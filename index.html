@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="FORGE" />
+<meta name="theme-color" content="#101215" />
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="apple-touch-icon.png" />
+<title>FORGE — Training & Nutrition Log</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#101215; --panel:#191C21; --panel-up:#1F232A; --border:#2B3039;
+    --text:#EDEEF0; --dim:#8A919C; --ember:#FF7A3D; --ember-deep:#E8571F;
+    --ok:#4ADE80; --warn:#F87171;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body {
+    background:var(--bg); color:var(--text);
+    font-family:'IBM Plex Mono', ui-monospace, monospace;
+    min-height:100vh; padding:16px 14px 96px;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .wrap { max-width:720px; margin:0 auto; }
+  h1 { font-family:'Oswald',sans-serif; font-weight:700; font-size:34px; text-transform:uppercase; line-height:1; }
+  h1 span { color:var(--ember); }
+  .sub { font-size:11px; color:var(--dim); margin-top:4px; }
+  .label { font-size:10px; letter-spacing:.14em; color:var(--dim); text-transform:uppercase; margin-bottom:6px; }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:18px; margin-bottom:12px; }
+  .card.flush { padding:0; overflow:hidden; }
+  input, select {
+    font-family:inherit; font-size:16px; padding:12px; border-radius:10px;
+    border:1px solid var(--border); background:var(--panel-up); color:var(--text);
+    width:100%; outline:none; color-scheme:dark;
+  }
+  input::placeholder { color:#565D68; }
+  input:focus-visible, select:focus-visible, button:focus-visible { outline:2px solid var(--ember); outline-offset:2px; }
+  input[type=range] {
+    -webkit-appearance:none; appearance:none; height:8px; padding:0; border-radius:6px;
+    background:linear-gradient(90deg,var(--ember-deep),var(--ember)); border:none; margin:14px 0 6px;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance:none; appearance:none; width:28px; height:28px; border-radius:50%;
+    background:var(--text); border:4px solid var(--ember); cursor:pointer;
+  }
+  .btn {
+    font-family:'Oswald',sans-serif; font-weight:600; font-size:14px; letter-spacing:.08em;
+    text-transform:uppercase; padding:13px 20px; border-radius:10px; border:none;
+    background:linear-gradient(135deg,var(--ember),var(--ember-deep)); color:#16100B; cursor:pointer;
+    width:100%;
+  }
+  .btn.ghost { background:transparent; border:1px solid var(--border); color:var(--text); }
+  .btn.small { padding:10px 14px; font-size:12px; width:auto; }
+  .btn:disabled { opacity:.55; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; }
+  .row > * { flex:1; }
+  .big { font-family:'Oswald',sans-serif; font-weight:700; font-size:50px; line-height:1.05; }
+  .big small { font-size:20px; color:var(--dim); font-weight:500; }
+  .err { color:var(--warn); font-size:12px; margin-top:8px; }
+  .note { color:var(--dim); font-size:10px; margin-top:8px; line-height:1.5; }
+  .ember-text { color:var(--ember); }
+
+  .bar-head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px; }
+  .bar-val { font-size:13px; font-weight:600; }
+  .bar-val .t { color:var(--dim); font-weight:400; }
+  .bar { position:relative; height:14px; border-radius:8px; background:var(--panel-up); border:1px solid var(--border); overflow:hidden; margin-bottom:14px; }
+  .bar .band { position:absolute; top:0; bottom:0; background:rgba(74,222,128,.10); border-left:1px solid rgba(74,222,128,.5); border-right:1px solid rgba(74,222,128,.5); }
+  .bar .fill { position:absolute; left:0; top:0; bottom:0; border-radius:8px; transition:width .3s ease; background:linear-gradient(90deg,var(--ember-deep),var(--ember)); }
+  .bar .fill.ok { background:var(--ok); }
+  .bar .fill.over { background:var(--warn); }
+
+  .result { padding:13px 16px; border-bottom:1px solid var(--border); cursor:pointer; }
+  .result:last-child { border-bottom:none; }
+  .result:active { background:var(--panel-up); }
+  .result .r-name { font-size:13px; font-weight:600; }
+  .result .r-brand { color:var(--ember); font-size:11px; }
+  .result .r-macros { color:var(--dim); font-size:11px; margin-top:3px; }
+
+  .chip { display:inline-block; padding:8px 12px; margin:0 6px 6px 0; border-radius:20px; border:1px solid var(--border);
+    background:var(--panel-up); font-size:12px; cursor:pointer; }
+  .chip:active { border-color:var(--ember); }
+
+  .list-item { display:flex; align-items:center; padding:13px 16px; border-bottom:1px solid var(--border); font-size:13px; }
+  .list-item:last-child { border-bottom:none; }
+  .del { margin-left:12px; border:none; background:none; color:var(--warn); font-size:15px; cursor:pointer; font-family:inherit; }
+
+  .tabbar {
+    position:fixed; left:0; right:0; bottom:0; display:flex; justify-content:center;
+    background:rgba(16,18,21,.96); border-top:1px solid var(--border);
+    padding:8px 10px calc(8px + env(safe-area-inset-bottom)); backdrop-filter:blur(8px);
+  }
+  .tabbar .inner { display:flex; gap:6px; width:100%; max-width:720px; }
+  .tab {
+    flex:1; font-family:'Oswald',sans-serif; font-weight:600; font-size:12px; letter-spacing:.06em;
+    text-transform:uppercase; padding:12px 2px; border-radius:10px; border:none;
+    background:transparent; color:var(--dim); cursor:pointer;
+  }
+  .tab.active { background:linear-gradient(135deg,var(--ember),var(--ember-deep)); color:#16100B; }
+  .view { display:none; }
+  .view.active { display:block; }
+  .hidden { display:none !important; }
+  .mt10 { margin-top:10px; } .mt14 { margin-top:14px; }
+  .exercise { margin-bottom:12px; }
+  .exercise .x-head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:5px; font-size:12px; }
+  .exercise .x-head b { font-weight:600; }
+  .exercise .x-head .scheme { color:var(--ember); }
+  svg { width:100%; display:block; }
+  @media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:18px;">
+    <div>
+      <h1>For<span>ge</span></h1>
+      <div class="sub" id="headerSub">Training & nutrition log</div>
+    </div>
+    <div id="saveState" class="note" style="margin:0;"></div>
+  </div>
+
+  <!-- ============ HOME ============ -->
+  <div id="view-dash" class="view active">
+    <div class="row" style="margin-bottom:12px;">
+      <div class="card" style="margin-bottom:0; min-width:180px;">
+        <div class="label">Current weight</div>
+        <div class="big"><span id="dashWt">—</span><small> lb</small></div>
+        <div class="note" id="dashWtNote"></div>
+      </div>
+      <div class="card" style="margin-bottom:0; min-width:180px;">
+        <div class="label">Goal progress</div>
+        <div class="big ember-text"><span id="dashPct">0</span><small> %</small></div>
+        <div class="bar" style="height:10px; margin-top:10px; margin-bottom:0;"><div class="fill" id="dashPctFill" style="width:0%"></div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="label" id="dashDateLabel">Today</div>
+      <div id="dashBars"></div>
+      <div class="note" id="dashRemaining" style="margin-top:2px;"></div>
+    </div>
+    <div class="card">
+      <div class="label">Last session</div>
+      <div id="dashLast" style="font-size:13px; color:var(--dim);">No sessions yet.</div>
+    </div>
+  </div>
+
+  <!-- ============ FOOD ============ -->
+  <div id="view-food" class="view">
+    <div class="card">
+      <div class="label">Log date</div>
+      <input type="date" id="foodDate" style="max-width:190px; margin-bottom:14px;">
+      <div class="label">Search any food or brand</div>
+      <input id="foodQuery" placeholder='e.g. "Chobani vanilla" or "chicken breast"' style="margin-bottom:10px;" enterkeyhint="search">
+      <button class="btn" id="searchBtn">🔍 Search food database</button>
+      <div class="row mt10">
+        <input id="barcodeInput" placeholder="Or type barcode number (UPC)" inputmode="numeric" style="flex:2;">
+        <button class="btn ghost small" id="barcodeBtn" style="flex:1;">Look up</button>
+      </div>
+      <div class="err hidden" id="searchErr"></div>
+    </div>
+
+    <div class="card hidden" id="recentsCard">
+      <div class="label" style="margin-bottom:10px;">Recent foods — tap to log again</div>
+      <div id="recents"></div>
+    </div>
+
+    <div class="card flush hidden" id="resultsCard">
+      <div style="padding:12px 16px; border-bottom:1px solid var(--border);"><span class="label" style="margin:0;">Results — tap one</span></div>
+      <div id="results"></div>
+    </div>
+
+    <div class="card hidden" id="calcCard">
+      <div class="label">Selected</div>
+      <div id="selName" style="font-size:14px; font-weight:600; margin-bottom:2px;"></div>
+      <div id="selPer100" class="note" style="margin-top:0; margin-bottom:8px;"></div>
+      <div class="row" style="align-items:flex-end;">
+        <div style="flex:1;"><div class="label">Amount</div><input type="number" id="qtyAmount" value="100" inputmode="decimal" step="any"></div>
+        <div style="flex:1;"><div class="label">Unit</div><select id="qtyUnit"></select></div>
+      </div>
+      <input type="range" id="qtySlider" min="0" max="500" step="5" value="100" aria-label="Amount slider">
+      <div style="font-size:15px; margin-top:8px;" id="calcLine">
+        = <b class="ember-text" id="calcCal">0</b> kcal · <b class="ember-text" id="calcPro">0</b>g P · <b id="calcCarb">0</b>g C · <b id="calcFat">0</b>g F
+      </div>
+      <button class="btn mt14" id="addSelBtn">Add to log</button>
+    </div>
+
+    <div class="card">
+      <div class="label">Or enter manually</div>
+      <input id="mName" placeholder="Food name" style="margin-bottom:10px;">
+      <div class="row" style="margin-bottom:10px;">
+        <div><div class="label">Calories</div><input type="number" id="mCal" placeholder="kcal" inputmode="numeric"></div>
+        <div><div class="label">Protein g</div><input type="number" id="mPro" placeholder="g" inputmode="numeric"></div>
+      </div>
+      <div class="row">
+        <div><div class="label">Carbs g</div><input type="number" id="mCarb" placeholder="g" inputmode="numeric"></div>
+        <div><div class="label">Fat g</div><input type="number" id="mFat" placeholder="g" inputmode="numeric"></div>
+      </div>
+      <button class="btn ghost mt14" id="addManualBtn">Add entry</button>
+    </div>
+
+    <div class="card">
+      <div class="label" id="totalsLabel">Totals</div>
+      <div id="foodBars"></div>
+    </div>
+
+    <div class="card flush">
+      <div id="foodList"><div style="padding:18px; font-size:13px; color:var(--dim);">Nothing logged for this date yet.</div></div>
+    </div>
+  </div>
+
+  <!-- ============ TRAIN ============ -->
+  <div id="view-work" class="view">
+    <div class="card">
+      <div class="label">Current program</div>
+      <div id="programName" style="font-family:'Oswald',sans-serif; font-weight:600; font-size:18px; text-transform:uppercase; margin-bottom:10px;"></div>
+      <div class="row">
+        <button class="btn ghost small" id="importBtn">⬆ Load program</button>
+        <button class="btn ghost small" id="exportBtn">⬇ Save program file</button>
+      </div>
+      <input type="file" id="importFile" accept=".json,application/json" class="hidden">
+      <div class="err hidden" id="programErr"></div>
+      <div class="note">Load any FORGE program file (.json). Ask Claude to build one for your goals, download it, and load it here.</div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="margin-bottom:14px;">
+        <div style="flex:0 0 175px;"><div class="label">Date</div><input type="date" id="wDate"></div>
+        <div><div class="label">Session type</div><select id="wDay"></select></div>
+      </div>
+
+      <div id="strengthBlock">
+        <div id="exerciseInputs"></div>
+        <div class="row" style="align-items:flex-end; margin-bottom:14px;">
+          <div style="flex:2;"><div class="label">Add exercise to this session</div><select id="addExSel"></select></div>
+          <div style="flex:0 0 auto;"><button class="btn ghost small" id="addExBtn">+ Add</button></div>
+        </div>
+      </div>
+
+      <div id="cardioBlock" class="hidden">
+        <div class="row" style="margin-bottom:12px;">
+          <div><div class="label">Cardio type</div><select id="cardioType"></select></div>
+          <div style="flex:0 0 120px;"><div class="label">Minutes</div><input type="number" id="cardioMin" placeholder="min" inputmode="numeric"></div>
+        </div>
+        <div class="label">Distance / intensity (optional)</div>
+        <input id="cardioDetail" placeholder='e.g. "2.5 mi" or "level 8"' style="margin-bottom:12px;">
+      </div>
+
+      <div class="label">Notes (optional)</div>
+      <input id="wNotes" placeholder="How it went, PRs, joint status…" style="margin-bottom:14px;">
+      <button class="btn" id="logWorkoutBtn">Log session</button>
+    </div>
+
+    <div class="card flush">
+      <div style="padding:12px 16px; border-bottom:1px solid var(--border);"><span class="label" style="margin:0;">History</span></div>
+      <div id="workHistory"><div style="padding:18px; font-size:13px; color:var(--dim);">No sessions yet.</div></div>
+    </div>
+  </div>
+
+  <!-- ============ WEIGHT ============ -->
+  <div id="view-weight" class="view">
+    <div class="card">
+      <div class="row" style="align-items:flex-end;">
+        <div style="flex:0 0 175px;"><div class="label">Date</div><input type="date" id="wtDate"></div>
+        <div style="flex:0 0 130px;"><div class="label">Weight (lb)</div><input type="number" id="wtVal" placeholder="e.g. 221.4" inputmode="decimal" step="any"></div>
+        <div style="flex:1; min-width:120px;"><button class="btn" id="addWtBtn">Record</button></div>
+      </div>
+      <div class="note">Weigh same time of day · trust the weekly trend, not the daily number</div>
+    </div>
+    <div class="card">
+      <div class="label" id="chartLabel">Trend</div>
+      <div id="chart"></div>
+    </div>
+    <div class="card flush hidden" id="wtListCard"><div id="wtList"></div></div>
+  </div>
+
+  <!-- ============ SETTINGS ============ -->
+  <div id="view-settings" class="view">
+    <div class="card">
+      <div class="label" style="margin-bottom:12px;">Bodyweight goal</div>
+      <div class="row" style="margin-bottom:12px;">
+        <div><div class="label">Start weight (lb)</div><input type="number" id="sStartWt" inputmode="decimal" step="any"></div>
+        <div><div class="label">Goal weight (lb)</div><input type="number" id="sGoalWt" inputmode="decimal" step="any"></div>
+      </div>
+      <div class="label" style="margin-bottom:12px; margin-top:6px;">Daily nutrition targets</div>
+      <div class="row" style="margin-bottom:12px;">
+        <div><div class="label">Calories min</div><input type="number" id="sCalLo" inputmode="numeric"></div>
+        <div><div class="label">Calories max</div><input type="number" id="sCalHi" inputmode="numeric"></div>
+      </div>
+      <div class="row" style="margin-bottom:12px;">
+        <div><div class="label">Protein min g</div><input type="number" id="sProLo" inputmode="numeric"></div>
+        <div><div class="label">Protein max g</div><input type="number" id="sProHi" inputmode="numeric"></div>
+      </div>
+      <div class="row" style="margin-bottom:14px;">
+        <div><div class="label">Carbs goal g</div><input type="number" id="sCarb" inputmode="numeric"></div>
+        <div><div class="label">Fat goal g</div><input type="number" id="sFat" inputmode="numeric"></div>
+      </div>
+      <button class="btn" id="saveSettingsBtn">Save settings</button>
+      <div class="note">These drive every bar in the app. Anyone can set their own numbers — cutting, bulking, or maintaining.</div>
+    </div>
+    <div class="card">
+      <div class="label" style="margin-bottom:10px;">Data</div>
+      <button class="btn ghost small" id="exportDataBtn">⬇ Back up all data (.json)</button>
+      <div style="height:10px;"></div>
+      <button class="btn ghost small" id="importDataBtn">⬆ Restore from backup</button>
+      <input type="file" id="importDataFile" accept=".json,application/json" class="hidden">
+      <div class="note">Data lives only on this device. Back up occasionally or when moving phones.</div>
+    </div>
+  </div>
+</div>
+
+<div class="tabbar">
+  <div class="inner">
+    <button class="tab active" data-view="dash">Home</button>
+    <button class="tab" data-view="food">Food</button>
+    <button class="tab" data-view="work">Train</button>
+    <button class="tab" data-view="weight">Weight</button>
+    <button class="tab" data-view="settings">⚙</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+// ================== storage keys & defaults ==================
+const DATA_KEY = "forge:data", CFG_KEY = "forge:cfg", PROG_KEY = "forge:program";
+
+const DEFAULT_CFG = { startWt:225, goalWt:175, calLo:1900, calHi:2100, proLo:180, proHi:200, carbGoal:160, fatGoal:60 };
+
+const DEFAULT_PROGRAM = {
+  name: "Phase 1 — The Cut",
+  author: "Built by Claude",
+  days: [
+    { id:"D1", title:"Lower · Squat", exercises:[
+      {name:"Box Squat (to parallel)",scheme:"4×5"},{name:"Romanian Deadlift",scheme:"3×8"},
+      {name:"Leg Curl",scheme:"3×12"},{name:"Calf Raise",scheme:"4×12"},{name:"Spanish Squat / TKE",scheme:"3×15"}]},
+    { id:"D2", title:"Upper · Bench", exercises:[
+      {name:"Bench Press",scheme:"4×5"},{name:"Chin-Up (bodyweight)",scheme:"4×6"},
+      {name:"Overhead Press",scheme:"3×8"},{name:"Barbell Row",scheme:"3×10"},{name:"Triceps / Curls",scheme:"3×12"}]},
+    { id:"D3", title:"Lower · Hinge", exercises:[
+      {name:"Trap Bar Deadlift",scheme:"4×4"},{name:"Bulgarian Split Squat",scheme:"3×8/leg"},
+      {name:"Back Extension",scheme:"3×12"},{name:"Hip Thrust",scheme:"3×10"}]},
+    { id:"D4", title:"Upper · Volume", exercises:[
+      {name:"Incline Bench Press",scheme:"4×8"},{name:"Pull-Up",scheme:"4×AMRAP"},
+      {name:"Dips",scheme:"3×10"},{name:"Lateral Raise",scheme:"3×15"},{name:"Face Pull",scheme:"3×15"}]},
+  ],
+};
+
+const EXERCISE_LIBRARY = [
+  "Bench Press","Incline Bench Press","Decline Bench Press","Dumbbell Bench Press","Dumbbell Incline Press",
+  "Overhead Press","Dumbbell Shoulder Press","Push-Up","Dips","Chest Fly","Cable Crossover",
+  "Barbell Row","Dumbbell Row","T-Bar Row","Seated Cable Row","Pull-Up","Chin-Up","Lat Pulldown",
+  "Face Pull","Rear Delt Fly","Shrug","Lateral Raise","Front Raise",
+  "Biceps Curl","Hammer Curl","Preacher Curl","Cable Curl",
+  "Triceps Pushdown","Overhead Triceps Extension","Skullcrusher","Close-Grip Bench Press",
+  "Back Squat","Box Squat","Front Squat","Goblet Squat","Hack Squat","Leg Press","Bulgarian Split Squat",
+  "Walking Lunge","Reverse Lunge","Step-Up",
+  "Deadlift","Trap Bar Deadlift","Romanian Deadlift","Sumo Deadlift","Good Morning","Hip Thrust","Glute Bridge",
+  "Back Extension","Leg Curl","Leg Extension","Calf Raise","Seated Calf Raise","Spanish Squat / TKE",
+  "Plank","Side Plank","Hanging Leg Raise","Cable Crunch","Ab Wheel","Russian Twist","Farmer Carry","Suitcase Carry",
+];
+
+const CARDIO_TYPES = [
+  "Walk","Incline Walk","Run","Jog","Sprint Intervals","Cycling","Rowing","Swimming","Stairmaster","Elliptical",
+  "Jump Rope","HIIT Circuit","Basketball","Soccer","Tennis/Pickleball","Hiking","Rucking","Sled Push/Pull","Battle Ropes","Other",
+];
+
+// local whole foods — per 100g: cal, protein, carbs, fat
+const LOCAL_DB = [
+  {n:"Chicken breast, cooked",cal:165,pro:31,carb:0,fat:3.6},{n:"Chicken thigh, cooked",cal:209,pro:26,carb:0,fat:10.9},
+  {n:"Ground beef 90/10, cooked",cal:217,pro:26,carb:0,fat:11.7},{n:"Ground beef 80/20, cooked",cal:254,pro:26,carb:0,fat:17},
+  {n:"Steak (sirloin), cooked",cal:206,pro:31,carb:0,fat:8.8},{n:"Pork chop, cooked",cal:200,pro:27,carb:0,fat:9},
+  {n:"Turkey breast, cooked",cal:147,pro:30,carb:0,fat:2},{n:"Salmon, cooked",cal:208,pro:22,carb:0,fat:13},
+  {n:"Tuna, canned in water",cal:116,pro:26,carb:0,fat:0.8},{n:"Tilapia, cooked",cal:128,pro:26,carb:0,fat:2.7},
+  {n:"Shrimp, cooked",cal:99,pro:24,carb:0.2,fat:0.3},{n:"Egg, whole",cal:143,pro:12.6,carb:0.7,fat:9.5},
+  {n:"Egg white",cal:52,pro:11,carb:0.7,fat:0.2},{n:"Greek yogurt, nonfat plain",cal:59,pro:10,carb:3.6,fat:0.4},
+  {n:"Greek yogurt, vanilla",cal:95,pro:9,carb:12,fat:2.5},{n:"Cottage cheese, 2%",cal:98,pro:11,carb:3.4,fat:4.3},
+  {n:"Whey protein powder",cal:400,pro:80,carb:8,fat:7},{n:"Cheddar cheese",cal:403,pro:25,carb:1.3,fat:33},
+  {n:"Milk, 2%",cal:50,pro:3.3,carb:4.8,fat:2},{n:"White rice, cooked",cal:130,pro:2.7,carb:28,fat:0.3},
+  {n:"Brown rice, cooked",cal:112,pro:2.6,carb:23.5,fat:0.9},{n:"Pasta, cooked",cal:158,pro:5.8,carb:31,fat:0.9},
+  {n:"Bread, white",cal:266,pro:9,carb:49,fat:3.3},{n:"Bread, whole wheat",cal:247,pro:13,carb:41,fat:3.4},
+  {n:"Oats, dry",cal:379,pro:13,carb:67,fat:6.5},{n:"Potato, baked",cal:93,pro:2.5,carb:21,fat:0.1},
+  {n:"Sweet potato, baked",cal:90,pro:2,carb:21,fat:0.2},{n:"Quinoa, cooked",cal:120,pro:4.4,carb:21,fat:1.9},
+  {n:"Banana",cal:89,pro:1.1,carb:23,fat:0.3},{n:"Apple",cal:52,pro:0.3,carb:14,fat:0.2},
+  {n:"Orange",cal:47,pro:0.9,carb:12,fat:0.1},{n:"Strawberries",cal:33,pro:0.7,carb:8,fat:0.3},
+  {n:"Blueberries",cal:57,pro:0.7,carb:14.5,fat:0.3},{n:"Broccoli",cal:34,pro:2.8,carb:7,fat:0.4},
+  {n:"Green beans",cal:31,pro:1.8,carb:7,fat:0.2},{n:"Spinach",cal:23,pro:2.9,carb:3.6,fat:0.4},
+  {n:"Avocado",cal:160,pro:2,carb:9,fat:15},{n:"Peanut butter",cal:588,pro:25,carb:20,fat:50},
+  {n:"Almonds",cal:579,pro:21,carb:22,fat:50},{n:"Olive oil",cal:884,pro:0,carb:0,fat:100},
+  {n:"Butter",cal:717,pro:0.9,carb:0,fat:81},
+];
+
+// ================== helpers (pure) ==================
+function loadJSON(key, fallback){
+  try { const raw = localStorage.getItem(key); if (raw) return JSON.parse(raw); } catch(e){}
+  return fallback;
+}
+function todayStr(){
+  const d = new Date();
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+function fmtDate(iso){ const p=iso.split("-"); return p[1]+"/"+p[2]+"/"+p[0].slice(2); }
+function esc(s){ const d=document.createElement("div"); d.textContent=String(s); return d.innerHTML; }
+function toGrams(amt, unit, servingG){
+  if (unit==="g") return amt;
+  if (unit==="oz") return amt*28.35;
+  if (unit==="lb") return amt*453.6;
+  if (unit==="serving") return amt*(servingG||100);
+  return amt;
+}
+function scaleMacro(per100, grams){ return per100*grams/100; }
+function validateProgram(p){
+  if(!p || typeof p!=="object") throw new Error("Not a program file");
+  if(!p.days || !Array.isArray(p.days) || !p.days.length) throw new Error("Missing days array");
+  p.days.forEach((d,i)=>{
+    if(!d.title) d.title = "Day "+(i+1);
+    if(!d.id) d.id = "D"+(i+1);
+    if(!Array.isArray(d.exercises)) throw new Error("Day "+(i+1)+" missing exercises");
+    d.exercises.forEach(ex=>{ if(!ex.name) throw new Error("Exercise missing name in day "+(i+1)); });
+  });
+  return p;
+}
+function download(filename, text){
+  const blob = new Blob([text], {type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+
+// ================== state ==================
+let data = loadJSON(DATA_KEY, null) || loadJSON("ryan-cut:data", null) || { food:{}, workouts:[], weights:[], recents:[] };
+if(!data.recents) data.recents = [];
+let cfg = Object.assign({}, DEFAULT_CFG, loadJSON(CFG_KEY, {}));
+let program = loadJSON(PROG_KEY, DEFAULT_PROGRAM);
+try { validateProgram(program); } catch(e){ program = DEFAULT_PROGRAM; }
+let selected = null;
+let extraExercises = [];
+
+function save(){
+  try { localStorage.setItem(DATA_KEY, JSON.stringify(data)); flashSave("Saved ✓"); }
+  catch(e){ flashSave("Save failed", true); }
+}
+function saveCfg(){ try{ localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }catch(e){} }
+function saveProgram(){ try{ localStorage.setItem(PROG_KEY, JSON.stringify(program)); }catch(e){} }
+
+let saveTimer;
+function flashSave(msg, bad){
+  const el = document.getElementById("saveState");
+  el.textContent = msg; el.style.color = bad ? "var(--warn)" : "var(--dim)";
+  clearTimeout(saveTimer); saveTimer = setTimeout(()=>{ el.textContent=""; }, 1500);
+}
+
+// ================== tabs ==================
+document.querySelectorAll(".tab").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
+    document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById("view-"+btn.dataset.view).classList.add("active");
+    renderAll();
+  });
+});
+
+// ================== bars ==================
+function rangeBarHTML(label, value, lo, hi, unit){
+  const max = hi*1.25;
+  const pct = Math.min(100,(value/max)*100);
+  const loP = (lo/max)*100, hiP = (hi/max)*100;
+  const inBand = value>=lo && value<=hi, over = value>hi;
+  const cls = over?"over":inBand?"ok":"";
+  const color = over?"var(--warn)":inBand?"var(--ok)":"var(--text)";
+  return '<div class="bar-head"><span class="label" style="margin:0;">'+label+'</span>'
+    +'<span class="bar-val" style="color:'+color+'">'+Math.round(value)+' <span class="t">/ '+lo+'–'+hi+' '+unit+'</span></span></div>'
+    +'<div class="bar"><div class="band" style="left:'+loP+'%; width:'+(hiP-loP)+'%;"></div>'
+    +'<div class="fill '+cls+'" style="width:'+pct+'%;"></div></div>';
+}
+function goalBarHTML(label, value, goal, unit){
+  const max = goal*1.25;
+  const pct = Math.min(100,(value/max)*100);
+  const goalP = (goal/max)*100;
+  const over = value>goal;
+  const cls = over?"over":"";
+  const color = over?"var(--warn)":"var(--text)";
+  return '<div class="bar-head"><span class="label" style="margin:0;">'+label+'</span>'
+    +'<span class="bar-val" style="color:'+color+'">'+Math.round(value)+' <span class="t">/ '+goal+' '+unit+'</span></span></div>'
+    +'<div class="bar"><div class="band" style="left:'+(goalP-1)+'%; width:2%;"></div>'
+    +'<div class="fill '+cls+'" style="width:'+pct+'%;"></div></div>';
+}
+
+// ================== FOOD ==================
+const foodDateEl = document.getElementById("foodDate");
+foodDateEl.value = todayStr();
+foodDateEl.addEventListener("change", renderFood);
+
+function daySums(dateStr){
+  const list = data.food[dateStr]||[];
+  const s = {cal:0,pro:0,carb:0,fat:0};
+  list.forEach(f=>{ s.cal+=Number(f.cal||0); s.pro+=Number(f.pro||0); s.carb+=Number(f.carb||0); s.fat+=Number(f.fat||0); });
+  return s;
+}
+function allBarsHTML(s){
+  return rangeBarHTML("Calories", s.cal, cfg.calLo, cfg.calHi, "kcal")
+    + rangeBarHTML("Protein", s.pro, cfg.proLo, cfg.proHi, "g")
+    + goalBarHTML("Carbs", s.carb, cfg.carbGoal, "g")
+    + goalBarHTML("Fat", s.fat, cfg.fatGoal, "g");
+}
+
+// --- OFF product mapping ---
+function mapOFFProduct(p){
+  const nu = p.nutriments || {};
+  if (!p.product_name || nu["energy-kcal_100g"]==null) return null;
+  return {
+    name: p.product_name,
+    brand: p.brands || "Generic",
+    cal100: Number(nu["energy-kcal_100g"]),
+    pro100: Number(nu["proteins_100g"]||0),
+    carb100: Number(nu["carbohydrates_100g"]||0),
+    fat100: Number(nu["fat_100g"]||0),
+    servingG: p.serving_quantity ? Number(p.serving_quantity) : null,
+    servingLabel: p.serving_size || null,
+  };
+}
+
+// --- search ---
+const searchBtn = document.getElementById("searchBtn");
+searchBtn.addEventListener("click", runSearch);
+document.getElementById("foodQuery").addEventListener("keydown", e=>{ if(e.key==="Enter") runSearch(); });
+
+async function runSearch(){
+  const q = document.getElementById("foodQuery").value.trim();
+  const errEl = document.getElementById("searchErr");
+  errEl.classList.add("hidden");
+  if(!q) return;
+  searchBtn.disabled = true; searchBtn.textContent = "Searching…";
+  const resultsEl = document.getElementById("results");
+  resultsEl.innerHTML = "";
+
+  const ql = q.toLowerCase();
+  const localHits = LOCAL_DB.filter(f=>f.n.toLowerCase().includes(ql)).slice(0,4)
+    .map(f=>({ name:f.n, brand:"Built-in · whole food", cal100:f.cal, pro100:f.pro, carb100:f.carb, fat100:f.fat, servingG:null, servingLabel:null }));
+
+  let offHits = [];
+  try {
+    const url = "https://world.openfoodfacts.org/cgi/search.pl?search_terms="+encodeURIComponent(q)
+      +"&search_simple=1&action=process&json=1&page_size=15&sort_by=unique_scans_n"
+      +"&fields=product_name,brands,nutriments,serving_size,serving_quantity";
+    const res = await fetch(url);
+    const json = await res.json();
+    offHits = (json.products||[]).map(mapOFFProduct).filter(Boolean);
+  } catch(e) {
+    if (localHits.length===0){
+      errEl.textContent = "Couldn't reach the food database — check connection. Built-in foods and manual entry still work.";
+      errEl.classList.remove("hidden");
+    }
+  }
+
+  renderResults([...localHits, ...offHits]);
+  searchBtn.disabled = false; searchBtn.textContent = "🔍 Search food database";
+}
+
+// --- barcode ---
+document.getElementById("barcodeBtn").addEventListener("click", runBarcode);
+document.getElementById("barcodeInput").addEventListener("keydown", e=>{ if(e.key==="Enter") runBarcode(); });
+async function runBarcode(){
+  const code = document.getElementById("barcodeInput").value.trim().replace(/\D/g,"");
+  const errEl = document.getElementById("searchErr");
+  errEl.classList.add("hidden");
+  if(!code) return;
+  const btn = document.getElementById("barcodeBtn");
+  btn.disabled = true; btn.textContent = "…";
+  try {
+    const res = await fetch("https://world.openfoodfacts.org/api/v2/product/"+code+".json?fields=product_name,brands,nutriments,serving_size,serving_quantity");
+    const json = await res.json();
+    if (json.status===1 && json.product){
+      const h = mapOFFProduct(json.product);
+      if (h){ selectFood(h); }
+      else { errEl.textContent = "Product found but has no nutrition data — enter it manually."; errEl.classList.remove("hidden"); }
+    } else {
+      errEl.textContent = "Barcode not found in the database — enter it manually.";
+      errEl.classList.remove("hidden");
+    }
+  } catch(e){
+    errEl.textContent = "Couldn't reach the database — check connection.";
+    errEl.classList.remove("hidden");
+  }
+  btn.disabled = false; btn.textContent = "Look up";
+}
+
+function renderResults(hits){
+  const resultsEl = document.getElementById("results");
+  const card = document.getElementById("resultsCard");
+  if (hits.length===0){
+    resultsEl.innerHTML = '<div style="padding:16px; font-size:13px; color:var(--dim);">No matches. Try fewer words — brand + one keyword works best.</div>';
+  } else {
+    resultsEl.innerHTML = "";
+    hits.forEach(h=>{
+      const div = document.createElement("div");
+      div.className = "result";
+      div.innerHTML = '<div class="r-name">'+esc(h.name)+'</div>'
+        +'<div class="r-brand">'+esc(h.brand)+'</div>'
+        +'<div class="r-macros">per 100g: '+Math.round(h.cal100)+' kcal · '+r1(h.pro100)+'P / '+r1(h.carb100)+'C / '+r1(h.fat100)+'F'
+        +(h.servingLabel?' · serving: '+esc(h.servingLabel):'')+'</div>';
+      div.addEventListener("click", ()=>selectFood(h));
+      resultsEl.appendChild(div);
+    });
+  }
+  card.classList.remove("hidden");
+}
+function r1(x){ return Math.round(Number(x||0)*10)/10; }
+
+// --- select + slider calc ---
+const qtyAmountEl = document.getElementById("qtyAmount");
+const qtySliderEl = document.getElementById("qtySlider");
+const qtyUnitEl = document.getElementById("qtyUnit");
+
+function sliderConfigFor(unit){
+  if (unit==="g") return {max:500, step:5};
+  if (unit==="oz") return {max:16, step:0.25};
+  if (unit==="lb") return {max:3, step:0.05};
+  if (unit==="serving") return {max:5, step:0.25};
+  return {max:500, step:5};
+}
+
+function selectFood(h){
+  selected = h;
+  document.getElementById("selName").textContent = h.name + (h.brand && h.brand!=="Generic" && !String(h.brand).startsWith("Built-in") ? " — "+h.brand : "");
+  document.getElementById("selPer100").textContent =
+    "per 100g: "+Math.round(h.cal100)+" kcal · "+r1(h.pro100)+"g P · "+r1(h.carb100)+"g C · "+r1(h.fat100)+"g F";
+  qtyUnitEl.innerHTML = "";
+  const opts = [["g","grams"],["oz","ounces"],["lb","pounds"]];
+  if (h.servingG) opts.unshift(["serving", "serving ("+(h.servingLabel||h.servingG+"g")+")"]);
+  opts.forEach(pair=>{ const o=document.createElement("option"); o.value=pair[0]; o.textContent=pair[1]; qtyUnitEl.appendChild(o); });
+  qtyAmountEl.value = h.servingG ? 1 : 100;
+  syncSliderToUnit();
+  document.getElementById("calcCard").classList.remove("hidden");
+  updateCalc();
+  const cc = document.getElementById("calcCard");
+  if (cc.scrollIntoView) cc.scrollIntoView({behavior:"smooth", block:"center"});
+}
+
+function syncSliderToUnit(){
+  const c = sliderConfigFor(qtyUnitEl.value);
+  qtySliderEl.max = c.max; qtySliderEl.step = c.step;
+  qtySliderEl.value = Math.min(Number(qtyAmountEl.value)||0, c.max);
+}
+qtyUnitEl.addEventListener("change", ()=>{
+  // sensible default when switching units
+  const u = qtyUnitEl.value;
+  qtyAmountEl.value = u==="g" ? 100 : u==="oz" ? 4 : u==="lb" ? 0.5 : 1;
+  syncSliderToUnit(); updateCalc();
+});
+qtyAmountEl.addEventListener("input", ()=>{ qtySliderEl.value = Math.min(Number(qtyAmountEl.value)||0, Number(qtySliderEl.max)); updateCalc(); });
+qtySliderEl.addEventListener("input", ()=>{ qtyAmountEl.value = qtySliderEl.value; updateCalc(); });
+
+function currentGrams(){
+  return toGrams(parseFloat(qtyAmountEl.value)||0, qtyUnitEl.value, selected ? selected.servingG : null);
+}
+function updateCalc(){
+  if(!selected) return;
+  const g = currentGrams();
+  document.getElementById("calcCal").textContent = Math.round(scaleMacro(selected.cal100,g));
+  document.getElementById("calcPro").textContent = Math.round(scaleMacro(selected.pro100,g));
+  document.getElementById("calcCarb").textContent = Math.round(scaleMacro(selected.carb100,g));
+  document.getElementById("calcFat").textContent = Math.round(scaleMacro(selected.fat100,g));
+}
+
+document.getElementById("addSelBtn").addEventListener("click", ()=>{
+  if(!selected) return;
+  const g = currentGrams();
+  const amt = qtyAmountEl.value, unit = qtyUnitEl.value;
+  const label = unit==="serving" ? amt+" serving · "+selected.name : amt+unit+" "+selected.name;
+  addEntry({
+    name: label,
+    cal: Math.round(scaleMacro(selected.cal100,g)),
+    pro: Math.round(scaleMacro(selected.pro100,g)),
+    carb: Math.round(scaleMacro(selected.carb100,g)),
+    fat: Math.round(scaleMacro(selected.fat100,g)),
+  });
+  pushRecent(Object.assign({}, selected, {lastAmt:amt, lastUnit:unit}));
+  document.getElementById("calcCard").classList.add("hidden");
+  document.getElementById("resultsCard").classList.add("hidden");
+  document.getElementById("foodQuery").value = "";
+  document.getElementById("barcodeInput").value = "";
+  selected = null;
+});
+
+// --- recents ---
+function pushRecent(item){
+  data.recents = (data.recents||[]).filter(r=>r.name!==item.name || r.brand!==item.brand);
+  data.recents.unshift(item);
+  data.recents = data.recents.slice(0,12);
+  save(); renderRecents();
+}
+function renderRecents(){
+  const card = document.getElementById("recentsCard");
+  const el = document.getElementById("recents");
+  const list = data.recents||[];
+  if(!list.length){ card.classList.add("hidden"); return; }
+  card.classList.remove("hidden");
+  el.innerHTML = "";
+  list.forEach(r=>{
+    const b = document.createElement("button");
+    b.className = "chip";
+    b.textContent = r.name.length>28 ? r.name.slice(0,27)+"…" : r.name;
+    b.addEventListener("click", ()=>{
+      selectFood(r);
+      if(r.lastAmt){ qtyUnitEl.value = r.lastUnit || qtyUnitEl.value; syncSliderToUnit(); qtyAmountEl.value = r.lastAmt; qtySliderEl.value = Math.min(Number(r.lastAmt)||0, Number(qtySliderEl.max)); updateCalc(); }
+    });
+    el.appendChild(b);
+  });
+}
+
+// --- manual + entries ---
+document.getElementById("addManualBtn").addEventListener("click", ()=>{
+  const n = document.getElementById("mName").value.trim();
+  const c = Number(document.getElementById("mCal").value);
+  if(!n || !c) return;
+  addEntry({
+    name:n, cal:c,
+    pro:Number(document.getElementById("mPro").value||0),
+    carb:Number(document.getElementById("mCarb").value||0),
+    fat:Number(document.getElementById("mFat").value||0),
+  });
+  ["mName","mCal","mPro","mCarb","mFat"].forEach(id=>document.getElementById(id).value="");
+});
+
+function addEntry(entry){
+  const d = foodDateEl.value;
+  if(!data.food[d]) data.food[d]=[];
+  data.food[d].push(entry);
+  save(); renderFood(); renderDash();
+}
+function removeEntry(i){
+  const d = foodDateEl.value;
+  data.food[d].splice(i,1);
+  save(); renderFood(); renderDash();
+}
+
+function renderFood(){
+  const d = foodDateEl.value;
+  const s = daySums(d);
+  document.getElementById("totalsLabel").textContent = "Totals · "+fmtDate(d);
+  document.getElementById("foodBars").innerHTML = allBarsHTML(s);
+  const list = data.food[d]||[];
+  const el = document.getElementById("foodList");
+  if(list.length===0){
+    el.innerHTML = '<div style="padding:18px; font-size:13px; color:var(--dim);">Nothing logged for this date yet.</div>';
+  } else {
+    el.innerHTML = list.map((f,i)=>
+      '<div class="list-item">'
+      +'<div style="flex:1; min-width:0;"><div style="font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">'+esc(f.name)+'</div>'
+      +'<div style="color:var(--dim); font-size:11px;">'+Math.round(f.cal)+' kcal · '+Math.round(f.pro)+'P / '+Math.round(f.carb||0)+'C / '+Math.round(f.fat||0)+'F</div></div>'
+      +'<button class="del" data-i="'+i+'" aria-label="Remove">✕</button></div>'
+    ).join("");
+    el.querySelectorAll(".del").forEach(b=>b.addEventListener("click",()=>removeEntry(Number(b.dataset.i))));
+  }
+  renderRecents();
+}
+
+// ================== TRAIN ==================
+const wDaySel = document.getElementById("wDay");
+document.getElementById("wDate").value = todayStr();
+
+function renderDayOptions(){
+  wDaySel.innerHTML = "";
+  program.days.forEach(p=>{
+    const o=document.createElement("option"); o.value=p.id; o.textContent=(p.id?p.id+" · ":"")+p.title;
+    wDaySel.appendChild(o);
+  });
+  const c=document.createElement("option"); c.value="__CARDIO__"; c.textContent="Cardio / Conditioning";
+  wDaySel.appendChild(c);
+  const f=document.createElement("option"); f.value="__FREE__"; f.textContent="Freestyle (build from library)";
+  wDaySel.appendChild(f);
+}
+function renderCardioOptions(){
+  const sel = document.getElementById("cardioType");
+  sel.innerHTML = "";
+  CARDIO_TYPES.forEach(c=>{ const o=document.createElement("option"); o.value=c; o.textContent=c; sel.appendChild(o); });
+}
+function renderLibraryOptions(){
+  const sel = document.getElementById("addExSel");
+  sel.innerHTML = "";
+  const og1 = document.createElement("optgroup"); og1.label="Strength";
+  EXERCISE_LIBRARY.forEach(x=>{ const o=document.createElement("option"); o.value=x; o.textContent=x; og1.appendChild(o); });
+  const og2 = document.createElement("optgroup"); og2.label="Cardio";
+  CARDIO_TYPES.forEach(x=>{ const o=document.createElement("option"); o.value="[Cardio] "+x; o.textContent=x; og2.appendChild(o); });
+  sel.appendChild(og1); sel.appendChild(og2);
+}
+
+wDaySel.addEventListener("change", ()=>{ extraExercises=[]; renderSessionInputs(); });
+
+function currentDayExercises(){
+  const v = wDaySel.value;
+  if (v==="__CARDIO__" || v==="__FREE__") return [];
+  const day = program.days.find(p=>p.id===v);
+  return day ? day.exercises : [];
+}
+
+function renderSessionInputs(){
+  const v = wDaySel.value;
+  const strengthBlock = document.getElementById("strengthBlock");
+  const cardioBlock = document.getElementById("cardioBlock");
+  if (v==="__CARDIO__"){
+    strengthBlock.classList.add("hidden"); cardioBlock.classList.remove("hidden");
+    return;
+  }
+  strengthBlock.classList.remove("hidden"); cardioBlock.classList.add("hidden");
+  const list = currentDayExercises().concat(extraExercises);
+  document.getElementById("exerciseInputs").innerHTML = list.map(ex=>{
+    const isCardio = ex.name.indexOf("[Cardio] ")===0;
+    const ph = isCardio ? 'e.g. 20 min, 2 mi' : 'e.g. 275×5, 275×5, 275×4';
+    return '<div class="exercise"><div class="x-head"><span><b>'+esc(ex.name.replace("[Cardio] ",""))+'</b>'
+      +(ex.scheme?' <span class="scheme">· '+esc(ex.scheme)+'</span>':'')+'</span></div>'
+      +'<input class="setInput" data-ex="'+esc(ex.name)+'" placeholder="'+ph+'"></div>';
+  }).join("") || '<div class="note" style="margin-bottom:14px;">No exercises yet — add from the library below.</div>';
+}
+
+document.getElementById("addExBtn").addEventListener("click", ()=>{
+  const name = document.getElementById("addExSel").value;
+  const vals = {};
+  document.querySelectorAll(".setInput").forEach(inp=>{ vals[inp.dataset.ex]=inp.value; });
+  extraExercises.push({name:name, scheme:""});
+  renderSessionInputs();
+  document.querySelectorAll(".setInput").forEach(inp=>{ if(vals[inp.dataset.ex]!=null) inp.value=vals[inp.dataset.ex]; });
+});
+
+document.getElementById("logWorkoutBtn").addEventListener("click", ()=>{
+  const v = wDaySel.value;
+  const date = document.getElementById("wDate").value;
+  const notes = document.getElementById("wNotes").value.trim();
+
+  if (v==="__CARDIO__"){
+    const type = document.getElementById("cardioType").value;
+    const min = document.getElementById("cardioMin").value;
+    const detail = document.getElementById("cardioDetail").value.trim();
+    if(!min) return;
+    const sets = {}; sets[type] = min+" min"+(detail?" · "+detail:"");
+    data.workouts.push({date:date, day:"CARDIO", title:"Cardio", sets:sets, notes:notes});
+    document.getElementById("cardioMin").value=""; document.getElementById("cardioDetail").value="";
+  } else {
+    const sets = {};
+    document.querySelectorAll(".setInput").forEach(inp=>{
+      if(inp.value.trim()) sets[inp.dataset.ex.replace("[Cardio] ","")] = inp.value.trim();
+    });
+    if(Object.keys(sets).length===0) return;
+    const day = program.days.find(p=>p.id===v);
+    data.workouts.push({date:date, day:v, title: v==="__FREE__" ? "Freestyle" : (day?day.title:v), sets:sets, notes:notes});
+    document.querySelectorAll(".setInput").forEach(inp=>inp.value="");
+    extraExercises=[];
+    renderSessionInputs();
+  }
+  document.getElementById("wNotes").value="";
+  save(); renderWork(); renderDash();
+});
+
+function renderWork(){
+  document.getElementById("programName").textContent = program.name || "Unnamed program";
+  const el = document.getElementById("workHistory");
+  if(data.workouts.length===0){
+    el.innerHTML = '<div style="padding:18px; font-size:13px; color:var(--dim);">No sessions yet.</div>';
+    return;
+  }
+  const sorted = data.workouts.map((s,idx)=>Object.assign({},s,{idx})).sort((a,b)=>b.date.localeCompare(a.date));
+  el.innerHTML = sorted.map(s=>{
+    const dayObj = program.days.find(p=>p.id===s.day);
+    const title = s.title || (dayObj?dayObj.title:s.day);
+    const setsHTML = Object.keys(s.sets).map(ex=>'<div>'+esc(ex)+': <span style="color:var(--text)">'+esc(s.sets[ex])+'</span></div>').join("");
+    return '<div style="padding:14px 16px; border-bottom:1px solid var(--border); font-size:12px;">'
+      +'<div style="display:flex; justify-content:space-between;">'
+      +'<span style="font-weight:600; color:var(--ember);">'+fmtDate(s.date)+' — '+esc(title)+'</span>'
+      +'<button class="del delWork" data-i="'+s.idx+'" aria-label="Delete">✕</button></div>'
+      +'<div style="color:var(--dim); margin-top:6px; line-height:1.7;">'+setsHTML
+      +(s.notes?'<div style="color:var(--ember); margin-top:3px;">Note: '+esc(s.notes)+'</div>':'')
+      +'</div></div>';
+  }).join("");
+  el.querySelectorAll(".delWork").forEach(b=>b.addEventListener("click",()=>{
+    data.workouts.splice(Number(b.dataset.i),1); save(); renderWork(); renderDash();
+  }));
+}
+
+// ---- program import/export ----
+document.getElementById("importBtn").addEventListener("click", ()=>document.getElementById("importFile").click());
+document.getElementById("importFile").addEventListener("change", (e)=>{
+  const file = e.target.files[0];
+  const errEl = document.getElementById("programErr");
+  errEl.classList.add("hidden");
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try {
+      program = validateProgram(JSON.parse(reader.result));
+      saveProgram();
+      extraExercises=[];
+      renderDayOptions(); renderSessionInputs(); renderWork();
+      flashSave("Program loaded ✓");
+    } catch(err){
+      errEl.textContent = "Couldn't load that file: "+err.message;
+      errEl.classList.remove("hidden");
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = "";
+});
+document.getElementById("exportBtn").addEventListener("click", ()=>{
+  download((program.name||"forge-program").replace(/[^a-z0-9]+/gi,"-").toLowerCase()+".json", JSON.stringify(program,null,2));
+});
+
+// ================== WEIGHT ==================
+document.getElementById("wtDate").value = todayStr();
+document.getElementById("addWtBtn").addEventListener("click", ()=>{
+  const v = Number(document.getElementById("wtVal").value);
+  const dt = document.getElementById("wtDate").value;
+  if(!v || v<50 || v>700) return;
+  data.weights = data.weights.filter(w=>w.date!==dt);
+  data.weights.push({date:dt, lbs:v});
+  document.getElementById("wtVal").value="";
+  save(); renderWeight(); renderDash();
+});
+
+function renderWeight(){
+  document.getElementById("chartLabel").textContent = "Trend · "+cfg.startWt+" → "+cfg.goalWt;
+  const sorted = data.weights.slice().sort((a,b)=>a.date.localeCompare(b.date));
+  const w=640,h=230,pad=38;
+  const all=[{date:"start",lbs:cfg.startWt}].concat(sorted);
+  const lbsList = all.map(p=>p.lbs);
+  const minY=Math.min(cfg.goalWt,cfg.startWt,Math.min.apply(null,lbsList))-5;
+  const maxY=Math.max(cfg.goalWt,cfg.startWt,Math.max.apply(null,lbsList))+5;
+  const y=v=>h-pad-((v-minY)/(maxY-minY))*(h-pad*2);
+  const n=Math.max(all.length-1,1);
+  const x=i=>pad+(i/n)*(w-pad*2);
+  const pts=all.map((p,i)=>x(i)+","+y(p.lbs)).join(" ");
+  let grid=""; for(let i=0;i<5;i++){const gy=pad+(i/4)*(h-pad*2); grid+='<line x1="'+pad+'" x2="'+(w-pad)+'" y1="'+gy+'" y2="'+gy+'" stroke="var(--border)" stroke-width="1"/>';}
+  const dots=all.map((p,i)=>'<circle cx="'+x(i)+'" cy="'+y(p.lbs)+'" r="4.5" fill="var(--panel)" stroke="var(--ember)" stroke-width="2.5"/>'
+    +'<text x="'+x(i)+'" y="'+(y(p.lbs)-11)+'" text-anchor="middle" font-size="10" fill="var(--text)" font-family="IBM Plex Mono">'+p.lbs+'</text>').join("");
+  document.getElementById("chart").innerHTML =
+  '<svg viewBox="0 0 '+w+' '+h+'">'
+    +'<defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="var(--ember-deep)"/><stop offset="100%" stop-color="var(--ember)"/></linearGradient>'
+    +'<linearGradient id="fg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(255,122,61,.25)"/><stop offset="100%" stop-color="rgba(255,122,61,0)"/></linearGradient></defs>'
+    +grid
+    +'<line x1="'+pad+'" x2="'+(w-pad)+'" y1="'+y(cfg.goalWt)+'" y2="'+y(cfg.goalWt)+'" stroke="var(--ok)" stroke-width="1.5" stroke-dasharray="6 5"/>'
+    +'<text x="'+(w-pad)+'" y="'+(y(cfg.goalWt)-7)+'" text-anchor="end" font-size="11" fill="var(--ok)" font-family="IBM Plex Mono">GOAL '+cfg.goalWt+'</text>'
+    +(all.length>1?('<polygon points="'+pts+' '+x(all.length-1)+','+(h-pad)+' '+x(0)+','+(h-pad)+'" fill="url(#fg)"/>'
+      +'<polyline points="'+pts+'" fill="none" stroke="url(#lg)" stroke-width="3" stroke-linecap="round"/>'):"")
+    +dots
+  +'</svg>';
+  const card=document.getElementById("wtListCard");
+  if(sorted.length===0){ card.classList.add("hidden"); return; }
+  card.classList.remove("hidden");
+  document.getElementById("wtList").innerHTML=sorted.slice().reverse().map(wp=>
+    '<div class="list-item"><span style="flex:1; color:var(--dim);">'+fmtDate(wp.date)+'</span>'
+    +'<span style="flex:1; text-align:right; font-weight:600;">'+wp.lbs+' lb</span>'
+    +'<button class="del delWt" data-d="'+wp.date+'" aria-label="Delete">✕</button></div>'
+  ).join("");
+  document.getElementById("wtList").querySelectorAll(".delWt").forEach(b=>b.addEventListener("click",()=>{
+    data.weights=data.weights.filter(w=>w.date!==b.dataset.d); save(); renderWeight(); renderDash();
+  }));
+}
+
+// ================== SETTINGS ==================
+function renderSettings(){
+  document.getElementById("sStartWt").value = cfg.startWt;
+  document.getElementById("sGoalWt").value = cfg.goalWt;
+  document.getElementById("sCalLo").value = cfg.calLo;
+  document.getElementById("sCalHi").value = cfg.calHi;
+  document.getElementById("sProLo").value = cfg.proLo;
+  document.getElementById("sProHi").value = cfg.proHi;
+  document.getElementById("sCarb").value = cfg.carbGoal;
+  document.getElementById("sFat").value = cfg.fatGoal;
+}
+document.getElementById("saveSettingsBtn").addEventListener("click", ()=>{
+  const g = id=>Number(document.getElementById(id).value);
+  cfg = {
+    startWt: g("sStartWt")||cfg.startWt, goalWt: g("sGoalWt")||cfg.goalWt,
+    calLo: g("sCalLo")||cfg.calLo, calHi: g("sCalHi")||cfg.calHi,
+    proLo: g("sProLo")||cfg.proLo, proHi: g("sProHi")||cfg.proHi,
+    carbGoal: g("sCarb")||cfg.carbGoal, fatGoal: g("sFat")||cfg.fatGoal,
+  };
+  if (cfg.calHi < cfg.calLo){ const t=cfg.calLo; cfg.calLo=cfg.calHi; cfg.calHi=t; }
+  if (cfg.proHi < cfg.proLo){ const t=cfg.proLo; cfg.proLo=cfg.proHi; cfg.proHi=t; }
+  saveCfg(); renderAll(); flashSave("Settings saved ✓");
+});
+document.getElementById("exportDataBtn").addEventListener("click", ()=>{
+  download("forge-backup-"+todayStr()+".json", JSON.stringify({cfg:cfg, program:program, data:data}, null, 2));
+});
+document.getElementById("importDataBtn").addEventListener("click", ()=>document.getElementById("importDataFile").click());
+document.getElementById("importDataFile").addEventListener("change", (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try {
+      const b = JSON.parse(reader.result);
+      if(b.data) data = b.data;
+      if(!data.recents) data.recents = [];
+      if(b.cfg) cfg = Object.assign({}, DEFAULT_CFG, b.cfg);
+      if(b.program) program = validateProgram(b.program);
+      save(); saveCfg(); saveProgram();
+      renderDayOptions(); renderSessionInputs(); renderAll();
+      flashSave("Backup restored ✓");
+    } catch(err){ flashSave("Restore failed", true); }
+  };
+  reader.readAsText(file);
+  e.target.value = "";
+});
+
+// ================== DASH ==================
+function renderDash(){
+  document.getElementById("headerSub").textContent = cfg.startWt+" → "+cfg.goalWt+" lb";
+  const sorted=data.weights.slice().sort((a,b)=>a.date.localeCompare(b.date));
+  const cur=sorted.length?sorted[sorted.length-1].lbs:cfg.startWt;
+  const total=Math.abs(cfg.startWt-cfg.goalWt)||1;
+  const moved=cfg.startWt>cfg.goalWt ? cfg.startWt-cur : cur-cfg.startWt;
+  const toGo=Math.abs(cur-cfg.goalWt);
+  const pct=Math.max(0,Math.min(100,(moved/total)*100));
+  document.getElementById("dashWt").textContent=cur;
+  document.getElementById("dashWtNote").textContent=(moved>0?((cfg.startWt>cfg.goalWt?"−":"+")+moved.toFixed(1)+" lb · "):"Baseline · ")+toGo.toFixed(1)+" to go";
+  document.getElementById("dashPct").textContent=pct.toFixed(0);
+  document.getElementById("dashPctFill").style.width=pct+"%";
+  const t=todayStr(), s=daySums(t);
+  document.getElementById("dashDateLabel").textContent="Today · "+fmtDate(t);
+  document.getElementById("dashBars").innerHTML=allBarsHTML(s);
+  const calLeft = Math.max(0, cfg.calLo - s.cal);
+  const proLeft = Math.max(0, cfg.proLo - s.pro);
+  document.getElementById("dashRemaining").textContent =
+    (calLeft>0||proLeft>0) ? ("Remaining to minimum: "+Math.round(calLeft)+" kcal · "+Math.round(proLeft)+"g protein") : "Minimums hit ✓";
+  const lastArr=data.workouts.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  const last=lastArr[0];
+  const el=document.getElementById("dashLast");
+  if(last){
+    const dayObj = program.days.find(p=>p.id===last.day);
+    const title = last.title || (dayObj?dayObj.title:last.day);
+    el.innerHTML='<div style="font-weight:600; color:var(--ember);">'+fmtDate(last.date)+' — '+esc(title)+'</div>'
+      +'<div style="margin-top:8px; line-height:1.7;">'+Object.keys(last.sets).map(ex=>'<div>'+esc(ex)+': <span style="color:var(--text)">'+esc(last.sets[ex])+'</span></div>').join("")+'</div>';
+  } else {
+    el.textContent="No sessions yet. Head to Train and log your first one.";
+  }
+}
+
+function renderAll(){ renderDash(); renderFood(); renderWork(); renderWeight(); renderSettings(); }
+
+// ================== boot ==================
+renderDayOptions();
+renderCardioOptions();
+renderLibraryOptions();
+renderSessionInputs();
+renderAll();
+
+// PWA service worker
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", ()=>{
+    navigator.serviceWorker.register("sw.js").catch(()=>{});
+  });
+}
+</script>
+</body>
+</html>
