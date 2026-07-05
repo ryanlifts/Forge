@@ -156,10 +156,19 @@
       <input id="foodQuery" placeholder='e.g. "Chobani vanilla" or "chicken breast"' style="margin-bottom:10px;" enterkeyhint="search">
       <button class="btn" id="searchBtn">🔍 Search food database</button>
       <div class="row mt10">
-        <input id="barcodeInput" placeholder="Or type barcode number (UPC)" inputmode="numeric" style="flex:2;">
-        <button class="btn ghost small" id="barcodeBtn" style="flex:1;">Look up</button>
+        <button class="btn ghost small" id="scanBtn" style="flex:1;">📷 Scan barcode</button>
+        <input id="barcodeInput" placeholder="or type UPC" inputmode="numeric" style="flex:1.4;">
+        <button class="btn ghost small" id="barcodeBtn" style="flex:0.8;">Look up</button>
       </div>
       <div class="err hidden" id="searchErr"></div>
+    </div>
+
+    <!-- barcode scanner overlay -->
+    <div id="scanOverlay" class="hidden" style="position:fixed; inset:0; z-index:50; background:rgba(16,18,21,.97); display:flex; flex-direction:column; align-items:center; justify-content:center; padding:20px;">
+      <div class="label" style="margin-bottom:12px;">Point camera at the barcode</div>
+      <div id="scanRegion" style="width:100%; max-width:420px; border-radius:14px; overflow:hidden; border:1px solid var(--border);"></div>
+      <div class="err hidden" id="scanErr" style="max-width:420px;"></div>
+      <button class="btn ghost mt14" id="scanCancelBtn" style="max-width:420px;">Cancel</button>
     </div>
 
     <div class="card hidden" id="recentsCard">
@@ -278,6 +287,43 @@
 
   <!-- ============ SETTINGS ============ -->
   <div id="view-settings" class="view">
+    <div class="card">
+      <div class="label" style="margin-bottom:12px;">Calorie & macro calculator</div>
+      <div class="row" style="margin-bottom:12px;">
+        <div><div class="label">Sex</div><select id="cSex"><option value="m">Male</option><option value="f">Female</option></select></div>
+        <div><div class="label">Age</div><input type="number" id="cAge" inputmode="numeric" placeholder="years"></div>
+      </div>
+      <div class="row" style="margin-bottom:12px;">
+        <div><div class="label">Height (ft)</div><input type="number" id="cFt" inputmode="numeric" placeholder="ft"></div>
+        <div><div class="label">Height (in)</div><input type="number" id="cIn" inputmode="numeric" placeholder="in"></div>
+        <div><div class="label">Weight (lb)</div><input type="number" id="cWt" inputmode="decimal" placeholder="lb"></div>
+      </div>
+      <div class="label">Activity level</div>
+      <select id="cAct" style="margin-bottom:12px;">
+        <option value="1.2">Sedentary (desk job, little exercise)</option>
+        <option value="1.375">Light (1–3 workouts/week)</option>
+        <option value="1.55" selected>Moderate (3–5 workouts/week)</option>
+        <option value="1.725">Very active (6–7 workouts/week or physical job)</option>
+        <option value="1.9">Athlete (2-a-days or heavy labor + training)</option>
+      </select>
+      <div class="label">Goal</div>
+      <select id="cGoal" style="margin-bottom:14px;">
+        <option value="-1000">Lose 2 lb/week (aggressive)</option>
+        <option value="-500" selected>Lose 1 lb/week</option>
+        <option value="-250">Lose 0.5 lb/week</option>
+        <option value="0">Maintain</option>
+        <option value="250">Gain 0.5 lb/week (lean bulk)</option>
+      </select>
+      <button class="btn ghost" id="calcMacrosBtn">Calculate</button>
+      <div id="calcOut" class="hidden" style="margin-top:14px;">
+        <div style="font-size:14px; line-height:1.8;" id="calcOutText"></div>
+        <button class="btn mt10" id="applyMacrosBtn">Use these as my targets</button>
+      </div>
+      <div class="note">
+        Uses the Mifflin-St Jeor equation (the standard clinical model for calorie needs), protein at ~0.9 g per lb of bodyweight, fat at ~25% of calories, carbs from the remainder.
+        For the research behind macro splits, see the <a href="https://jissn.biomedcentral.com/articles/10.1186/s12970-018-0242-y" target="_blank" rel="noopener" style="color:var(--ember);">International Society of Sports Nutrition's evidence review</a> (open access, peer-reviewed).
+      </div>
+    </div>
     <div class="card">
       <div class="label" style="margin-bottom:12px;">Bodyweight goal</div>
       <div class="row" style="margin-bottom:12px;">
@@ -406,6 +452,8 @@ function toGrams(amt, unit, servingG){
   if (unit==="g") return amt;
   if (unit==="oz") return amt*28.35;
   if (unit==="lb") return amt*453.6;
+  if (unit==="ml") return amt;            // ~1 g/ml for most foods/liquids
+  if (unit==="floz") return amt*29.57;    // ~1 g/ml
   if (unit==="serving") return amt*(servingG||100);
   return amt;
 }
@@ -523,6 +571,29 @@ function mapOFFProduct(p){
   };
 }
 
+// --- OFF search: modern endpoint first, legacy fallback ---
+function fetchWithTimeout(url, ms){
+  return new Promise((resolve, reject)=>{
+    const t = setTimeout(()=>reject(new Error("timeout")), ms);
+    fetch(url).then(r=>{ clearTimeout(t); resolve(r); }, e=>{ clearTimeout(t); reject(e); });
+  });
+}
+async function searchOFF(q){
+  const fields = "product_name,brands,nutriments,serving_size,serving_quantity";
+  // 1) modern search API
+  try {
+    const res = await fetchWithTimeout("https://search.openfoodfacts.org/search?q="+encodeURIComponent(q)+"&page_size=15&fields="+fields, 8000);
+    const json = await res.json();
+    const hits = (json.hits||[]).map(mapOFFProduct).filter(Boolean);
+    if (hits.length) return hits;
+  } catch(e){ /* fall through */ }
+  // 2) legacy search API
+  const res2 = await fetchWithTimeout("https://world.openfoodfacts.org/cgi/search.pl?search_terms="+encodeURIComponent(q)
+    +"&search_simple=1&action=process&json=1&page_size=15&sort_by=unique_scans_n&fields="+fields, 10000);
+  const json2 = await res2.json();
+  return (json2.products||[]).map(mapOFFProduct).filter(Boolean);
+}
+
 // --- search ---
 const searchBtn = document.getElementById("searchBtn");
 searchBtn.addEventListener("click", runSearch);
@@ -537,18 +608,20 @@ async function runSearch(){
   const resultsEl = document.getElementById("results");
   resultsEl.innerHTML = "";
 
-  const ql = q.toLowerCase();
-  const localHits = LOCAL_DB.filter(f=>f.n.toLowerCase().includes(ql)).slice(0,4)
-    .map(f=>({ name:f.n, brand:"Built-in · whole food", cal100:f.cal, pro100:f.pro, carb100:f.carb, fat100:f.fat, servingG:null, servingLabel:null }));
+  const tokens = q.toLowerCase().split(/\s+/).filter(t=>t.length>2);
+  const localHits = LOCAL_DB.map(f=>{
+      const name = f.n.toLowerCase();
+      const score = tokens.reduce((s,t)=>s+(name.includes(t)?1:0),0);
+      return {f:f, score:score};
+    })
+    .filter(x=>x.score>0)
+    .sort((a,b)=>b.score-a.score)
+    .slice(0,4)
+    .map(x=>({ name:x.f.n, brand:"Built-in · whole food", cal100:x.f.cal, pro100:x.f.pro, carb100:x.f.carb, fat100:x.f.fat, servingG:null, servingLabel:null }));
 
   let offHits = [];
   try {
-    const url = "https://world.openfoodfacts.org/cgi/search.pl?search_terms="+encodeURIComponent(q)
-      +"&search_simple=1&action=process&json=1&page_size=15&sort_by=unique_scans_n"
-      +"&fields=product_name,brands,nutriments,serving_size,serving_quantity";
-    const res = await fetch(url);
-    const json = await res.json();
-    offHits = (json.products||[]).map(mapOFFProduct).filter(Boolean);
+    offHits = await searchOFF(q);
   } catch(e) {
     if (localHits.length===0){
       errEl.textContent = "Couldn't reach the food database — check connection. Built-in foods and manual entry still work.";
@@ -559,6 +632,54 @@ async function runSearch(){
   renderResults([...localHits, ...offHits]);
   searchBtn.disabled = false; searchBtn.textContent = "🔍 Search food database";
 }
+
+// --- camera barcode scanning (lazy-loads scanner library on first use) ---
+let scanner = null, scannerLibLoading = null;
+function loadScannerLib(){
+  if (window.Html5Qrcode) return Promise.resolve();
+  if (scannerLibLoading) return scannerLibLoading;
+  scannerLibLoading = new Promise((resolve, reject)=>{
+    const s = document.createElement("script");
+    s.src = "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js";
+    s.onload = resolve;
+    s.onerror = ()=>reject(new Error("Scanner library failed to load"));
+    document.head.appendChild(s);
+  });
+  return scannerLibLoading;
+}
+document.getElementById("scanBtn").addEventListener("click", async ()=>{
+  const overlay = document.getElementById("scanOverlay");
+  const scanErr = document.getElementById("scanErr");
+  scanErr.classList.add("hidden");
+  overlay.classList.remove("hidden");
+  try {
+    await loadScannerLib();
+    scanner = new window.Html5Qrcode("scanRegion");
+    const formats = [
+      window.Html5QrcodeSupportedFormats.EAN_13, window.Html5QrcodeSupportedFormats.EAN_8,
+      window.Html5QrcodeSupportedFormats.UPC_A, window.Html5QrcodeSupportedFormats.UPC_E,
+    ];
+    await scanner.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 260, height: 140 }, formatsToSupport: formats },
+      async (decoded)=>{
+        await stopScanner();
+        document.getElementById("barcodeInput").value = decoded;
+        runBarcode();
+      },
+      ()=>{} // per-frame misses are normal; ignore
+    );
+  } catch(e){
+    scanErr.textContent = "Camera unavailable ("+(e.message||"permission denied")+"). Type the barcode number instead.";
+    scanErr.classList.remove("hidden");
+  }
+});
+async function stopScanner(){
+  try { if (scanner){ await scanner.stop(); scanner.clear(); } } catch(e){}
+  scanner = null;
+  document.getElementById("scanOverlay").classList.add("hidden");
+}
+document.getElementById("scanCancelBtn").addEventListener("click", stopScanner);
 
 // --- barcode ---
 document.getElementById("barcodeBtn").addEventListener("click", runBarcode);
@@ -619,6 +740,8 @@ function sliderConfigFor(unit){
   if (unit==="g") return {max:500, step:5};
   if (unit==="oz") return {max:16, step:0.25};
   if (unit==="lb") return {max:3, step:0.05};
+  if (unit==="ml") return {max:1000, step:10};
+  if (unit==="floz") return {max:32, step:0.5};
   if (unit==="serving") return {max:5, step:0.25};
   return {max:500, step:5};
 }
@@ -629,7 +752,7 @@ function selectFood(h){
   document.getElementById("selPer100").textContent =
     "per 100g: "+Math.round(h.cal100)+" kcal · "+r1(h.pro100)+"g P · "+r1(h.carb100)+"g C · "+r1(h.fat100)+"g F";
   qtyUnitEl.innerHTML = "";
-  const opts = [["g","grams"],["oz","ounces"],["lb","pounds"]];
+  const opts = [["g","grams"],["oz","ounces"],["lb","pounds"],["ml","ml"],["floz","fl oz"]];
   if (h.servingG) opts.unshift(["serving", "serving ("+(h.servingLabel||h.servingG+"g")+")"]);
   opts.forEach(pair=>{ const o=document.createElement("option"); o.value=pair[0]; o.textContent=pair[1]; qtyUnitEl.appendChild(o); });
   qtyAmountEl.value = h.servingG ? 1 : 100;
@@ -648,7 +771,7 @@ function syncSliderToUnit(){
 qtyUnitEl.addEventListener("change", ()=>{
   // sensible default when switching units
   const u = qtyUnitEl.value;
-  qtyAmountEl.value = u==="g" ? 100 : u==="oz" ? 4 : u==="lb" ? 0.5 : 1;
+  qtyAmountEl.value = u==="g" ? 100 : u==="oz" ? 4 : u==="lb" ? 0.5 : u==="ml" ? 240 : u==="floz" ? 8 : 1;
   syncSliderToUnit(); updateCalc();
 });
 qtyAmountEl.addEventListener("input", ()=>{ qtySliderEl.value = Math.min(Number(qtyAmountEl.value)||0, Number(qtySliderEl.max)); updateCalc(); });
@@ -957,6 +1080,43 @@ function renderWeight(){
     data.weights=data.weights.filter(w=>w.date!==b.dataset.d); save(); renderWeight(); renderDash();
   }));
 }
+
+// ================== MACRO CALCULATOR ==================
+function calcMacros(sex, age, ft, inches, lb, activity, goalAdj){
+  const kg = lb*0.4536;
+  const cm = (ft*12+inches)*2.54;
+  const bmr = 10*kg + 6.25*cm - 5*age + (sex==="m"?5:-161);
+  const tdee = bmr*activity;
+  const cal = Math.round(tdee + goalAdj);
+  const pro = Math.round(lb*0.9);
+  const fat = Math.round(cal*0.25/9);
+  const carb = Math.max(0, Math.round((cal - pro*4 - fat*9)/4));
+  return { bmr:Math.round(bmr), tdee:Math.round(tdee), cal:cal, pro:pro, fat:fat, carb:carb };
+}
+let lastCalc = null;
+document.getElementById("calcMacrosBtn").addEventListener("click", ()=>{
+  const sex = document.getElementById("cSex").value;
+  const age = Number(document.getElementById("cAge").value);
+  const ft = Number(document.getElementById("cFt").value);
+  const inches = Number(document.getElementById("cIn").value||0);
+  const lb = Number(document.getElementById("cWt").value);
+  const act = Number(document.getElementById("cAct").value);
+  const goal = Number(document.getElementById("cGoal").value);
+  if(!age || !ft || !lb) { flashSave("Fill age, height, weight", true); return; }
+  lastCalc = calcMacros(sex, age, ft, inches, lb, act, goal);
+  document.getElementById("calcOutText").innerHTML =
+    'Maintenance (TDEE): <b>'+lastCalc.tdee+'</b> kcal/day<br>'
+    +'Your target: <b class="ember-text">'+lastCalc.cal+' kcal</b><br>'
+    +'Protein: <b class="ember-text">'+lastCalc.pro+'g</b> · Carbs: <b>'+lastCalc.carb+'g</b> · Fat: <b>'+lastCalc.fat+'g</b>';
+  document.getElementById("calcOut").classList.remove("hidden");
+});
+document.getElementById("applyMacrosBtn").addEventListener("click", ()=>{
+  if(!lastCalc) return;
+  cfg.calLo = lastCalc.cal-100; cfg.calHi = lastCalc.cal+100;
+  cfg.proLo = Math.max(0,lastCalc.pro-10); cfg.proHi = lastCalc.pro+10;
+  cfg.carbGoal = lastCalc.carb; cfg.fatGoal = lastCalc.fat;
+  saveCfg(); renderAll(); flashSave("Targets applied ✓");
+});
 
 // ================== SETTINGS ==================
 function renderSettings(){
