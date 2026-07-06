@@ -170,6 +170,10 @@
   <div id="view-dash" class="view active">
     <div id="streakLine" class="note hidden" style="margin:0 0 10px; font-size:12px;"></div>
     <button class="btn hidden" id="nextWorkoutBtn" style="margin-bottom:12px;"></button>
+    <div class="card hidden" id="weekCard">
+      <div class="label">This week</div>
+      <div id="weekBody" style="font-size:13px; line-height:1.9;"></div>
+    </div>
     <div class="row" style="margin-bottom:12px;">
       <div class="card" style="margin-bottom:0; min-width:180px;">
         <div class="label">Current weight</div>
@@ -429,6 +433,18 @@
     <div class="card">
       <div class="label" id="chartLabel">Trend</div>
       <div id="chart"></div>
+      <div class="note hidden" id="projLine" style="font-size:12px;"></div>
+    </div>
+    <div class="card hidden" id="measureCard">
+      <div class="label">Body measurements (inches)</div>
+      <div class="row" style="margin:10px 0 12px;">
+        <div><div class="label">Waist</div><input type="number" id="mWaist" inputmode="decimal" step="any" placeholder="in"></div>
+        <div><div class="label">Chest</div><input type="number" id="mChest" inputmode="decimal" step="any" placeholder="in"></div>
+        <div><div class="label">Arm</div><input type="number" id="mArm" inputmode="decimal" step="any" placeholder="in"></div>
+      </div>
+      <button class="btn ghost small" id="mSaveBtn">Save measurements</button>
+      <div class="note">On a cut, the tape often shows progress when the scale stalls — waist trend is the honest one. Monthly is plenty.</div>
+      <div id="mList" style="margin-top:10px;"></div>
     </div>
     <div class="card flush hidden" id="wtListCard"><div id="wtList"></div></div>
   </div>
@@ -502,6 +518,9 @@
       </div>
       <button class="btn" id="saveSettingsBtn">Save settings</button>
       <div class="note">These drive every bar in the app. Anyone can set their own numbers — cutting, bulking, or maintaining.</div>
+      <div style="height:14px;"></div>
+      <button class="btn ghost small" id="measureToggleBtn">Enable body measurements</button>
+      <div class="note">Adds an optional waist/chest/arm tracker to the Weight tab. Toggle off any time — your entries stay saved.</div>
     </div>
     <div class="card">
       <div class="label" style="margin-bottom:10px;">USDA food database (optional, free)</div>
@@ -516,6 +535,24 @@
       <button class="btn ghost small" id="importDataBtn">⬆ Restore from backup</button>
       <input type="file" id="importDataFile" accept=".json,application/json" class="hidden">
       <div class="note">Data lives only on this device. Back up occasionally or when moving phones.</div>
+    </div>
+  </div>
+</div>
+
+<div id="liftOverlay" class="hidden" style="position:fixed; inset:0; z-index:56; background:var(--bg); overflow-y:auto; padding:16px 14px 90px;">
+  <div style="max-width:720px; margin:0 auto;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+      <div style="font-family:'Oswald',sans-serif; font-weight:700; font-size:20px; text-transform:uppercase;" id="liftTitle"></div>
+      <button class="xbtn" id="liftCloseBtn">✕ Close</button>
+    </div>
+    <div class="note" style="margin:0 0 12px;">Estimated 1RM per session (Epley). Dots are your logged best each day.</div>
+    <div class="card"><div id="liftChart"></div></div>
+    <div class="card">
+      <div class="row" style="align-items:flex-end;">
+        <div style="flex:1;"><div class="label">Goal for this lift (lb, est. 1RM)</div><input type="number" id="liftGoalInput" inputmode="numeric" placeholder="e.g. 315"></div>
+        <button class="xbtn" id="liftGoalSave" style="flex:0 0 auto;">Set goal</button>
+      </div>
+      <div class="note" id="liftGoalNote"></div>
     </div>
   </div>
 </div>
@@ -1696,7 +1733,7 @@ document.getElementById("addWtBtn").addEventListener("click", ()=>{
   data.weights = data.weights.filter(w=>w.date!==dt);
   data.weights.push({date:dt, lbs:v});
   document.getElementById("wtVal").value="";
-  save(); renderWeight(); renderDash();
+  save(); renderWeight(); renderDash(); renderProjection(); renderWeek();
   if (dt===todayStr()) checkWeightAdjust(v);
 });
 
@@ -1855,10 +1892,12 @@ function renderPRs(){
   card.classList.remove("hidden");
   names.sort((a,b)=>map[b].e1rm-map[a].e1rm);
   document.getElementById("prList").innerHTML = names.slice(0,8).map(ex=>
-    '<div class="list-item"><span style="flex:2;">'+esc(ex)+'</span>'
+    '<div class="list-item" style="cursor:pointer;" data-ex="'+esc(ex)+'"><span style="flex:2;">'+esc(ex)+' <span style="color:var(--dim); font-size:10px;">📈</span></span>'
     +'<span style="flex:1.4; text-align:right; color:var(--dim);">'+map[ex].w+'×'+map[ex].r+'</span>'
     +'<span style="flex:1; text-align:right; font-weight:600; color:var(--ember);">~'+Math.round(map[ex].e1rm)+'</span></div>'
   ).join("");
+  document.getElementById("prList").querySelectorAll("[data-ex]").forEach(row=>
+    row.addEventListener("click", ()=>openLiftChart(row.dataset.ex)));
 }
 function lastSessionFor(dayId){
   let best = null;
@@ -2145,7 +2184,183 @@ async function searchUSDA(q){
   const json = await res.json();
   return (json.foods||[]).map(mapUSDA).filter(Boolean);
 }
+// ================== ANALYTICS ==================
+// --- generic line chart (dates -> values) with optional goal line ---
+function lineChartSVG(pts, goal){
+  const w=640, h=230, pad=40;
+  if (!pts.length) return '<div class="note">Not enough data yet.</div>';
+  const ys = pts.map(p=>p.y).concat(goal?[goal]:[]);
+  const minY = Math.min.apply(null, ys)-10, maxY = Math.max.apply(null, ys)+10;
+  const t0 = new Date(pts[0].date).getTime();
+  const t1 = Math.max(new Date(pts[pts.length-1].date).getTime(), t0+1);
+  const x = d => pad + ((new Date(d).getTime()-t0)/(t1-t0)) * (w-pad*2);
+  const y = v => h-pad-((v-minY)/(maxY-minY))*(h-pad*2);
+  let grid=""; for(let i=0;i<5;i++){const gy=pad+(i/4)*(h-pad*2); grid+='<line x1="'+pad+'" x2="'+(w-pad)+'" y1="'+gy+'" y2="'+gy+'" stroke="var(--border)" stroke-width="1"/>';}
+  const line = pts.length>1 ? '<polyline points="'+pts.map(p=>x(p.date)+","+y(p.y)).join(" ")+'" fill="none" stroke="url(#lg2)" stroke-width="3" stroke-linecap="round"/>' : "";
+  const dots = pts.map(p=>'<circle cx="'+x(p.date)+'" cy="'+y(p.y)+'" r="4.5" fill="var(--panel)" stroke="var(--ember)" stroke-width="2.5"/>'
+    +'<text x="'+x(p.date)+'" y="'+(y(p.y)-11)+'" text-anchor="middle" font-size="10" fill="var(--text)" font-family="IBM Plex Mono">'+Math.round(p.y)+'</text>').join("");
+  const goalLine = goal ? '<line x1="'+pad+'" x2="'+(w-pad)+'" y1="'+y(goal)+'" y2="'+y(goal)+'" stroke="var(--ok)" stroke-width="1.5" stroke-dasharray="6 5"/>'
+    +'<text x="'+(w-pad)+'" y="'+(y(goal)-7)+'" text-anchor="end" font-size="11" fill="var(--ok)" font-family="IBM Plex Mono">GOAL '+goal+'</text>' : "";
+  return '<svg viewBox="0 0 '+w+' '+h+'"><defs><linearGradient id="lg2" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="var(--ember-deep)"/><stop offset="100%" stop-color="var(--ember)"/></linearGradient></defs>'
+    +grid+goalLine+line+dots+'</svg>';
+}
+
+// --- per-lift chart overlay ---
+let liftOverlayEx = null;
+function liftHistory(exName){
+  const byDate = {};
+  data.workouts.forEach(s=>{
+    const v = s.sets[exName];
+    if (!v) return;
+    const b = parseBestSet(v);
+    if (b && (!byDate[s.date] || b.e1rm>byDate[s.date])) byDate[s.date] = b.e1rm;
+  });
+  return Object.keys(byDate).sort().map(d=>({date:d, y:byDate[d]}));
+}
+function openLiftChart(exName){
+  liftOverlayEx = exName;
+  document.getElementById("liftTitle").textContent = exName;
+  const goal = (cfg.liftGoals||{})[exName] || null;
+  const pts = liftHistory(exName);
+  document.getElementById("liftChart").innerHTML = lineChartSVG(pts, goal);
+  document.getElementById("liftGoalInput").value = goal || "";
+  const best = pts.length ? Math.round(Math.max.apply(null, pts.map(p=>p.y))) : 0;
+  document.getElementById("liftGoalNote").textContent = goal
+    ? "Current best: ~"+best+" est. 1RM · "+Math.max(0, goal-best)+" lb to go"
+    : "Set a goal to draw a target line on the chart.";
+  document.getElementById("liftOverlay").classList.remove("hidden");
+}
+document.getElementById("liftCloseBtn").addEventListener("click", ()=>document.getElementById("liftOverlay").classList.add("hidden"));
+document.getElementById("liftGoalSave").addEventListener("click", ()=>{
+  const v = Number(document.getElementById("liftGoalInput").value);
+  if(!cfg.liftGoals) cfg.liftGoals = {};
+  if (v>0) cfg.liftGoals[liftOverlayEx] = v; else delete cfg.liftGoals[liftOverlayEx];
+  saveCfg();
+  ackBtn("liftGoalSave", "✓ Goal set");
+  openLiftChart(liftOverlayEx);
+});
+
+// --- weekly review ---
+function renderWeek(){
+  const card = document.getElementById("weekCard");
+  const now = new Date();
+  const days = [];
+  for(let i=6;i>=0;i--){
+    const d = new Date(now); d.setDate(d.getDate()-i);
+    days.push(d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"));
+  }
+  const logged = days.filter(d=>(data.food[d]||[]).length>0);
+  const sessions = data.workouts.filter(w=>days.indexOf(w.date)>=0).length;
+  const wIn = data.weights.filter(w=>days.indexOf(w.date)>=0).sort((a,b)=>a.date.localeCompare(b.date));
+  if (!logged.length && !sessions && wIn.length<2){ card.classList.add("hidden"); return; }
+  card.classList.remove("hidden");
+  const fullDays = logged.map(d=>daySums(d)).filter(x=>x.cal>500);
+  const avgCal = fullDays.length ? Math.round(fullDays.reduce((s,x)=>s+x.cal,0)/fullDays.length) : null;
+  const proDays = logged.filter(d=>daySums(d).pro>=cfg.proLo).length;
+  let html = "";
+  if (avgCal!=null){
+    const inBand = avgCal>=cfg.calLo && avgCal<=cfg.calHi;
+    html += 'Avg calories: <b style="color:'+(inBand?'var(--ok)':'var(--text)')+'">'+avgCal+'</b> <span style="color:var(--dim)">/ '+cfg.calLo+'–'+cfg.calHi+'</span><br>';
+  }
+  if (logged.length) html += 'Protein target hit: <b>'+proDays+' of '+logged.length+'</b> logged days<br>';
+  html += 'Sessions: <b>'+sessions+'</b> this week<br>';
+  if (wIn.length>=2){
+    const dw = Math.round((wIn[wIn.length-1].lbs - wIn[0].lbs)*10)/10;
+    html += 'Weight: <b style="color:'+(dw<=0?'var(--ok)':'var(--text)')+'">'+(dw>0?'+':'')+dw+' lb</b> this week';
+  }
+  document.getElementById("weekBody").innerHTML = html;
+}
+
+// --- goal projection ---
+function weightSlope(daysBack){
+  const cutoff = new Date(Date.now() - daysBack*86400000);
+  const cutStr = cutoff.getFullYear()+"-"+String(cutoff.getMonth()+1).padStart(2,"0")+"-"+String(cutoff.getDate()).padStart(2,"0");
+  const wts = data.weights.filter(w=>w.date>=cutStr).sort((a,b)=>a.date.localeCompare(b.date));
+  if (wts.length<4) return null;
+  const span = (new Date(wts[wts.length-1].date) - new Date(wts[0].date))/86400000;
+  if (span<10) return null;
+  const t0 = new Date(wts[0].date).getTime();
+  const pts = wts.map(w=>({x:(new Date(w.date).getTime()-t0)/86400000, y:w.lbs}));
+  const n=pts.length, sx=pts.reduce((s,p)=>s+p.x,0), sy=pts.reduce((s,p)=>s+p.y,0);
+  const sxx=pts.reduce((s,p)=>s+p.x*p.x,0), sxy=pts.reduce((s,p)=>s+p.x*p.y,0);
+  const den = n*sxx-sx*sx;
+  if (!den) return null;
+  return { slope:(n*sxy-sx*sy)/den, current: wts[wts.length-1].lbs };
+}
+function renderProjection(){
+  const el = document.getElementById("projLine");
+  const r = weightSlope(35);
+  if (!r){ el.classList.add("hidden"); return; }
+  const rate = Math.round(r.slope*7*10)/10; // lb/week
+  const toGo = cfg.goalWt - r.current;      // negative when cutting
+  el.classList.remove("hidden");
+  if (Math.abs(rate) < 0.15){
+    el.textContent = "Trend: holding steady — not enough movement to project a goal date.";
+    return;
+  }
+  if ((toGo<0 && rate>=0) || (toGo>0 && rate<=0)){
+    el.textContent = "Trending "+(rate>0?"+":"")+rate+" lb/week — currently moving away from your "+cfg.goalWt+" lb goal.";
+    return;
+  }
+  const weeks = toGo/rate;
+  if (weeks > 104){
+    el.textContent = "Trending "+(rate>0?"+":"")+rate+" lb/week — over ~2 years to goal at this rate.";
+    return;
+  }
+  const eta = new Date(Date.now() + weeks*7*86400000);
+  const fmt = eta.toLocaleDateString("en-US", {month:"short", day:"numeric", year:"numeric"});
+  el.innerHTML = 'At your current rate (<b>'+(rate>0?'+':'')+rate+' lb/week</b>), you reach <b class="ember-text">'+cfg.goalWt+' lb around '+fmt+'</b>.';
+}
+
+// --- body measurements (optional) ---
+function renderMeasureToggle(){
+  document.getElementById("measureToggleBtn").textContent = cfg.measureOn ? "Disable body measurements" : "Enable body measurements";
+  document.getElementById("measureCard").classList.toggle("hidden", !cfg.measureOn);
+}
+document.getElementById("measureToggleBtn").addEventListener("click", ()=>{
+  cfg.measureOn = !cfg.measureOn;
+  saveCfg();
+  renderMeasureToggle();
+  ackBtn("measureToggleBtn", cfg.measureOn ? "✓ Enabled" : "✓ Disabled");
+  renderMeasure();
+});
+document.getElementById("mSaveBtn").addEventListener("click", ()=>{
+  const waist = Number(document.getElementById("mWaist").value)||null;
+  const chest = Number(document.getElementById("mChest").value)||null;
+  const arm = Number(document.getElementById("mArm").value)||null;
+  if (!waist && !chest && !arm){ flashSave("Enter at least one", true); return; }
+  if (!data.measure) data.measure = [];
+  const dt = todayStr();
+  data.measure = data.measure.filter(m=>m.date!==dt);
+  data.measure.push({date:dt, waist:waist, chest:chest, arm:arm});
+  ["mWaist","mChest","mArm"].forEach(id=>document.getElementById(id).value="");
+  save(); renderMeasure();
+  ackBtn("mSaveBtn", "✓ Saved");
+});
+function renderMeasure(){
+  if (!cfg.measureOn) return;
+  const el = document.getElementById("mList");
+  const list = (data.measure||[]).slice().sort((a,b)=>b.date.localeCompare(a.date));
+  if (!list.length){ el.innerHTML = ""; return; }
+  el.innerHTML = list.map((m,i)=>{
+    const prev = list[i+1];
+    const delta = (cur, pre)=> (cur!=null && pre!=null) ? ' <span style="color:'+(cur<pre?'var(--ok)':'var(--dim)')+'; font-size:10px;">('+(cur-pre>0?'+':'')+Math.round((cur-pre)*10)/10+')</span>' : '';
+    return '<div class="list-item"><span style="flex:1; color:var(--dim);">'+fmtDate(m.date)+'</span>'
+      +'<span style="flex:3; text-align:right; font-size:12px;">'
+      +(m.waist!=null?('W '+m.waist+delta(m.waist, prev&&prev.waist)+'  '):'')
+      +(m.chest!=null?('C '+m.chest+delta(m.chest, prev&&prev.chest)+'  '):'')
+      +(m.arm!=null?('A '+m.arm+delta(m.arm, prev&&prev.arm)):'')
+      +'</span>'
+      +'<button class="del mdel" data-d="'+m.date+'" aria-label="Delete">✕</button></div>';
+  }).join("");
+  el.querySelectorAll(".mdel").forEach(b=>b.addEventListener("click",()=>{
+    data.measure = data.measure.filter(m=>m.date!==b.dataset.d);
+    save(); renderMeasure();
+  }));
+}
+
 // ================== MACRO CALCULATOR ==================
+
 function calcMacros(sex, age, ft, inches, lb, activity, goalAdj){
   const kg = lb*0.4536;
   const cm = (ft*12+inches)*2.54;
@@ -2375,7 +2590,7 @@ document.getElementById("dashWtBtn").addEventListener("click", ()=>{
   data.weights = data.weights.filter(w=>w.date!==dt);
   data.weights.push({date:dt, lbs:v});
   document.getElementById("dashWtInput").value="";
-  save(); renderWeight(); renderDash(); renderTDEE();
+  save(); renderWeight(); renderDash(); renderTDEE(); renderProjection(); renderWeek();
   flashSave("Weight recorded ✓");
   ackBtn("dashWtBtn", "✓");
   checkWeightAdjust(v);
@@ -2427,7 +2642,7 @@ function renderNextWorkout(){
   btn.textContent = "▶ Start next: "+(nd.id?nd.id+" · ":"")+nd.title;
   btn.classList.remove("hidden");
 }
-function renderAll(){ renderDash(); renderFood(); renderWork(); renderWeight(); renderSettings(); renderMeals(); renderPRs(); renderTDEE(); renderNextWorkout();
+function renderAll(){ renderDash(); renderFood(); renderWork(); renderWeight(); renderSettings(); renderMeals(); renderPRs(); renderTDEE(); renderNextWorkout(); renderWeek(); renderProjection(); renderMeasureToggle(); renderMeasure();
   const st = computeStreak();
   const sl = document.getElementById("streakLine");
   if (st>=2){ sl.textContent = "🔥 "+st+"-day logging streak — keep the chain alive"; sl.classList.remove("hidden"); }
