@@ -109,6 +109,16 @@
   .exercise .x-head b { font-weight:600; }
   .exercise .x-head .scheme { color:var(--ember); }
   svg { width:100%; display:block; }
+  /* meal segmented control */
+  .seg { display:flex; gap:6px; }
+  .seg button { flex:1; font-family:'Oswald',sans-serif; font-weight:600; font-size:12px; letter-spacing:.05em;
+    text-transform:uppercase; padding:10px 2px; border-radius:10px; border:1px solid var(--border);
+    background:transparent; color:var(--dim); cursor:pointer; }
+  .seg button.on { background:linear-gradient(135deg,var(--ember),var(--ember-deep)); color:#16100B; border-color:transparent; }
+  .mealhead { display:flex; justify-content:space-between; align-items:baseline; padding:11px 16px 7px;
+    border-bottom:1px solid var(--border); background:var(--panel-up); }
+  .mealhead .mh-name { font-family:'Oswald',sans-serif; font-weight:600; font-size:13px; letter-spacing:.06em; text-transform:uppercase; }
+  .mealhead .mh-tot { font-size:11px; color:var(--dim); }
   /* set rows */
   .srow { display:flex; align-items:center; gap:6px; margin-bottom:6px; }
   .srow .slabel { font-size:10px; color:var(--dim); width:34px; }
@@ -197,6 +207,14 @@
     <div class="card">
       <div class="label">Log date</div>
       <input type="date" id="foodDate" style="max-width:190px; margin-bottom:14px;">
+      <div class="label">Logging to</div>
+      <div class="seg" id="mealSeg" style="margin-bottom:4px;">
+        <button data-meal="breakfast">Bkfst</button>
+        <button data-meal="lunch">Lunch</button>
+        <button data-meal="dinner">Dinner</button>
+        <button data-meal="snacks">Snacks</button>
+      </div>
+      <div style="height:12px;"></div>
       <div class="label">Search any food or brand</div>
       <input id="foodQuery" placeholder='e.g. "Chobani vanilla" or "chicken breast"' style="margin-bottom:10px;" enterkeyhint="search">
       <button class="btn" id="searchBtn">🔍 Search food database</button>
@@ -242,9 +260,13 @@
       <div id="mealChips" style="margin-top:10px;"></div>
     </div>
 
-    <div class="card hidden" id="recentsCard">
-      <div class="label" style="margin-bottom:10px;">Recent foods — tap to log again</div>
-      <div id="recents"></div>
+    <div class="card hidden" id="recentsCard" style="padding:12px 16px;">
+      <button id="recentsToggle" style="width:100%; display:flex; justify-content:space-between; align-items:center;
+        background:none; border:none; color:var(--text); font-family:inherit; font-size:12px; cursor:pointer; padding:4px 0;">
+        <span class="label" style="margin:0;" id="recentsLabel">Frequent breakfast foods</span>
+        <span id="recentsArrow" style="color:var(--dim);">▾</span>
+      </button>
+      <div id="recents" class="hidden" style="margin-top:10px;"></div>
     </div>
 
     <div class="card flush hidden" id="resultsCard">
@@ -335,12 +357,16 @@
         </div>
       </div>
       <div id="plateOut" style="font-size:13px; margin-top:10px; color:var(--ember); font-weight:600;"></div>
-      <div class="row mt10">
-        <div class="label" style="align-self:center; margin:0;">Rest timer:</div>
-        <button class="btn ghost small" data-rest="90">1:30</button>
-        <button class="btn ghost small" data-rest="120">2:00</button>
-        <button class="btn ghost small" data-rest="180">3:00</button>
-        <div id="restDisplay" style="font-family:'Oswald',sans-serif; font-weight:700; font-size:24px; align-self:center; min-width:70px; text-align:center;"></div>
+      <div class="row mt10" id="restRow" style="align-items:center;">
+        <div class="label" style="align-self:center; margin:0; flex:0 0 auto;">Rest:</div>
+        <div id="restPresets" style="display:flex; gap:6px; flex-wrap:wrap; flex:1;"></div>
+        <button class="xbtn" id="restCustomBtn" style="flex:0 0 auto;">＋</button>
+        <button id="restDisplay" aria-label="Tap to cancel timer" style="font-family:'Oswald',sans-serif; font-weight:700; font-size:24px;
+          background:none; border:none; color:var(--text); cursor:pointer; min-width:70px; text-align:center; padding:0;"></button>
+      </div>
+      <div class="row hidden mt10" id="restCustomRow" style="align-items:flex-end;">
+        <div style="flex:1;"><div class="label">Custom rest (seconds)</div><input type="number" id="restCustomInput" inputmode="numeric" placeholder="e.g. 240"></div>
+        <button class="xbtn" id="restCustomSet" style="flex:0 0 auto;">Set</button>
       </div>
     </div>
 
@@ -612,7 +638,7 @@ function download(filename, text){
 
 // ================== state ==================
 let data = loadJSON(DATA_KEY, null) || loadJSON("ryan-cut:data", null) || { food:{}, workouts:[], weights:[], recents:[] };
-if(!data.recents) data.recents = []; if(!data.myFoods) data.myFoods = {}; if(!data.meals) data.meals = []; if(!data.finished) data.finished = {}; if(!data.foodCounts) data.foodCounts = {};
+if(!data.recents) data.recents = []; if(!data.myFoods) data.myFoods = {}; if(!data.meals) data.meals = []; if(!data.finished) data.finished = {}; if(!data.foodCounts) data.foodCounts = {}; if(!data.mealCounts) data.mealCounts = {};
 let cfg = Object.assign({}, DEFAULT_CFG, loadJSON(CFG_KEY, {}));
 let program = loadJSON(PROG_KEY, DEFAULT_PROGRAM);
 try { validateProgram(program); } catch(e){ program = DEFAULT_PROGRAM; }
@@ -671,6 +697,33 @@ function goalBarHTML(label, value, goal, unit){
 }
 
 // ================== FOOD ==================
+const MEALS = ["breakfast","lunch","dinner","snacks"];
+const MEAL_LABEL = {breakfast:"Breakfast", lunch:"Lunch", dinner:"Dinner", snacks:"Snacks", other:"Uncategorized"};
+function defaultMeal(){
+  const h = new Date().getHours() + new Date().getMinutes()/60;
+  if (h < 10.5) return "breakfast";
+  if (h < 15) return "lunch";
+  if (h < 20.5) return "dinner";
+  return "snacks";
+}
+let currentMeal = defaultMeal();
+let recentsOpen = false;
+function renderMealSeg(){
+  document.querySelectorAll("#mealSeg button").forEach(b=>{
+    b.classList.toggle("on", b.dataset.meal===currentMeal);
+  });
+  document.getElementById("recentsLabel").textContent = "Frequent "+currentMeal+" foods";
+}
+document.querySelectorAll("#mealSeg button").forEach(b=>b.addEventListener("click", ()=>{
+  currentMeal = b.dataset.meal;
+  renderMealSeg(); renderRecents();
+}));
+document.getElementById("recentsToggle").addEventListener("click", ()=>{
+  recentsOpen = !recentsOpen;
+  document.getElementById("recents").classList.toggle("hidden", !recentsOpen);
+  document.getElementById("recentsArrow").textContent = recentsOpen ? "▴" : "▾";
+});
+
 const foodDateEl = document.getElementById("foodDate");
 foodDateEl.value = todayStr();
 foodDateEl.addEventListener("change", renderFood);
@@ -993,22 +1046,30 @@ document.getElementById("addSelBtn").addEventListener("click", ()=>{
 });
 
 // --- recents ---
-function pushRecent(item){
+function pushRecent(item, meal){
   if(!data.foodCounts) data.foodCounts = {};
+  if(!data.mealCounts) data.mealCounts = {};
+  const m = meal || currentMeal;
   const key = item.name+"|"+(item.brand||"");
   data.foodCounts[key] = (data.foodCounts[key]||0)+1;
+  if(!data.mealCounts[m]) data.mealCounts[m] = {};
+  data.mealCounts[m][key] = (data.mealCounts[m][key]||0)+1;
   data.recents = (data.recents||[]).filter(r=>r.name!==item.name || r.brand!==item.brand);
   data.recents.unshift(item);
-  data.recents.sort((a,b)=>(data.foodCounts[b.name+"|"+(b.brand||"")]||0)-(data.foodCounts[a.name+"|"+(a.brand||"")]||0));
-  data.recents = data.recents.slice(0,12);
+  data.recents = data.recents.slice(0,20);
   save(); renderRecents();
 }
 function renderRecents(){
   const card = document.getElementById("recentsCard");
   const el = document.getElementById("recents");
-  const list = data.recents||[];
+  const counts = (data.mealCounts||{})[currentMeal]||{};
+  const list = (data.recents||[])
+    .filter(r=>counts[r.name+"|"+(r.brand||"")]>0)
+    .sort((a,b)=>(counts[b.name+"|"+(b.brand||"")]||0)-(counts[a.name+"|"+(a.brand||"")]||0))
+    .slice(0,8);
   if(!list.length){ card.classList.add("hidden"); return; }
   card.classList.remove("hidden");
+  el.classList.toggle("hidden", !recentsOpen);
   el.innerHTML = "";
   list.forEach(r=>{
     const b = document.createElement("button");
@@ -1039,6 +1100,7 @@ document.getElementById("addManualBtn").addEventListener("click", ()=>{
 function addEntry(entry){
   const d = foodDateEl.value;
   if(!data.food[d]) data.food[d]=[];
+  if(!entry.meal) entry.meal = currentMeal;
   data.food[d].push(entry);
   save(); renderFood(); renderDash();
 }
@@ -1058,17 +1120,30 @@ function renderFood(){
   if(list.length===0){
     el.innerHTML = '<div style="padding:18px; font-size:13px; color:var(--dim);">Nothing logged for this date yet.</div>';
   } else {
-    el.innerHTML = list.map((f,i)=>
-      '<div class="list-item">'
-      +'<div style="flex:1; min-width:0;"><div style="font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">'+esc(f.name)+'</div>'
-      +'<div style="color:var(--dim); font-size:11px;">'+Math.round(f.cal)+' kcal · '+Math.round(f.pro)+'P / '+Math.round(f.carb||0)+'C / '+Math.round(f.fat||0)+'F</div></div>'
-      +'<button class="del dup" data-i="'+i+'" aria-label="Duplicate" style="color:var(--dim);">⧉</button>'
-      +'<button class="del" data-i="'+i+'" aria-label="Remove">✕</button></div>'
-    ).join("");
+    const groups = ["breakfast","lunch","dinner","snacks","other"];
+    let html = "";
+    groups.forEach(g=>{
+      const idxs = [];
+      list.forEach((f,i)=>{ if((f.meal||"other")===g) idxs.push(i); });
+      if(!idxs.length) return;
+      const gc = idxs.reduce((s,i)=>s+Number(list[i].cal||0),0);
+      const gp = idxs.reduce((s,i)=>s+Number(list[i].pro||0),0);
+      html += '<div class="mealhead"><span class="mh-name">'+MEAL_LABEL[g]+'</span>'
+        +'<span class="mh-tot">'+Math.round(gc)+' kcal · '+Math.round(gp)+'g P</span></div>';
+      idxs.forEach(i=>{
+        const f = list[i];
+        html += '<div class="list-item">'
+          +'<div style="flex:1; min-width:0;"><div style="font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">'+esc(f.name)+'</div>'
+          +'<div style="color:var(--dim); font-size:11px;">'+Math.round(f.cal)+' kcal · '+Math.round(f.pro)+'P / '+Math.round(f.carb||0)+'C / '+Math.round(f.fat||0)+'F</div></div>'
+          +'<button class="del dup" data-i="'+i+'" aria-label="Duplicate" style="color:var(--dim);">⧉</button>'
+          +'<button class="del" data-i="'+i+'" aria-label="Remove">✕</button></div>';
+      });
+    });
+    el.innerHTML = html;
     el.querySelectorAll(".del:not(.dup)").forEach(b=>b.addEventListener("click",()=>removeEntry(Number(b.dataset.i))));
     el.querySelectorAll(".dup").forEach(b=>b.addEventListener("click",()=>{
       const f = list[Number(b.dataset.i)];
-      addEntry(Object.assign({}, f));
+      addEntry(Object.assign({}, f)); // keeps original meal
     }));
   }
   renderRecents();
@@ -1891,24 +1966,61 @@ function updatePlates(){
 document.getElementById("plateTarget").addEventListener("input", updatePlates);
 document.getElementById("plateBar").addEventListener("change", updatePlates);
 
-let restInterval = null;
+let restInterval = null, restRunning = false;
 function startRest(seconds){
   clearInterval(restInterval);
+  restRunning = true;
   let sec = seconds;
   const disp = document.getElementById("restDisplay");
   const tick = ()=>{
     disp.textContent = Math.floor(sec/60)+":"+String(sec%60).padStart(2,"0");
     disp.style.color = sec<=10 ? "var(--ok)" : "var(--text)";
-    if (sec<=0){ clearInterval(restInterval); disp.textContent="GO!"; disp.style.color="var(--ok)"; }
+    if (sec<=0){ clearInterval(restInterval); restRunning=false; disp.textContent="GO!"; disp.style.color="var(--ok)"; }
     sec--;
   };
   tick();
   restInterval = setInterval(tick, 1000);
 }
-document.querySelectorAll("[data-rest]").forEach(b=>b.addEventListener("click", ()=>{
-  cfg.restSec = Number(b.dataset.rest); saveCfg();
-  startRest(cfg.restSec);
-}));
+function cancelRest(){
+  clearInterval(restInterval);
+  restRunning = false;
+  const disp = document.getElementById("restDisplay");
+  disp.textContent = "";
+}
+document.getElementById("restDisplay").addEventListener("click", cancelRest);
+function fmtRest(sec){ return Math.floor(sec/60)+":"+String(sec%60).padStart(2,"0"); }
+function renderRestPresets(){
+  const wrap = document.getElementById("restPresets");
+  wrap.innerHTML = "";
+  const presets = [90,120,180];
+  if (cfg.customRestSec && presets.indexOf(cfg.customRestSec)===-1) presets.push(cfg.customRestSec);
+  presets.forEach(p=>{
+    const b = document.createElement("button");
+    b.className = "xbtn";
+    b.textContent = fmtRest(p);
+    if (p===cfg.restSec) b.style.borderColor = "var(--ember)";
+    b.addEventListener("click", ()=>{
+      cfg.restSec = p; saveCfg();
+      renderRestPresets();
+      startRest(p);
+    });
+    wrap.appendChild(b);
+  });
+}
+document.getElementById("restCustomBtn").addEventListener("click", ()=>{
+  document.getElementById("restCustomRow").classList.toggle("hidden");
+});
+document.getElementById("restCustomSet").addEventListener("click", ()=>{
+  const v = Math.round(Number(document.getElementById("restCustomInput").value));
+  if (!v || v<10 || v>1800){ flashSave("10–1800 seconds", true); return; }
+  cfg.customRestSec = v;
+  cfg.restSec = v;
+  saveCfg();
+  document.getElementById("restCustomRow").classList.add("hidden");
+  document.getElementById("restCustomInput").value = "";
+  renderRestPresets();
+  startRest(v);
+});
 
 // ================== SHARE PROGRAM ==================
 document.getElementById("shareBtn").addEventListener("click", async ()=>{
@@ -2029,7 +2141,7 @@ document.getElementById("importDataFile").addEventListener("change", (e)=>{
     try {
       const b = JSON.parse(reader.result);
       if(b.data) data = b.data;
-      if(!data.recents) data.recents = []; if(!data.myFoods) data.myFoods = {}; if(!data.meals) data.meals = []; if(!data.finished) data.finished = {}; if(!data.foodCounts) data.foodCounts = {};
+      if(!data.recents) data.recents = []; if(!data.myFoods) data.myFoods = {}; if(!data.meals) data.meals = []; if(!data.finished) data.finished = {}; if(!data.foodCounts) data.foodCounts = {}; if(!data.mealCounts) data.mealCounts = {};
       if(b.cfg) cfg = Object.assign({}, DEFAULT_CFG, b.cfg);
       if(b.program) program = validateProgram(b.program);
       save(); saveCfg(); saveProgram();
@@ -2112,6 +2224,8 @@ renderCardioOptions();
 renderLibraryOptions();
 initSessionState();
 renderSessionInputs();
+renderMealSeg();
+renderRestPresets();
 renderAll();
 
 // PWA service worker
