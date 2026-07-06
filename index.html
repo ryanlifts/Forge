@@ -109,7 +109,18 @@
   .exercise .x-head b { font-weight:600; }
   .exercise .x-head .scheme { color:var(--ember); }
   svg { width:100%; display:block; }
-  @media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
+  /* celebration overlay */
+  #celebrate { position:fixed; inset:0; z-index:60; background:rgba(16,18,21,.97); display:flex; align-items:center; justify-content:center; padding:24px; }
+  .cel-box { max-width:440px; width:100%; text-align:center; }
+  .cel-title { font-family:'Oswald',sans-serif; font-weight:700; font-size:40px; text-transform:uppercase; line-height:1.1;
+    background:linear-gradient(135deg,var(--ember),var(--ember-deep)); -webkit-background-clip:text; background-clip:text; color:transparent;
+    animation:pulse 1.2s ease-in-out infinite alternate; }
+  @keyframes pulse { from { transform:scale(1); } to { transform:scale(1.05); } }
+  .cel-quote { font-size:15px; line-height:1.7; margin:18px 0 6px; }
+  .cel-attr { color:var(--ember); font-size:12px; margin-bottom:14px; }
+  .cel-tip { color:var(--dim); font-size:12px; line-height:1.7; border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:16px; text-align:left; }
+  .cel-pr { color:var(--ok); font-size:13px; font-weight:600; margin:10px 0; line-height:1.8; }
+  @media (prefers-reduced-motion: reduce) { * { transition:none !important; } .cel-title { animation:none; } }
 </style>
 </head>
 <body>
@@ -124,6 +135,7 @@
 
   <!-- ============ HOME ============ -->
   <div id="view-dash" class="view active">
+    <div id="streakLine" class="note hidden" style="margin:0 0 10px; font-size:12px;"></div>
     <div class="row" style="margin-bottom:12px;">
       <div class="card" style="margin-bottom:0; min-width:180px;">
         <div class="label">Current weight</div>
@@ -141,10 +153,17 @@
       <div id="dashBars"></div>
       <div class="note" id="dashRemaining" style="margin-top:2px;"></div>
     </div>
+    <div class="card hidden" id="tdeeCard">
+      <div class="label">Your measured metabolism</div>
+      <div id="tdeeText" style="font-size:13px; line-height:1.8;"></div>
+      <button class="btn ghost small mt10" id="tdeeApplyBtn">Recalibrate my targets</button>
+      <div class="note">Computed from YOUR logged food vs YOUR actual weight change — more accurate than any formula. Updates as you log.</div>
+    </div>
     <div class="card">
       <div class="label">Last session</div>
       <div id="dashLast" style="font-size:13px; color:var(--dim);">No sessions yet.</div>
     </div>
+    <button class="btn" id="finishDayBtn" style="margin-bottom:12px;">🏁 Finish today's log</button>
   </div>
 
   <!-- ============ FOOD ============ -->
@@ -169,6 +188,32 @@
       <div id="scanRegion" style="width:100%; max-width:420px; border-radius:14px; overflow:hidden; border:1px solid var(--border);"></div>
       <div class="err hidden" id="scanErr" style="max-width:420px;"></div>
       <button class="btn ghost mt14" id="scanCancelBtn" style="max-width:420px;">Cancel</button>
+    </div>
+
+    <!-- custom food creator (shown when a barcode isn't in the database) -->
+    <div class="card hidden" id="customCard">
+      <div class="label">Not in the database — save it once, own it forever</div>
+      <div class="note" style="margin-top:0; margin-bottom:12px;">Copy these from the nutrition label. Next time you scan this barcode, your entry comes up instantly.</div>
+      <input id="cfName" placeholder="Food name (e.g. Friendly Farms Vanilla Greek Yogurt)" style="margin-bottom:10px;">
+      <div class="row" style="margin-bottom:10px;">
+        <div><div class="label">Serving size (g)</div><input type="number" id="cfServG" inputmode="decimal" placeholder="e.g. 170"></div>
+        <div><div class="label">Calories / serving</div><input type="number" id="cfCal" inputmode="numeric" placeholder="kcal"></div>
+      </div>
+      <div class="row" style="margin-bottom:12px;">
+        <div><div class="label">Protein g</div><input type="number" id="cfPro" inputmode="decimal" placeholder="g"></div>
+        <div><div class="label">Carbs g</div><input type="number" id="cfCarb" inputmode="decimal" placeholder="g"></div>
+        <div><div class="label">Fat g</div><input type="number" id="cfFat" inputmode="decimal" placeholder="g"></div>
+      </div>
+      <button class="btn" id="cfSaveBtn">Save & select</button>
+    </div>
+
+    <div class="card" id="quickCard">
+      <div class="label" style="margin-bottom:10px;">Quick log</div>
+      <div class="row">
+        <button class="btn ghost small" id="copyYesterdayBtn">⧉ Copy yesterday</button>
+        <button class="btn ghost small" id="saveMealBtn">＋ Save today as a meal</button>
+      </div>
+      <div id="mealChips" style="margin-top:10px;"></div>
     </div>
 
     <div class="card hidden" id="recentsCard">
@@ -227,11 +272,33 @@
       <div id="programName" style="font-family:'Oswald',sans-serif; font-weight:600; font-size:18px; text-transform:uppercase; margin-bottom:10px;"></div>
       <div class="row">
         <button class="btn ghost small" id="importBtn">⬆ Load program</button>
-        <button class="btn ghost small" id="exportBtn">⬇ Save program file</button>
+        <button class="btn ghost small" id="exportBtn">⬇ Save file</button>
+        <button class="btn ghost small" id="shareBtn">📤 Share</button>
       </div>
       <input type="file" id="importFile" accept=".json,application/json" class="hidden">
       <div class="err hidden" id="programErr"></div>
       <div class="note">Load any FORGE program file (.json). Ask Claude to build one for your goals, download it, and load it here.</div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="align-items:flex-end;">
+        <div style="flex:1.2;">
+          <div class="label">Plate math (per side)</div>
+          <input type="number" id="plateTarget" inputmode="decimal" placeholder="Target weight, e.g. 275">
+        </div>
+        <div style="flex:0.8;">
+          <div class="label">Bar</div>
+          <select id="plateBar"><option value="45">45 lb</option><option value="35">35 lb</option><option value="15">15 lb</option></select>
+        </div>
+      </div>
+      <div id="plateOut" style="font-size:13px; margin-top:10px; color:var(--ember); font-weight:600;"></div>
+      <div class="row mt10">
+        <div class="label" style="align-self:center; margin:0;">Rest timer:</div>
+        <button class="btn ghost small" data-rest="90">1:30</button>
+        <button class="btn ghost small" data-rest="120">2:00</button>
+        <button class="btn ghost small" data-rest="180">3:00</button>
+        <div id="restDisplay" style="font-family:'Oswald',sans-serif; font-weight:700; font-size:24px; align-self:center; min-width:70px; text-align:center;"></div>
+      </div>
     </div>
 
     <div class="card">
@@ -260,6 +327,11 @@
       <div class="label">Notes (optional)</div>
       <input id="wNotes" placeholder="How it went, PRs, joint status…" style="margin-bottom:14px;">
       <button class="btn" id="logWorkoutBtn">Log session</button>
+    </div>
+
+    <div class="card flush hidden" id="prCard">
+      <div style="padding:12px 16px; border-bottom:1px solid var(--border);"><span class="label" style="margin:0;">Personal records (est. 1RM)</span></div>
+      <div id="prList"></div>
     </div>
 
     <div class="card flush">
@@ -347,6 +419,12 @@
       <div class="note">These drive every bar in the app. Anyone can set their own numbers — cutting, bulking, or maintaining.</div>
     </div>
     <div class="card">
+      <div class="label" style="margin-bottom:10px;">USDA food database (optional, free)</div>
+      <input id="sUsdaKey" placeholder="Paste your free USDA API key" style="margin-bottom:10px;">
+      <button class="btn ghost small" id="saveUsdaBtn">Save key</button>
+      <div class="note">Adds 400,000+ US branded products (including store brands) to your search. Get a free key in ~1 minute at <a href="https://fdc.nal.usda.gov/api-key-signup.html" target="_blank" rel="noopener" style="color:var(--ember);">fdc.nal.usda.gov</a> — they email it instantly.</div>
+    </div>
+    <div class="card">
       <div class="label" style="margin-bottom:10px;">Data</div>
       <button class="btn ghost small" id="exportDataBtn">⬇ Back up all data (.json)</button>
       <div style="height:10px;"></div>
@@ -354,6 +432,18 @@
       <input type="file" id="importDataFile" accept=".json,application/json" class="hidden">
       <div class="note">Data lives only on this device. Back up occasionally or when moving phones.</div>
     </div>
+  </div>
+</div>
+
+<div id="celebrate" class="hidden">
+  <div class="cel-box">
+    <div class="cel-title" id="celTitle">Session Forged</div>
+    <div class="cel-pr hidden" id="celPR"></div>
+    <div id="celStats" class="note" style="font-size:12px;"></div>
+    <div class="cel-quote" id="celQuote"></div>
+    <div class="cel-attr" id="celAttr"></div>
+    <div class="cel-tip" id="celTip"></div>
+    <button class="btn" id="celCloseBtn">Keep forging</button>
   </div>
 </div>
 
@@ -479,7 +569,7 @@ function download(filename, text){
 
 // ================== state ==================
 let data = loadJSON(DATA_KEY, null) || loadJSON("ryan-cut:data", null) || { food:{}, workouts:[], weights:[], recents:[] };
-if(!data.recents) data.recents = [];
+if(!data.recents) data.recents = []; if(!data.myFoods) data.myFoods = {}; if(!data.meals) data.meals = []; if(!data.finished) data.finished = {};
 let cfg = Object.assign({}, DEFAULT_CFG, loadJSON(CFG_KEY, {}));
 let program = loadJSON(PROG_KEY, DEFAULT_PROGRAM);
 try { validateProgram(program); } catch(e){ program = DEFAULT_PROGRAM; }
@@ -609,27 +699,31 @@ async function runSearch(){
   resultsEl.innerHTML = "";
 
   const tokens = q.toLowerCase().split(/\s+/).filter(t=>t.length>2);
+  const scoreName = (name)=>tokens.reduce((s,t)=>s+(name.toLowerCase().includes(t)?1:0),0);
+  // personal foods first
+  const myHits = Object.keys(data.myFoods||{}).map(code=>data.myFoods[code])
+    .map(f=>({f:f, score:scoreName(f.name)})).filter(x=>x.score>0)
+    .sort((a,b)=>b.score-a.score).slice(0,4).map(x=>x.f);
   const localHits = LOCAL_DB.map(f=>{
-      const name = f.n.toLowerCase();
-      const score = tokens.reduce((s,t)=>s+(name.includes(t)?1:0),0);
-      return {f:f, score:score};
+      return {f:f, score:scoreName(f.n)};
     })
     .filter(x=>x.score>0)
     .sort((a,b)=>b.score-a.score)
     .slice(0,4)
     .map(x=>({ name:x.f.n, brand:"Built-in · whole food", cal100:x.f.cal, pro100:x.f.pro, carb100:x.f.carb, fat100:x.f.fat, servingG:null, servingLabel:null }));
 
-  let offHits = [];
+  let usdaHits = [], offHits = [];
+  try { usdaHits = await searchUSDA(q); } catch(e){ /* USDA optional */ }
   try {
     offHits = await searchOFF(q);
   } catch(e) {
-    if (localHits.length===0){
-      errEl.textContent = "Couldn't reach the food database — check connection. Built-in foods and manual entry still work.";
+    if (localHits.length===0 && myHits.length===0 && usdaHits.length===0){
+      errEl.textContent = "Couldn't reach the food databases — check connection. Built-in foods and manual entry still work.";
       errEl.classList.remove("hidden");
     }
   }
 
-  renderResults([...localHits, ...offHits]);
+  renderResults([...myHits, ...localHits, ...usdaHits, ...offHits]);
   searchBtn.disabled = false; searchBtn.textContent = "🔍 Search food database";
 }
 
@@ -688,7 +782,13 @@ async function runBarcode(){
   const code = document.getElementById("barcodeInput").value.trim().replace(/\D/g,"");
   const errEl = document.getElementById("searchErr");
   errEl.classList.add("hidden");
+  document.getElementById("customCard").classList.add("hidden");
   if(!code) return;
+  // personal library first
+  if (data.myFoods && data.myFoods[code]){
+    selectFood(data.myFoods[code]);
+    return;
+  }
   const btn = document.getElementById("barcodeBtn");
   btn.disabled = true; btn.textContent = "…";
   try {
@@ -697,10 +797,9 @@ async function runBarcode(){
     if (json.status===1 && json.product){
       const h = mapOFFProduct(json.product);
       if (h){ selectFood(h); }
-      else { errEl.textContent = "Product found but has no nutrition data — enter it manually."; errEl.classList.remove("hidden"); }
+      else { await tryUSDABarcode(code); }
     } else {
-      errEl.textContent = "Barcode not found in the database — enter it manually.";
-      errEl.classList.remove("hidden");
+      await tryUSDABarcode(code);
     }
   } catch(e){
     errEl.textContent = "Couldn't reach the database — check connection.";
@@ -708,6 +807,47 @@ async function runBarcode(){
   }
   btn.disabled = false; btn.textContent = "Look up";
 }
+
+async function tryUSDABarcode(code){
+  if (cfg.usdaKey){
+    try {
+      const hits = await searchUSDA(code); // USDA matches UPC/GTIN in query
+      if (hits.length){ selectFood(hits[0]); return; }
+    } catch(e){}
+  }
+  openCustomForm(code);
+}
+
+// --- personal barcode library ---
+let pendingBarcode = null;
+function openCustomForm(code){
+  pendingBarcode = code;
+  document.getElementById("customCard").classList.remove("hidden");
+  const cc = document.getElementById("customCard");
+  if (cc.scrollIntoView) cc.scrollIntoView({behavior:"smooth", block:"center"});
+}
+document.getElementById("cfSaveBtn").addEventListener("click", ()=>{
+  const name = document.getElementById("cfName").value.trim();
+  const servG = Number(document.getElementById("cfServG").value);
+  const cal = Number(document.getElementById("cfCal").value);
+  if(!name || !servG || !cal){ flashSave("Need name, serving size, calories", true); return; }
+  const pro = Number(document.getElementById("cfPro").value||0);
+  const carb = Number(document.getElementById("cfCarb").value||0);
+  const fat = Number(document.getElementById("cfFat").value||0);
+  const food = {
+    name: name, brand: "My foods",
+    cal100: cal/servG*100, pro100: pro/servG*100, carb100: carb/servG*100, fat100: fat/servG*100,
+    servingG: servG, servingLabel: servG+"g",
+  };
+  if(!data.myFoods) data.myFoods = {};
+  if(pendingBarcode) data.myFoods[pendingBarcode] = food;
+  save();
+  ["cfName","cfServG","cfCal","cfPro","cfCarb","cfFat"].forEach(id=>document.getElementById(id).value="");
+  document.getElementById("customCard").classList.add("hidden");
+  pendingBarcode = null;
+  selectFood(food);
+  flashSave("Saved to your foods ✓");
+});
 
 function renderResults(hits){
   const resultsEl = document.getElementById("results");
@@ -930,13 +1070,16 @@ function renderSessionInputs(){
     return;
   }
   strengthBlock.classList.remove("hidden"); cardioBlock.classList.add("hidden");
+  const last = (v!=="__FREE__") ? lastSessionFor(v) : null;
   const list = currentDayExercises().concat(extraExercises);
   document.getElementById("exerciseInputs").innerHTML = list.map(ex=>{
     const isCardio = ex.name.indexOf("[Cardio] ")===0;
     const ph = isCardio ? 'e.g. 20 min, 2 mi' : 'e.g. 275×5, 275×5, 275×4';
+    const prev = last && last.sets[ex.name] ? last.sets[ex.name] : null;
     return '<div class="exercise"><div class="x-head"><span><b>'+esc(ex.name.replace("[Cardio] ",""))+'</b>'
-      +(ex.scheme?' <span class="scheme">· '+esc(ex.scheme)+'</span>':'')+'</span></div>'
-      +'<input class="setInput" data-ex="'+esc(ex.name)+'" placeholder="'+ph+'"></div>';
+      +(ex.scheme?' <span class="scheme">· '+esc(ex.scheme)+'</span>':'')+'</span>'
+      +(prev?'<span style="color:var(--dim); font-size:11px;">last: '+esc(prev)+'</span>':'')+'</div>'
+      +'<input class="setInput" data-ex="'+esc(ex.name)+'" placeholder="'+(prev?esc(prev)+' → beat it':ph)+'"></div>';
   }).join("") || '<div class="note" style="margin-bottom:14px;">No exercises yet — add from the library below.</div>';
 }
 
@@ -962,23 +1105,39 @@ document.getElementById("logWorkoutBtn").addEventListener("click", ()=>{
     const sets = {}; sets[type] = min+" min"+(detail?" · "+detail:"");
     data.workouts.push({date:date, day:"CARDIO", title:"Cardio", sets:sets, notes:notes});
     document.getElementById("cardioMin").value=""; document.getElementById("cardioDetail").value="";
-  } else {
-    const sets = {};
-    document.querySelectorAll(".setInput").forEach(inp=>{
-      if(inp.value.trim()) sets[inp.dataset.ex.replace("[Cardio] ","")] = inp.value.trim();
-    });
-    if(Object.keys(sets).length===0) return;
-    const day = program.days.find(p=>p.id===v);
-    data.workouts.push({date:date, day:v, title: v==="__FREE__" ? "Freestyle" : (day?day.title:v), sets:sets, notes:notes});
-    document.querySelectorAll(".setInput").forEach(inp=>inp.value="");
-    extraExercises=[];
-    renderSessionInputs();
+    save(); renderWork(); renderDash();
+    showCelebration("Cardio Banked", null, type+" · "+min+" min");
+    return;
   }
+  const sets = {};
+  document.querySelectorAll(".setInput").forEach(inp=>{
+    if(inp.value.trim()) sets[inp.dataset.ex.replace("[Cardio] ","")] = inp.value.trim();
+  });
+  if(Object.keys(sets).length===0) return;
+  // PR detection BEFORE pushing the new session
+  const prLines = [];
+  Object.keys(sets).forEach(ex=>{
+    const nb = parseBestSet(sets[ex]);
+    if(!nb) return;
+    const hist = bestHistorical(ex, -1);
+    if (hist && nb.e1rm > hist.e1rm + 0.5){
+      prLines.push("🏆 PR: "+ex+" "+nb.w+"×"+nb.r+" (est 1RM "+Math.round(nb.e1rm)+", was "+Math.round(hist.e1rm)+")");
+    }
+  });
+  const day = program.days.find(p=>p.id===v);
+  data.workouts.push({date:date, day:v, title: v==="__FREE__" ? "Freestyle" : (day?day.title:v), sets:sets, notes:notes});
+  document.querySelectorAll(".setInput").forEach(inp=>inp.value="");
+  extraExercises=[];
+  renderSessionInputs();
   document.getElementById("wNotes").value="";
   save(); renderWork(); renderDash();
+  const streak = computeStreak();
+  showCelebration(prLines.length ? "PR FORGED" : "Session Forged", prLines,
+    Object.keys(sets).length+" exercises logged"+(streak>1?"  ·  🔥 "+streak+"-day streak":""));
 });
 
 function renderWork(){
+  renderPRs();
   document.getElementById("programName").textContent = program.name || "Unnamed program";
   const el = document.getElementById("workHistory");
   if(data.workouts.length===0){
@@ -1081,6 +1240,336 @@ function renderWeight(){
   }));
 }
 
+// ================== MOTIVATION ==================
+const QUOTES = [
+  {q:"The last three or four reps is what makes the muscle grow.", a:"Arnold Schwarzenegger"},
+  {q:"Everybody wants to be a bodybuilder, but nobody wants to lift no heavy-ass weights.", a:"Ronnie Coleman"},
+  {q:"I hated every minute of training, but I said, don't quit. Suffer now and live the rest of your life as a champion.", a:"Muhammad Ali"},
+  {q:"Today I will do what others won't, so tomorrow I can accomplish what others can't.", a:"Jerry Rice"},
+  {q:"Strength does not come from winning. Your struggles develop your strengths.", a:"Arnold Schwarzenegger"},
+  {q:"The successful warrior is the average man, with laser-like focus.", a:"Bruce Lee"},
+  {q:"If you think lifting is dangerous, try being weak. Being weak is dangerous.", a:"Bret Contreras"},
+  {q:"The pain you feel today will be the strength you feel tomorrow.", a:"Common gym wisdom"},
+  {q:"Discipline is doing what you hate to do, but doing it like you love it.", a:"Mike Tyson"},
+  {q:"You miss 100% of the shots you don't take.", a:"Wayne Gretzky"},
+  {q:"It's not about how hard you hit. It's about how hard you can get hit and keep moving forward.", a:"Rocky Balboa"},
+  {q:"A champion is someone who gets up when they can't.", a:"Jack Dempsey"},
+  {q:"Success usually comes to those who are too busy to be looking for it.", a:"Henry David Thoreau"},
+  {q:"The body achieves what the mind believes.", a:"Common training wisdom"},
+  {q:"Don't count the days, make the days count.", a:"Muhammad Ali"},
+  {q:"What hurts today makes you stronger tomorrow.", a:"Jay Cutler"},
+  {q:"The worst thing I can be is the same as everybody else.", a:"Arnold Schwarzenegger"},
+  {q:"You shall gain, but you shall pay with sweat, blood, and vomit.", a:"Pavel Tsatsouline"},
+  {q:"There are no shortcuts. Everything is reps, reps, reps.", a:"Arnold Schwarzenegger"},
+  {q:"Champions aren't made in gyms. Champions are made from something deep inside them: a desire, a dream, a vision.", a:"Muhammad Ali"},
+  {q:"Hard work beats talent when talent doesn't work hard.", a:"Tim Notke"},
+  {q:"If it doesn't challenge you, it doesn't change you.", a:"Fred DeVito"},
+  {q:"We are what we repeatedly do. Excellence, then, is not an act, but a habit.", a:"Will Durant"},
+  {q:"Whether you think you can, or you think you can't — you're right.", a:"Henry Ford"},
+];
+const TIPS = [
+  "Protein first: build every meal around the protein source, then fill in the rest. It protects muscle on a cut and keeps you full.",
+  "Weigh in daily, judge weekly. A single day's scale number is mostly water — the 7-day average is the truth.",
+  "The best diet is the one you can still be doing in 6 months. Sustainable beats optimal.",
+  "Sleep is a training variable. Under 7 hours measurably drops strength, recovery, and willpower around food.",
+  "Hitting your protein minimum on a rough eating day still counts as a win. Never let one bad meal become a bad week.",
+  "Progressive overload is the whole game: add a rep or 5 lbs before you add exercises.",
+  "Log your sets during rest periods, not after the workout — accuracy dies fast from memory.",
+  "Warm-up sets are practice reps. Same bar speed and setup as your work sets, just lighter.",
+  "If a joint hurts, change the exercise, not the goal. There's always a pain-free variation that trains the same muscle.",
+  "Walking is the most underrated fat-loss tool: 8-10k steps burns real calories without eating into recovery.",
+  "Pre-log your food in the morning. Deciding once beats negotiating with yourself all day.",
+  "Water before meals, protein at every meal, vegetables at most: three habits that cover 80% of diet quality.",
+  "A deload week every 6-8 weeks isn't lost progress — it's when accumulated fatigue clears and PRs get unlocked.",
+  "Grip the floor with your feet on squats and deadlifts. Full-body tension starts at the ground.",
+  "Cardio doesn't kill gains; zero recovery does. Keep easy cardio easy and it only helps.",
+  "Restaurant survival: protein entrée, double vegetables, sauce on the side. You can eat out and stay on target.",
+  "Strength is a skill. Frequent, crisp practice with good bar speed beats occasional all-out grinders.",
+  "The scale up 2 lbs overnight? Salt, carbs, and stress hold water. Fat gain requires ~7,000 surplus calories — you didn't eat that.",
+  "Film your heavy sets from the side. The camera catches depth and back position your ego won't.",
+  "Hungry before bed on a cut? Casein-heavy foods — Greek yogurt, cottage cheese — digest slowly and protect overnight recovery.",
+  "Same lifts, same order, same rest times week to week — change too many variables and you can't tell what's working.",
+  "Motivation gets you started; systems keep you going. That's why you log.",
+];
+function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+
+function showCelebration(title, prLines, statsText){
+  document.getElementById("celTitle").textContent = title;
+  const prEl = document.getElementById("celPR");
+  if (prLines && prLines.length){ prEl.innerHTML = prLines.map(esc).join("<br>"); prEl.classList.remove("hidden"); }
+  else prEl.classList.add("hidden");
+  document.getElementById("celStats").textContent = statsText || "";
+  const qu = pick(QUOTES);
+  document.getElementById("celQuote").textContent = "\u201C"+qu.q+"\u201D";
+  document.getElementById("celAttr").textContent = "— "+qu.a;
+  document.getElementById("celTip").textContent = "💡 " + pick(TIPS);
+  document.getElementById("celebrate").classList.remove("hidden");
+}
+document.getElementById("celCloseBtn").addEventListener("click", ()=>document.getElementById("celebrate").classList.add("hidden"));
+
+// ================== e1RM / PR ENGINE ==================
+function parseBestSet(str){
+  // finds best estimated 1RM in a string like "275x5, 285×3"
+  let best = null;
+  const re = /(\d+(?:\.\d+)?)\s*[x×]\s*(\d+)/g;
+  let m;
+  while((m = re.exec(str)) !== null){
+    const w = parseFloat(m[1]), r = parseInt(m[2],10);
+    if (!w || !r || r>30) continue;
+    const e = w*(1+r/30); // Epley
+    if (!best || e>best.e1rm) best = {w:w, r:r, e1rm:e};
+  }
+  return best;
+}
+function bestHistorical(exName, excludeIdx){
+  let best = null;
+  data.workouts.forEach((s,i)=>{
+    if (i===excludeIdx) return;
+    const str = s.sets[exName];
+    if(!str) return;
+    const b = parseBestSet(str);
+    if (b && (!best || b.e1rm>best.e1rm)) best = b;
+  });
+  return best;
+}
+function allPRs(){
+  const map = {};
+  data.workouts.forEach(s=>{
+    Object.keys(s.sets).forEach(ex=>{
+      const b = parseBestSet(s.sets[ex]);
+      if (b && (!map[ex] || b.e1rm>map[ex].e1rm)) map[ex] = Object.assign({date:s.date}, b);
+    });
+  });
+  return map;
+}
+function renderPRs(){
+  const map = allPRs();
+  const names = Object.keys(map);
+  const card = document.getElementById("prCard");
+  if(!names.length){ card.classList.add("hidden"); return; }
+  card.classList.remove("hidden");
+  names.sort((a,b)=>map[b].e1rm-map[a].e1rm);
+  document.getElementById("prList").innerHTML = names.slice(0,8).map(ex=>
+    '<div class="list-item"><span style="flex:2;">'+esc(ex)+'</span>'
+    +'<span style="flex:1.4; text-align:right; color:var(--dim);">'+map[ex].w+'×'+map[ex].r+'</span>'
+    +'<span style="flex:1; text-align:right; font-weight:600; color:var(--ember);">~'+Math.round(map[ex].e1rm)+'</span></div>'
+  ).join("");
+}
+function lastSessionFor(dayId){
+  let best = null;
+  data.workouts.forEach(s=>{
+    if (s.day!==dayId) return;
+    if (!best || s.date>=best.date) best = s; // >= so later entries win same-day ties
+  });
+  return best;
+}
+
+// ================== ADAPTIVE TDEE ==================
+function computeTDEE(){
+  const today = new Date();
+  const cutoff = new Date(today.getTime() - 28*86400000);
+  const cutStr = cutoff.getFullYear()+"-"+String(cutoff.getMonth()+1).padStart(2,"0")+"-"+String(cutoff.getDate()).padStart(2,"0");
+  const wts = data.weights.filter(w=>w.date>=cutStr).sort((a,b)=>a.date.localeCompare(b.date));
+  if (wts.length<4) return null;
+  const spanDays = (new Date(wts[wts.length-1].date) - new Date(wts[0].date))/86400000;
+  if (spanDays<10) return null;
+  const tStr = todayStr();
+  const calDays = Object.keys(data.food).filter(d=>d>=wts[0].date && d<=wts[wts.length-1].date && d<tStr)
+    .map(d=>daySums(d).cal).filter(c=>c>800);
+  if (calDays.length<7) return null;
+  const avgCal = calDays.reduce((s,c)=>s+c,0)/calDays.length;
+  // least-squares slope of weight in lb/day
+  const t0 = new Date(wts[0].date).getTime();
+  const pts = wts.map(w=>({x:(new Date(w.date).getTime()-t0)/86400000, y:w.lbs}));
+  const n = pts.length;
+  const sx = pts.reduce((s,p)=>s+p.x,0), sy = pts.reduce((s,p)=>s+p.y,0);
+  const sxx = pts.reduce((s,p)=>s+p.x*p.x,0), sxy = pts.reduce((s,p)=>s+p.x*p.y,0);
+  const denom = n*sxx - sx*sx;
+  if (!denom) return null;
+  const slope = (n*sxy - sx*sy)/denom; // lb per day
+  const tdee = avgCal - slope*3500;
+  return { tdee:Math.round(tdee), avgCal:Math.round(avgCal), weeklyChange:Math.round(slope*7*10)/10, days:calDays.length };
+}
+let lastTDEE = null;
+function renderTDEE(){
+  const card = document.getElementById("tdeeCard");
+  lastTDEE = computeTDEE();
+  if(!lastTDEE){ card.classList.add("hidden"); return; }
+  card.classList.remove("hidden");
+  document.getElementById("tdeeText").innerHTML =
+    'Measured TDEE: <b class="ember-text">'+lastTDEE.tdee+' kcal/day</b><br>'
+    +'Based on '+lastTDEE.days+' logged days, avg '+lastTDEE.avgCal+' kcal, trending '
+    +(lastTDEE.weeklyChange<=0? lastTDEE.weeklyChange : "+"+lastTDEE.weeklyChange)+' lb/week';
+}
+document.getElementById("tdeeApplyBtn").addEventListener("click", ()=>{
+  if(!lastTDEE) return;
+  const currentDeficit = Math.round((cfg.calLo+cfg.calHi)/2) - lastTDEE.tdee; // negative = deficit intent preserved? use target rate instead:
+  // preserve the user's current intended rate: assume they want the same deficit they originally set vs formula; simplest robust move: keep a 500 deficit if losing, else maintain
+  const losing = cfg.goalWt < cfg.startWt;
+  const target = lastTDEE.tdee + (losing ? -500 : 0);
+  cfg.calLo = target-100; cfg.calHi = target+100;
+  saveCfg(); renderAll(); flashSave("Targets recalibrated ✓");
+});
+
+// ================== STREAK ==================
+function computeStreak(){
+  let streak = 0;
+  const d = new Date();
+  for(let i=0;i<365;i++){
+    const ds = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+    const logged = (data.food[ds]&&data.food[ds].length) || data.workouts.some(w=>w.date===ds) || (data.finished&&data.finished[ds]);
+    if (logged) streak++;
+    else if (i>0) break; // today not logged yet doesn't break the streak
+    d.setDate(d.getDate()-1);
+  }
+  return streak;
+}
+
+// ================== FINISH DAY ==================
+document.getElementById("finishDayBtn").addEventListener("click", ()=>{
+  const t = todayStr();
+  if(!data.finished) data.finished = {};
+  data.finished[t] = true;
+  save();
+  const s = daySums(t);
+  const inCal = s.cal>=cfg.calLo && s.cal<=cfg.calHi;
+  const inPro = s.pro>=cfg.proLo;
+  const streak = computeStreak();
+  const stats = Math.round(s.cal)+" kcal · "+Math.round(s.pro)+"g protein"
+    +(inCal&&inPro ? " — both targets hit 🎯" : inPro ? " — protein target hit" : "")
+    +(streak>1 ? "  ·  🔥 "+streak+"-day streak" : "");
+  showCelebration("Day Complete", null, stats);
+  renderDash();
+});
+
+// ================== QUICK LOG: copy yesterday & meals ==================
+document.getElementById("copyYesterdayBtn").addEventListener("click", ()=>{
+  const d = new Date(foodDateEl.value+"T12:00:00");
+  d.setDate(d.getDate()-1);
+  const yd = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+  const list = data.food[yd]||[];
+  if(!list.length){ flashSave("Nothing logged yesterday", true); return; }
+  const cur = foodDateEl.value;
+  if(!data.food[cur]) data.food[cur]=[];
+  list.forEach(f=>data.food[cur].push(Object.assign({},f)));
+  save(); renderFood(); renderDash();
+  flashSave("Copied "+list.length+" items ✓");
+});
+document.getElementById("saveMealBtn").addEventListener("click", ()=>{
+  const list = data.food[foodDateEl.value]||[];
+  if(!list.length){ flashSave("Log some food first", true); return; }
+  const name = prompt("Name this meal (e.g. My breakfast):");
+  if(!name) return;
+  if(!data.meals) data.meals=[];
+  data.meals = data.meals.filter(m=>m.name!==name);
+  data.meals.push({name:name, items:list.map(f=>Object.assign({},f))});
+  data.meals = data.meals.slice(-12);
+  save(); renderMeals();
+  flashSave("Meal saved ✓");
+});
+function renderMeals(){
+  const el = document.getElementById("mealChips");
+  const meals = data.meals||[];
+  el.innerHTML = "";
+  meals.forEach((m,i)=>{
+    const cal = m.items.reduce((s,f)=>s+Number(f.cal||0),0);
+    const b = document.createElement("button");
+    b.className="chip";
+    b.textContent = m.name+" ("+Math.round(cal)+" kcal)";
+    b.addEventListener("click", ()=>{
+      const cur = foodDateEl.value;
+      if(!data.food[cur]) data.food[cur]=[];
+      m.items.forEach(f=>data.food[cur].push(Object.assign({},f)));
+      save(); renderFood(); renderDash();
+      flashSave("Added "+m.name+" ✓");
+    });
+    b.addEventListener("contextmenu",(e)=>{
+      e.preventDefault();
+      if(confirm("Delete meal '"+m.name+"'?")){ data.meals.splice(i,1); save(); renderMeals(); }
+    });
+    el.appendChild(b);
+  });
+}
+
+// ================== PLATE MATH & REST TIMER ==================
+function plateMath(target, bar){
+  const perSide = (target-bar)/2;
+  if (perSide<0) return "Lighter than the bar";
+  const plates = [45,35,25,10,5,2.5];
+  let rem = perSide; const out = [];
+  plates.forEach(p=>{ const n = Math.floor(rem/p); if(n>0){ out.push(n+"×"+p); rem = Math.round((rem-n*p)*100)/100; } });
+  return out.length ? out.join(" + ")+" per side"+(rem>0?" (+"+rem+" left)":"") : "Empty bar";
+}
+function updatePlates(){
+  const t = Number(document.getElementById("plateTarget").value);
+  const b = Number(document.getElementById("plateBar").value);
+  document.getElementById("plateOut").textContent = t ? plateMath(t,b) : "";
+}
+document.getElementById("plateTarget").addEventListener("input", updatePlates);
+document.getElementById("plateBar").addEventListener("change", updatePlates);
+
+let restInterval = null;
+document.querySelectorAll("[data-rest]").forEach(b=>b.addEventListener("click", ()=>{
+  clearInterval(restInterval);
+  let sec = Number(b.dataset.rest);
+  const disp = document.getElementById("restDisplay");
+  const tick = ()=>{
+    disp.textContent = Math.floor(sec/60)+":"+String(sec%60).padStart(2,"0");
+    disp.style.color = sec<=10 ? "var(--ok)" : "var(--text)";
+    if (sec<=0){ clearInterval(restInterval); disp.textContent="GO!"; disp.style.color="var(--ok)"; }
+    sec--;
+  };
+  tick();
+  restInterval = setInterval(tick, 1000);
+}));
+
+// ================== SHARE PROGRAM ==================
+document.getElementById("shareBtn").addEventListener("click", async ()=>{
+  const json = JSON.stringify(program,null,2);
+  const fname = (program.name||"forge-program").replace(/[^a-z0-9]+/gi,"-").toLowerCase()+".json";
+  try {
+    if (navigator.canShare && window.File){
+      const file = new File([json], fname, {type:"application/json"});
+      if (navigator.canShare({files:[file]})){
+        await navigator.share({files:[file], title:program.name});
+        return;
+      }
+    }
+    if (navigator.share){ await navigator.share({title:program.name, text:json}); return; }
+  } catch(e){ /* user cancelled or unsupported */ }
+  download(fname, json); // fallback
+});
+
+// ================== USDA SEARCH ==================
+function mapUSDA(f){
+  // Handles branded (labelNutrients + servingSize) and standard (per-100g foodNutrients)
+  const getNut = (id)=> {
+    const n = (f.foodNutrients||[]).find(x=>x.nutrientId===id || (x.nutrient&&x.nutrient.id===id));
+    return n ? Number(n.value!=null?n.value:(n.amount||0)) : 0;
+  };
+  let cal100 = getNut(1008), pro100 = getNut(1003), carb100 = getNut(1005), fat100 = getNut(1004);
+  if (!cal100 && f.labelNutrients && f.servingSize){
+    const g = Number(f.servingSize); // grams for most branded
+    const l = f.labelNutrients;
+    const per = (v)=> v&&v.value!=null ? Number(v.value)/g*100 : 0;
+    cal100 = per(l.calories); pro100 = per(l.protein); carb100 = per(l.carbohydrates); fat100 = per(l.fat);
+  }
+  if (!cal100) return null;
+  return {
+    name: f.description || f.lowercaseDescription || "Unknown",
+    brand: f.brandName || f.brandOwner || "USDA",
+    cal100:cal100, pro100:pro100, carb100:carb100, fat100:fat100,
+    servingG: f.servingSize && (String(f.servingSizeUnit||"").toLowerCase().indexOf("g")===0 || String(f.servingSizeUnit||"").toLowerCase()==="ml") ? Number(f.servingSize) : null,
+    servingLabel: f.servingSize ? f.servingSize+(f.servingSizeUnit||"g") : null,
+  };
+}
+async function searchUSDA(q){
+  if (!cfg.usdaKey) return [];
+  const res = await fetchWithTimeout("https://api.nal.usda.gov/fdc/v1/foods/search?api_key="+encodeURIComponent(cfg.usdaKey)
+    +"&query="+encodeURIComponent(q)+"&pageSize=10&dataType=Branded,Foundation,SR%20Legacy", 8000);
+  const json = await res.json();
+  return (json.foods||[]).map(mapUSDA).filter(Boolean);
+}
 // ================== MACRO CALCULATOR ==================
 function calcMacros(sex, age, ft, inches, lb, activity, goalAdj){
   const kg = lb*0.4536;
@@ -1153,7 +1642,7 @@ document.getElementById("importDataFile").addEventListener("change", (e)=>{
     try {
       const b = JSON.parse(reader.result);
       if(b.data) data = b.data;
-      if(!data.recents) data.recents = [];
+      if(!data.recents) data.recents = []; if(!data.myFoods) data.myFoods = {}; if(!data.meals) data.meals = []; if(!data.finished) data.finished = {};
       if(b.cfg) cfg = Object.assign({}, DEFAULT_CFG, b.cfg);
       if(b.program) program = validateProgram(b.program);
       save(); saveCfg(); saveProgram();
@@ -1198,7 +1687,18 @@ function renderDash(){
   }
 }
 
-function renderAll(){ renderDash(); renderFood(); renderWork(); renderWeight(); renderSettings(); }
+document.getElementById("saveUsdaBtn").addEventListener("click", ()=>{
+  cfg.usdaKey = document.getElementById("sUsdaKey").value.trim();
+  saveCfg(); flashSave(cfg.usdaKey ? "USDA key saved ✓" : "USDA key cleared");
+});
+
+function renderAll(){ renderDash(); renderFood(); renderWork(); renderWeight(); renderSettings(); renderMeals(); renderPRs(); renderTDEE();
+  const st = computeStreak();
+  const sl = document.getElementById("streakLine");
+  if (st>=2){ sl.textContent = "🔥 "+st+"-day logging streak — keep the chain alive"; sl.classList.remove("hidden"); }
+  else sl.classList.add("hidden");
+  document.getElementById("sUsdaKey").value = cfg.usdaKey||"";
+}
 
 // ================== boot ==================
 renderDayOptions();
