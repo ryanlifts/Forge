@@ -463,6 +463,15 @@
       <button class="btn ghost" id="calcMacrosBtn">Calculate</button>
       <div id="calcOut" class="hidden" style="margin-top:14px;">
         <div style="font-size:14px; line-height:1.8;" id="calcOutText"></div>
+        <div class="label" style="margin-top:14px;">Macro split (P / C / F)</div>
+        <div id="splitChips" style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;"></div>
+        <div class="row hidden" id="splitCustomRow" style="margin-bottom:10px;">
+          <div><div class="label">Protein %</div><input type="number" id="spP" inputmode="numeric"></div>
+          <div><div class="label">Carbs %</div><input type="number" id="spC" inputmode="numeric"></div>
+          <div><div class="label">Fat %</div><input type="number" id="spF" inputmode="numeric"></div>
+        </div>
+        <div style="font-size:14px; line-height:1.8;" id="splitGrams"></div>
+        <div class="note hidden" id="splitWarn" style="color:var(--warn);"></div>
         <button class="btn mt10" id="applyMacrosBtn">Use these as my targets</button>
       </div>
       <div class="note">
@@ -506,6 +515,15 @@
       <input type="file" id="importDataFile" accept=".json,application/json" class="hidden">
       <div class="note">Data lives only on this device. Back up occasionally or when moving phones.</div>
     </div>
+  </div>
+</div>
+
+<div id="adjustOverlay" class="hidden" style="position:fixed; inset:0; z-index:58; background:rgba(16,18,21,.97); display:flex; align-items:center; justify-content:center; padding:24px;">
+  <div class="card" style="max-width:420px; width:100%; margin:0;">
+    <div class="label">Progress check</div>
+    <div id="adjustText" style="font-size:14px; line-height:1.8; margin:8px 0 14px;"></div>
+    <button class="btn" id="adjustYesBtn">Adjust my targets</button>
+    <button class="btn ghost mt10" id="adjustNoBtn">Not yet</button>
   </div>
 </div>
 
@@ -1660,6 +1678,7 @@ document.getElementById("addWtBtn").addEventListener("click", ()=>{
   data.weights.push({date:dt, lbs:v});
   document.getElementById("wtVal").value="";
   save(); renderWeight(); renderDash();
+  if (dt===todayStr()) checkWeightAdjust(v);
 });
 
 function renderWeight(){
@@ -1875,6 +1894,9 @@ document.getElementById("tdeeApplyBtn").addEventListener("click", ()=>{
   const losing = cfg.goalWt < cfg.startWt;
   const target = lastTDEE.tdee + (losing ? -500 : 0);
   cfg.calLo = target-100; cfg.calHi = target+100;
+  const sortedW = data.weights.slice().sort((a,b)=>a.date.localeCompare(b.date));
+  cfg.lastTargetWt = sortedW.length ? sortedW[sortedW.length-1].lbs : cfg.lastTargetWt || cfg.startWt;
+  delete cfg.adjustPromptedAt;
   saveCfg(); renderAll(); flashSave("Targets recalibrated ✓");
 });
 
@@ -2114,6 +2136,87 @@ function calcMacros(sex, age, ft, inches, lb, activity, goalAdj){
   return { bmr:Math.round(bmr), tdee:Math.round(tdee), cal:cal, pro:pro, fat:fat, carb:carb };
 }
 let lastCalc = null;
+let splitState = { mode:"rec", p:40, c:30, f:30 }; // mode: rec | preset | custom
+const SPLIT_PRESETS = [
+  {label:"Recommended", mode:"rec"},
+  {label:"40/30/30", p:40, c:30, f:30},
+  {label:"30/40/30", p:30, c:40, f:30},
+  {label:"40/40/20", p:40, c:40, f:20},
+  {label:"30/35/35", p:30, c:35, f:35},
+  {label:"Custom", mode:"custom"},
+];
+function splitGrams(){
+  if (!lastCalc) return null;
+  if (splitState.mode==="rec"){
+    return { pro:lastCalc.pro, carb:lastCalc.carb, fat:lastCalc.fat };
+  }
+  return {
+    pro: Math.round(lastCalc.cal*splitState.p/100/4),
+    carb: Math.round(lastCalc.cal*splitState.c/100/4),
+    fat: Math.round(lastCalc.cal*splitState.f/100/9),
+  };
+}
+function renderSplit(){
+  const wrap = document.getElementById("splitChips");
+  wrap.innerHTML = "";
+  SPLIT_PRESETS.forEach(pr=>{
+    const b = document.createElement("button");
+    b.className = "xbtn";
+    b.textContent = pr.label;
+    const active = pr.mode ? splitState.mode===pr.mode
+      : (splitState.mode==="preset" && splitState.p===pr.p && splitState.c===pr.c && splitState.f===pr.f);
+    if (active) b.style.borderColor = "var(--ember)";
+    b.addEventListener("click", ()=>{
+      if (pr.mode==="rec"){ splitState = {mode:"rec", p:40, c:30, f:30}; }
+      else if (pr.mode==="custom"){ splitState = {mode:"custom", p:splitState.p, c:splitState.c, f:splitState.f}; }
+      else { splitState = {mode:"preset", p:pr.p, c:pr.c, f:pr.f}; }
+      renderSplit();
+    });
+    wrap.appendChild(b);
+  });
+  document.getElementById("splitCustomRow").classList.toggle("hidden", splitState.mode!=="custom");
+  if (splitState.mode==="custom"){
+    document.getElementById("spP").value = splitState.p;
+    document.getElementById("spC").value = splitState.c;
+    document.getElementById("spF").value = splitState.f;
+  }
+  const g = splitGrams();
+  if (!g) return;
+  const label = splitState.mode==="rec"
+    ? "0.9g/lb protein · 25% fat · carbs from the rest"
+    : splitState.p+"% / "+splitState.c+"% / "+splitState.f+"%";
+  document.getElementById("splitGrams").innerHTML =
+    label+' → <b class="ember-text">'+g.pro+'g P</b> · <b>'+g.carb+'g C</b> · <b>'+g.fat+'g F</b>';
+  // protein floor sanity check
+  const wt = Number(document.getElementById("cWt").value) || cfg.startWt;
+  const warn = document.getElementById("splitWarn");
+  if (g.pro < wt*0.7){
+    warn.textContent = "⚠ This split gives only "+g.pro+"g protein ("+(Math.round(g.pro/wt*100)/100)+" g/lb). For muscle retention while losing weight, research supports a higher protein share.";
+    warn.classList.remove("hidden");
+  } else {
+    warn.classList.add("hidden");
+  }
+}
+// auto-balancing custom fields: edit P or C -> F absorbs; edit F -> C absorbs
+function clampPct(v){ return Math.max(5, Math.min(70, Math.round(Number(v)||0))); }
+document.getElementById("spP").addEventListener("input", ()=>{
+  splitState.p = clampPct(document.getElementById("spP").value);
+  splitState.f = Math.max(5, 100 - splitState.p - splitState.c);
+  splitState.c = 100 - splitState.p - splitState.f;
+  renderSplit();
+});
+document.getElementById("spC").addEventListener("input", ()=>{
+  splitState.c = clampPct(document.getElementById("spC").value);
+  splitState.f = Math.max(5, 100 - splitState.p - splitState.c);
+  splitState.p = 100 - splitState.c - splitState.f;
+  renderSplit();
+});
+document.getElementById("spF").addEventListener("input", ()=>{
+  splitState.f = clampPct(document.getElementById("spF").value);
+  splitState.c = Math.max(5, 100 - splitState.p - splitState.f);
+  splitState.p = 100 - splitState.c - splitState.f;
+  renderSplit();
+});
 document.getElementById("calcMacrosBtn").addEventListener("click", ()=>{
   const sex = document.getElementById("cSex").value;
   const age = Number(document.getElementById("cAge").value);
@@ -2124,18 +2227,68 @@ document.getElementById("calcMacrosBtn").addEventListener("click", ()=>{
   const goal = Number(document.getElementById("cGoal").value);
   if(!age || !ft || !lb) { flashSave("Fill age, height, weight", true); return; }
   lastCalc = calcMacros(sex, age, ft, inches, lb, act, goal);
+  cfg.calcInputs = {sex:sex, age:age, ft:ft, inches:inches, act:act, goal:goal};
+  saveCfg();
   document.getElementById("calcOutText").innerHTML =
     'Maintenance (TDEE): <b>'+lastCalc.tdee+'</b> kcal/day<br>'
-    +'Your target: <b class="ember-text">'+lastCalc.cal+' kcal</b><br>'
-    +'Protein: <b class="ember-text">'+lastCalc.pro+'g</b> · Carbs: <b>'+lastCalc.carb+'g</b> · Fat: <b>'+lastCalc.fat+'g</b>';
+    +'Your target: <b class="ember-text">'+lastCalc.cal+' kcal</b>';
   document.getElementById("calcOut").classList.remove("hidden");
+  renderSplit();
 });
 document.getElementById("applyMacrosBtn").addEventListener("click", ()=>{
   if(!lastCalc) return;
+  const g = splitGrams();
   cfg.calLo = lastCalc.cal-100; cfg.calHi = lastCalc.cal+100;
-  cfg.proLo = Math.max(0,lastCalc.pro-10); cfg.proHi = lastCalc.pro+10;
-  cfg.carbGoal = lastCalc.carb; cfg.fatGoal = lastCalc.fat;
+  cfg.proLo = Math.max(0,g.pro-10); cfg.proHi = g.pro+10;
+  cfg.carbGoal = g.carb; cfg.fatGoal = g.fat;
+  cfg.lastTargetWt = Number(document.getElementById("cWt").value) || cfg.lastTargetWt || cfg.startWt;
+  delete cfg.adjustPromptedAt;
   saveCfg(); renderAll(); flashSave("Targets applied ✓");
+});
+
+// ---- weight-change adjustment prompt ----
+function checkWeightAdjust(newWt){
+  const anchor = cfg.lastTargetWt || cfg.startWt;
+  const moved = Math.abs(newWt - anchor);
+  if (moved < 5) return; // meaningful change only — daily noise never triggers this
+  const snooze = cfg.adjustPromptedAt;
+  if (snooze!=null && Math.abs(newWt - snooze) < 2.5) return; // they said "not yet" — wait for more change
+  const dir = newWt < anchor ? "down" : "up";
+  document.getElementById("adjustText").innerHTML =
+    "You're <b class=\"ember-text\">"+Math.round(moved*10)/10+" lb "+dir+"</b> since your targets were set ("
+    +anchor+" → "+newWt+" lb). Your calorie needs have changed with your weight — want to recalculate?";
+  document.getElementById("adjustOverlay").classList.remove("hidden");
+  document.getElementById("adjustOverlay").dataset.wt = newWt;
+}
+document.getElementById("adjustNoBtn").addEventListener("click", ()=>{
+  cfg.adjustPromptedAt = Number(document.getElementById("adjustOverlay").dataset.wt);
+  saveCfg();
+  document.getElementById("adjustOverlay").classList.add("hidden");
+});
+document.getElementById("adjustYesBtn").addEventListener("click", ()=>{
+  const wt = Number(document.getElementById("adjustOverlay").dataset.wt);
+  document.getElementById("adjustOverlay").classList.add("hidden");
+  // jump to Settings with the calculator prefilled at the new weight
+  document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
+  document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+  document.querySelector('.tab[data-view="settings"]').classList.add("active");
+  document.getElementById("view-settings").classList.add("active");
+  const ci = cfg.calcInputs;
+  if (ci){
+    document.getElementById("cSex").value = ci.sex;
+    document.getElementById("cAge").value = ci.age;
+    document.getElementById("cFt").value = ci.ft;
+    document.getElementById("cIn").value = ci.inches;
+    document.getElementById("cAct").value = ci.act;
+    document.getElementById("cGoal").value = ci.goal;
+  }
+  document.getElementById("cWt").value = wt;
+  if (ci){
+    // inputs are complete — run the calculation immediately
+    document.getElementById("calcMacrosBtn").dispatchEvent(new Event("click", {bubbles:true}));
+  }
+  const cc = document.getElementById("calcMacrosBtn");
+  if (cc.scrollIntoView) cc.scrollIntoView({behavior:"smooth", block:"center"});
 });
 
 // ================== SETTINGS ==================
@@ -2159,6 +2312,9 @@ document.getElementById("saveSettingsBtn").addEventListener("click", ()=>{
   });
   if (cfg.calHi < cfg.calLo){ const t=cfg.calLo; cfg.calLo=cfg.calHi; cfg.calHi=t; }
   if (cfg.proHi < cfg.proLo){ const t=cfg.proLo; cfg.proLo=cfg.proHi; cfg.proHi=t; }
+  const sortedW2 = data.weights.slice().sort((a,b)=>a.date.localeCompare(b.date));
+  cfg.lastTargetWt = sortedW2.length ? sortedW2[sortedW2.length-1].lbs : cfg.lastTargetWt || cfg.startWt;
+  delete cfg.adjustPromptedAt;
   saveCfg(); renderAll(); flashSave("Settings saved ✓");
 });
 document.getElementById("exportDataBtn").addEventListener("click", ()=>{
@@ -2195,6 +2351,7 @@ document.getElementById("dashWtBtn").addEventListener("click", ()=>{
   document.getElementById("dashWtInput").value="";
   save(); renderWeight(); renderDash(); renderTDEE();
   flashSave("Weight recorded ✓");
+  checkWeightAdjust(v);
 });
 
 // ================== DASH ==================
