@@ -109,6 +109,27 @@
   .exercise .x-head b { font-weight:600; }
   .exercise .x-head .scheme { color:var(--ember); }
   svg { width:100%; display:block; }
+  /* set rows */
+  .srow { display:flex; align-items:center; gap:6px; margin-bottom:6px; }
+  .srow .slabel { font-size:10px; color:var(--dim); width:34px; }
+  .snum { width:64px; text-align:center; padding:10px 4px; font-size:15px; }
+  .step { width:38px; height:40px; border-radius:8px; border:1px solid var(--border); background:var(--panel-up);
+    color:var(--text); font-family:inherit; font-size:13px; cursor:pointer; flex-shrink:0; }
+  .step:active { border-color:var(--ember); }
+  .sx { color:var(--dim); font-size:13px; }
+  .sdone { width:40px; height:40px; border-radius:8px; border:1px solid var(--border); background:transparent;
+    color:var(--dim); font-size:16px; cursor:pointer; flex-shrink:0; margin-left:auto; }
+  .sdone.on { border-color:var(--ok); color:var(--ok); background:rgba(74,222,128,.08); }
+  .xbtn { border:1px solid var(--border); background:transparent; color:var(--text); border-radius:8px;
+    padding:8px 10px; font-family:inherit; font-size:11px; cursor:pointer; }
+  .xbtn:active { border-color:var(--ember); }
+  .x-tools { display:flex; gap:6px; }
+  .autoUp { color:var(--ok); font-size:10px; }
+  /* builder */
+  .bday { border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:12px; }
+  .bex { display:flex; align-items:center; gap:6px; margin-bottom:8px; }
+  .bex input { padding:9px 8px; font-size:13px; }
+  .bex .bname { flex:2; } .bex .bscheme { flex:1; }
   /* celebration overlay */
   #celebrate { position:fixed; inset:0; z-index:60; background:rgba(16,18,21,.97); display:flex; align-items:center; justify-content:center; padding:24px; }
   .cel-box { max-width:440px; width:100%; text-align:center; }
@@ -136,11 +157,16 @@
   <!-- ============ HOME ============ -->
   <div id="view-dash" class="view active">
     <div id="streakLine" class="note hidden" style="margin:0 0 10px; font-size:12px;"></div>
+    <button class="btn hidden" id="nextWorkoutBtn" style="margin-bottom:12px;"></button>
     <div class="row" style="margin-bottom:12px;">
       <div class="card" style="margin-bottom:0; min-width:180px;">
         <div class="label">Current weight</div>
         <div class="big"><span id="dashWt">—</span><small> lb</small></div>
         <div class="note" id="dashWtNote"></div>
+        <div class="row" style="margin-top:10px;">
+          <input type="number" id="dashWtInput" inputmode="decimal" placeholder="Today's lb" style="flex:1.4; padding:9px; font-size:14px;">
+          <button class="xbtn" id="dashWtBtn" style="flex:1;">Record</button>
+        </div>
       </div>
       <div class="card" style="margin-bottom:0; min-width:180px;">
         <div class="label">Goal progress</div>
@@ -271,13 +297,30 @@
       <div class="label">Current program</div>
       <div id="programName" style="font-family:'Oswald',sans-serif; font-weight:600; font-size:18px; text-transform:uppercase; margin-bottom:10px;"></div>
       <div class="row">
-        <button class="btn ghost small" id="importBtn">⬆ Load program</button>
+        <button class="btn ghost small" id="importBtn">⬆ Load</button>
         <button class="btn ghost small" id="exportBtn">⬇ Save file</button>
         <button class="btn ghost small" id="shareBtn">📤 Share</button>
       </div>
+      <div class="row mt10">
+        <button class="btn ghost small" id="editProgBtn">✎ Edit this program</button>
+        <button class="btn ghost small" id="newProgBtn">＋ Build new program</button>
+      </div>
       <input type="file" id="importFile" accept=".json,application/json" class="hidden">
       <div class="err hidden" id="programErr"></div>
-      <div class="note">Load any FORGE program file (.json). Ask Claude to build one for your goals, download it, and load it here.</div>
+      <div class="note">Load any FORGE program file (.json) — from Claude, a coach, a friend — or build your own right here.</div>
+    </div>
+
+    <!-- program builder -->
+    <div class="card hidden" id="builderCard">
+      <div class="label">Program builder</div>
+      <input id="bName" placeholder="Program name" style="margin:8px 0 12px;">
+      <div id="bDays"></div>
+      <button class="btn ghost small" id="bAddDayBtn">＋ Add day</button>
+      <div class="row mt14">
+        <button class="btn" id="bSaveBtn">Save program</button>
+        <button class="btn ghost" id="bCancelBtn">Cancel</button>
+      </div>
+      <div class="err hidden" id="bErr"></div>
     </div>
 
     <div class="card">
@@ -569,7 +612,7 @@ function download(filename, text){
 
 // ================== state ==================
 let data = loadJSON(DATA_KEY, null) || loadJSON("ryan-cut:data", null) || { food:{}, workouts:[], weights:[], recents:[] };
-if(!data.recents) data.recents = []; if(!data.myFoods) data.myFoods = {}; if(!data.meals) data.meals = []; if(!data.finished) data.finished = {};
+if(!data.recents) data.recents = []; if(!data.myFoods) data.myFoods = {}; if(!data.meals) data.meals = []; if(!data.finished) data.finished = {}; if(!data.foodCounts) data.foodCounts = {};
 let cfg = Object.assign({}, DEFAULT_CFG, loadJSON(CFG_KEY, {}));
 let program = loadJSON(PROG_KEY, DEFAULT_PROGRAM);
 try { validateProgram(program); } catch(e){ program = DEFAULT_PROGRAM; }
@@ -951,8 +994,12 @@ document.getElementById("addSelBtn").addEventListener("click", ()=>{
 
 // --- recents ---
 function pushRecent(item){
+  if(!data.foodCounts) data.foodCounts = {};
+  const key = item.name+"|"+(item.brand||"");
+  data.foodCounts[key] = (data.foodCounts[key]||0)+1;
   data.recents = (data.recents||[]).filter(r=>r.name!==item.name || r.brand!==item.brand);
   data.recents.unshift(item);
+  data.recents.sort((a,b)=>(data.foodCounts[b.name+"|"+(b.brand||"")]||0)-(data.foodCounts[a.name+"|"+(a.brand||"")]||0));
   data.recents = data.recents.slice(0,12);
   save(); renderRecents();
 }
@@ -1015,9 +1062,14 @@ function renderFood(){
       '<div class="list-item">'
       +'<div style="flex:1; min-width:0;"><div style="font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">'+esc(f.name)+'</div>'
       +'<div style="color:var(--dim); font-size:11px;">'+Math.round(f.cal)+' kcal · '+Math.round(f.pro)+'P / '+Math.round(f.carb||0)+'C / '+Math.round(f.fat||0)+'F</div></div>'
+      +'<button class="del dup" data-i="'+i+'" aria-label="Duplicate" style="color:var(--dim);">⧉</button>'
       +'<button class="del" data-i="'+i+'" aria-label="Remove">✕</button></div>'
     ).join("");
-    el.querySelectorAll(".del").forEach(b=>b.addEventListener("click",()=>removeEntry(Number(b.dataset.i))));
+    el.querySelectorAll(".del:not(.dup)").forEach(b=>b.addEventListener("click",()=>removeEntry(Number(b.dataset.i))));
+    el.querySelectorAll(".dup").forEach(b=>b.addEventListener("click",()=>{
+      const f = list[Number(b.dataset.i)];
+      addEntry(Object.assign({}, f));
+    }));
   }
   renderRecents();
 }
@@ -1052,13 +1104,79 @@ function renderLibraryOptions(){
   sel.appendChild(og1); sel.appendChild(og2);
 }
 
-wDaySel.addEventListener("change", ()=>{ extraExercises=[]; renderSessionInputs(); });
+wDaySel.addEventListener("change", ()=>{ extraExercises=[]; initSessionState(); renderSessionInputs(); });
 
 function currentDayExercises(){
   const v = wDaySel.value;
   if (v==="__CARDIO__" || v==="__FREE__") return [];
   const day = program.days.find(p=>p.id===v);
   return day ? day.exercises : [];
+}
+
+// ---------- set-row engine ----------
+let sessionState = {}; // exName -> {mode:"rows"|"text", rows:[{w,r,done}], text:""}
+
+function toRows(val){
+  // converts a stored sets value (array or legacy string) into editable rows
+  if (Array.isArray(val)) return val.map(s=>({w:s.w, r:s.r, done:false}));
+  if (typeof val === "string"){
+    const rows = [];
+    const re = /(\d+(?:\.\d+)?)\s*[x\u00d7]\s*(\d+)/g;
+    let m;
+    while((m = re.exec(val)) !== null){
+      rows.push({w:parseFloat(m[1]), r:parseInt(m[2],10), done:false});
+    }
+    return rows;
+  }
+  return [];
+}
+function formatSets(val){
+  if (Array.isArray(val)) return val.map(s=>s.w+"\u00d7"+s.r).join(", ");
+  return String(val);
+}
+function parseScheme(scheme){
+  // "4\u00d75" or "3x8-12" -> {sets:4, reps:5} (reps = lower bound of a range)
+  if (!scheme) return null;
+  const m = String(scheme).match(/(\d+)\s*[x\u00d7]\s*(\d+)/);
+  return m ? {sets:parseInt(m[1],10), reps:parseInt(m[2],10)} : null;
+}
+function prefillRows(ex, lastVal){
+  const sch = parseScheme(ex.scheme);
+  if (lastVal){
+    const rows = toRows(lastVal);
+    if (rows.length){
+      // auto-progression: all reps hit target and weights uniform -> suggest +5
+      let auto = false;
+      if (sch && rows.every(r=>r.r>=sch.reps)){
+        const w0 = rows[0].w;
+        if (rows.every(r=>r.w===w0) && w0>0){
+          rows.forEach(r=>{ r.w = w0+5; r.r = sch.reps; });
+          auto = true;
+        }
+      }
+      return {rows:rows, auto:auto};
+    }
+  }
+  // no history: build empty rows from scheme
+  const n = sch ? sch.sets : 3;
+  const rows = [];
+  for(let i=0;i<n;i++) rows.push({w:"", r: sch?sch.reps:"", done:false});
+  return {rows:rows, auto:false};
+}
+function initSessionState(){
+  sessionState = {};
+  const v = wDaySel.value;
+  if (v==="__CARDIO__") return;
+  const last = (v!=="__FREE__") ? lastSessionFor(v) : null;
+  currentDayExercises().concat(extraExercises).forEach(ex=>{
+    const isCardio = ex.name.indexOf("[Cardio] ")===0;
+    if (isCardio){
+      sessionState[ex.name] = {mode:"text", rows:[], text:"", auto:false};
+    } else {
+      const pf = prefillRows(ex, last && last.sets ? last.sets[ex.name.replace("[Cardio] ","")] : null);
+      sessionState[ex.name] = {mode:"rows", rows:pf.rows, text:"", auto:pf.auto};
+    }
+  });
 }
 
 function renderSessionInputs(){
@@ -1072,24 +1190,121 @@ function renderSessionInputs(){
   strengthBlock.classList.remove("hidden"); cardioBlock.classList.add("hidden");
   const last = (v!=="__FREE__") ? lastSessionFor(v) : null;
   const list = currentDayExercises().concat(extraExercises);
-  document.getElementById("exerciseInputs").innerHTML = list.map(ex=>{
-    const isCardio = ex.name.indexOf("[Cardio] ")===0;
-    const ph = isCardio ? 'e.g. 20 min, 2 mi' : 'e.g. 275×5, 275×5, 275×4';
-    const prev = last && last.sets[ex.name] ? last.sets[ex.name] : null;
-    return '<div class="exercise"><div class="x-head"><span><b>'+esc(ex.name.replace("[Cardio] ",""))+'</b>'
-      +(ex.scheme?' <span class="scheme">· '+esc(ex.scheme)+'</span>':'')+'</span>'
-      +(prev?'<span style="color:var(--dim); font-size:11px;">last: '+esc(prev)+'</span>':'')+'</div>'
-      +'<input class="setInput" data-ex="'+esc(ex.name)+'" placeholder="'+(prev?esc(prev)+' → beat it':ph)+'"></div>';
-  }).join("") || '<div class="note" style="margin-bottom:14px;">No exercises yet — add from the library below.</div>';
+  const container = document.getElementById("exerciseInputs");
+  container.innerHTML = "";
+  if (!list.length){
+    container.innerHTML = '<div class="note" style="margin-bottom:14px;">No exercises yet \u2014 add from the library below.</div>';
+    return;
+  }
+  list.forEach(ex=>{
+    if (!sessionState[ex.name]) {
+      const pf = prefillRows(ex, last && last.sets ? last.sets[ex.name.replace("[Cardio] ","")] : null);
+      sessionState[ex.name] = ex.name.indexOf("[Cardio] ")===0
+        ? {mode:"text", rows:[], text:"", auto:false}
+        : {mode:"rows", rows:pf.rows, text:"", auto:pf.auto};
+    }
+    const st = sessionState[ex.name];
+    const prevVal = last && last.sets ? last.sets[ex.name.replace("[Cardio] ","")] : null;
+    const div = document.createElement("div");
+    div.className = "exercise";
+    const head = document.createElement("div");
+    head.className = "x-head";
+    head.innerHTML = '<span><b>'+esc(ex.name.replace("[Cardio] ",""))+'</b>'
+      +(ex.scheme?' <span class="scheme">\u00b7 '+esc(ex.scheme)+'</span>':'')
+      +(st.auto?' <span class="autoUp">+5 auto</span>':'')+'</span>';
+    const tools = document.createElement("div");
+    tools.className = "x-tools";
+    if (prevVal){
+      const sameBtn = document.createElement("button");
+      sameBtn.className = "xbtn"; sameBtn.textContent = "= last";
+      sameBtn.title = "Log same as last time";
+      sameBtn.addEventListener("click", ()=>{
+        st.mode = "rows";
+        st.rows = toRows(prevVal).map(r=>({w:r.w, r:r.r, done:true}));
+        st.auto = false;
+        renderSessionInputs();
+      });
+      tools.appendChild(sameBtn);
+    }
+    const tBtn = document.createElement("button");
+    tBtn.className = "xbtn"; tBtn.textContent = st.mode==="rows" ? "\u2328" : "#";
+    tBtn.title = "Toggle text entry";
+    tBtn.addEventListener("click", ()=>{
+      if (st.mode==="rows"){
+        st.text = st.rows.filter(r=>r.w&&r.r).map(r=>r.w+"x"+r.r).join(", ");
+        st.mode = "text";
+      } else {
+        st.rows = toRows(st.text);
+        if(!st.rows.length) st.rows = [{w:"",r:"",done:false}];
+        st.mode = "rows";
+      }
+      renderSessionInputs();
+    });
+    tools.appendChild(tBtn);
+    head.appendChild(tools);
+    div.appendChild(head);
+    if (prevVal){
+      const lastLine = document.createElement("div");
+      lastLine.style.cssText = "color:var(--dim); font-size:11px; margin-bottom:6px;";
+      lastLine.textContent = "last: "+formatSets(prevVal);
+      div.appendChild(lastLine);
+    }
+
+    if (st.mode==="text"){
+      const inp = document.createElement("input");
+      inp.placeholder = ex.name.indexOf("[Cardio] ")===0 ? "e.g. 20 min, 2 mi" : "e.g. 275x5, 275x5, 275x4";
+      inp.value = st.text;
+      inp.addEventListener("input", ()=>{ st.text = inp.value; });
+      div.appendChild(inp);
+    } else {
+      st.rows.forEach((row, ri)=>{
+        const rdiv = document.createElement("div");
+        rdiv.className = "srow";
+        rdiv.innerHTML = '<span class="slabel">Set '+(ri+1)+'</span>';
+        const mkStep = (txt, fn)=>{ const b=document.createElement("button"); b.className="step"; b.textContent=txt; b.addEventListener("click", fn); return b; };
+        const wIn = document.createElement("input");
+        wIn.type="number"; wIn.className="snum"; wIn.inputMode="decimal"; wIn.placeholder="lb"; wIn.value=row.w;
+        wIn.addEventListener("input", ()=>{ row.w = wIn.value===""?"":Number(wIn.value); });
+        const rIn = document.createElement("input");
+        rIn.type="number"; rIn.className="snum"; rIn.inputMode="numeric"; rIn.placeholder="reps"; rIn.value=row.r;
+        rIn.addEventListener("input", ()=>{ row.r = rIn.value===""?"":Number(rIn.value); });
+        rdiv.appendChild(mkStep("\u22125", ()=>{ row.w = Math.max(0,(Number(row.w)||0)-5); wIn.value=row.w; }));
+        rdiv.appendChild(wIn);
+        rdiv.appendChild(mkStep("+5", ()=>{ row.w = (Number(row.w)||0)+5; wIn.value=row.w; }));
+        const x = document.createElement("span"); x.className="sx"; x.textContent="\u00d7"; rdiv.appendChild(x);
+        rdiv.appendChild(mkStep("\u22121", ()=>{ row.r = Math.max(0,(Number(row.r)||0)-1); rIn.value=row.r; }));
+        rdiv.appendChild(rIn);
+        rdiv.appendChild(mkStep("+1", ()=>{ row.r = (Number(row.r)||0)+1; rIn.value=row.r; }));
+        const done = document.createElement("button");
+        done.className = "sdone"+(row.done?" on":""); done.textContent = "\u2713";
+        done.setAttribute("aria-label","Mark set done");
+        done.addEventListener("click", ()=>{
+          row.done = !row.done;
+          done.className = "sdone"+(row.done?" on":"");
+          if (row.done) startRest(cfg.restSec||90);
+        });
+        rdiv.appendChild(done);
+        div.appendChild(rdiv);
+      });
+      const addRow = document.createElement("button");
+      addRow.className = "xbtn"; addRow.textContent = "+ Add set";
+      addRow.style.marginTop = "2px";
+      addRow.addEventListener("click", ()=>{
+        const filled = st.rows.slice().reverse().find(r=>Number(r.w)>0);
+        const prev = filled || st.rows[st.rows.length-1];
+        st.rows.push(prev ? {w:prev.w, r:prev.r, done:false} : {w:"", r:"", done:false});
+        renderSessionInputs();
+      });
+      div.appendChild(addRow);
+    }
+    container.appendChild(div);
+  });
 }
 
 document.getElementById("addExBtn").addEventListener("click", ()=>{
   const name = document.getElementById("addExSel").value;
-  const vals = {};
-  document.querySelectorAll(".setInput").forEach(inp=>{ vals[inp.dataset.ex]=inp.value; });
   extraExercises.push({name:name, scheme:""});
   renderSessionInputs();
-  document.querySelectorAll(".setInput").forEach(inp=>{ if(vals[inp.dataset.ex]!=null) inp.value=vals[inp.dataset.ex]; });
 });
 
 document.getElementById("logWorkoutBtn").addEventListener("click", ()=>{
@@ -1102,16 +1317,23 @@ document.getElementById("logWorkoutBtn").addEventListener("click", ()=>{
     const min = document.getElementById("cardioMin").value;
     const detail = document.getElementById("cardioDetail").value.trim();
     if(!min) return;
-    const sets = {}; sets[type] = min+" min"+(detail?" · "+detail:"");
+    const sets = {}; sets[type] = min+" min"+(detail?" \u00b7 "+detail:"");
     data.workouts.push({date:date, day:"CARDIO", title:"Cardio", sets:sets, notes:notes});
     document.getElementById("cardioMin").value=""; document.getElementById("cardioDetail").value="";
     save(); renderWork(); renderDash();
-    showCelebration("Cardio Banked", null, type+" · "+min+" min");
+    showCelebration("Cardio Banked", null, type+" \u00b7 "+min+" min");
     return;
   }
   const sets = {};
-  document.querySelectorAll(".setInput").forEach(inp=>{
-    if(inp.value.trim()) sets[inp.dataset.ex.replace("[Cardio] ","")] = inp.value.trim();
+  Object.keys(sessionState).forEach(exName=>{
+    const st = sessionState[exName];
+    const key = exName.replace("[Cardio] ","");
+    if (st.mode==="text"){
+      if (st.text.trim()) sets[key] = st.text.trim();
+    } else {
+      const rows = st.rows.filter(r=>Number(r.w)>0 && Number(r.r)>0).map(r=>({w:Number(r.w), r:Number(r.r)}));
+      if (rows.length) sets[key] = rows;
+    }
   });
   if(Object.keys(sets).length===0) return;
   // PR detection BEFORE pushing the new session
@@ -1121,19 +1343,19 @@ document.getElementById("logWorkoutBtn").addEventListener("click", ()=>{
     if(!nb) return;
     const hist = bestHistorical(ex, -1);
     if (hist && nb.e1rm > hist.e1rm + 0.5){
-      prLines.push("🏆 PR: "+ex+" "+nb.w+"×"+nb.r+" (est 1RM "+Math.round(nb.e1rm)+", was "+Math.round(hist.e1rm)+")");
+      prLines.push("\ud83c\udfc6 PR: "+ex+" "+nb.w+"\u00d7"+nb.r+" (est 1RM "+Math.round(nb.e1rm)+", was "+Math.round(hist.e1rm)+")");
     }
   });
   const day = program.days.find(p=>p.id===v);
   data.workouts.push({date:date, day:v, title: v==="__FREE__" ? "Freestyle" : (day?day.title:v), sets:sets, notes:notes});
-  document.querySelectorAll(".setInput").forEach(inp=>inp.value="");
   extraExercises=[];
+  initSessionState();
   renderSessionInputs();
   document.getElementById("wNotes").value="";
-  save(); renderWork(); renderDash();
+  save(); renderWork(); renderDash(); renderNextWorkout();
   const streak = computeStreak();
   showCelebration(prLines.length ? "PR FORGED" : "Session Forged", prLines,
-    Object.keys(sets).length+" exercises logged"+(streak>1?"  ·  🔥 "+streak+"-day streak":""));
+    Object.keys(sets).length+" exercises logged"+(streak>1?"  \u00b7  \ud83d\udd25 "+streak+"-day streak":""));
 });
 
 function renderWork(){
@@ -1148,7 +1370,7 @@ function renderWork(){
   el.innerHTML = sorted.map(s=>{
     const dayObj = program.days.find(p=>p.id===s.day);
     const title = s.title || (dayObj?dayObj.title:s.day);
-    const setsHTML = Object.keys(s.sets).map(ex=>'<div>'+esc(ex)+': <span style="color:var(--text)">'+esc(s.sets[ex])+'</span></div>').join("");
+    const setsHTML = Object.keys(s.sets).map(ex=>'<div>'+esc(ex)+': <span style="color:var(--text)">'+esc(formatSets(s.sets[ex]))+'</span></div>').join("");
     return '<div style="padding:14px 16px; border-bottom:1px solid var(--border); font-size:12px;">'
       +'<div style="display:flex; justify-content:space-between;">'
       +'<span style="font-weight:600; color:var(--ember);">'+fmtDate(s.date)+' — '+esc(title)+'</span>'
@@ -1161,6 +1383,161 @@ function renderWork(){
     data.workouts.splice(Number(b.dataset.i),1); save(); renderWork(); renderDash();
   }));
 }
+
+// ---- program builder ----
+let builderProg = null;
+function openBuilder(fromCurrent){
+  builderProg = fromCurrent
+    ? JSON.parse(JSON.stringify(program))
+    : {name:"My Program", days:[{id:"D1", title:"Day 1", exercises:[]}]};
+  document.getElementById("bName").value = builderProg.name || "";
+  document.getElementById("bErr").classList.add("hidden");
+  document.getElementById("builderCard").classList.remove("hidden");
+  renderBuilder();
+  const bc = document.getElementById("builderCard");
+  if (bc.scrollIntoView) bc.scrollIntoView({behavior:"smooth", block:"start"});
+}
+document.getElementById("editProgBtn").addEventListener("click", ()=>openBuilder(true));
+document.getElementById("newProgBtn").addEventListener("click", ()=>openBuilder(false));
+document.getElementById("bCancelBtn").addEventListener("click", ()=>{
+  builderProg = null;
+  document.getElementById("builderCard").classList.add("hidden");
+});
+document.getElementById("bAddDayBtn").addEventListener("click", ()=>{
+  builderProg.days.push({id:"", title:"Day "+(builderProg.days.length+1), exercises:[]});
+  renderBuilder();
+});
+document.getElementById("bSaveBtn").addEventListener("click", ()=>{
+  const errEl = document.getElementById("bErr");
+  errEl.classList.add("hidden");
+  builderProg.name = document.getElementById("bName").value.trim() || "My Program";
+  const bad = builderProg.days.findIndex(d=>!d.exercises.length);
+  if (builderProg.days.length===0){ errEl.textContent="Add at least one day."; errEl.classList.remove("hidden"); return; }
+  if (bad>=0){ errEl.textContent='"'+(builderProg.days[bad].title||("Day "+(bad+1)))+'" has no exercises yet.'; errEl.classList.remove("hidden"); return; }
+  builderProg.days.forEach((d,i)=>{ d.id = "D"+(i+1); if(!d.title) d.title = "Day "+(i+1); });
+  try {
+    program = validateProgram(JSON.parse(JSON.stringify(builderProg)));
+  } catch(e){ errEl.textContent = e.message; errEl.classList.remove("hidden"); return; }
+  saveProgram();
+  builderProg = null;
+  document.getElementById("builderCard").classList.add("hidden");
+  extraExercises = [];
+  renderDayOptions(); initSessionState(); renderSessionInputs(); renderWork(); renderDash();
+  flashSave("Program saved ✓");
+});
+
+function renderBuilder(){
+  const wrap = document.getElementById("bDays");
+  wrap.innerHTML = "";
+  builderProg.days.forEach((day, di)=>{
+    const dd = document.createElement("div");
+    dd.className = "bday";
+    // day header: title + tools
+    const head = document.createElement("div");
+    head.className = "row";
+    head.style.marginBottom = "10px";
+    const tIn = document.createElement("input");
+    tIn.value = day.title || "";
+    tIn.placeholder = "Day name (e.g. Push, Lower A)";
+    tIn.addEventListener("input", ()=>{ day.title = tIn.value; });
+    head.appendChild(tIn);
+    const dup = document.createElement("button");
+    dup.className = "xbtn"; dup.textContent = "⧉"; dup.title = "Duplicate day";
+    dup.style.flex = "0 0 auto";
+    dup.addEventListener("click", ()=>{
+      day.title = tIn.value;
+      const copy = JSON.parse(JSON.stringify(day));
+      copy.title = (copy.title||"Day")+" copy";
+      builderProg.days.splice(di+1, 0, copy);
+      renderBuilder();
+    });
+    head.appendChild(dup);
+    const del = document.createElement("button");
+    del.className = "xbtn"; del.textContent = "✕"; del.title = "Remove day";
+    del.style.flex = "0 0 auto"; del.style.color = "var(--warn)";
+    del.addEventListener("click", ()=>{ builderProg.days.splice(di,1); renderBuilder(); });
+    head.appendChild(del);
+    dd.appendChild(head);
+    // exercises
+    day.exercises.forEach((ex, xi)=>{
+      const row = document.createElement("div");
+      row.className = "bex";
+      const nIn = document.createElement("input");
+      nIn.className = "bname"; nIn.value = ex.name; nIn.placeholder = "Exercise";
+      nIn.addEventListener("input", ()=>{ ex.name = nIn.value; });
+      const sIn = document.createElement("input");
+      sIn.className = "bscheme"; sIn.value = ex.scheme||""; sIn.placeholder = "e.g. 4×5";
+      sIn.addEventListener("input", ()=>{ ex.scheme = sIn.value; });
+      const up = document.createElement("button");
+      up.className = "xbtn"; up.textContent = "↑";
+      up.addEventListener("click", ()=>{
+        if (xi>0){ day.exercises.splice(xi-1,0,day.exercises.splice(xi,1)[0]); renderBuilder(); }
+      });
+      const dn = document.createElement("button");
+      dn.className = "xbtn"; dn.textContent = "↓";
+      dn.addEventListener("click", ()=>{
+        if (xi<day.exercises.length-1){ day.exercises.splice(xi+1,0,day.exercises.splice(xi,1)[0]); renderBuilder(); }
+      });
+      const rm = document.createElement("button");
+      rm.className = "xbtn"; rm.textContent = "✕"; rm.style.color = "var(--warn)";
+      rm.addEventListener("click", ()=>{ day.exercises.splice(xi,1); renderBuilder(); });
+      row.appendChild(nIn); row.appendChild(sIn); row.appendChild(up); row.appendChild(dn); row.appendChild(rm);
+      dd.appendChild(row);
+    });
+    // add-exercise row: library select + custom entry
+    const addRow = document.createElement("div");
+    addRow.className = "bex";
+    const sel = document.createElement("select");
+    const og1 = document.createElement("optgroup"); og1.label = "Strength";
+    EXERCISE_LIBRARY.forEach(x=>{ const o=document.createElement("option"); o.value=x; o.textContent=x; og1.appendChild(o); });
+    const og2 = document.createElement("optgroup"); og2.label = "Cardio";
+    CARDIO_TYPES.forEach(x=>{ const o=document.createElement("option"); o.value="[Cardio] "+x; o.textContent=x; og2.appendChild(o); });
+    const ogC = document.createElement("optgroup"); ogC.label = "Custom";
+    const oc = document.createElement("option"); oc.value="__CUSTOM__"; oc.textContent="Type my own…"; ogC.appendChild(oc);
+    sel.appendChild(og1); sel.appendChild(og2); sel.appendChild(ogC);
+    sel.style.flex = "2";
+    const custom = document.createElement("input");
+    custom.placeholder = "Custom exercise name"; custom.className = "bname hidden";
+    sel.addEventListener("change", ()=>{ custom.classList.toggle("hidden", sel.value!=="__CUSTOM__"); });
+    const schIn = document.createElement("input");
+    schIn.className = "bscheme"; schIn.placeholder = "e.g. 3×8";
+    const addBtn = document.createElement("button");
+    addBtn.className = "xbtn"; addBtn.textContent = "＋ Add";
+    addBtn.addEventListener("click", ()=>{
+      const name = sel.value==="__CUSTOM__" ? custom.value.trim() : sel.value;
+      if (!name) return;
+      day.exercises.push({name:name, scheme:schIn.value.trim()});
+      renderBuilder();
+    });
+    addRow.appendChild(sel); addRow.appendChild(custom); addRow.appendChild(schIn); addRow.appendChild(addBtn);
+    dd.appendChild(addRow);
+    wrap.appendChild(dd);
+  });
+}
+
+// ---- next workout suggestion ----
+function nextProgramDay(){
+  if (!program.days.length) return null;
+  const inProgram = data.workouts
+    .filter(s=>program.days.some(d=>d.id===s.day))
+    .sort((a,b)=>a.date.localeCompare(b.date));
+  if (!inProgram.length) return program.days[0];
+  const lastDay = inProgram[inProgram.length-1].day;
+  const idx = program.days.findIndex(d=>d.id===lastDay);
+  return program.days[(idx+1) % program.days.length];
+}
+document.getElementById("nextWorkoutBtn").addEventListener("click", ()=>{
+  const nd = nextProgramDay();
+  if (!nd) return;
+  document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
+  document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+  document.querySelector('.tab[data-view="work"]').classList.add("active");
+  document.getElementById("view-work").classList.add("active");
+  wDaySel.value = nd.id;
+  extraExercises = [];
+  initSessionState();
+  renderSessionInputs();
+});
 
 // ---- program import/export ----
 document.getElementById("importBtn").addEventListener("click", ()=>document.getElementById("importFile").click());
@@ -1308,16 +1685,22 @@ function showCelebration(title, prLines, statsText){
 document.getElementById("celCloseBtn").addEventListener("click", ()=>document.getElementById("celebrate").classList.add("hidden"));
 
 // ================== e1RM / PR ENGINE ==================
-function parseBestSet(str){
-  // finds best estimated 1RM in a string like "275x5, 285×3"
+function parseBestSet(val){
+  // best estimated 1RM from structured rows [{w,r}] or a legacy string like "275x5, 285×3"
   let best = null;
-  const re = /(\d+(?:\.\d+)?)\s*[x×]\s*(\d+)/g;
-  let m;
-  while((m = re.exec(str)) !== null){
-    const w = parseFloat(m[1]), r = parseInt(m[2],10);
-    if (!w || !r || r>30) continue;
+  const consider = (w,r)=>{
+    if (!w || !r || r>30) return;
     const e = w*(1+r/30); // Epley
     if (!best || e>best.e1rm) best = {w:w, r:r, e1rm:e};
+  };
+  if (Array.isArray(val)){
+    val.forEach(s=>consider(Number(s.w), Number(s.r)));
+    return best;
+  }
+  const re = /(\d+(?:\.\d+)?)\s*[x×]\s*(\d+)/g;
+  let m;
+  while((m = re.exec(String(val))) !== null){
+    consider(parseFloat(m[1]), parseInt(m[2],10));
   }
   return best;
 }
@@ -1509,9 +1892,9 @@ document.getElementById("plateTarget").addEventListener("input", updatePlates);
 document.getElementById("plateBar").addEventListener("change", updatePlates);
 
 let restInterval = null;
-document.querySelectorAll("[data-rest]").forEach(b=>b.addEventListener("click", ()=>{
+function startRest(seconds){
   clearInterval(restInterval);
-  let sec = Number(b.dataset.rest);
+  let sec = seconds;
   const disp = document.getElementById("restDisplay");
   const tick = ()=>{
     disp.textContent = Math.floor(sec/60)+":"+String(sec%60).padStart(2,"0");
@@ -1521,6 +1904,10 @@ document.querySelectorAll("[data-rest]").forEach(b=>b.addEventListener("click", 
   };
   tick();
   restInterval = setInterval(tick, 1000);
+}
+document.querySelectorAll("[data-rest]").forEach(b=>b.addEventListener("click", ()=>{
+  cfg.restSec = Number(b.dataset.rest); saveCfg();
+  startRest(cfg.restSec);
 }));
 
 // ================== SHARE PROGRAM ==================
@@ -1642,7 +2029,7 @@ document.getElementById("importDataFile").addEventListener("change", (e)=>{
     try {
       const b = JSON.parse(reader.result);
       if(b.data) data = b.data;
-      if(!data.recents) data.recents = []; if(!data.myFoods) data.myFoods = {}; if(!data.meals) data.meals = []; if(!data.finished) data.finished = {};
+      if(!data.recents) data.recents = []; if(!data.myFoods) data.myFoods = {}; if(!data.meals) data.meals = []; if(!data.finished) data.finished = {}; if(!data.foodCounts) data.foodCounts = {};
       if(b.cfg) cfg = Object.assign({}, DEFAULT_CFG, b.cfg);
       if(b.program) program = validateProgram(b.program);
       save(); saveCfg(); saveProgram();
@@ -1652,6 +2039,18 @@ document.getElementById("importDataFile").addEventListener("change", (e)=>{
   };
   reader.readAsText(file);
   e.target.value = "";
+});
+
+// ---- quick weigh-in on Home ----
+document.getElementById("dashWtBtn").addEventListener("click", ()=>{
+  const v = Number(document.getElementById("dashWtInput").value);
+  if(!v || v<50 || v>700){ flashSave("Enter a weight", true); return; }
+  const dt = todayStr();
+  data.weights = data.weights.filter(w=>w.date!==dt);
+  data.weights.push({date:dt, lbs:v});
+  document.getElementById("dashWtInput").value="";
+  save(); renderWeight(); renderDash(); renderTDEE();
+  flashSave("Weight recorded ✓");
 });
 
 // ================== DASH ==================
@@ -1681,7 +2080,7 @@ function renderDash(){
     const dayObj = program.days.find(p=>p.id===last.day);
     const title = last.title || (dayObj?dayObj.title:last.day);
     el.innerHTML='<div style="font-weight:600; color:var(--ember);">'+fmtDate(last.date)+' — '+esc(title)+'</div>'
-      +'<div style="margin-top:8px; line-height:1.7;">'+Object.keys(last.sets).map(ex=>'<div>'+esc(ex)+': <span style="color:var(--text)">'+esc(last.sets[ex])+'</span></div>').join("")+'</div>';
+      +'<div style="margin-top:8px; line-height:1.7;">'+Object.keys(last.sets).map(ex=>'<div>'+esc(ex)+': <span style="color:var(--text)">'+esc(formatSets(last.sets[ex]))+'</span></div>').join("")+'</div>';
   } else {
     el.textContent="No sessions yet. Head to Train and log your first one.";
   }
@@ -1692,7 +2091,14 @@ document.getElementById("saveUsdaBtn").addEventListener("click", ()=>{
   saveCfg(); flashSave(cfg.usdaKey ? "USDA key saved ✓" : "USDA key cleared");
 });
 
-function renderAll(){ renderDash(); renderFood(); renderWork(); renderWeight(); renderSettings(); renderMeals(); renderPRs(); renderTDEE();
+function renderNextWorkout(){
+  const btn = document.getElementById("nextWorkoutBtn");
+  const nd = nextProgramDay();
+  if (!nd){ btn.classList.add("hidden"); return; }
+  btn.textContent = "▶ Start next: "+(nd.id?nd.id+" · ":"")+nd.title;
+  btn.classList.remove("hidden");
+}
+function renderAll(){ renderDash(); renderFood(); renderWork(); renderWeight(); renderSettings(); renderMeals(); renderPRs(); renderTDEE(); renderNextWorkout();
   const st = computeStreak();
   const sl = document.getElementById("streakLine");
   if (st>=2){ sl.textContent = "🔥 "+st+"-day logging streak — keep the chain alive"; sl.classList.remove("hidden"); }
@@ -1704,6 +2110,7 @@ function renderAll(){ renderDash(); renderFood(); renderWork(); renderWeight(); 
 renderDayOptions();
 renderCardioOptions();
 renderLibraryOptions();
+initSessionState();
 renderSessionInputs();
 renderAll();
 
