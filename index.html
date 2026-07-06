@@ -260,13 +260,18 @@
       <div id="mealChips" style="margin-top:10px;"></div>
     </div>
 
-    <div class="card hidden" id="recentsCard" style="padding:12px 16px;">
-      <button id="recentsToggle" style="width:100%; display:flex; justify-content:space-between; align-items:center;
-        background:none; border:none; color:var(--text); font-family:inherit; font-size:12px; cursor:pointer; padding:4px 0;">
-        <span class="label" style="margin:0;" id="recentsLabel">Frequent breakfast foods</span>
-        <span id="recentsArrow" style="color:var(--dim);">▾</span>
-      </button>
-      <div id="recents" class="hidden" style="margin-top:10px;"></div>
+    <button class="btn ghost small hidden" id="recentsOpenBtn" style="width:100%; margin-bottom:12px;">★ Recent foods</button>
+
+    <!-- recent foods page overlay -->
+    <div id="recentsOverlay" class="hidden" style="position:fixed; inset:0; z-index:55; background:var(--bg); overflow-y:auto; padding:16px 14px 90px;">
+      <div style="max-width:720px; margin:0 auto;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+          <div style="font-family:'Oswald',sans-serif; font-weight:700; font-size:22px; text-transform:uppercase;">Recent foods</div>
+          <button class="xbtn" id="recentsCloseBtn">✕ Close</button>
+        </div>
+        <div class="note" style="margin:0 0 12px;">Ranked by how often you log them. Tap one to add it — amount is adjustable before it's logged.</div>
+        <div class="card flush"><div id="recentsList"></div></div>
+      </div>
     </div>
 
     <div class="card flush hidden" id="resultsCard">
@@ -707,21 +712,21 @@ function defaultMeal(){
   return "snacks";
 }
 let currentMeal = defaultMeal();
-let recentsOpen = false;
 function renderMealSeg(){
   document.querySelectorAll("#mealSeg button").forEach(b=>{
     b.classList.toggle("on", b.dataset.meal===currentMeal);
   });
-  document.getElementById("recentsLabel").textContent = "Frequent "+currentMeal+" foods";
 }
 document.querySelectorAll("#mealSeg button").forEach(b=>b.addEventListener("click", ()=>{
   currentMeal = b.dataset.meal;
-  renderMealSeg(); renderRecents();
+  renderMealSeg(); renderFood();
 }));
-document.getElementById("recentsToggle").addEventListener("click", ()=>{
-  recentsOpen = !recentsOpen;
-  document.getElementById("recents").classList.toggle("hidden", !recentsOpen);
-  document.getElementById("recentsArrow").textContent = recentsOpen ? "▴" : "▾";
+document.getElementById("recentsOpenBtn").addEventListener("click", ()=>{
+  renderRecents();
+  document.getElementById("recentsOverlay").classList.remove("hidden");
+});
+document.getElementById("recentsCloseBtn").addEventListener("click", ()=>{
+  document.getElementById("recentsOverlay").classList.add("hidden");
 });
 
 const foodDateEl = document.getElementById("foodDate");
@@ -1060,26 +1065,30 @@ function pushRecent(item, meal){
   save(); renderRecents();
 }
 function renderRecents(){
-  const card = document.getElementById("recentsCard");
-  const el = document.getElementById("recents");
-  const counts = (data.mealCounts||{})[currentMeal]||{};
+  const btn = document.getElementById("recentsOpenBtn");
+  const el = document.getElementById("recentsList");
+  const counts = data.foodCounts||{};
   const list = (data.recents||[])
-    .filter(r=>counts[r.name+"|"+(r.brand||"")]>0)
+    .slice()
     .sort((a,b)=>(counts[b.name+"|"+(b.brand||"")]||0)-(counts[a.name+"|"+(a.brand||"")]||0))
-    .slice(0,8);
-  if(!list.length){ card.classList.add("hidden"); return; }
-  card.classList.remove("hidden");
-  el.classList.toggle("hidden", !recentsOpen);
+    .slice(0,30);
+  if(!list.length){ btn.classList.add("hidden"); return; }
+  btn.classList.remove("hidden");
   el.innerHTML = "";
   list.forEach(r=>{
-    const b = document.createElement("button");
-    b.className = "chip";
-    b.textContent = r.name.length>28 ? r.name.slice(0,27)+"…" : r.name;
-    b.addEventListener("click", ()=>{
+    const n = counts[r.name+"|"+(r.brand||"")]||1;
+    const row = document.createElement("div");
+    row.className = "result";
+    row.innerHTML = '<div class="r-name">'+esc(r.name)+'</div>'
+      +'<div class="r-macros">'+Math.round(r.cal100)+' kcal · '+r1(r.pro100)+'g P per 100g'
+      +(r.lastAmt?' · last: '+esc(r.lastAmt)+' '+esc(r.lastUnit||''):'')
+      +' · logged '+n+'×</div>';
+    row.addEventListener("click", ()=>{
+      document.getElementById("recentsOverlay").classList.add("hidden");
       selectFood(r);
       if(r.lastAmt){ qtyUnitEl.value = r.lastUnit || qtyUnitEl.value; syncSliderToUnit(); qtyAmountEl.value = r.lastAmt; qtySliderEl.value = Math.min(Number(r.lastAmt)||0, Number(qtySliderEl.max)); updateCalc(); }
     });
-    el.appendChild(b);
+    el.appendChild(row);
   });
 }
 
@@ -1120,7 +1129,7 @@ function renderFood(){
   if(list.length===0){
     el.innerHTML = '<div style="padding:18px; font-size:13px; color:var(--dim);">Nothing logged for this date yet.</div>';
   } else {
-    const groups = ["breakfast","lunch","dinner","snacks","other"];
+    const groups = [currentMeal, "other"];
     let html = "";
     groups.forEach(g=>{
       const idxs = [];
@@ -1990,11 +1999,14 @@ function cancelRest(){
 document.getElementById("restDisplay").addEventListener("click", cancelRest);
 function fmtRest(sec){ return Math.floor(sec/60)+":"+String(sec%60).padStart(2,"0"); }
 function renderRestPresets(){
+  // migrate old single custom to list
+  if (cfg.customRestSec && !cfg.customRests){ cfg.customRests = [cfg.customRestSec]; delete cfg.customRestSec; saveCfg(); }
+  if (!cfg.customRests) cfg.customRests = [];
   const wrap = document.getElementById("restPresets");
   wrap.innerHTML = "";
-  const presets = [90,120,180];
-  if (cfg.customRestSec && presets.indexOf(cfg.customRestSec)===-1) presets.push(cfg.customRestSec);
-  presets.forEach(p=>{
+  const addChip = (p, removable)=>{
+    const holder = document.createElement("span");
+    holder.style.cssText = "display:inline-flex; align-items:center; gap:2px;";
     const b = document.createElement("button");
     b.className = "xbtn";
     b.textContent = fmtRest(p);
@@ -2004,8 +2016,24 @@ function renderRestPresets(){
       renderRestPresets();
       startRest(p);
     });
-    wrap.appendChild(b);
-  });
+    holder.appendChild(b);
+    if (removable){
+      const x = document.createElement("button");
+      x.className = "xbtn"; x.textContent = "✕";
+      x.style.cssText = "color:var(--warn); padding:8px 6px;";
+      x.setAttribute("aria-label","Remove preset");
+      x.addEventListener("click", ()=>{
+        cfg.customRests = cfg.customRests.filter(c=>c!==p);
+        if (cfg.restSec===p) cfg.restSec = 90;
+        saveCfg();
+        renderRestPresets();
+      });
+      holder.appendChild(x);
+    }
+    wrap.appendChild(holder);
+  };
+  [90,120,180].forEach(p=>addChip(p, false));
+  cfg.customRests.forEach(p=>{ if([90,120,180].indexOf(p)===-1) addChip(p, true); });
 }
 document.getElementById("restCustomBtn").addEventListener("click", ()=>{
   document.getElementById("restCustomRow").classList.toggle("hidden");
@@ -2013,7 +2041,11 @@ document.getElementById("restCustomBtn").addEventListener("click", ()=>{
 document.getElementById("restCustomSet").addEventListener("click", ()=>{
   const v = Math.round(Number(document.getElementById("restCustomInput").value));
   if (!v || v<10 || v>1800){ flashSave("10–1800 seconds", true); return; }
-  cfg.customRestSec = v;
+  if (!cfg.customRests) cfg.customRests = [];
+  if (cfg.customRests.indexOf(v)===-1 && [90,120,180].indexOf(v)===-1){
+    cfg.customRests.push(v);
+    cfg.customRests = cfg.customRests.slice(-4); // keep it tidy
+  }
   cfg.restSec = v;
   saveCfg();
   document.getElementById("restCustomRow").classList.add("hidden");
