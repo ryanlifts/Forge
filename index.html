@@ -1620,12 +1620,12 @@ function renderSettings(){
 }
 document.getElementById("saveSettingsBtn").addEventListener("click", ()=>{
   const g = id=>Number(document.getElementById(id).value);
-  cfg = {
+  cfg = Object.assign({}, cfg, {
     startWt: g("sStartWt")||cfg.startWt, goalWt: g("sGoalWt")||cfg.goalWt,
     calLo: g("sCalLo")||cfg.calLo, calHi: g("sCalHi")||cfg.calHi,
     proLo: g("sProLo")||cfg.proLo, proHi: g("sProHi")||cfg.proHi,
     carbGoal: g("sCarb")||cfg.carbGoal, fatGoal: g("sFat")||cfg.fatGoal,
-  };
+  });
   if (cfg.calHi < cfg.calLo){ const t=cfg.calLo; cfg.calLo=cfg.calHi; cfg.calHi=t; }
   if (cfg.proHi < cfg.proLo){ const t=cfg.proLo; cfg.proLo=cfg.proHi; cfg.proHi=t; }
   saveCfg(); renderAll(); flashSave("Settings saved ✓");
