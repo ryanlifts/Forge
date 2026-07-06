@@ -109,6 +109,8 @@
   .exercise .x-head b { font-weight:600; }
   .exercise .x-head .scheme { color:var(--ember); }
   svg { width:100%; display:block; }
+  /* button acknowledgment */
+  .acked { background:var(--ok) !important; color:#0E1A12 !important; border-color:var(--ok) !important; }
   /* meal segmented control */
   .seg { display:flex; gap:6px; }
   .seg button { flex:1; font-family:'Oswald',sans-serif; font-weight:600; font-size:12px; letter-spacing:.05em;
@@ -675,6 +677,21 @@ function save(){
 function saveCfg(){ try{ localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }catch(e){} }
 function saveProgram(){ try{ localStorage.setItem(PROG_KEY, JSON.stringify(program)); }catch(e){} }
 
+function ackBtn(id, label){
+  const b = typeof id==="string" ? document.getElementById(id) : id;
+  if (!b || b.dataset.acking) return;
+  b.dataset.acking = "1";
+  const origText = b.textContent;
+  b.textContent = label || "✓ Saved";
+  b.classList.add("acked");
+  b.disabled = true;
+  setTimeout(()=>{
+    b.textContent = origText;
+    b.classList.remove("acked");
+    b.disabled = false;
+    delete b.dataset.acking;
+  }, 1400);
+}
 let saveTimer;
 function flashSave(msg, bad){
   const el = document.getElementById("saveState");
@@ -1122,6 +1139,7 @@ document.getElementById("addManualBtn").addEventListener("click", ()=>{
     fat:Number(document.getElementById("mFat").value||0),
   });
   ["mName","mCal","mPro","mCarb","mFat"].forEach(id=>document.getElementById(id).value="");
+  ackBtn("addManualBtn", "✓ Added");
 });
 
 function addEntry(entry){
@@ -1666,6 +1684,7 @@ document.getElementById("importFile").addEventListener("change", (e)=>{
 });
 document.getElementById("exportBtn").addEventListener("click", ()=>{
   download((program.name||"forge-program").replace(/[^a-z0-9]+/gi,"-").toLowerCase()+".json", JSON.stringify(program,null,2));
+  ackBtn("exportBtn", "✓ Downloaded");
 });
 
 // ================== WEIGHT ==================
@@ -1898,6 +1917,7 @@ document.getElementById("tdeeApplyBtn").addEventListener("click", ()=>{
   cfg.lastTargetWt = sortedW.length ? sortedW[sortedW.length-1].lbs : cfg.lastTargetWt || cfg.startWt;
   delete cfg.adjustPromptedAt;
   saveCfg(); renderAll(); flashSave("Targets recalibrated ✓");
+  ackBtn("tdeeApplyBtn", "✓ Recalibrated");
 });
 
 // ================== STREAK ==================
@@ -1943,6 +1963,7 @@ document.getElementById("copyYesterdayBtn").addEventListener("click", ()=>{
   list.forEach(f=>data.food[cur].push(Object.assign({},f)));
   save(); renderFood(); renderDash();
   flashSave("Copied "+list.length+" items ✓");
+  ackBtn("copyYesterdayBtn", "✓ Copied "+list.length);
 });
 document.getElementById("saveMealBtn").addEventListener("click", ()=>{
   const list = data.food[foodDateEl.value]||[];
@@ -1955,6 +1976,7 @@ document.getElementById("saveMealBtn").addEventListener("click", ()=>{
   data.meals = data.meals.slice(-12);
   save(); renderMeals();
   flashSave("Meal saved ✓");
+  ackBtn("saveMealBtn", "✓ Meal saved");
 });
 function renderMeals(){
   const el = document.getElementById("mealChips");
@@ -2244,6 +2266,7 @@ document.getElementById("applyMacrosBtn").addEventListener("click", ()=>{
   cfg.lastTargetWt = Number(document.getElementById("cWt").value) || cfg.lastTargetWt || cfg.startWt;
   delete cfg.adjustPromptedAt;
   saveCfg(); renderAll(); flashSave("Targets applied ✓");
+  ackBtn("applyMacrosBtn", "✓ Targets applied");
 });
 
 // ---- weight-change adjustment prompt ----
@@ -2316,9 +2339,11 @@ document.getElementById("saveSettingsBtn").addEventListener("click", ()=>{
   cfg.lastTargetWt = sortedW2.length ? sortedW2[sortedW2.length-1].lbs : cfg.lastTargetWt || cfg.startWt;
   delete cfg.adjustPromptedAt;
   saveCfg(); renderAll(); flashSave("Settings saved ✓");
+  ackBtn("saveSettingsBtn", "✓ Saved");
 });
 document.getElementById("exportDataBtn").addEventListener("click", ()=>{
   download("forge-backup-"+todayStr()+".json", JSON.stringify({cfg:cfg, program:program, data:data}, null, 2));
+  ackBtn("exportDataBtn", "✓ Backup downloaded");
 });
 document.getElementById("importDataBtn").addEventListener("click", ()=>document.getElementById("importDataFile").click());
 document.getElementById("importDataFile").addEventListener("change", (e)=>{
@@ -2335,6 +2360,7 @@ document.getElementById("importDataFile").addEventListener("change", (e)=>{
       save(); saveCfg(); saveProgram();
       renderDayOptions(); renderSessionInputs(); renderAll();
       flashSave("Backup restored ✓");
+      ackBtn("importDataBtn", "✓ Restored");
     } catch(err){ flashSave("Restore failed", true); }
   };
   reader.readAsText(file);
@@ -2351,6 +2377,7 @@ document.getElementById("dashWtBtn").addEventListener("click", ()=>{
   document.getElementById("dashWtInput").value="";
   save(); renderWeight(); renderDash(); renderTDEE();
   flashSave("Weight recorded ✓");
+  ackBtn("dashWtBtn", "✓");
   checkWeightAdjust(v);
 });
 
@@ -2390,6 +2417,7 @@ function renderDash(){
 document.getElementById("saveUsdaBtn").addEventListener("click", ()=>{
   cfg.usdaKey = document.getElementById("sUsdaKey").value.trim();
   saveCfg(); flashSave(cfg.usdaKey ? "USDA key saved ✓" : "USDA key cleared");
+  ackBtn("saveUsdaBtn", cfg.usdaKey ? "✓ Key saved" : "✓ Cleared");
 });
 
 function renderNextWorkout(){
