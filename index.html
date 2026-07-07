@@ -109,6 +109,13 @@
   .exercise .x-head b { font-weight:600; }
   .exercise .x-head .scheme { color:var(--ember); }
   svg { width:100%; display:block; }
+  /* full-page overlays: respect iPhone status bar + smooth scrolling */
+  #faqOverlay, #recentsOverlay, #liftOverlay {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    padding-top: calc(16px + env(safe-area-inset-top)) !important;
+  }
+  body.locked { overflow: hidden; position: fixed; inset: 0; }
   /* FAQ accordion */
   .faq-sec { font-family:'Oswald',sans-serif; font-weight:600; font-size:15px; letter-spacing:.05em;
     text-transform:uppercase; color:var(--ember); margin:18px 0 8px; }
@@ -738,6 +745,15 @@ function save(){
 function saveCfg(){ try{ localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }catch(e){} }
 function saveProgram(){ try{ localStorage.setItem(PROG_KEY, JSON.stringify(program)); }catch(e){} }
 
+let lockScrollY = 0;
+function lockScroll(){
+  lockScrollY = window.scrollY || 0;
+  document.body.classList.add("locked");
+}
+function unlockScroll(){
+  document.body.classList.remove("locked");
+  window.scrollTo(0, lockScrollY);
+}
 function ackBtn(id, label){
   const b = typeof id==="string" ? document.getElementById(id) : id;
   if (!b || b.dataset.acking) return;
@@ -819,10 +835,13 @@ document.querySelectorAll("#mealSeg button").forEach(b=>b.addEventListener("clic
 }));
 document.getElementById("recentsOpenBtn").addEventListener("click", ()=>{
   renderRecents();
+  lockScroll();
   document.getElementById("recentsOverlay").classList.remove("hidden");
+  document.getElementById("recentsOverlay").scrollTop = 0;
 });
 document.getElementById("recentsCloseBtn").addEventListener("click", ()=>{
   document.getElementById("recentsOverlay").classList.add("hidden");
+  unlockScroll();
 });
 
 const foodDateEl = document.getElementById("foodDate");
@@ -1181,6 +1200,7 @@ function renderRecents(){
       +' · logged '+n+'×</div>';
     row.addEventListener("click", ()=>{
       document.getElementById("recentsOverlay").classList.add("hidden");
+      unlockScroll();
       selectFood(r);
       if(r.lastAmt){ qtyUnitEl.value = r.lastUnit || qtyUnitEl.value; syncSliderToUnit(); qtyAmountEl.value = r.lastAmt; qtySliderEl.value = Math.min(Number(r.lastAmt)||0, Number(qtySliderEl.max)); updateCalc(); }
     });
@@ -2252,9 +2272,16 @@ function openLiftChart(exName){
   document.getElementById("liftGoalNote").textContent = goal
     ? "Current best: ~"+best+" est. 1RM · "+Math.max(0, goal-best)+" lb to go"
     : "Set a goal to draw a target line on the chart.";
+  if (document.getElementById("liftOverlay").classList.contains("hidden")){
+    lockScroll();
+    document.getElementById("liftOverlay").scrollTop = 0;
+  }
   document.getElementById("liftOverlay").classList.remove("hidden");
 }
-document.getElementById("liftCloseBtn").addEventListener("click", ()=>document.getElementById("liftOverlay").classList.add("hidden"));
+document.getElementById("liftCloseBtn").addEventListener("click", ()=>{
+  document.getElementById("liftOverlay").classList.add("hidden");
+  unlockScroll();
+});
 document.getElementById("liftGoalSave").addEventListener("click", ()=>{
   const v = Number(document.getElementById("liftGoalInput").value);
   if(!cfg.liftGoals) cfg.liftGoals = {};
@@ -2447,10 +2474,13 @@ function renderFAQ(){
 }
 document.getElementById("faqOpenBtn").addEventListener("click", ()=>{
   renderFAQ();
+  lockScroll();
   document.getElementById("faqOverlay").classList.remove("hidden");
+  document.getElementById("faqOverlay").scrollTop = 0;
 });
 document.getElementById("faqCloseBtn").addEventListener("click", ()=>{
   document.getElementById("faqOverlay").classList.add("hidden");
+  unlockScroll();
 });
 
 // ================== MACRO CALCULATOR ==================
