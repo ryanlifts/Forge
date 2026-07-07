@@ -109,6 +109,18 @@
   .exercise .x-head b { font-weight:600; }
   .exercise .x-head .scheme { color:var(--ember); }
   svg { width:100%; display:block; }
+  /* FAQ accordion */
+  .faq-sec { font-family:'Oswald',sans-serif; font-weight:600; font-size:15px; letter-spacing:.05em;
+    text-transform:uppercase; color:var(--ember); margin:18px 0 8px; }
+  .faq-q { width:100%; text-align:left; background:var(--panel); border:1px solid var(--border);
+    border-radius:12px; color:var(--text); font-family:inherit; font-size:13px; font-weight:600;
+    padding:13px 14px; cursor:pointer; margin-bottom:8px; display:flex; justify-content:space-between; gap:10px; }
+  .faq-q .arrow { color:var(--dim); flex-shrink:0; }
+  .faq-a { display:none; font-size:13px; line-height:1.7; color:var(--dim); padding:2px 14px 14px; margin-top:-6px;
+    background:var(--panel); border:1px solid var(--border); border-top:none; border-radius:0 0 12px 12px; margin-bottom:8px; }
+  .faq-item.open .faq-q { border-radius:12px 12px 0 0; margin-bottom:0; }
+  .faq-item.open .faq-a { display:block; }
+  .faq-a b { color:var(--text); }
   /* button acknowledgment */
   .acked { background:var(--ok) !important; color:#0E1A12 !important; border-color:var(--ok) !important; }
   /* meal segmented control */
@@ -451,6 +463,7 @@
 
   <!-- ============ SETTINGS ============ -->
   <div id="view-settings" class="view">
+    <button class="btn ghost small" id="faqOpenBtn" style="width:100%; margin-bottom:12px;">❓ Help & FAQ — how everything works</button>
     <div class="card">
       <div class="label" style="margin-bottom:12px;">Calorie & macro calculator</div>
       <div class="row" style="margin-bottom:12px;">
@@ -536,6 +549,17 @@
       <input type="file" id="importDataFile" accept=".json,application/json" class="hidden">
       <div class="note">Data lives only on this device. Back up occasionally or when moving phones.</div>
     </div>
+  </div>
+</div>
+
+<div id="faqOverlay" class="hidden" style="position:fixed; inset:0; z-index:57; background:var(--bg); overflow-y:auto; padding:16px 14px 90px;">
+  <div style="max-width:720px; margin:0 auto;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+      <div style="font-family:'Oswald',sans-serif; font-weight:700; font-size:22px; text-transform:uppercase;">Help & FAQ</div>
+      <button class="xbtn" id="faqCloseBtn">✕ Close</button>
+    </div>
+    <div class="note" style="margin:0 0 8px;">Tap any question to expand it.</div>
+    <div id="faqBody"></div>
   </div>
 </div>
 
@@ -2358,6 +2382,76 @@ function renderMeasure(){
     save(); renderMeasure();
   }));
 }
+
+// ================== HELP & FAQ ==================
+const FAQ = [
+  {sec:"Getting started"},
+  {q:"How do I set my calorie and macro targets?", a:"Go to <b>⚙ Settings → Calorie & macro calculator</b>. Enter your sex, age, height, weight, activity level, and goal, tap <b>Calculate</b>, pick a macro split (or use Recommended), then tap <b>Use these as my targets</b>. Every bar in the app now measures against your numbers. You can also type targets directly into the fields below the calculator."},
+  {q:"What's a macro split and which should I pick?", a:"It's how your calories divide between protein / carbs / fat. <b>Recommended</b> (0.9g protein per lb, 25% fat) suits most people losing fat while keeping muscle. Higher-carb splits like 40/40/20 suit hard training; the Custom option lets you set any percentages and they auto-balance to 100%. The link under the calculator goes to the peer-reviewed research."},
+  {q:"How do I log my weight?", a:"Fastest way: the small field on the <b>Home</b> tab — type today's weight, tap Record. The Weight tab does the same plus lets you log past dates. Weigh at the same time each day and judge the weekly trend, not any single day."},
+
+  {sec:"Food logging"},
+  {q:"How do I get the full food database (USDA key)?", a:"In <b>⚙ Settings → USDA food database</b>, tap the fdc.nal.usda.gov link, sign up with your name and email (free, ~1 minute), and the key arrives by email instantly. Paste it in and tap <b>Save key</b>. This adds 400,000+ US branded products — including store brands — to your searches."},
+  {q:"How does barcode scanning work?", a:"On the Food tab tap <b>📷 Scan barcode</b> and point your camera at the label (allow camera access when asked). If the product is found, it loads with full macros. You can also type the UPC number manually and tap Look up."},
+  {q:"A barcode wasn't found — now what?", a:"The app opens a <b>save-it-once form</b>: copy the serving size and macros off the nutrition label, save, and that barcode belongs to you forever. Next scan of the same product loads instantly from your personal library, and it shows up in text search too."},
+  {q:"What are the meal buttons (Bkfst/Lunch/Dinner/Snacks)?", a:"Every entry is filed under a meal. The right one pre-selects itself by time of day — just override by tapping if needed. The day list shows only the selected meal with its own subtotal; the Totals bars always count the whole day."},
+  {q:"What's the fastest way to log food I eat often?", a:"Three tools: <b>★ Recent foods</b> (your most-logged items, tap one and it opens with your last portion prefilled), <b>Save today as a meal</b> (bundles the day's entries into a one-tap chip — long-press a chip to delete it), and <b>⧉ Copy yesterday</b>. The ⧉ on any logged entry duplicates it."},
+  {q:"How do I adjust the amount I ate?", a:"After picking any food, use the <b>slider or the amount field</b> — calories and macros recalculate live. Units: grams, oz, lb, ml, fl oz, or the product's serving."},
+
+  {sec:"Training"},
+  {q:"How do I log a workout?", a:"Train tab → pick your session day (or tap <b>▶ Start next</b> on Home, which knows your rotation). Each exercise shows set rows prefilled from last time — adjust with the <b>−5/+5</b> and <b>−1/+1</b> buttons, tap <b>✓</b> as you finish sets (auto-starts your rest timer), then <b>Log session</b>. The <b>= last</b> button fills an exercise identical to last time in one tap; the <b>⌨</b> button switches to free-text typing."},
+  {q:"What does '+5 auto' mean?", a:"You hit all your target reps at the same weight last session, so the app pre-loaded 5 lb more — progressive overload applied for you. You can always change it."},
+  {q:"How do programs work?", a:"The Train tab runs whatever program is loaded. <b>＋ Build new program</b> creates your own (any number of days, 60+ exercise library plus custom names, schemes like 4×5). <b>✎ Edit</b> modifies the current one. <b>⬆ Load</b> imports any FORGE .json file — from a friend, a coach, or an AI. <b>⬇/📤</b> exports and shares yours."},
+  {q:"Can an AI build me a program?", a:"Yes — ask Claude (or any AI): 'Build me a workout program as a JSON file for the FORGE app' and describe your goals, experience, available days, and equipment. Ask for days with id/title/exercises, each exercise having a name and a scheme like 4×5. Download the .json it produces and load it in the Train tab."},
+  {q:"What are the PR board and the 📈 charts?", a:"Every set you log is converted to an estimated 1RM (Epley formula). Your best per exercise ranks on the PR board — tap any row for a progress chart over time, and set a goal weight to draw a target line. Beating a previous best triggers the PR FORGED screen when you log."},
+  {q:"What's plate math and the rest timer?", a:"Type a target weight and the app tells you which plates to load per side. Rest timer: tap a preset to start, tap the running numbers to cancel, and ＋ adds custom durations (they stick around as presets — ✕ removes them). Checking ✓ on a set auto-starts your last-used duration."},
+
+  {sec:"Progress & smart features"},
+  {q:"What is 'Your measured metabolism'?", a:"After ~2 weeks of logging food and weigh-ins, the app computes your <b>actual TDEE</b> from your real intake vs your real weight trend — more accurate than any formula. Tap <b>Recalibrate</b> to update your calorie targets from it."},
+  {q:"Why did the app ask if I want to adjust my targets?", a:"Your weight has moved 5+ lb since your targets were set, which changes your calorie needs. Tap <b>Adjust</b> and the calculator opens prefilled with your new weight — recalculate, pick your split, apply. 'Not yet' snoozes it until you've moved further."},
+  {q:"What do the weekly review and goal date mean?", a:"The <b>This week</b> card on Home summarizes your last 7 days: average calories, protein compliance, sessions, and weight change. The projection under the weight chart estimates when you reach your goal at your current rate — it updates with every weigh-in and will honestly tell you if the trend is moving the wrong way."},
+  {q:"How do I track body measurements?", a:"It's optional: <b>⚙ Settings → Enable body measurements</b> adds a waist/chest/arm tracker to the Weight tab. On a fat-loss phase, a shrinking waist is often better evidence than the scale. Toggle it off anytime — entries stay saved."},
+
+  {sec:"Your data & the app"},
+  {q:"Where is my data stored? Is it private?", a:"Everything lives <b>only on your device</b> — no account, no server, nothing leaves your phone. Nobody (including whoever shared the app with you) can see your logs."},
+  {q:"How do I back up or move to a new phone?", a:"<b>⚙ Settings → Back up all data</b> downloads one file containing everything. On the new phone, install the app and use <b>Restore from backup</b>. Do a backup occasionally — if you delete the app from your home screen and clear browser data, on-device data goes with it."},
+  {q:"How do I share this app with someone?", a:"Send them the web address. iPhone: open in Safari → Share → <b>Add to Home Screen</b>. Android: open in Chrome → <b>Install app</b> when prompted (or ⋮ menu → Add to Home Screen). They get their own fresh copy with their own private data."},
+  {q:"Search isn't returning results — why?", a:"Online food search needs a connection; without one you still get the built-in whole-foods list, your saved foods, and manual entry. If branded results seem thin, make sure your free USDA key is saved in Settings. For products, the barcode scan is the most reliable route."},
+  {q:"The app doesn't seem to update / looks stuck?", a:"Close it fully (swipe it away), reopen, close again, reopen. The first open downloads the new version in the background; the second runs it."},
+];
+function renderFAQ(){
+  const body = document.getElementById("faqBody");
+  if (body.childNodes.length) return; // build once
+  FAQ.forEach(item=>{
+    if (item.sec){
+      const h = document.createElement("div");
+      h.className = "faq-sec"; h.textContent = item.sec;
+      body.appendChild(h);
+      return;
+    }
+    const wrap = document.createElement("div");
+    wrap.className = "faq-item";
+    const q = document.createElement("button");
+    q.className = "faq-q";
+    q.innerHTML = '<span>'+item.q+'</span><span class="arrow">▾</span>';
+    const a = document.createElement("div");
+    a.className = "faq-a";
+    a.innerHTML = item.a;
+    q.addEventListener("click", ()=>{
+      const open = wrap.classList.toggle("open");
+      q.querySelector(".arrow").textContent = open ? "▴" : "▾";
+    });
+    wrap.appendChild(q); wrap.appendChild(a);
+    body.appendChild(wrap);
+  });
+}
+document.getElementById("faqOpenBtn").addEventListener("click", ()=>{
+  renderFAQ();
+  document.getElementById("faqOverlay").classList.remove("hidden");
+});
+document.getElementById("faqCloseBtn").addEventListener("click", ()=>{
+  document.getElementById("faqOverlay").classList.add("hidden");
+});
 
 // ================== MACRO CALCULATOR ==================
 
