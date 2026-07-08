@@ -698,21 +698,18 @@ const DATA_KEY = "forge:data", CFG_KEY = "forge:cfg", PROG_KEY = "forge:program"
 const DEFAULT_CFG = { startWt:225, goalWt:175, calLo:1900, calHi:2100, proLo:180, proHi:200, carbGoal:160, fatGoal:60 };
 
 const DEFAULT_PROGRAM = {
-  name: "Phase 1 — The Cut",
+  name: "Full Body Foundations (3-Day)",
   author: "Built by Claude",
   days: [
-    { id:"D1", title:"Lower · Squat", exercises:[
-      {name:"Box Squat (to parallel)",scheme:"4×5"},{name:"Romanian Deadlift",scheme:"3×8"},
-      {name:"Leg Curl",scheme:"3×12"},{name:"Calf Raise",scheme:"4×12"},{name:"Spanish Squat / TKE",scheme:"3×15"}]},
-    { id:"D2", title:"Upper · Bench", exercises:[
-      {name:"Bench Press",scheme:"4×5"},{name:"Chin-Up (bodyweight)",scheme:"4×6"},
-      {name:"Overhead Press",scheme:"3×8"},{name:"Barbell Row",scheme:"3×10"},{name:"Triceps / Curls",scheme:"3×12"}]},
-    { id:"D3", title:"Lower · Hinge", exercises:[
-      {name:"Trap Bar Deadlift",scheme:"4×4"},{name:"Bulgarian Split Squat",scheme:"3×8/leg"},
-      {name:"Back Extension",scheme:"3×12"},{name:"Hip Thrust",scheme:"3×10"}]},
-    { id:"D4", title:"Upper · Volume", exercises:[
-      {name:"Incline Bench Press",scheme:"4×8"},{name:"Pull-Up",scheme:"4×AMRAP"},
-      {name:"Dips",scheme:"3×10"},{name:"Lateral Raise",scheme:"3×15"},{name:"Face Pull",scheme:"3×15"}]},
+    { id:"D1", title:"Full Body A", exercises:[
+      {name:"Back Squat",scheme:"3×5"},{name:"Bench Press",scheme:"3×5"},
+      {name:"Seated Cable Row",scheme:"3×10"},{name:"Plank",scheme:"3×30-60s"}]},
+    { id:"D2", title:"Full Body B", exercises:[
+      {name:"Romanian Deadlift",scheme:"3×8"},{name:"Overhead Press",scheme:"3×8"},
+      {name:"Lat Pulldown",scheme:"3×10"},{name:"Biceps Curl",scheme:"3×12"}]},
+    { id:"D3", title:"Full Body C", exercises:[
+      {name:"Deadlift",scheme:"3×5"},{name:"Dumbbell Bench Press",scheme:"3×10"},
+      {name:"Dumbbell Row",scheme:"3×10"},{name:"Lateral Raise",scheme:"3×15"}]},
   ],
 };
 
