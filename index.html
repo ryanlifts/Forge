@@ -25,10 +25,22 @@
     min-height:100vh; padding:16px 14px 96px;
     -webkit-tap-highlight-color:transparent;
   }
-  .wrap { max-width:720px; margin:0 auto; }
-  h1 { font-family:'Oswald',sans-serif; font-weight:700; font-size:34px; text-transform:uppercase; line-height:1; }
-  h1 span { color:var(--ember); }
+  .wrap { max-width:720px; margin:0 auto; padding-top:calc(env(safe-area-inset-top)); }
+  h1 { font-family:'Oswald',sans-serif; font-weight:700; font-size:40px; text-transform:uppercase; line-height:1;
+    letter-spacing:.1em;
+    background:linear-gradient(135deg,var(--ember) 30%,var(--ember-deep));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    text-shadow:0 0 26px rgba(255,122,61,.22); }
   .sub { font-size:11px; color:var(--dim); margin-top:4px; }
+  /* the journey strip */
+  #journey { margin:10px 0 16px; }
+  .jy-top { display:flex; justify-content:space-between; align-items:baseline; }
+  .jy-now { font-family:'Oswald',sans-serif; font-weight:600; font-size:16px; }
+  .jy-track { position:relative; height:7px; background:var(--panel-up); border:1px solid var(--border); border-radius:99px; margin:7px 0 5px; }
+  .jy-fill { position:absolute; left:0; top:0; bottom:0; background:linear-gradient(90deg,var(--ember-deep),var(--ember)); border-radius:99px; }
+  .jy-dot { position:absolute; top:50%; width:15px; height:15px; border-radius:50%; background:var(--ember);
+    border:3px solid var(--bg); transform:translate(-50%,-50%); box-shadow:0 0 0 1.5px var(--ember), 0 0 10px rgba(255,122,61,.5); }
+  .jy-ends { display:flex; justify-content:space-between; font-size:10px; color:var(--dim); font-family:'IBM Plex Mono',monospace; }
   .label { font-size:10px; letter-spacing:.14em; color:var(--dim); text-transform:uppercase; margin-bottom:6px; }
   .card { background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:18px; margin-bottom:12px; }
   .card.flush { padding:0; overflow:hidden; }
@@ -185,12 +197,20 @@
 </head>
 <body>
 <div class="wrap">
-  <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:18px;">
-    <div>
-      <h1>For<span>ge</span></h1>
-      <div class="sub" id="headerSub">Training & nutrition log</div>
-    </div>
+  <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+    <h1>FORGE</h1>
     <div id="saveState" class="note" style="margin:0;"></div>
+  </div>
+  <div id="journey" class="hidden">
+    <div class="jy-top">
+      <span class="label" style="margin:0;">The Journey</span>
+      <span class="jy-now" id="jyNow">—</span>
+    </div>
+    <div class="jy-track">
+      <div class="jy-fill" id="jyFill"></div>
+      <div class="jy-dot" id="jyDot"></div>
+    </div>
+    <div class="jy-ends"><span id="jyStart"></span><span id="jyGoal"></span></div>
   </div>
 
   <!-- ============ HOME ============ -->
@@ -3253,8 +3273,22 @@ document.getElementById("dashWtBtn").addEventListener("click", ()=>{
 });
 
 // ================== DASH ==================
+function renderJourney(){
+  const el = document.getElementById("journey");
+  if (!cfg.goalWt || !cfg.startWt || cfg.goalWt===cfg.startWt){ el.classList.add("hidden"); return; }
+  el.classList.remove("hidden");
+  const sorted = data.weights.slice().sort((a,b)=>a.date.localeCompare(b.date));
+  const cur = sorted.length ? sorted[sorted.length-1].lbs : cfg.startWt;
+  let pct = (cfg.startWt - cur) / (cfg.startWt - cfg.goalWt); // works cutting or gaining
+  pct = Math.max(0, Math.min(1, pct));
+  document.getElementById("jyFill").style.width = (pct*100)+"%";
+  document.getElementById("jyDot").style.left = (pct*100)+"%";
+  document.getElementById("jyNow").textContent = (pct>=1 ? "🏁 " : "") + cur + " lb";
+  document.getElementById("jyStart").textContent = cfg.startWt + " start";
+  document.getElementById("jyGoal").textContent = cfg.goalWt + " goal";
+}
 function renderDash(){
-  document.getElementById("headerSub").textContent = cfg.startWt+" → "+cfg.goalWt+" lb";
+  renderJourney();
   const sorted=data.weights.slice().sort((a,b)=>a.date.localeCompare(b.date));
   const cur=sorted.length?sorted[sorted.length-1].lbs:cfg.startWt;
   const total=Math.abs(cfg.startWt-cfg.goalWt)||1;
