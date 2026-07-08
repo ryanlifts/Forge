@@ -1,5 +1,5 @@
 // FORGE service worker — offline app shell, network-first for food APIs
-const CACHE = "forge-v17";
+const CACHE = "forge-v18";
 const SHELL = [
   "./",
   "./index.html",
