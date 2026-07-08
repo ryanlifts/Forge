@@ -226,6 +226,19 @@
       <div class="label">This week</div>
       <div id="weekBody" style="font-size:13px; line-height:1.9;"></div>
     </div>
+    <div class="card" id="aiCoachCard">
+      <div class="label">🤖 AI Coach</div>
+      <div style="font-size:13px; line-height:1.7; margin:6px 0 12px;">
+        Turn any AI into your personal trainer. One tap builds a progress report from your real data —
+        weight trend, nutrition adherence, lift progression, and your current program — ready to paste into
+        Claude, ChatGPT, or any AI. It can assess your progress and hand back an adjusted program that loads
+        straight into FORGE. <span style="color:var(--dim);">Totally optional — FORGE works fully without it.</span>
+      </div>
+      <div class="row">
+        <button class="btn ghost small" id="aiCopyBtn">📋 Copy report</button>
+        <button class="btn ghost small" id="aiDownloadBtn">⬇ Download</button>
+      </div>
+    </div>
     <div class="row" style="margin-bottom:12px;">
       <div class="card" style="margin-bottom:0; min-width:180px;">
         <div class="label">Current weight</div>
@@ -2576,6 +2589,97 @@ async function searchUSDA(q){
   const json = await res.json();
   return (json.foods||[]).map(mapUSDA).filter(Boolean);
 }
+// ================== AI COACH REPORT ==================
+function aiReport(){
+  const today = todayStr();
+  const sorted = data.weights.slice().sort((a,b)=>a.date.localeCompare(b.date));
+  const cur = sorted.length ? sorted[sorted.length-1].lbs : cfg.startWt;
+  const sl = weightSlope(28);
+  const rate = sl ? Math.round(sl.slope*7*10)/10 : null;
+  const tdee = (typeof computeTDEE==="function") ? computeTDEE() : null;
+
+  // nutrition adherence: last 14 days
+  const days = [];
+  for(let i=13;i>=0;i--){
+    const d = new Date(); d.setDate(d.getDate()-i);
+    days.push(d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"));
+  }
+  const logged = days.filter(d=>(data.food[d]||[]).length>0);
+  const fullDays = logged.map(d=>daySums(d)).filter(x=>x.cal>500);
+  const avgCal = fullDays.length ? Math.round(fullDays.reduce((a,x)=>a+x.cal,0)/fullDays.length) : null;
+  const avgPro = fullDays.length ? Math.round(fullDays.reduce((a,x)=>a+x.pro,0)/fullDays.length) : null;
+  const proHit = logged.filter(d=>daySums(d).pro>=cfg.proLo).length;
+
+  // training: last 28 days
+  const cut28 = new Date(Date.now()-28*86400000);
+  const cutStr = cut28.getFullYear()+"-"+String(cut28.getMonth()+1).padStart(2,"0")+"-"+String(cut28.getDate()).padStart(2,"0");
+  const recent = data.workouts.filter(w=>w.date>=cutStr);
+  const strengthS = recent.filter(w=>w.day!=="CARDIO").length;
+  const cardioS = recent.filter(w=>w.day==="CARDIO").length;
+
+  // per-lift progression: every program exercise with history
+  const liftLines = [];
+  program.days.forEach(d=>d.exercises.forEach(ex=>{
+    const name = ex.name.replace("[Cardio] ","");
+    const hist = liftHistory(name);
+    if (!hist.length) return;
+    const last3 = hist.slice(-3).map(p=>fmtDate(p.date)+": ~"+Math.round(p.y));
+    const goal = (cfg.liftGoals||{})[name];
+    liftLines.push("- **"+name+"** ("+(ex.scheme||"no scheme")+"): est-1RM trend "+last3.join(" → ")
+      +(goal ? " · goal "+goal : ""));
+  }));
+
+  const L = [];
+  L.push("# FORGE Progress Report — "+fmtDate(today));
+  L.push("");
+  L.push("You are my fitness coach. Below is my real logged data from the FORGE app. Please:");
+  L.push("1. Assess my rate of progress toward my goal — too fast, too slow, or on track.");
+  L.push("2. Flag anything in my nutrition adherence that needs fixing.");
+  L.push("3. Review my lift progression and suggest specific training adjustments.");
+  L.push("4. If my program should change, return a COMPLETE updated program as a JSON code block in the exact format shown at the bottom (same structure, keep exercise names I'm progressing on unchanged so my history stays connected). I will load it directly into the app.");
+  L.push("5. Be direct — no generic advice.");
+  L.push("");
+  L.push("## Goal & weight");
+  L.push("- Start: "+cfg.startWt+" lb · Current: "+cur+" lb · Goal: "+cfg.goalWt+" lb");
+  L.push(rate!=null ? "- Trend (last 28 days): "+(rate>0?"+":"")+rate+" lb/week" : "- Trend: not enough weigh-ins yet ("+sorted.length+" recorded)");
+  if (tdee && tdee.tdee) L.push("- Measured TDEE from my actual logs: ~"+tdee.tdee+" kcal/day");
+  L.push("");
+  L.push("## Nutrition (last 14 days)");
+  L.push("- Targets: "+cfg.calLo+"–"+cfg.calHi+" kcal · protein "+cfg.proLo+"–"+cfg.proHi+"g · carbs "+cfg.carbGoal+"g · fat "+cfg.fatGoal+"g");
+  L.push(logged.length ? "- Logged "+logged.length+" of 14 days · avg "+ (avgCal!=null ? avgCal+" kcal, "+avgPro+"g protein" : "insufficient full days") + " · protein target hit "+proHit+"/"+logged.length+" days" : "- No food logged in the last 14 days");
+  L.push("");
+  L.push("## Training (last 28 days)");
+  L.push("- "+strengthS+" strength sessions, "+cardioS+" cardio sessions · program: \""+(program.name||"unnamed")+"\" ("+program.days.length+" days/rotation)");
+  if (liftLines.length){ L.push("- Lift progression (best estimated 1RM per session):"); liftLines.forEach(x=>L.push("  "+x)); }
+  else L.push("- No strength sessions logged against the current program yet.");
+  L.push("");
+  L.push("## My current program (edit this and return the full updated JSON)");
+  L.push("```json");
+  L.push(JSON.stringify(program, null, 2));
+  L.push("```");
+  L.push("");
+  L.push("Program format rules: top level {name, days:[...]}; each day {id:\"D1\", title, exercises:[{name, scheme}]}; schemes like \"4×5\" or \"3×8-12\" power the app's prefill and auto-progression; cardio entries are named \"[Cardio] Type\" with a duration as the scheme.");
+  return L.join("\n");
+}
+document.getElementById("aiDownloadBtn").addEventListener("click", ()=>{
+  download("forge-report-"+todayStr()+".md", aiReport());
+  ackBtn("aiDownloadBtn", "✓ Downloaded");
+});
+document.getElementById("aiCopyBtn").addEventListener("click", ()=>{
+  const txt = aiReport();
+  const done = ()=>ackBtn("aiCopyBtn", "✓ Copied — paste into any AI");
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(done).catch(()=>{ fallbackCopy(txt); done(); });
+  } else { fallbackCopy(txt); done(); }
+});
+function fallbackCopy(txt){
+  const ta = document.createElement("textarea");
+  ta.value = txt; ta.style.position = "fixed"; ta.style.opacity = "0";
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand("copy"); } catch(e){}
+  document.body.removeChild(ta);
+}
+
 // ================== ANALYTICS ==================
 // --- generic line chart (dates -> values) with optional goal line ---
 function lineChartSVG(pts, goal){
@@ -2965,6 +3069,7 @@ const FAQ = [
   {q:"What is 'Your measured metabolism'?", a:"After ~2 weeks of logging food and weigh-ins, the app computes your <b>actual TDEE</b> from your real intake vs your real weight trend — more accurate than any formula. Tap <b>Recalibrate</b> to update your calorie targets from it."},
   {q:"Why did the app ask if I want to adjust my targets?", a:"Your weight has moved 5+ lb since your targets were set, which changes your calorie needs. Tap <b>Adjust</b> and the calculator opens prefilled with your new weight — recalculate, pick your split, apply. 'Not yet' snoozes it until you've moved further."},
   {q:"What do the weekly review and goal date mean?", a:"The <b>This week</b> card on Home summarizes your last 7 days: average calories, protein compliance, sessions, and weight change. The projection under the weight chart estimates when you reach your goal at your current rate — it updates with every weigh-in and will honestly tell you if the trend is moving the wrong way."},
+  {q:"What is the AI Coach report?", a:"On the Home tab, the <b>🤖 AI Coach</b> card builds a progress report from your real data — weight trend, measured TDEE, nutrition adherence, per-lift progression, and your current program. Tap <b>Copy report</b>, paste it into Claude, ChatGPT, or any AI, and ask away. The report even includes your program in FORGE format, so the AI can return an adjusted program you load right back in (Train → ⬆ Load). Completely optional — the app works fully without it."},
   {q:"How do I track body measurements?", a:"It's optional: <b>⚙ Settings → Enable body measurements</b> adds a waist/chest/arm tracker to the Weight tab. On a fat-loss phase, a shrinking waist is often better evidence than the scale. Toggle it off anytime — entries stay saved."},
 
   {sec:"Your data & the app"},
