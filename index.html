@@ -116,6 +116,14 @@
     padding-top: calc(16px + env(safe-area-inset-top)) !important;
   }
   body.locked { overflow: hidden; position: fixed; inset: 0; }
+  /* setup wizard */
+  .su-opt { width:100%; text-align:left; background:var(--panel); border:1px solid var(--border); border-radius:12px;
+    color:var(--text); font-family:inherit; font-size:14px; padding:14px; cursor:pointer; margin-bottom:10px; }
+  .su-opt.sel { border-color:var(--ember); background:rgba(255,122,61,.07); }
+  .su-opt .su-sub { color:var(--dim); font-size:12px; margin-top:3px; }
+  .su-dots { display:flex; gap:8px; justify-content:center; margin:4px 0 16px; }
+  .su-dots span { width:8px; height:8px; border-radius:50%; background:var(--border); }
+  .su-dots span.on { background:var(--ember); }
   /* FAQ accordion */
   .faq-sec { font-family:'Oswald',sans-serif; font-weight:600; font-size:15px; letter-spacing:.05em;
     text-transform:uppercase; color:var(--ember); margin:18px 0 8px; }
@@ -603,6 +611,22 @@
       <input type="file" id="importDataFile" accept=".json,application/json" class="hidden">
       <div class="note">Data lives only on this device. Back up occasionally or when moving phones.</div>
     </div>
+  </div>
+</div>
+
+<div id="setupOverlay" class="hidden" style="position:fixed; inset:0; z-index:60; background:var(--bg); overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; padding:calc(20px + env(safe-area-inset-top)) 18px 40px;">
+  <div style="max-width:520px; margin:0 auto;">
+    <div style="text-align:center; margin-bottom:6px;">
+      <div style="font-family:'Oswald',sans-serif; font-weight:700; font-size:28px; letter-spacing:.06em;">FORGE</div>
+      <div class="note" style="margin:2px 0 14px;" id="setupTagline">Let's set you up — about a minute.</div>
+    </div>
+    <div class="su-dots" id="setupDots"></div>
+    <div id="setupBody"></div>
+    <div class="row mt14">
+      <button class="btn ghost" id="setupBack">Back</button>
+      <button class="btn" id="setupNext">Next</button>
+    </div>
+    <button id="setupSkip" style="width:100%; background:none; border:none; color:var(--dim); font-family:inherit; font-size:12px; margin-top:14px; cursor:pointer; text-decoration:underline;">Skip setup — I'll do it in Settings</button>
   </div>
 </div>
 
@@ -2715,6 +2739,186 @@ function renderMeasure(){
     data.measure = data.measure.filter(m=>m.date!==b.dataset.d);
     save(); renderMeasure();
   }));
+}
+
+// ================== FIRST-RUN SETUP WIZARD ==================
+let setupStep = 0;
+const setupChoice = { goalMode:"lose", trainAction:null, cw:null, gw:null };
+function hasAnyData(){
+  return (data.weights||[]).length>0 || (data.workouts||[]).length>0 || Object.keys(data.food||{}).length>0;
+}
+function openSetup(){
+  setupStep = 0;
+  lockScroll();
+  document.getElementById("setupOverlay").classList.remove("hidden");
+  renderSetupStep();
+}
+function closeSetup(runAction){
+  cfg.setupDone = true;
+  saveCfg();
+  document.getElementById("setupOverlay").classList.add("hidden");
+  unlockScroll();
+  renderAll();
+  if (runAction && setupChoice.trainAction){
+    // land them on the Train tab with their chosen path open
+    document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
+    document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+    document.querySelector('.tab[data-view="work"]').classList.add("active");
+    document.getElementById("view-work").classList.add("active");
+    if (setupChoice.trainAction==="build") openBuilder(false);
+    if (setupChoice.trainAction==="import") document.getElementById("importFile").click();
+  }
+}
+document.getElementById("setupSkip").addEventListener("click", ()=>closeSetup(false));
+document.getElementById("setupBack").addEventListener("click", ()=>{
+  if (setupStep>0){ setupStep--; renderSetupStep(); }
+});
+document.getElementById("setupNext").addEventListener("click", ()=>{
+  if (!validateSetupStep()) return;
+  if (setupStep<4){ setupStep++; renderSetupStep(); }
+  else closeSetup(true);
+});
+function validateSetupStep(){
+  if (setupStep===0){
+    const cw = Number(document.getElementById("suWt").value);
+    const gw = Number(document.getElementById("suGoalWt").value);
+    if (!cw || cw<50 || cw>700){ flashSave("Enter your current weight", true); return false; }
+    if (!gw || gw<50 || gw>700){ flashSave("Enter a goal weight", true); return false; }
+    setupChoice.cw = cw; setupChoice.gw = gw;
+    cfg.startWt = cw; cfg.goalWt = gw;
+    const dt = todayStr();
+    if (!data.weights.some(w=>w.date===dt)) data.weights.push({date:dt, lbs:cw});
+    cfg.lastTargetWt = cw;
+    saveCfg(); save();
+  }
+  return true;
+}
+function suDots(){
+  const d = document.getElementById("setupDots");
+  d.innerHTML = "";
+  for(let i=0;i<5;i++){ const sp=document.createElement("span"); if(i===setupStep) sp.className="on"; d.appendChild(sp); }
+}
+function renderSetupStep(){
+  suDots();
+  const body = document.getElementById("setupBody");
+  document.getElementById("setupBack").style.visibility = setupStep===0 ? "hidden" : "visible";
+  document.getElementById("setupNext").textContent = setupStep===4 ? "Finish setup" : "Next";
+  document.getElementById("setupOverlay").scrollTop = 0;
+
+  if (setupStep===0){
+    body.innerHTML = '<div class="card"><div class="label">Step 1 · Your goal</div>'
+      +'<div class="row" style="margin:10px 0 12px;">'
+      +'<div><div class="label">Current weight (lb)</div><input type="number" id="suWt" inputmode="decimal" placeholder="e.g. 225"></div>'
+      +'<div><div class="label">Goal weight (lb)</div><input type="number" id="suGoalWt" inputmode="decimal" placeholder="e.g. 175"></div>'
+      +'</div>'
+      +'<div class="label">I want to</div><div id="suModes"></div>'
+      +'<div class="note">Your current weight becomes your first weigh-in.</div></div>';
+    if (setupChoice.cw) document.getElementById("suWt").value = setupChoice.cw;
+    if (setupChoice.gw) document.getElementById("suGoalWt").value = setupChoice.gw;
+    const modes = [["lose","Lose fat","Calorie deficit, high protein"],["maintain","Maintain","Recomp / hold steady"],["gain","Build muscle","Lean surplus"]];
+    const md = document.getElementById("suModes");
+    modes.forEach(m=>{
+      const b = document.createElement("button");
+      b.className = "su-opt"+(setupChoice.goalMode===m[0]?" sel":"");
+      b.innerHTML = '<b>'+m[1]+'</b><div class="su-sub">'+m[2]+'</div>';
+      b.addEventListener("click", ()=>{ setupChoice.goalMode=m[0]; renderSetupStep(); });
+      md.appendChild(b);
+    });
+  }
+
+  if (setupStep===1){
+    body.innerHTML = '<div class="card"><div class="label">Step 2 · Calories & macros</div>'
+      +'<div class="row" style="margin:10px 0 10px;">'
+      +'<div><div class="label">Sex</div><select id="suSex"><option value="m">Male</option><option value="f">Female</option></select></div>'
+      +'<div><div class="label">Age</div><input type="number" id="suAge" inputmode="numeric" placeholder="yrs"></div>'
+      +'</div>'
+      +'<div class="row" style="margin-bottom:10px;">'
+      +'<div><div class="label">Height ft</div><input type="number" id="suFt" inputmode="numeric" placeholder="5"></div>'
+      +'<div><div class="label">in</div><input type="number" id="suIn" inputmode="numeric" placeholder="11"></div>'
+      +'<div><div class="label">Activity</div><select id="suAct">'
+      +'<option value="1.2">Desk job</option><option value="1.375">Light</option><option value="1.55" selected>Moderate</option><option value="1.725">Very active</option>'
+      +'</select></div></div>'
+      +'<button class="btn ghost small" id="suCalcBtn" style="width:100%;">Calculate & apply my targets</button>'
+      +'<div id="suOut" style="font-size:13px; line-height:1.8; margin-top:10px;"></div>'
+      +'<div class="note">Uses the Mifflin-St Jeor formula. Fine-tune targets or pick a custom macro split anytime in ⚙ Settings.</div></div>';
+    if (cfg.calcInputs && setupChoice.cw){
+      document.getElementById("suSex").value = cfg.calcInputs.sex;
+      document.getElementById("suAge").value = cfg.calcInputs.age;
+      document.getElementById("suFt").value = cfg.calcInputs.ft;
+      document.getElementById("suIn").value = cfg.calcInputs.inches;
+      document.getElementById("suAct").value = String(cfg.calcInputs.act);
+    }
+    document.getElementById("suCalcBtn").addEventListener("click", ()=>{
+      const sex = document.getElementById("suSex").value;
+      const age = Number(document.getElementById("suAge").value);
+      const ft = Number(document.getElementById("suFt").value);
+      const inches = Number(document.getElementById("suIn").value||0);
+      const act = Number(document.getElementById("suAct").value);
+      const goal = setupChoice.goalMode==="lose" ? -500 : (setupChoice.goalMode==="gain" ? 300 : 0);
+      if(!age || !ft){ flashSave("Fill age and height", true); return; }
+      const r = calcMacros(sex, age, ft, inches, cfg.startWt, act, goal);
+      cfg.calLo = r.cal-100; cfg.calHi = r.cal+100;
+      cfg.proLo = Math.max(0, r.pro-10); cfg.proHi = r.pro+10;
+      cfg.carbGoal = r.carb; cfg.fatGoal = r.fat;
+      cfg.calcInputs = {sex:sex, age:age, ft:ft, inches:inches, act:act, goal:goal};
+      cfg.lastTargetWt = cfg.startWt;
+      saveCfg();
+      document.getElementById("suOut").innerHTML =
+        'Maintenance: <b>'+r.tdee+'</b> kcal · Target: <b class="ember-text">'+r.cal+' kcal</b><br>'
+        +'Protein <b>'+r.pro+'g</b> · Carbs <b>'+r.carb+'g</b> · Fat <b>'+r.fat+'g</b><br>'
+        +'<span style="color:var(--ok);">✓ Applied — every bar in the app now uses these.</span>';
+      ackBtn("suCalcBtn", "✓ Targets applied");
+    });
+  }
+
+  if (setupStep===2){
+    body.innerHTML = '<div class="card"><div class="label">Step 3 · Training</div>'
+      +'<div class="note" style="margin:8px 0 12px;">FORGE logs your sessions against a program. Pick a path:</div>'
+      +'<div id="suTrain"></div></div>';
+    const opts = [
+      [null, "Use the loaded program", esc(program.name||"Built-in program")+" — start logging immediately"],
+      ["build", "Build my own", "Name your days, pick exercises — opens the builder after setup"],
+      ["import", "Load a program file", "From a coach, a friend, or an AI (.json) — opens the file picker after setup"],
+    ];
+    const td = document.getElementById("suTrain");
+    opts.forEach(o=>{
+      const b = document.createElement("button");
+      b.className = "su-opt"+(setupChoice.trainAction===o[0]?" sel":"");
+      b.innerHTML = '<b>'+o[1]+'</b><div class="su-sub">'+o[2]+'</div>';
+      b.addEventListener("click", ()=>{ setupChoice.trainAction=o[0]; renderSetupStep(); });
+      td.appendChild(b);
+    });
+  }
+
+  if (setupStep===3){
+    body.innerHTML = '<div class="card"><div class="label">Step 4 · Food database</div>'
+      +'<div class="note" style="margin:8px 0 12px;">Search works out of the box (built-in foods + a worldwide barcode database). Adding a <b>free USDA key</b> unlocks 400,000+ US branded products — takes about a minute.</div>'
+      +'<a href="https://fdc.nal.usda.gov/api-key-signup.html" target="_blank" style="color:var(--ember); font-size:13px;">Get a free key at fdc.nal.usda.gov →</a>'
+      +'<div class="row mt10" style="align-items:flex-end;">'
+      +'<div style="flex:1;"><div class="label">Paste key (or skip)</div><input id="suUsda" placeholder="Your API key"></div>'
+      +'<button class="xbtn" id="suUsdaSave" style="flex:0 0 auto;">Save</button></div>'
+      +'<div class="note">No key? No problem — and any product a scan cannot find, you enter once from the label and it is yours forever.</div></div>';
+    if (cfg.usdaKey) document.getElementById("suUsda").value = cfg.usdaKey;
+    document.getElementById("suUsdaSave").addEventListener("click", ()=>{
+      const k = document.getElementById("suUsda").value.trim();
+      if(!k){ flashSave("Paste a key first", true); return; }
+      cfg.usdaKey = k; saveCfg();
+      ackBtn("suUsdaSave", "✓ Saved");
+    });
+  }
+
+  if (setupStep===4){
+    body.innerHTML = '<div class="card"><div class="label">Step 5 · Your data</div>'
+      +'<div style="font-size:14px; line-height:1.9; margin-top:8px;">'
+      +'🔒 Everything you log stays <b>only on this device</b>. No account, no server, no ads — nobody can see your data.<br><br>'
+      +'💾 The flip side: <b>you</b> are the backup plan. FORGE will remind you on the Home screen once logs build up — one tap downloads a file that restores everything on any phone.<br><br>'
+      +'🏁 Done. Log your food, log your lifts, weigh in daily — the smart stuff (metabolism tracking, projections, auto-progression) switches on as data builds.</div></div>';
+  }
+}
+// show on truly fresh installs only; existing users are grandfathered silently
+if (!cfg.setupDone){
+  if (hasAnyData()){ cfg.setupDone = true; saveCfg(); }
+  else { openSetup(); }
 }
 
 // ================== HELP & FAQ ==================
