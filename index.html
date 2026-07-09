@@ -6,11 +6,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="apple-mobile-web-app-title" content="FORGE" />
+<meta name="apple-mobile-web-app-title" content="BlackPyre" />
 <meta name="theme-color" content="#101215" />
 <link rel="manifest" href="manifest.json" />
 <link rel="apple-touch-icon" href="apple-touch-icon.png" />
-<title>FORGE — Training & Nutrition Log</title>
+<title>BlackPyre — Training & Nutrition Log</title>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -26,8 +26,8 @@
     -webkit-tap-highlight-color:transparent;
   }
   .wrap { max-width:720px; margin:0 auto; padding-top:calc(env(safe-area-inset-top)); }
-  h1 { font-family:'Oswald',sans-serif; font-weight:700; font-size:40px; text-transform:uppercase; line-height:1;
-    letter-spacing:.1em;
+  h1 { font-family:'Oswald',sans-serif; font-weight:700; font-size:31px; text-transform:uppercase; line-height:1;
+    letter-spacing:.09em;
     background:linear-gradient(135deg,var(--ember) 30%,var(--ember-deep));
     -webkit-background-clip:text; background-clip:text; color:transparent;
     text-shadow:0 0 26px rgba(var(--ember-rgb),.22); }
@@ -207,7 +207,7 @@
 <body>
 <div class="wrap">
   <div style="display:flex; justify-content:space-between; align-items:flex-end;">
-    <h1>FORGE</h1>
+    <h1>BLACKPYRE</h1>
     <div id="saveState" class="note" style="margin:0;"></div>
   </div>
   <div id="journey" class="hidden">
@@ -289,7 +289,7 @@
         Turn any AI into your personal trainer. One tap builds a progress report from your real data —
         weight trend, nutrition adherence, lift progression, and your current program — ready to paste into
         Claude, ChatGPT, or any AI. It can assess your progress and hand back an adjusted program that loads
-        straight into FORGE. <span style="color:var(--dim);">Totally optional — FORGE works fully without it.</span>
+        straight into BlackPyre. <span style="color:var(--dim);">Totally optional — BlackPyre works fully without it.</span>
       </div>
       <button class="btn" id="coachOpenBtn" style="width:100%; margin-bottom:10px;">💬 Chat with your Coach</button>
       <div class="row">
@@ -494,7 +494,7 @@
       <button class="btn ghost small mt10" id="pasteProgBtn" style="width:100%;">📋 Paste program from an AI</button>
       <input type="file" id="importFile" accept=".json,application/json" class="hidden">
       <div class="err hidden" id="programErr"></div>
-      <div class="note">Load any FORGE program file (.json) — from Claude, a coach, a friend — or build your own right here.</div>
+      <div class="note">Load any BlackPyre program file (.json) — from Claude, a coach, a friend — or build your own right here.</div>
     </div>
 
     <!-- program builder -->
@@ -536,9 +536,9 @@
     </div>
 
     <div class="card">
-      <div class="row" style="margin-bottom:14px;">
-        <div style="flex:0 0 175px;"><div class="label">Date</div><input type="date" id="wDate"></div>
-        <div><div class="label">Session type</div><select id="wDay"></select></div>
+      <div style="margin-bottom:14px;">
+        <div class="label">Session type</div><select id="wDay" style="margin-bottom:12px;"></select>
+        <div class="label">Date</div><input type="date" id="wDate" style="max-width:190px;">
       </div>
 
       <div id="strengthBlock">
@@ -741,16 +741,16 @@
 <div id="disclaimerOverlay" class="hidden" style="position:fixed; inset:0; z-index:61; background:var(--bg); overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; padding:calc(20px + env(safe-area-inset-top)) 18px 40px;">
   <div style="max-width:560px; margin:0 auto;">
     <div style="text-align:center;">
-      <div style="font-family:'Oswald',sans-serif; font-weight:700; font-size:28px; letter-spacing:.06em;">FORGE</div>
+      <div style="font-family:'Oswald',sans-serif; font-weight:700; font-size:28px; letter-spacing:.06em;">BLACKPYRE</div>
       <div class="label" style="margin:10px 0 14px;">Before you start</div>
     </div>
     <div class="card" style="font-size:13px; line-height:1.8;">
       <b>Health & Liability Disclaimer</b><br><br>
-      FORGE is an informational logging tool, <b>not medical advice</b> and not a substitute for guidance from a physician, registered dietitian, or qualified trainer.<br><br>
+      BlackPyre is an informational logging tool, <b>not medical advice</b> and not a substitute for guidance from a physician, registered dietitian, or qualified trainer.<br><br>
       • <b>Consult a professional first.</b> Talk to your doctor before beginning any diet, weight-change, or exercise program — especially if you have any medical condition, injury, are pregnant, or are under 18.<br><br>
       • <b>Estimates are estimates.</b> Calorie and macro targets use published scientific formulas (Mifflin-St Jeor; Epley for estimated 1RM). Individual needs vary — no calculation replaces professional assessment.<br><br>
       • <b>Programs are general templates,</b> not personalized prescriptions. Exercise carries inherent risk of injury. Use appropriate form and loads, and stop immediately if you feel pain, dizziness, or shortness of breath.<br><br>
-      • <b>You are responsible for your choices.</b> By using FORGE you agree that you use it at your own risk, and that the app's creators and contributors are <b>not liable</b> for any injury, health outcome, or loss arising from its use. The app is provided "as is," without warranties of any kind.<br><br>
+      • <b>You are responsible for your choices.</b> By using BlackPyre you agree that you use it at your own risk, and that the app's creators and contributors are <b>not liable</b> for any injury, health outcome, or loss arising from its use. The app is provided "as is," without warranties of any kind.<br><br>
       • <b>Nutrition data</b> comes from public databases and user entries and may contain errors — verify labels for allergies or medical diets.
     </div>
     <button class="btn" id="disclaimerAgreeBtn" style="width:100%;">I understand and agree</button>
@@ -761,8 +761,8 @@
 <div id="setupOverlay" class="hidden" style="position:fixed; inset:0; z-index:60; background:var(--bg); overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; padding:calc(20px + env(safe-area-inset-top)) 18px 40px;">
   <div style="max-width:520px; margin:0 auto;">
     <div style="text-align:center; margin-bottom:6px;">
-      <div style="font-family:'Oswald',sans-serif; font-weight:700; font-size:28px; letter-spacing:.06em;">FORGE</div>
-      <div class="note" style="margin:2px 0 14px;" id="setupTagline">Hard training. FORGE makes the rest easy.<br>Setup takes about a minute.</div>
+      <div style="font-family:'Oswald',sans-serif; font-weight:700; font-size:28px; letter-spacing:.06em;">BLACKPYRE</div>
+      <div class="note" style="margin:2px 0 14px;" id="setupTagline">Burn the guesswork. Forge the result.<br>Setup takes about a minute.</div>
     </div>
     <div class="su-dots" id="setupDots"></div>
     <div id="setupBody"></div>
@@ -2000,7 +2000,7 @@ document.getElementById("logWorkoutBtn").addEventListener("click", ()=>{
     return;
   }
   const streak = computeStreak();
-  showCelebration(prLines.length ? "PR FORGED" : "Session Forged", prLines,
+  showCelebration(prLines.length ? "PR BlackPyreD" : "Session Forged", prLines,
     Object.keys(sets).length+" exercises logged"+(streak>1?"  \u00b7  \ud83d\udd25 "+streak+"-day streak":""));
 });
 
@@ -3184,7 +3184,7 @@ function extractAIPayloads(text){
 // ================== COACH CHAT ==================
 let coachHistory = [];
 function coachSystem(){
-  return "You are the user's personal fitness coach inside the FORGE app. Be direct, specific, and evidence-based — no generic filler. Their live data follows.\n\n"
+  return "You are the user's personal fitness coach inside the BlackPyre app. Be direct, specific, and evidence-based — no generic filler. Their live data follows.\n\n"
     + aiReport()
     + "\n\n---\nResponse contract:\n"
     + "- If you propose a new or edited training program, include EXACTLY ONE ```json code block containing the COMPLETE program: {\"name\":..., \"days\":[{\"id\":\"D1\",\"title\":...,\"exercises\":[{\"name\":...,\"scheme\":...}]}]}. Keep exercise names the user is progressing on unchanged so their history stays connected. Schemes like \"4×5\" power the app's auto-progression.\n"
@@ -3195,7 +3195,7 @@ function openCoach(prefillSend){
   lockScroll();
   document.getElementById("coachOverlay").classList.remove("hidden");
   if (!coachHistory.length){
-    addCoachBubble("ai", "Hey — I have your full FORGE data in front of me: weight trend, nutrition, lift progression, and your current program. Ask me anything, or try:\n\n• How is my progress?\n• Adjust my program — [what's bugging you]\n• Why has my weight stalled?\n• Should I change my calories?", null);
+    addCoachBubble("ai", "Hey — I have your full BlackPyre data in front of me: weight trend, nutrition, lift progression, and your current program. Ask me anything, or try:\n\n• How is my progress?\n• Adjust my program — [what's bugging you]\n• Why has my weight stalled?\n• Should I change my calories?", null);
   }
   if (prefillSend){
     document.getElementById("coachInput").value = prefillSend;
@@ -3486,9 +3486,9 @@ function aiReport(){
   }));
 
   const L = [];
-  L.push("# FORGE Progress Report — "+fmtDate(today));
+  L.push("# BlackPyre Progress Report — "+fmtDate(today));
   L.push("");
-  L.push("You are my fitness coach. Below is my real logged data from the FORGE app. Please:");
+  L.push("You are my fitness coach. Below is my real logged data from the BlackPyre app. Please:");
   L.push("1. Assess my rate of progress toward my goal — too fast, too slow, or on track.");
   L.push("2. Flag anything in my nutrition adherence that needs fixing.");
   L.push("3. Review my lift progression and suggest specific training adjustments.");
@@ -3518,7 +3518,7 @@ function aiReport(){
   return L.join("\n");
 }
 document.getElementById("aiDownloadBtn").addEventListener("click", ()=>{
-  download("forge-report-"+todayStr()+".md", aiReport());
+  download("blackpyre-report-"+todayStr()+".md", aiReport());
   ackBtn("aiDownloadBtn", "✓ Downloaded");
 });
 document.getElementById("aiCopyBtn").addEventListener("click", ()=>{
@@ -3892,7 +3892,7 @@ function renderSetupStep(){
 
   if (setupStep===2){
     body.innerHTML = '<div class="card"><div class="label">Step 3 · Training</div>'
-      +'<div class="note" style="margin:8px 0 12px;">FORGE logs your sessions against a program. Pick a path:</div>'
+      +'<div class="note" style="margin:8px 0 12px;">BlackPyre logs your sessions against a program. Pick a path:</div>'
       +'<div id="suTrain"></div></div>';
     const opts = [
       [null, "Use the loaded program", esc(program.name||"Built-in program")+" — start logging immediately"],
@@ -3930,7 +3930,7 @@ function renderSetupStep(){
     body.innerHTML = '<div class="card"><div class="label">Step 5 · Your data</div>'
       +'<div style="font-size:14px; line-height:1.9; margin-top:8px;">'
       +'🔒 Everything you log stays <b>only on this device</b>. No account, no server, no ads — nobody can see your data.<br><br>'
-      +'💾 The flip side: <b>you</b> are the backup plan. FORGE will remind you on the Home screen once logs build up — one tap downloads a file that restores everything on any phone.<br><br>'
+      +'💾 The flip side: <b>you</b> are the backup plan. BlackPyre will remind you on the Home screen once logs build up — one tap downloads a file that restores everything on any phone.<br><br>'
       +'🏁 Done. Log your food, log your lifts, weigh in daily — the smart stuff (metabolism tracking, projections, auto-progression) switches on as data builds.</div></div>';
   }
 }
@@ -3960,7 +3960,7 @@ const FAQ = [
   {sec:"Getting started"},
   {q:"How do I set my calorie and macro targets?", a:"New installs get walked through this in the setup wizard (including combined goals — picking <b>Lose fat + Build muscle</b> sets up a recomposition: slight deficit, high protein). Anytime after: <b>⚙ Settings → Calorie & macro calculator</b> — enter your stats, tap <b>Calculate</b>, pick a macro split (or use Recommended), then <b>Use these as my targets</b>. Every bar in the app measures against your numbers, and you can always type targets directly into the fields below the calculator."},
   {q:"What's a macro split and which should I pick?", a:"It's how your calories divide between protein / carbs / fat. <b>Recommended</b> (0.9g protein per lb, 25% fat) suits most people losing fat while keeping muscle. Higher-carb splits like 40/40/20 suit hard training; the Custom option lets you set any percentages and they auto-balance to 100%. The link under the calculator goes to the peer-reviewed research."},
-  {q:"What's the bar under the FORGE logo?", a:"That's <b>The Journey</b> — your whole goal on one line. Left end is your starting weight, right end is your goal, and the glowing dot is exactly where you are right now based on your latest weigh-in. It moves the moment you record a weight, on every screen. Hit the goal and you get the 🏁."},
+  {q:"What's the bar under the BlackPyre logo?", a:"That's <b>The Journey</b> — your whole goal on one line. Left end is your starting weight, right end is your goal, and the glowing dot is exactly where you are right now based on your latest weigh-in. It moves the moment you record a weight, on every screen. Hit the goal and you get the 🏁."},
   {q:"How do I log my weight?", a:"Fastest way: the small field on the <b>Home</b> tab — type today's weight, tap Record. The Weight tab does the same plus lets you log past dates. Weigh at the same time each day and judge the weekly trend, not any single day."},
 
   {sec:"Food logging"},
@@ -3969,7 +3969,7 @@ const FAQ = [
   {q:"A barcode wasn't found — now what?", a:"The app opens a <b>save-it-once form</b>: copy the serving size and macros off the nutrition label, save, and that barcode belongs to you forever. Next scan of the same product loads instantly, it shows up in text search, and it lives in <b>🍱 My foods</b> where you can edit or delete it anytime."},
   {q:"What are the meal buttons (Bkfst/Lunch/Dinner/Snacks)?", a:"Every entry is filed under a meal. The right one pre-selects itself by time of day — just override by tapping if needed. The day list shows only the selected meal with its own subtotal; the Totals bars always count the whole day."},
   {q:"What is My Foods?", a:"Your personal food library — tap <b>🍱 My foods</b> on the Food page. Create foods that have no barcode (homemade chili, your protein shake), edit or delete anything, add a barcode later so scanning finds it, and manage your saved meals (rename/delete). There's also a <b>＋ Save this as a reusable food</b> button under manual entry, so anything you type once can become permanent."},
-  {q:"What is the ⚡ usual meal card?", a:"FORGE learns your patterns. When you've logged the same foods for a meal on most days over the last two weeks, a card appears: <b>⚡ Your usual breakfast</b> — your regulars with your typical portions, logged in <b>one tap</b>. It only offers what you haven't logged yet today, and disappears once the meal is mostly logged. No setup — it just notices."},
+  {q:"What is the ⚡ usual meal card?", a:"BlackPyre learns your patterns. When you've logged the same foods for a meal on most days over the last two weeks, a card appears: <b>⚡ Your usual breakfast</b> — your regulars with your typical portions, logged in <b>one tap</b>. It only offers what you haven't logged yet today, and disappears once the meal is mostly logged. No setup — it just notices."},
   {q:"What's the fastest way to log food I eat often?", a:"Three tools: <b>★ Recent foods</b> (your most-logged items, tap one and it opens with your last portion prefilled), <b>Save today as a meal</b> (bundles the day's entries into a one-tap chip — long-press a chip to delete it), and <b>⧉ Copy yesterday</b>. The ⧉ on any logged entry duplicates it."},
   {q:"How do I adjust the amount I ate?", a:"After picking any food, use the <b>slider or the amount field</b> — calories and macros recalculate live. Units: grams, oz, lb, ml, fl oz, or the product's serving."},
 
@@ -3978,9 +3978,9 @@ const FAQ = [
   {q:"How do I log a workout?", a:"Train tab → pick your session day (or tap <b>▶ Start next</b> on Home, which knows your rotation). Each exercise shows set rows prefilled from last time — adjust with the <b>−5/+5</b> and <b>−1/+1</b> buttons, tap <b>✓</b> as you finish sets (auto-starts your rest timer), then <b>Log session</b>. The <b>= last</b> button fills an exercise identical to last time in one tap; the <b>⌨</b> button switches to free-text typing."},
   {q:"I logged something wrong — can I fix it?", a:"Yes, everything is editable. Food: tap <b>✎</b> on any entry, fix the values, tap <b>Update entry</b>. Workouts: tap <b>✎</b> on any session in history — it loads back into the set rows, change what you need, tap <b>Update session</b> (corrections don't re-trigger celebrations or false PRs). Cardio sessions, custom foods, and saved meals are all editable too."},
   {q:"What does '+5 auto' mean?", a:"You hit all your target reps at the same weight last session, so the app pre-loaded 5 lb more — progressive overload applied for you. You can always change it."},
-  {q:"How do programs work?", a:"The Train tab runs whatever program is loaded. <b>＋ Build new program</b> creates your own (any number of days, 60+ exercise library plus custom names, schemes like 4×5). <b>✎ Edit</b> modifies the current one. <b>⬆ Load</b> imports any FORGE .json file — from a friend, a coach, or an AI. <b>⬇/📤</b> exports and shares yours."},
-  {q:"Can an AI build me a program?", a:"Yes, two ways. Easiest: copy the AI's reply and tap <b>📋 Paste program from an AI</b> in the Train tab — FORGE finds the program in the text and loads it. Or load a downloaded .json with ⬆ Load. To get one, ask any AI: 'Build me a workout program as a JSON file for the FORGE app' with your goals, days, and equipment — or better, use the in-app Coach, which already knows your history."},
-  {q:"What are the PR board and the 📈 charts?", a:"Every set you log is converted to an estimated 1RM (Epley formula). Your best per exercise ranks on the PR board — tap any row for a progress chart over time, and set a goal weight to draw a target line. Beating a previous best triggers the PR FORGED screen when you log."},
+  {q:"How do programs work?", a:"The Train tab runs whatever program is loaded. <b>＋ Build new program</b> creates your own (any number of days, 60+ exercise library plus custom names, schemes like 4×5). <b>✎ Edit</b> modifies the current one. <b>⬆ Load</b> imports any BlackPyre .json file — from a friend, a coach, or an AI. <b>⬇/📤</b> exports and shares yours."},
+  {q:"Can an AI build me a program?", a:"Yes, two ways. Easiest: copy the AI's reply and tap <b>📋 Paste program from an AI</b> in the Train tab — BlackPyre finds the program in the text and loads it. Or load a downloaded .json with ⬆ Load. To get one, ask any AI: 'Build me a workout program as a JSON file for the BlackPyre app' with your goals, days, and equipment — or better, use the in-app Coach, which already knows your history."},
+  {q:"What are the PR board and the 📈 charts?", a:"Every set you log is converted to an estimated 1RM (Epley formula). Your best per exercise ranks on the PR board — tap any row for a progress chart over time, and set a goal weight to draw a target line. Beating a previous best triggers the PR BlackPyreD screen when you log."},
   {q:"What's plate math and the rest timer?", a:"Type a target weight and the app tells you which plates to load per side. Rest timer: tap a preset to start, tap the running numbers to cancel, and ＋ adds custom durations (they stick around as presets — ✕ removes them). Checking ✓ on a set auto-starts your last-used duration."},
 
   {sec:"Progress & smart features"},
@@ -3990,17 +3990,17 @@ const FAQ = [
   {q:"What can the AI Coach do?", a:"Two tiers. <b>Without any key:</b> the Copy report / Download buttons build a full progress briefing you can paste into any AI. <b>With your own Anthropic API key</b> (⚙ Settings → AI Coach key): a live in-app <b>Coach chat</b> that already knows your data — ask anything, and when it proposes a program or new calorie targets, a one-tap button loads them straight in. Plus <b>✨ AI quick log</b> (type \"2 eggs and toast\" → logged) and <b>📸 photo meal logging</b> (snap your plate → estimated macros to confirm). All optional; everything else works without it."},
   {q:"Is the AI key safe? What does it cost?", a:"Your key is stored only on this device, sent only to Anthropic with your requests, and <b>deliberately excluded from backup files</b>. You pay Anthropic directly for what you use — a coaching chat or photo estimate costs roughly a cent. No subscription, no middleman. Clear it anytime in Settings."},
   {q:"How accurate is photo / AI food logging?", a:"They're <b>estimates</b> — good ones, but the AI is judging portions from a description or a photo. Every item shows before logging so you can remove anything, and after logging you can ✎ edit values. For packaged foods with labels, the barcode scan is exact; use AI logging for plates, restaurants, and speed."},
-  {q:"What is the AI Coach report?", a:"On the Home tab, the <b>🤖 AI Coach</b> card builds a progress report from your real data — weight trend, measured TDEE, nutrition adherence, per-lift progression, and your current program. Tap <b>Copy report</b>, paste it into Claude, ChatGPT, or any AI, and ask away. The report even includes your program in FORGE format, so the AI can return an adjusted program you load right back in (Train → ⬆ Load). Completely optional — the app works fully without it."},
+  {q:"What is the AI Coach report?", a:"On the Home tab, the <b>🤖 AI Coach</b> card builds a progress report from your real data — weight trend, measured TDEE, nutrition adherence, per-lift progression, and your current program. Tap <b>Copy report</b>, paste it into Claude, ChatGPT, or any AI, and ask away. The report even includes your program in BlackPyre format, so the AI can return an adjusted program you load right back in (Train → ⬆ Load). Completely optional — the app works fully without it."},
   {q:"Can I track water?", a:"Yes — <b>⚙ Settings → Enable water tracking</b> adds a one-tap glass counter to your Home tab. Off by default, toggle anytime."},
   {q:"Can I change the app's color?", a:"Yes — <b>⚙ Settings → Accent color</b> has six looks: Ember, Steel, Emerald, Crimson, Violet, and Gold. One tap re-themes the whole app instantly."},
   {q:"How do I look back at past workouts?", a:"The Train tab's history is grouped by <b>month</b> — the current month is open, tap any older month to expand it. Every session shows its full sets and is editable with ✎. For a single lift's progress over time, tap it on the PR board for the chart."},
   {q:"How do I track body measurements?", a:"It's optional: <b>⚙ Settings → Enable body measurements</b> adds a waist/chest/arm tracker to the Weight tab. On a fat-loss phase, a shrinking waist is often better evidence than the scale. Toggle it off anytime — entries stay saved."},
 
   {sec:"Legal"},
-  {q:"Disclaimer & terms of use", a:"FORGE is an informational logging tool, <b>not medical advice</b>, and not a substitute for a physician, registered dietitian, or qualified trainer. Consult your doctor before beginning any diet or exercise program, especially with any medical condition, injury, or pregnancy, or if under 18. Calorie/macro targets use published scientific formulas (Mifflin-St Jeor; Epley for estimated 1RM) — they are estimates, and individual needs vary. Programs are general templates, not personalized prescriptions; exercise carries inherent injury risk — stop if you feel pain, dizziness, or shortness of breath. Nutrition data comes from public databases and user entries and may contain errors — verify labels for allergies or medical diets. By using FORGE you agree you use it <b>at your own risk</b> and that its creators are <b>not liable</b> for any injury, health outcome, or loss arising from its use. The app is provided \"as is,\" without warranties of any kind. You accepted this disclaimer on first use; it applies to all continued use."},
+  {q:"Disclaimer & terms of use", a:"BlackPyre is an informational logging tool, <b>not medical advice</b>, and not a substitute for a physician, registered dietitian, or qualified trainer. Consult your doctor before beginning any diet or exercise program, especially with any medical condition, injury, or pregnancy, or if under 18. Calorie/macro targets use published scientific formulas (Mifflin-St Jeor; Epley for estimated 1RM) — they are estimates, and individual needs vary. Programs are general templates, not personalized prescriptions; exercise carries inherent injury risk — stop if you feel pain, dizziness, or shortness of breath. Nutrition data comes from public databases and user entries and may contain errors — verify labels for allergies or medical diets. By using BlackPyre you agree you use it <b>at your own risk</b> and that its creators are <b>not liable</b> for any injury, health outcome, or loss arising from its use. The app is provided \"as is,\" without warranties of any kind. You accepted this disclaimer on first use; it applies to all continued use."},
   {sec:"Your data & the app"},
   {q:"Where is my data stored? Is it private?", a:"Everything lives <b>only on your device</b> — no account, no server, nothing leaves your phone. Nobody (including whoever shared the app with you) can see your logs."},
-  {q:"How do I back up or move to a new phone?", a:"<b>⚙ Settings → Back up all data</b> downloads one file containing everything. On the new phone, install the app and use <b>Restore from backup</b>. FORGE watches out for you here: Settings always shows your last backup, and a reminder card appears on Home when you've logged enough new data to be worth protecting — one tap backs it up. Keep the file somewhere safe (Files, email, cloud drive)."},
+  {q:"How do I back up or move to a new phone?", a:"<b>⚙ Settings → Back up all data</b> downloads one file containing everything. On the new phone, install the app and use <b>Restore from backup</b>. BlackPyre watches out for you here: Settings always shows your last backup, and a reminder card appears on Home when you've logged enough new data to be worth protecting — one tap backs it up. Keep the file somewhere safe (Files, email, cloud drive)."},
   {q:"How do I share this app with someone?", a:"Send them the web address. iPhone: open in Safari → Share → <b>Add to Home Screen</b>. Android: open in Chrome → <b>Install app</b> when prompted (or ⋮ menu → Add to Home Screen). They get their own fresh copy with their own private data."},
   {q:"Search isn't returning results — why?", a:"Online food search needs a connection; without one you still get the built-in whole-foods list, your saved foods, and manual entry. If branded results seem thin, make sure your free USDA key is saved in Settings. For products, the barcode scan is the most reliable route."},
   {q:"The app doesn't seem to update / looks stuck?", a:"Close it fully (swipe it away), reopen, close again, reopen. The first open downloads the new version in the background; the second runs it."},
@@ -4243,7 +4243,7 @@ function doBackup(btnId){
   data.meta.lastBackup = todayStr();
   data.meta.logsSince = 0;
   const cfgSafe = Object.assign({}, cfg); delete cfgSafe.anthropicKey;
-  download("forge-backup-"+todayStr()+".json", JSON.stringify({cfg:cfgSafe, program:program, data:data}, null, 2));
+  download("blackpyre-backup-"+todayStr()+".json", JSON.stringify({cfg:cfgSafe, program:program, data:data}, null, 2));
   save(); renderBackup();
   ackBtn(btnId, "✓ Backup downloaded");
 }
