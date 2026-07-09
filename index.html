@@ -122,12 +122,21 @@
   .exercise .x-head .scheme { color:var(--ember); }
   svg { width:100%; display:block; }
   /* full-page overlays: respect iPhone status bar + smooth scrolling */
-  #faqOverlay, #recentsOverlay, #liftOverlay, #myFoodsOverlay {
+  #faqOverlay, #recentsOverlay, #liftOverlay, #myFoodsOverlay, #coachOverlay {
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
     padding-top: calc(16px + env(safe-area-inset-top)) !important;
   }
   body.locked { overflow: hidden; position: fixed; inset: 0; }
+  /* AI coach chat */
+  .cmsg { max-width:86%; padding:11px 14px; border-radius:14px; margin-bottom:10px; font-size:14px; line-height:1.65; white-space:pre-wrap; word-wrap:break-word; }
+  .cmsg.user { margin-left:auto; background:rgba(255,122,61,.12); border:1px solid rgba(255,122,61,.35); border-bottom-right-radius:4px; }
+  .cmsg.ai { margin-right:auto; background:var(--panel); border:1px solid var(--border); border-bottom-left-radius:4px; }
+  .cmsg .act { display:block; width:100%; margin-top:10px; text-align:center; background:linear-gradient(135deg,var(--ember),var(--ember-deep)); color:#16100B;
+    border:none; border-radius:10px; padding:12px; font-family:'Oswald',sans-serif; font-weight:600; font-size:13px; letter-spacing:.05em; text-transform:uppercase; cursor:pointer; }
+  .cmsg .act:disabled { opacity:.6; }
+  #coachInput { flex:1; resize:none; min-height:44px; max-height:120px; }
+  .ctyping { color:var(--dim); font-size:12px; padding:4px 2px; }
   /* setup wizard */
   .su-opt { width:100%; text-align:left; background:var(--panel); border:1px solid var(--border); border-radius:12px;
     color:var(--text); font-family:inherit; font-size:14px; padding:14px; cursor:pointer; margin-bottom:10px; }
@@ -222,6 +231,11 @@
       <div id="backupText" style="font-size:13px; line-height:1.7; margin:6px 0 12px;"></div>
       <button class="btn ghost small" id="backupNowBtn">⬇ Back up now</button>
     </div>
+    <div class="card hidden" id="checkinCard" style="border-color:var(--ember);">
+      <div class="label">🤖 Coach check-in</div>
+      <div style="font-size:13px; line-height:1.7; margin:6px 0 12px;">A week of new data since your last review. Want your coach to take a look?</div>
+      <button class="btn ghost small" id="checkinBtn">💬 Get my weekly review</button>
+    </div>
     <div class="card hidden" id="weekCard">
       <div class="label">This week</div>
       <div id="weekBody" style="font-size:13px; line-height:1.9;"></div>
@@ -266,10 +280,12 @@
         Claude, ChatGPT, or any AI. It can assess your progress and hand back an adjusted program that loads
         straight into FORGE. <span style="color:var(--dim);">Totally optional — FORGE works fully without it.</span>
       </div>
+      <button class="btn" id="coachOpenBtn" style="width:100%; margin-bottom:10px;">💬 Chat with your Coach</button>
       <div class="row">
         <button class="btn ghost small" id="aiCopyBtn">📋 Copy report</button>
         <button class="btn ghost small" id="aiDownloadBtn">⬇ Download</button>
       </div>
+      <div class="note hidden" id="coachKeyNote"></div>
     </div>
   </div>
 
@@ -334,6 +350,17 @@
     <div class="row" style="margin-bottom:12px;">
       <button class="btn ghost small hidden" id="recentsOpenBtn">★ Recent foods</button>
       <button class="btn ghost small" id="myFoodsOpenBtn">🍱 My foods</button>
+    </div>
+    <div class="card hidden" id="aiFoodCard">
+      <div class="label">✨ AI quick log</div>
+      <div class="row" style="margin:8px 0 0; align-items:flex-end;">
+        <div style="flex:1;"><input id="aiFoodText" placeholder="e.g. 2 eggs, toast with butter, black coffee"></div>
+        <button class="xbtn" id="aiFoodGoBtn" style="flex:0 0 auto;">Log it</button>
+      </div>
+      <button class="btn ghost small mt10" id="aiPhotoBtn" style="width:100%;">📸 Log a meal from a photo</button>
+      <input type="file" id="aiPhotoFile" accept="image/*" class="hidden">
+      <div id="aiFoodStatus" class="note hidden" style="margin-top:8px;"></div>
+      <div id="aiFoodConfirm" class="hidden" style="margin-top:10px;"></div>
     </div>
 
     <!-- my foods page overlay -->
@@ -443,6 +470,7 @@
         <button class="btn ghost small" id="editProgBtn">✎ Edit this program</button>
         <button class="btn ghost small" id="newProgBtn">＋ Build new program</button>
       </div>
+      <button class="btn ghost small mt10" id="pasteProgBtn" style="width:100%;">📋 Paste program from an AI</button>
       <input type="file" id="importFile" accept=".json,application/json" class="hidden">
       <div class="err hidden" id="programErr"></div>
       <div class="note">Load any FORGE program file (.json) — from Claude, a coach, a friend — or build your own right here.</div>
@@ -635,6 +663,15 @@
       <button class="btn ghost small" id="saveUsdaBtn">Save key</button>
       <div class="note">Adds 400,000+ US branded products (including store brands) to your search. Get a free key in ~1 minute at <a href="https://fdc.nal.usda.gov/api-key-signup.html" target="_blank" rel="noopener" style="color:var(--ember);">fdc.nal.usda.gov</a> — they email it instantly.</div>
     </div>
+
+    <div class="card">
+      <div class="label" style="margin-bottom:10px;">🤖 AI Coach key (optional)</div>
+      <div class="note" style="margin:0 0 10px;">Powers the in-app Coach chat, photo meal logging, and AI quick-log. Get a key at <a href="https://console.anthropic.com/" target="_blank" rel="noopener" style="color:var(--ember);">console.anthropic.com</a> (account + billing required; usage costs pennies per chat). Stored only on this device and excluded from backups.</div>
+      <div class="row" style="align-items:flex-end;">
+        <div style="flex:1;"><input id="sAnthropicKey" placeholder="sk-ant-…" autocomplete="off"></div>
+        <button class="xbtn" id="saveAnthropicBtn" style="flex:0 0 auto;">Save key</button>
+      </div>
+    </div>
     <div class="card">
       <div class="label" style="margin-bottom:10px;">Data</div>
       <button class="btn ghost small" id="exportDataBtn">⬇ Back up all data (.json)</button>
@@ -644,6 +681,22 @@
       <input type="file" id="importDataFile" accept=".json,application/json" class="hidden">
       <div class="note">Data lives only on this device. Back up occasionally or when moving phones.</div>
     </div>
+  </div>
+</div>
+
+<div id="coachOverlay" class="hidden" style="position:fixed; inset:0; z-index:56; background:var(--bg); display:flex; flex-direction:column; padding:16px 14px 12px;">
+  <div style="max-width:720px; margin:0 auto; width:100%; display:flex; flex-direction:column; flex:1; min-height:0;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex:0 0 auto;">
+      <div style="font-family:'Oswald',sans-serif; font-weight:700; font-size:20px; text-transform:uppercase;">AI Coach</div>
+      <button class="xbtn" id="coachCloseBtn">✕ Close</button>
+    </div>
+    <div id="coachMsgs" style="flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; padding-bottom:8px;"></div>
+    <div class="ctyping hidden" id="coachTyping">Coach is thinking…</div>
+    <div class="row" style="flex:0 0 auto; align-items:flex-end;">
+      <textarea id="coachInput" placeholder="Ask your coach anything…" rows="1"></textarea>
+      <button class="btn" id="coachSendBtn" style="flex:0 0 auto; padding:12px 18px;">Send</button>
+    </div>
+    <div class="note" style="text-align:center; margin:6px 0 0;">Runs on your own API key · your data goes only to Anthropic · a chat costs about a cent</div>
   </div>
 </div>
 
@@ -2609,6 +2662,329 @@ async function searchUSDA(q){
   const json = await res.json();
   return (json.foods||[]).map(mapUSDA).filter(Boolean);
 }
+// ================== AI ENGINE (bring-your-own-key) ==================
+const AI_MODEL = "claude-sonnet-4-6";
+function hasAIKey(){ return !!(cfg.anthropicKey && cfg.anthropicKey.trim()); }
+
+document.getElementById("saveAnthropicBtn").addEventListener("click", ()=>{
+  cfg.anthropicKey = document.getElementById("sAnthropicKey").value.trim();
+  saveCfg();
+  renderAIGates();
+  ackBtn("saveAnthropicBtn", cfg.anthropicKey ? "✓ Key saved" : "✓ Cleared");
+  flashSave(cfg.anthropicKey ? "AI Coach unlocked ✓" : "AI key cleared");
+});
+
+function renderAIGates(){
+  document.getElementById("sAnthropicKey").value = cfg.anthropicKey || "";
+  document.getElementById("aiFoodCard").classList.toggle("hidden", !hasAIKey());
+  const note = document.getElementById("coachKeyNote");
+  if (hasAIKey()){ note.classList.add("hidden"); }
+  else {
+    note.classList.remove("hidden");
+    note.textContent = "Chat needs a one-time API key — add it in ⚙ Settings → AI Coach key. Copy report works without one.";
+  }
+  renderCheckin();
+}
+
+async function anthropicCall(messages, system, maxTokens){
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": cfg.anthropicKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true",
+    },
+    body: JSON.stringify({ model: AI_MODEL, max_tokens: maxTokens || 3000, system: system, messages: messages }),
+  });
+  if (!res.ok){
+    if (res.status===401 || res.status===403) throw new Error("Your API key was rejected — check it in Settings.");
+    if (res.status===429) throw new Error("Rate limited — wait a few seconds and try again.");
+    throw new Error("The AI service returned an error ("+res.status+"). Try again.");
+  }
+  const j = await res.json();
+  return (j.content||[]).map(b=>b.type==="text"?b.text:"").join("");
+}
+
+// ---------- payload extraction from AI replies ----------
+function extractAIPayloads(text){
+  const out = { display: text, program: null, targets: null };
+  const blocks = [];
+  const re = /```(?:json)?\s*([\s\S]*?)```/g;
+  let m;
+  while((m = re.exec(text)) !== null) blocks.push({raw:m[0], body:m[1]});
+  blocks.forEach(b=>{
+    try {
+      const j = JSON.parse(b.body);
+      if (j && Array.isArray(j.days)){ out.program = j; out.display = out.display.replace(b.raw, "").trim(); }
+      else if (j && j.forgeTargets){ out.targets = j.forgeTargets; out.display = out.display.replace(b.raw, "").trim(); }
+    } catch(e){ /* not JSON — leave it visible */ }
+  });
+  return out;
+}
+
+// ================== COACH CHAT ==================
+let coachHistory = [];
+function coachSystem(){
+  return "You are the user's personal fitness coach inside the FORGE app. Be direct, specific, and evidence-based — no generic filler. Their live data follows.\n\n"
+    + aiReport()
+    + "\n\n---\nResponse contract:\n"
+    + "- If you propose a new or edited training program, include EXACTLY ONE ```json code block containing the COMPLETE program: {\"name\":..., \"days\":[{\"id\":\"D1\",\"title\":...,\"exercises\":[{\"name\":...,\"scheme\":...}]}]}. Keep exercise names the user is progressing on unchanged so their history stays connected. Schemes like \"4×5\" power the app's auto-progression.\n"
+    + "- If you propose new nutrition targets, include a ```json block: {\"forgeTargets\":{\"calLo\":...,\"calHi\":...,\"proLo\":...,\"proHi\":...,\"carbGoal\":...,\"fatGoal\":...}}.\n"
+    + "- Otherwise reply in plain prose. Keep replies under 300 words unless asked for detail.";
+}
+function openCoach(prefillSend){
+  lockScroll();
+  document.getElementById("coachOverlay").classList.remove("hidden");
+  if (!coachHistory.length){
+    addCoachBubble("ai", "Hey — I have your full FORGE data in front of me: weight trend, nutrition, lift progression, and your current program. Ask me anything, or try:\n\n• How is my progress?\n• Adjust my program — [what's bugging you]\n• Why has my weight stalled?\n• Should I change my calories?", null);
+  }
+  if (prefillSend){
+    document.getElementById("coachInput").value = prefillSend;
+    sendCoach();
+  }
+}
+document.getElementById("coachOpenBtn").addEventListener("click", ()=>{
+  if (!hasAIKey()){
+    flashSave("Add your AI key in Settings first", true);
+    renderAIGates();
+    return;
+  }
+  openCoach();
+});
+document.getElementById("coachCloseBtn").addEventListener("click", ()=>{
+  document.getElementById("coachOverlay").classList.add("hidden");
+  unlockScroll();
+});
+function addCoachBubble(role, text, payloads){
+  const wrap = document.getElementById("coachMsgs");
+  const div = document.createElement("div");
+  div.className = "cmsg " + (role==="user" ? "user" : "ai");
+  div.textContent = text;
+  if (payloads && payloads.program){
+    const b = document.createElement("button");
+    b.className = "act";
+    b.textContent = "📥 Load program: " + (payloads.program.name || "Updated program");
+    b.addEventListener("click", ()=>{
+      try {
+        program = validateProgram(payloads.program);
+        saveProgram();
+        extraExercises = [];
+        renderDayOptions(); initSessionState(); renderSessionInputs(); renderWork(); renderDash(); renderNextWorkout();
+        b.textContent = "✓ Loaded — it's your active program";
+        b.disabled = true;
+        flashSave("Program loaded ✓");
+      } catch(e){ flashSave("Program invalid: "+e.message, true); }
+    });
+    div.appendChild(b);
+  }
+  if (payloads && payloads.targets){
+    const t = payloads.targets;
+    const b = document.createElement("button");
+    b.className = "act";
+    b.textContent = "🎯 Apply targets: " + (t.calLo||"?") + "–" + (t.calHi||"?") + " kcal";
+    b.addEventListener("click", ()=>{
+      ["calLo","calHi","proLo","proHi","carbGoal","fatGoal"].forEach(k=>{ if (typeof t[k]==="number") cfg[k] = t[k]; });
+      const sortedW = data.weights.slice().sort((a,b2)=>a.date.localeCompare(b2.date));
+      cfg.lastTargetWt = sortedW.length ? sortedW[sortedW.length-1].lbs : cfg.lastTargetWt;
+      delete cfg.adjustPromptedAt;
+      saveCfg(); renderAll();
+      b.textContent = "✓ Applied — bars updated";
+      b.disabled = true;
+      flashSave("Targets applied ✓");
+    });
+    div.appendChild(b);
+  }
+  wrap.appendChild(div);
+  wrap.scrollTop = wrap.scrollHeight;
+}
+async function sendCoach(){
+  const inp = document.getElementById("coachInput");
+  const msg = inp.value.trim();
+  if (!msg) return;
+  inp.value = "";
+  addCoachBubble("user", msg, null);
+  coachHistory.push({role:"user", content: msg});
+  const typing = document.getElementById("coachTyping");
+  typing.classList.remove("hidden");
+  document.getElementById("coachSendBtn").disabled = true;
+  try {
+    const reply = await anthropicCall(coachHistory, coachSystem(), 3000);
+    coachHistory.push({role:"assistant", content: reply});
+    const p = extractAIPayloads(reply);
+    addCoachBubble("ai", p.display || "Here you go:", p);
+    cfg.lastCoachDate = todayStr();
+    saveCfg();
+    renderCheckin();
+  } catch(e){
+    addCoachBubble("ai", "⚠ " + e.message, null);
+  }
+  typing.classList.add("hidden");
+  document.getElementById("coachSendBtn").disabled = false;
+}
+document.getElementById("coachSendBtn").addEventListener("click", sendCoach);
+
+// ================== WEEKLY CHECK-IN ==================
+function renderCheckin(){
+  const card = document.getElementById("checkinCard");
+  if (!hasAIKey() || !hasAnyData()){ card.classList.add("hidden"); return; }
+  const last = cfg.lastCoachDate;
+  const days = last ? Math.floor((new Date(todayStr()) - new Date(last))/86400000) : 999;
+  card.classList.toggle("hidden", days < 7);
+}
+document.getElementById("checkinBtn").addEventListener("click", ()=>{
+  openCoach("Give me my weekly review — assess my week, call out what needs fixing, and tell me what to focus on next week.");
+});
+
+// ================== PASTE PROGRAM FROM AI ==================
+document.getElementById("pasteProgBtn").addEventListener("click", async ()=>{
+  let text = "";
+  try {
+    if (navigator.clipboard && navigator.clipboard.readText) text = await navigator.clipboard.readText();
+  } catch(e){ /* permission denied */ }
+  if (!text) text = prompt("Paste the AI's reply (or just the JSON program) here:") || "";
+  if (!text.trim()) return;
+  let prog = null;
+  const p = extractAIPayloads(text);
+  if (p.program) prog = p.program;
+  if (!prog){
+    try { const j = JSON.parse(text.trim()); if (j && Array.isArray(j.days)) prog = j; } catch(e){}
+  }
+  if (!prog){
+    const m = text.match(/\{[\s\S]*"days"[\s\S]*\}/);
+    if (m){ try { const j = JSON.parse(m[0]); if (Array.isArray(j.days)) prog = j; } catch(e){} }
+  }
+  if (!prog){ flashSave("No program found in that text", true); return; }
+  try {
+    program = validateProgram(prog);
+    saveProgram();
+    extraExercises = [];
+    renderDayOptions(); initSessionState(); renderSessionInputs(); renderWork(); renderDash(); renderNextWorkout();
+    ackBtn("pasteProgBtn", "✓ Loaded: "+(program.name||"program"));
+    flashSave("Program loaded ✓");
+  } catch(e){ flashSave("Program invalid: "+e.message, true); }
+});
+
+// ================== AI FOOD LOGGING (text + photo) ==================
+const FOOD_AI_SYSTEM = 'You are a nutrition estimator. Given a meal description or photo, respond with ONLY a JSON object, no prose, no code fences: {"foods":[{"name":"...","cal":0,"pro":0,"carb":0,"fat":0}]} — one entry per distinct food, realistic portion estimates, calories as kcal, macros in grams. If you cannot identify any food, return {"foods":[]}.';
+function parseFoodsReply(text){
+  let t = text.trim().replace(/```(?:json)?/g, "").replace(/```/g, "").trim();
+  const m = t.match(/\{[\s\S]*\}/);
+  if (m) t = m[0];
+  const j = JSON.parse(t);
+  if (!j || !Array.isArray(j.foods)) throw new Error("bad shape");
+  return j.foods.filter(f=>f && f.name && Number(f.cal)>=0).map(f=>({
+    name:String(f.name), cal:Number(f.cal)||0, pro:Number(f.pro)||0, carb:Number(f.carb)||0, fat:Number(f.fat)||0,
+  }));
+}
+function aiFoodStatus(msg, isErr){
+  const el = document.getElementById("aiFoodStatus");
+  if (!msg){ el.classList.add("hidden"); return; }
+  el.classList.remove("hidden");
+  el.textContent = msg;
+  el.style.color = isErr ? "var(--warn)" : "var(--dim)";
+}
+function showFoodConfirm(foods){
+  const el = document.getElementById("aiFoodConfirm");
+  el.classList.remove("hidden");
+  el.innerHTML = "";
+  if (!foods.length){
+    el.innerHTML = '<div class="note">The AI could not identify any food there. Try describing it, or use manual entry.</div>';
+    return;
+  }
+  const items = foods.slice();
+  const list = document.createElement("div");
+  const add = document.createElement("button");
+  add.className = "btn ghost small mt10";
+  add.style.width = "100%";
+  function redraw(){
+    list.innerHTML = "";
+    items.forEach((f,i)=>{
+      const row = document.createElement("div");
+      row.className = "list-item";
+      row.innerHTML = '<div style="flex:1; min-width:0;"><div style="font-weight:500;">'+esc(f.name)+'</div>'
+        +'<div style="color:var(--dim); font-size:11px;">'+Math.round(f.cal)+' kcal · '+Math.round(f.pro)+'P / '+Math.round(f.carb)+'C / '+Math.round(f.fat)+'F (estimate)</div></div>';
+      const x = document.createElement("button");
+      x.className = "del"; x.textContent = "✕"; x.setAttribute("aria-label","Remove");
+      x.addEventListener("click", ()=>{ items.splice(i,1); redraw(); });
+      row.appendChild(x);
+      list.appendChild(row);
+    });
+    add.textContent = "✓ Log " + items.length + " item" + (items.length===1?"":"s") + " to " + currentMeal;
+    add.disabled = items.length===0;
+  }
+  redraw();
+  el.appendChild(list);
+  const totals = document.createElement("div");
+  totals.className = "note";
+  totals.textContent = "Estimates — edit anything after logging with ✎.";
+  el.appendChild(totals);
+  add.addEventListener("click", ()=>{
+    items.forEach(f=>addEntry(Object.assign({}, f)));
+    el.classList.add("hidden");
+    aiFoodStatus(null);
+    flashSave("Logged "+items.length+" ✓");
+  });
+  el.appendChild(add);
+}
+document.getElementById("aiFoodGoBtn").addEventListener("click", async ()=>{
+  const q = document.getElementById("aiFoodText").value.trim();
+  if (!q) return;
+  aiFoodStatus("Estimating…");
+  document.getElementById("aiFoodConfirm").classList.add("hidden");
+  document.getElementById("aiFoodGoBtn").disabled = true;
+  try {
+    const reply = await anthropicCall([{role:"user", content:q}], FOOD_AI_SYSTEM, 1200);
+    const foods = parseFoodsReply(reply);
+    aiFoodStatus(null);
+    showFoodConfirm(foods);
+    document.getElementById("aiFoodText").value = "";
+  } catch(e){
+    aiFoodStatus("⚠ "+(e.message||"Could not estimate that"), true);
+  }
+  document.getElementById("aiFoodGoBtn").disabled = false;
+});
+document.getElementById("aiPhotoBtn").addEventListener("click", ()=>document.getElementById("aiPhotoFile").click());
+document.getElementById("aiPhotoFile").addEventListener("change", async (ev)=>{
+  const file = ev.target.files && ev.target.files[0];
+  ev.target.value = "";
+  if (!file) return;
+  aiFoodStatus("Reading photo…");
+  document.getElementById("aiFoodConfirm").classList.add("hidden");
+  try {
+    const b64 = await downscaleImage(file, 1024);
+    aiFoodStatus("Coach is looking at your plate…");
+    const reply = await anthropicCall([{role:"user", content:[
+      {type:"image", source:{type:"base64", media_type:"image/jpeg", data:b64}},
+      {type:"text", text:"Identify the foods in this meal photo and estimate portions and macros."},
+    ]}], FOOD_AI_SYSTEM, 1200);
+    const foods = parseFoodsReply(reply);
+    aiFoodStatus(null);
+    showFoodConfirm(foods);
+  } catch(e){
+    aiFoodStatus("⚠ "+(e.message||"Could not read that photo"), true);
+  }
+});
+function downscaleImage(file, maxDim){
+  return new Promise((resolve, reject)=>{
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = ()=>{
+      try {
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const c = document.createElement("canvas");
+        c.width = Math.round(img.width*scale);
+        c.height = Math.round(img.height*scale);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        resolve(c.toDataURL("image/jpeg", 0.8).split(",")[1]);
+      } catch(e){ reject(e); }
+    };
+    img.onerror = ()=>{ URL.revokeObjectURL(url); reject(new Error("Could not open that image")); };
+    img.src = url;
+  });
+}
+
 // ================== AI COACH REPORT ==================
 function aiReport(){
   const today = todayStr();
@@ -3141,7 +3517,7 @@ const FAQ = [
   {q:"I logged something wrong — can I fix it?", a:"Yes, everything is editable. Food: tap <b>✎</b> on any entry, fix the values, tap <b>Update entry</b>. Workouts: tap <b>✎</b> on any session in history — it loads back into the set rows, change what you need, tap <b>Update session</b> (corrections don't re-trigger celebrations or false PRs). Cardio sessions, custom foods, and saved meals are all editable too."},
   {q:"What does '+5 auto' mean?", a:"You hit all your target reps at the same weight last session, so the app pre-loaded 5 lb more — progressive overload applied for you. You can always change it."},
   {q:"How do programs work?", a:"The Train tab runs whatever program is loaded. <b>＋ Build new program</b> creates your own (any number of days, 60+ exercise library plus custom names, schemes like 4×5). <b>✎ Edit</b> modifies the current one. <b>⬆ Load</b> imports any FORGE .json file — from a friend, a coach, or an AI. <b>⬇/📤</b> exports and shares yours."},
-  {q:"Can an AI build me a program?", a:"Yes — ask Claude (or any AI): 'Build me a workout program as a JSON file for the FORGE app' and describe your goals, experience, available days, and equipment. Ask for days with id/title/exercises, each exercise having a name and a scheme like 4×5. Download the .json it produces and load it in the Train tab."},
+  {q:"Can an AI build me a program?", a:"Yes, two ways. Easiest: copy the AI's reply and tap <b>📋 Paste program from an AI</b> in the Train tab — FORGE finds the program in the text and loads it. Or load a downloaded .json with ⬆ Load. To get one, ask any AI: 'Build me a workout program as a JSON file for the FORGE app' with your goals, days, and equipment — or better, use the in-app Coach, which already knows your history."},
   {q:"What are the PR board and the 📈 charts?", a:"Every set you log is converted to an estimated 1RM (Epley formula). Your best per exercise ranks on the PR board — tap any row for a progress chart over time, and set a goal weight to draw a target line. Beating a previous best triggers the PR FORGED screen when you log."},
   {q:"What's plate math and the rest timer?", a:"Type a target weight and the app tells you which plates to load per side. Rest timer: tap a preset to start, tap the running numbers to cancel, and ＋ adds custom durations (they stick around as presets — ✕ removes them). Checking ✓ on a set auto-starts your last-used duration."},
 
@@ -3149,6 +3525,9 @@ const FAQ = [
   {q:"What is 'Your measured metabolism'?", a:"After ~2 weeks of logging food and weigh-ins, the app computes your <b>actual TDEE</b> from your real intake vs your real weight trend — more accurate than any formula. Tap <b>Recalibrate</b> to update your calorie targets from it."},
   {q:"Why did the app ask if I want to adjust my targets?", a:"Your weight has moved 5+ lb since your targets were set, which changes your calorie needs. Tap <b>Adjust</b> and the calculator opens prefilled with your new weight — recalculate, pick your split, apply. 'Not yet' snoozes it until you've moved further."},
   {q:"What do the weekly review and goal date mean?", a:"The <b>This week</b> card on Home summarizes your last 7 days: average calories, protein compliance, sessions, and weight change. The projection under the weight chart estimates when you reach your goal at your current rate — it updates with every weigh-in and will honestly tell you if the trend is moving the wrong way."},
+  {q:"What can the AI Coach do?", a:"Two tiers. <b>Without any key:</b> the Copy report / Download buttons build a full progress briefing you can paste into any AI. <b>With your own Anthropic API key</b> (⚙ Settings → AI Coach key): a live in-app <b>Coach chat</b> that already knows your data — ask anything, and when it proposes a program or new calorie targets, a one-tap button loads them straight in. Plus <b>✨ AI quick log</b> (type \"2 eggs and toast\" → logged) and <b>📸 photo meal logging</b> (snap your plate → estimated macros to confirm). All optional; everything else works without it."},
+  {q:"Is the AI key safe? What does it cost?", a:"Your key is stored only on this device, sent only to Anthropic with your requests, and <b>deliberately excluded from backup files</b>. You pay Anthropic directly for what you use — a coaching chat or photo estimate costs roughly a cent. No subscription, no middleman. Clear it anytime in Settings."},
+  {q:"How accurate is photo / AI food logging?", a:"They're <b>estimates</b> — good ones, but the AI is judging portions from a description or a photo. Every item shows before logging so you can remove anything, and after logging you can ✎ edit values. For packaged foods with labels, the barcode scan is exact; use AI logging for plates, restaurants, and speed."},
   {q:"What is the AI Coach report?", a:"On the Home tab, the <b>🤖 AI Coach</b> card builds a progress report from your real data — weight trend, measured TDEE, nutrition adherence, per-lift progression, and your current program. Tap <b>Copy report</b>, paste it into Claude, ChatGPT, or any AI, and ask away. The report even includes your program in FORGE format, so the AI can return an adjusted program you load right back in (Train → ⬆ Load). Completely optional — the app works fully without it."},
   {q:"How do I track body measurements?", a:"It's optional: <b>⚙ Settings → Enable body measurements</b> adds a waist/chest/arm tracker to the Weight tab. On a fat-loss phase, a shrinking waist is often better evidence than the scale. Toggle it off anytime — entries stay saved."},
 
@@ -3398,7 +3777,8 @@ document.getElementById("saveSettingsBtn").addEventListener("click", ()=>{
 function doBackup(btnId){
   data.meta.lastBackup = todayStr();
   data.meta.logsSince = 0;
-  download("forge-backup-"+todayStr()+".json", JSON.stringify({cfg:cfg, program:program, data:data}, null, 2));
+  const cfgSafe = Object.assign({}, cfg); delete cfgSafe.anthropicKey;
+  download("forge-backup-"+todayStr()+".json", JSON.stringify({cfg:cfgSafe, program:program, data:data}, null, 2));
   save(); renderBackup();
   ackBtn(btnId, "✓ Backup downloaded");
 }
@@ -3525,6 +3905,7 @@ function renderAll(){ renderDash(); renderFood(); renderWork(); renderWeight(); 
   if (st>=2){ sl.textContent = "🔥 "+st+"-day logging streak — keep the chain alive"; sl.classList.remove("hidden"); }
   else sl.classList.add("hidden");
   document.getElementById("sUsdaKey").value = cfg.usdaKey||"";
+  renderAIGates();
 }
 
 // ================== boot ==================
