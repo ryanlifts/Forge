@@ -15,7 +15,7 @@
 <style>
   :root {
     --bg:#101215; --panel:#191C21; --panel-up:#1F232A; --border:#2B3039;
-    --text:#EDEEF0; --dim:#8A919C; --ember:#FF7A3D; --ember-deep:#E8571F;
+    --text:#EDEEF0; --dim:#8A919C; --ember:#FF7A3D; --ember-deep:#E8571F; --ember-rgb:255,122,61;
     --ok:#4ADE80; --warn:#F87171;
   }
   * { box-sizing:border-box; margin:0; padding:0; }
@@ -30,7 +30,7 @@
     letter-spacing:.1em;
     background:linear-gradient(135deg,var(--ember) 30%,var(--ember-deep));
     -webkit-background-clip:text; background-clip:text; color:transparent;
-    text-shadow:0 0 26px rgba(255,122,61,.22); }
+    text-shadow:0 0 26px rgba(var(--ember-rgb),.22); }
   .sub { font-size:11px; color:var(--dim); margin-top:4px; }
   /* the journey strip */
   #journey { margin:10px 0 16px; }
@@ -39,7 +39,7 @@
   .jy-track { position:relative; height:7px; background:var(--panel-up); border:1px solid var(--border); border-radius:99px; margin:7px 0 5px; }
   .jy-fill { position:absolute; left:0; top:0; bottom:0; background:linear-gradient(90deg,var(--ember-deep),var(--ember)); border-radius:99px; }
   .jy-dot { position:absolute; top:50%; width:15px; height:15px; border-radius:50%; background:var(--ember);
-    border:3px solid var(--bg); transform:translate(-50%,-50%); box-shadow:0 0 0 1.5px var(--ember), 0 0 10px rgba(255,122,61,.5); }
+    border:3px solid var(--bg); transform:translate(-50%,-50%); box-shadow:0 0 0 1.5px var(--ember), 0 0 10px rgba(var(--ember-rgb),.5); }
   .jy-ends { display:flex; justify-content:space-between; font-size:10px; color:var(--dim); font-family:'IBM Plex Mono',monospace; }
   .label { font-size:10px; letter-spacing:.14em; color:var(--dim); text-transform:uppercase; margin-bottom:6px; }
   .card { background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:18px; margin-bottom:12px; }
@@ -130,7 +130,7 @@
   body.locked { overflow: hidden; position: fixed; inset: 0; }
   /* AI coach chat */
   .cmsg { max-width:86%; padding:11px 14px; border-radius:14px; margin-bottom:10px; font-size:14px; line-height:1.65; white-space:pre-wrap; word-wrap:break-word; }
-  .cmsg.user { margin-left:auto; background:rgba(255,122,61,.12); border:1px solid rgba(255,122,61,.35); border-bottom-right-radius:4px; }
+  .cmsg.user { margin-left:auto; background:rgba(var(--ember-rgb),.12); border:1px solid rgba(var(--ember-rgb),.35); border-bottom-right-radius:4px; }
   .cmsg.ai { margin-right:auto; background:var(--panel); border:1px solid var(--border); border-bottom-left-radius:4px; }
   .cmsg .act { display:block; width:100%; margin-top:10px; text-align:center; background:linear-gradient(135deg,var(--ember),var(--ember-deep)); color:#16100B;
     border:none; border-radius:10px; padding:12px; font-family:'Oswald',sans-serif; font-weight:600; font-size:13px; letter-spacing:.05em; text-transform:uppercase; cursor:pointer; }
@@ -140,7 +140,7 @@
   /* setup wizard */
   .su-opt { width:100%; text-align:left; background:var(--panel); border:1px solid var(--border); border-radius:12px;
     color:var(--text); font-family:inherit; font-size:14px; padding:14px; cursor:pointer; margin-bottom:10px; }
-  .su-opt.sel { border-color:var(--ember); background:rgba(255,122,61,.07); }
+  .su-opt.sel { border-color:var(--ember); background:rgba(var(--ember-rgb),.07); }
   .su-opt .su-sub { color:var(--dim); font-size:12px; margin-top:3px; }
   .su-dots { display:flex; gap:8px; justify-content:center; margin:4px 0 16px; }
   .su-dots span { width:8px; height:8px; border-radius:50%; background:var(--border); }
@@ -220,6 +220,7 @@
       <div class="jy-dot" id="jyDot"></div>
     </div>
     <div class="jy-ends"><span id="jyStart"></span><span id="jyGoal"></span></div>
+    <div class="note hidden" id="journeyMsg" style="margin-top:8px; color:var(--text); font-size:12px; line-height:1.6;"></div>
   </div>
 
   <!-- ============ HOME ============ -->
@@ -230,6 +231,15 @@
       <div class="label" style="color:var(--warn);">Backup recommended</div>
       <div id="backupText" style="font-size:13px; line-height:1.7; margin:6px 0 12px;"></div>
       <button class="btn ghost small" id="backupNowBtn">⬇ Back up now</button>
+    </div>
+    <div class="card hidden" id="waterCard">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div><div class="label">💧 Water</div><div style="font-family:'Oswald',sans-serif; font-weight:700; font-size:22px;"><span id="waterCount">0</span> <small style="font-size:12px; color:var(--dim);">glasses today</small></div></div>
+        <div class="row" style="flex:0 0 auto;">
+          <button class="step" id="waterMinus" style="width:44px; height:44px;">−</button>
+          <button class="step" id="waterPlus" style="width:44px; height:44px; border-color:var(--ember);">＋</button>
+        </div>
+      </div>
     </div>
     <div class="card hidden" id="checkinCard" style="border-color:var(--ember);">
       <div class="label">🤖 Coach check-in</div>
@@ -272,6 +282,7 @@
       <div id="dashLast" style="font-size:13px; color:var(--dim);">No sessions yet.</div>
     </div>
     <button class="btn" id="finishDayBtn" style="margin-bottom:12px;">🏁 Finish today's log</button>
+    <button class="btn ghost small" id="quotesOpenBtn" style="width:100%; margin-bottom:12px;">❝ Motivation — words from the greats</button>
     <div class="card" id="aiCoachCard">
       <div class="label">🤖 AI Coach</div>
       <div style="font-size:13px; line-height:1.7; margin:6px 0 12px;">
@@ -357,8 +368,12 @@
         <div style="flex:1;"><input id="aiFoodText" placeholder="e.g. 2 eggs, toast with butter, black coffee"></div>
         <button class="xbtn" id="aiFoodGoBtn" style="flex:0 0 auto;">Log it</button>
       </div>
-      <button class="btn ghost small mt10" id="aiPhotoBtn" style="width:100%;">📸 Log a meal from a photo</button>
+      <div class="row mt10" style="align-items:flex-end;">
+        <div style="flex:1;"><input id="aiPhotoCaption" placeholder="Optional: where/what (e.g. Chipotle chicken bowl)"></div>
+        <button class="xbtn" id="aiPhotoBtn" style="flex:0 0 auto;">📸 Photo</button>
+      </div>
       <input type="file" id="aiPhotoFile" accept="image/*" class="hidden">
+      <div class="note" style="margin-top:6px;">Photos are analyzed and immediately discarded — never stored, never uploaded anywhere but the AI.</div>
       <div id="aiFoodStatus" class="note hidden" style="margin-top:8px;"></div>
       <div id="aiFoodConfirm" class="hidden" style="margin-top:10px;"></div>
     </div>
@@ -406,6 +421,7 @@
           <button class="xbtn" id="recentsCloseBtn">✕ Close</button>
         </div>
         <div class="note" style="margin:0 0 12px;">Ranked by how often you log them. Tap one to add it — amount is adjustable before it's logged.</div>
+        <input id="recentsSearch" placeholder="Search your recents…" style="margin-bottom:12px;">
         <div class="card flush"><div id="recentsList"></div></div>
       </div>
     </div>
@@ -523,7 +539,8 @@
       <div id="strengthBlock">
         <div id="exerciseInputs"></div>
         <div class="row" style="align-items:flex-end; margin-bottom:14px;">
-          <div style="flex:2;"><div class="label">Add exercise to this session</div><select id="addExSel"></select></div>
+          <div style="flex:2;"><div class="label">Add exercise to this session</div><select id="addExSel"></select>
+          <input id="addExCustom" class="hidden" placeholder="Type your exercise" style="margin-top:8px;"></div>
           <div style="flex:0 0 auto;"><button class="btn ghost small" id="addExBtn">+ Add</button></div>
         </div>
       </div>
@@ -656,12 +673,18 @@
       <div style="height:14px;"></div>
       <button class="btn ghost small" id="measureToggleBtn">Enable body measurements</button>
       <div class="note">Adds an optional waist/chest/arm tracker to the Weight tab. Toggle off any time — your entries stay saved.</div>
+      <div style="height:10px;"></div>
+      <button class="btn ghost small" id="waterToggleBtn">Enable water tracking</button>
+      <div class="note">Adds a tap counter to the Home tab. Off by default.</div>
+      <div style="height:14px;"></div>
+      <div class="label">Accent color</div>
+      <div id="accentRow" style="display:flex; gap:10px; margin-top:8px;"></div>
     </div>
     <div class="card">
       <div class="label" style="margin-bottom:10px;">USDA food database (optional, free)</div>
       <input id="sUsdaKey" placeholder="Paste your free USDA API key" style="margin-bottom:10px;">
       <button class="btn ghost small" id="saveUsdaBtn">Save key</button>
-      <div class="note">Adds 400,000+ US branded products (including store brands) to your search. Get a free key in ~1 minute at <a href="https://fdc.nal.usda.gov/api-key-signup.html" target="_blank" rel="noopener" style="color:var(--ember);">fdc.nal.usda.gov</a> — they email it instantly.</div>
+      <div class="note">A shared community key is <b>built in</b> — branded search works out of the box. Add your own free key for guaranteed speed if the shared one ever gets busy: <a href="https://fdc.nal.usda.gov/api-key-signup.html" target="_blank" rel="noopener" style="color:var(--ember);">fdc.nal.usda.gov</a> — they email it instantly.</div>
     </div>
 
     <div class="card">
@@ -681,6 +704,16 @@
       <input type="file" id="importDataFile" accept=".json,application/json" class="hidden">
       <div class="note">Data lives only on this device. Back up occasionally or when moving phones.</div>
     </div>
+  </div>
+</div>
+
+<div id="quotesOverlay" class="hidden" style="position:fixed; inset:0; z-index:55; background:var(--bg); overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; padding:calc(16px + env(safe-area-inset-top)) 14px 90px;">
+  <div style="max-width:720px; margin:0 auto;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+      <div style="font-family:'Oswald',sans-serif; font-weight:700; font-size:22px; text-transform:uppercase;">Motivation</div>
+      <button class="xbtn" id="quotesCloseBtn">✕ Close</button>
+    </div>
+    <div id="quotesList"></div>
   </div>
 </div>
 
@@ -724,7 +757,7 @@
   <div style="max-width:520px; margin:0 auto;">
     <div style="text-align:center; margin-bottom:6px;">
       <div style="font-family:'Oswald',sans-serif; font-weight:700; font-size:28px; letter-spacing:.06em;">FORGE</div>
-      <div class="note" style="margin:2px 0 14px;" id="setupTagline">Let's set you up — about a minute.</div>
+      <div class="note" style="margin:2px 0 14px;" id="setupTagline">Hard training. FORGE makes the rest easy.<br>Setup takes about a minute.</div>
     </div>
     <div class="su-dots" id="setupDots"></div>
     <div id="setupBody"></div>
@@ -839,6 +872,51 @@ const CARDIO_TYPES = [
 ];
 
 // local whole foods — per 100g: cal, protein, carbs, fat
+const ALT_MAP = {
+  "Back Squat":["Leg Press","Goblet Squat","Hack Squat"],
+  "Front Squat":["Goblet Squat","Leg Press","Back Squat"],
+  "Goblet Squat":["Leg Press","Back Squat"],
+  "Box Squat (to parallel)":["Leg Press","Goblet Squat","Back Squat"],
+  "Bench Press":["Dumbbell Bench Press","Machine Chest Press","Push-Up"],
+  "Incline Bench Press":["Incline Dumbbell Press","Machine Chest Press"],
+  "Dumbbell Bench Press":["Bench Press","Machine Chest Press","Push-Up"],
+  "Incline Dumbbell Press":["Incline Bench Press","Machine Chest Press"],
+  "Deadlift":["Trap Bar Deadlift","Romanian Deadlift","Rack Pull"],
+  "Trap Bar Deadlift":["Deadlift","Romanian Deadlift"],
+  "Romanian Deadlift":["Leg Curl","Back Extension","Good Morning"],
+  "Overhead Press":["Dumbbell Shoulder Press","Machine Shoulder Press","Landmine Press"],
+  "Dumbbell Shoulder Press":["Overhead Press","Machine Shoulder Press"],
+  "Pull-Up":["Lat Pulldown","Assisted Pull-Up","Chin-Up (bodyweight)"],
+  "Chin-Up (bodyweight)":["Lat Pulldown","Assisted Pull-Up","Pull-Up"],
+  "Lat Pulldown":["Pull-Up","Seated Cable Row"],
+  "Barbell Row":["Dumbbell Row","Seated Cable Row","Chest-Supported Row"],
+  "Dumbbell Row":["Barbell Row","Seated Cable Row"],
+  "Seated Cable Row":["Barbell Row","Dumbbell Row","Chest-Supported Row"],
+  "Leg Press":["Back Squat","Goblet Squat","Hack Squat"],
+  "Bulgarian Split Squat":["Lunge","Step-Up","Leg Press"],
+  "Lunge":["Bulgarian Split Squat","Step-Up"],
+  "Step-Up":["Lunge","Bulgarian Split Squat"],
+  "Leg Curl":["Romanian Deadlift","Nordic Curl"],
+  "Leg Extension":["Leg Press","Goblet Squat"],
+  "Hip Thrust":["Glute Bridge","Romanian Deadlift"],
+  "Glute Bridge":["Hip Thrust","Romanian Deadlift"],
+  "Calf Raise":["Seated Calf Raise"],
+  "Seated Calf Raise":["Calf Raise"],
+  "Lateral Raise":["Cable Lateral Raise","Upright Row"],
+  "Face Pull":["Rear Delt Fly","Band Pull-Apart"],
+  "Rear Delt Fly":["Face Pull","Band Pull-Apart"],
+  "Dips":["Close-Grip Bench Press","Triceps Pushdown","Push-Up"],
+  "Triceps Pushdown":["Dips","Skull Crusher","Close-Grip Bench Press"],
+  "Skull Crusher":["Triceps Pushdown","Close-Grip Bench Press"],
+  "Biceps Curl":["Hammer Curl","Cable Curl","Preacher Curl"],
+  "Hammer Curl":["Biceps Curl","Cable Curl"],
+  "Plank":["Dead Bug","Ab Wheel","Hanging Knee Raise"],
+  "Hanging Knee Raise":["Plank","Ab Wheel","Dead Bug"],
+  "Back Extension":["Romanian Deadlift","Good Morning","Hip Thrust"],
+  "Push-Up":["Bench Press","Dumbbell Bench Press","Machine Chest Press"],
+};
+const DEFAULT_USDA_KEY = "8xMjfBYwxcNbli7OVr7Gb394962FbJQvqDMDmLqi"; // shared community key — add your own in Settings for guaranteed speed
+function effectiveUsdaKey(){ return (cfg.usdaKey && cfg.usdaKey.trim()) || DEFAULT_USDA_KEY; }
 const LOCAL_DB = [
   {n:"Chicken breast, cooked",cal:165,pro:31,carb:0,fat:3.6},{n:"Chicken thigh, cooked",cal:209,pro:26,carb:0,fat:10.9},
   {n:"Ground beef 90/10, cooked",cal:217,pro:26,carb:0,fat:11.7},{n:"Ground beef 80/20, cooked",cal:254,pro:26,carb:0,fat:17},
@@ -861,6 +939,93 @@ const LOCAL_DB = [
   {n:"Avocado",cal:160,pro:2,carb:9,fat:15},{n:"Peanut butter",cal:588,pro:25,carb:20,fat:50},
   {n:"Almonds",cal:579,pro:21,carb:22,fat:50},{n:"Olive oil",cal:884,pro:0,carb:0,fat:100},
   {n:"Butter",cal:717,pro:0.9,carb:0,fat:81},
+  {n:"Chicken drumstick, cooked",cal:172,pro:28,carb:0,fat:5.7},{n:"Chicken wing, cooked",cal:203,pro:30,carb:0,fat:8.1},{n:"Rotisserie chicken (mixed)",cal:190,pro:25,carb:0,fat:10},
+  {n:"Ground turkey 93/7, cooked",cal:213,pro:27,carb:0,fat:11},{n:"Turkey breast, deli",cal:104,pro:17,carb:4,fat:2},{n:"Ground chicken, cooked",cal:189,pro:24,carb:0,fat:10},
+  {n:"Ribeye steak, cooked",cal:291,pro:24,carb:0,fat:22},{n:"Flank steak, cooked",cal:192,pro:28,carb:0,fat:8},{n:"NY strip steak, cooked",cal:206,pro:29,carb:0,fat:9},
+  {n:"Ground beef 93/7, cooked",cal:182,pro:26,carb:0,fat:8},{n:"Ground beef 73/27, cooked",cal:285,pro:24,carb:0,fat:21},{n:"Beef brisket, cooked",cal:288,pro:26,carb:0,fat:20},
+  {n:"Pork tenderloin, cooked",cal:143,pro:26,carb:0,fat:3.5},{n:"Pulled pork (no sauce)",cal:210,pro:24,carb:0,fat:12},{n:"Bacon, cooked",cal:541,pro:37,carb:1.4,fat:42},
+  {n:"Ham, deli",cal:112,pro:17,carb:2,fat:4},{n:"Pepperoni",cal:504,pro:19,carb:1.2,fat:46},{n:"Italian sausage, cooked",cal:344,pro:19,carb:2,fat:28},
+  {n:"Breakfast sausage, cooked",cal:325,pro:18,carb:1,fat:27},{n:"Hot dog (beef)",cal:290,pro:11,carb:2,fat:26},{n:"Bratwurst, cooked",cal:333,pro:14,carb:2,fat:29},
+  {n:"Lamb chop, cooked",cal:294,pro:25,carb:0,fat:21},{n:"Bison, ground, cooked",cal:179,pro:26,carb:0,fat:8},{n:"Venison, cooked",cal:158,pro:30,carb:0,fat:3.2},
+  {n:"Salmon, cooked",cal:206,pro:22,carb:0,fat:12},{n:"Tilapia, cooked",cal:128,pro:26,carb:0,fat:2.7},{n:"Cod, cooked",cal:105,pro:23,carb:0,fat:0.9},
+  {n:"Tuna, canned in water",cal:116,pro:26,carb:0,fat:0.8},{n:"Tuna steak, cooked",cal:132,pro:28,carb:0,fat:1.3},{n:"Shrimp, cooked",cal:99,pro:24,carb:0.2,fat:0.3},
+  {n:"Crab meat",cal:97,pro:19,carb:0,fat:1.5},{n:"Lobster, cooked",cal:89,pro:19,carb:0,fat:0.9},{n:"Scallops, cooked",cal:111,pro:21,carb:5,fat:0.8},
+  {n:"Sardines, canned in oil",cal:208,pro:25,carb:0,fat:11},{n:"Mackerel, cooked",cal:262,pro:24,carb:0,fat:18},{n:"Halibut, cooked",cal:111,pro:23,carb:0,fat:1.6},
+  {n:"Egg, whole",cal:143,pro:13,carb:0.7,fat:9.5},{n:"Egg white",cal:52,pro:11,carb:0.7,fat:0.2},{n:"Egg, fried",cal:196,pro:14,carb:0.8,fat:15},
+  {n:"Whey protein powder",cal:400,pro:80,carb:8,fat:6},{n:"Casein protein powder",cal:373,pro:77,carb:10,fat:2},{n:"Protein bar (typical)",cal:380,pro:33,carb:40,fat:12},
+  {n:"Tofu, firm",cal:78,pro:8,carb:2,fat:4.8},{n:"Tempeh",cal:192,pro:20,carb:8,fat:11},{n:"Seitan",cal:141,pro:25,carb:6,fat:2},{n:"Edamame, shelled",cal:121,pro:12,carb:9,fat:5},
+  {n:"Greek yogurt, nonfat",cal:59,pro:10,carb:3.6,fat:0.4},{n:"Greek yogurt, whole milk",cal:97,pro:9,carb:4,fat:5},{n:"Regular yogurt, plain",cal:61,pro:3.5,carb:4.7,fat:3.3},
+  {n:"Cottage cheese, 2%",cal:84,pro:11,carb:4.3,fat:2.3},{n:"Cottage cheese, 4%",cal:98,pro:11,carb:3.4,fat:4.3},{n:"Skyr",cal:63,pro:11,carb:4,fat:0.2},
+  {n:"Milk, whole",cal:61,pro:3.2,carb:4.8,fat:3.3},{n:"Milk, 2%",cal:50,pro:3.3,carb:4.8,fat:2},{n:"Milk, 1%",cal:42,pro:3.4,carb:5,fat:1},{n:"Milk, skim",cal:34,pro:3.4,carb:5,fat:0.1},
+  {n:"Almond milk, unsweetened",cal:15,pro:0.6,carb:0.6,fat:1.1},{n:"Oat milk",cal:47,pro:1,carb:7.6,fat:1.5},{n:"Soy milk",cal:43,pro:3.5,carb:2.5,fat:2},{n:"Chocolate milk, 2%",cal:76,pro:3,carb:12,fat:2},
+  {n:"Cheddar cheese",cal:403,pro:23,carb:3.1,fat:33},{n:"Mozzarella, part-skim",cal:254,pro:24,carb:3,fat:16},{n:"Swiss cheese",cal:380,pro:27,carb:5,fat:28},
+  {n:"Parmesan, grated",cal:420,pro:38,carb:14,fat:28},{n:"American cheese slice",cal:296,pro:16,carb:8,fat:23},{n:"Cream cheese",cal:342,pro:6,carb:5.5,fat:34},
+  {n:"String cheese",cal:280,pro:24,carb:4,fat:20},{n:"Feta cheese",cal:264,pro:14,carb:4,fat:21},{n:"Butter",cal:717,pro:0.9,carb:0.1,fat:81},
+  {n:"White rice, cooked",cal:130,pro:2.7,carb:28,fat:0.3},{n:"Brown rice, cooked",cal:112,pro:2.3,carb:24,fat:0.8},{n:"Jasmine rice, cooked",cal:129,pro:2.7,carb:28,fat:0.2},
+  {n:"Quinoa, cooked",cal:120,pro:4.4,carb:21,fat:1.9},{n:"Couscous, cooked",cal:112,pro:3.8,carb:23,fat:0.2},{n:"Farro, cooked",cal:130,pro:5,carb:26,fat:1},
+  {n:"Pasta, cooked",cal:158,pro:5.8,carb:31,fat:0.9},{n:"Whole wheat pasta, cooked",cal:124,pro:5.3,carb:27,fat:0.5},{n:"Mac and cheese, prepared",cal:164,pro:6.6,carb:20,fat:6.6},
+  {n:"Ramen noodles, prepared",cal:188,pro:4.5,carb:27,fat:7},{n:"Rice noodles, cooked",cal:109,pro:0.9,carb:25,fat:0.2},{n:"Gnocchi, cooked",cal:133,pro:3.8,carb:23,fat:2.8},
+  {n:"Oatmeal, cooked with water",cal:71,pro:2.5,carb:12,fat:1.5},{n:"Oats, dry",cal:379,pro:13,carb:67,fat:6.5},{n:"Steel cut oats, dry",cal:375,pro:12.5,carb:67,fat:6.3},
+  {n:"Grits, cooked",cal:59,pro:1.4,carb:13,fat:0.4},{n:"Cream of wheat, cooked",cal:56,pro:1.7,carb:12,fat:0.2},{n:"Granola",cal:471,pro:10,carb:64,fat:20},
+  {n:"Cereal (typical flakes)",cal:357,pro:7,carb:84,fat:1},{n:"Cheerios",cal:367,pro:12,carb:73,fat:6.7},{n:"Pancake, prepared",cal:227,pro:6.4,carb:28,fat:9.7},
+  {n:"Waffle, prepared",cal:291,pro:7.9,carb:33,fat:14},{n:"French toast",cal:229,pro:8,carb:25,fat:11},{n:"Maple syrup",cal:260,pro:0,carb:67,fat:0},
+  {n:"White bread",cal:265,pro:9,carb:49,fat:3.2},{n:"Whole wheat bread",cal:247,pro:13,carb:41,fat:3.4},{n:"Sourdough bread",cal:289,pro:12,carb:56,fat:2.1},
+  {n:"Bagel, plain",cal:257,pro:10,carb:50,fat:1.7},{n:"English muffin",cal:227,pro:8.9,carb:44,fat:1.7},{n:"Croissant",cal:406,pro:8.2,carb:46,fat:21},
+  {n:"Flour tortilla",cal:306,pro:8.2,carb:51,fat:7.7},{n:"Corn tortilla",cal:218,pro:5.7,carb:45,fat:2.9},{n:"Pita bread",cal:275,pro:9.1,carb:56,fat:1.2},
+  {n:"Hamburger bun",cal:278,pro:9.6,carb:50,fat:3.9},{n:"Dinner roll",cal:310,pro:9,carb:53,fat:6.4},{n:"Naan bread",cal:310,pro:9,carb:50,fat:9},
+  {n:"Potato, baked with skin",cal:93,pro:2.5,carb:21,fat:0.1},{n:"Sweet potato, baked",cal:90,pro:2,carb:21,fat:0.2},{n:"Mashed potatoes with butter",cal:113,pro:2,carb:17,fat:4.2},
+  {n:"French fries",cal:312,pro:3.4,carb:41,fat:15},{n:"Hash browns",cal:265,pro:3,carb:35,fat:13},{n:"Tater tots",cal:227,pro:2.5,carb:29,fat:11},
+  {n:"Black beans, cooked",cal:132,pro:8.9,carb:24,fat:0.5},{n:"Pinto beans, cooked",cal:143,pro:9,carb:26,fat:0.6},{n:"Chickpeas, cooked",cal:164,pro:8.9,carb:27,fat:2.6},
+  {n:"Lentils, cooked",cal:116,pro:9,carb:20,fat:0.4},{n:"Refried beans",cal:91,pro:5.5,carb:15,fat:1.2},{n:"Hummus",cal:166,pro:7.9,carb:14,fat:9.6},
+  {n:"Corn, cooked",cal:96,pro:3.4,carb:21,fat:1.5},{n:"Peas, cooked",cal:84,pro:5.4,carb:16,fat:0.2},{n:"Butternut squash, cooked",cal:40,pro:0.9,carb:11,fat:0.1},
+  {n:"Broccoli, cooked",cal:35,pro:2.4,carb:7.2,fat:0.4},{n:"Cauliflower, cooked",cal:23,pro:1.8,carb:4.1,fat:0.5},{n:"Green beans, cooked",cal:35,pro:1.9,carb:7.9,fat:0.3},
+  {n:"Asparagus, cooked",cal:22,pro:2.4,carb:4.1,fat:0.2},{n:"Brussels sprouts, cooked",cal:36,pro:2.6,carb:7.1,fat:0.5},{n:"Spinach, raw",cal:23,pro:2.9,carb:3.6,fat:0.4},
+  {n:"Kale, raw",cal:35,pro:2.9,carb:4.4,fat:1.5},{n:"Lettuce, romaine",cal:17,pro:1.2,carb:3.3,fat:0.3},{n:"Mixed salad greens",cal:20,pro:1.8,carb:3.5,fat:0.3},
+  {n:"Carrots, raw",cal:41,pro:0.9,carb:9.6,fat:0.2},{n:"Bell pepper",cal:26,pro:1,carb:6,fat:0.3},{n:"Cucumber",cal:15,pro:0.7,carb:3.6,fat:0.1},
+  {n:"Tomato",cal:18,pro:0.9,carb:3.9,fat:0.2},{n:"Onion",cal:40,pro:1.1,carb:9.3,fat:0.1},{n:"Mushrooms, raw",cal:22,pro:3.1,carb:3.3,fat:0.3},
+  {n:"Zucchini, cooked",cal:15,pro:1.1,carb:2.7,fat:0.4},{n:"Cabbage, raw",cal:25,pro:1.3,carb:5.8,fat:0.1},{n:"Celery",cal:14,pro:0.7,carb:3,fat:0.2},
+  {n:"Avocado",cal:160,pro:2,carb:8.5,fat:15},{n:"Guacamole",cal:157,pro:2,carb:8,fat:14},{n:"Olives",cal:115,pro:0.8,carb:6,fat:11},
+  {n:"Apple",cal:52,pro:0.3,carb:14,fat:0.2},{n:"Banana",cal:89,pro:1.1,carb:23,fat:0.3},{n:"Orange",cal:47,pro:0.9,carb:12,fat:0.1},
+  {n:"Strawberries",cal:32,pro:0.7,carb:7.7,fat:0.3},{n:"Blueberries",cal:57,pro:0.7,carb:14,fat:0.3},{n:"Raspberries",cal:52,pro:1.2,carb:12,fat:0.7},
+  {n:"Grapes",cal:69,pro:0.7,carb:18,fat:0.2},{n:"Watermelon",cal:30,pro:0.6,carb:7.6,fat:0.2},{n:"Cantaloupe",cal:34,pro:0.8,carb:8.2,fat:0.2},
+  {n:"Pineapple",cal:50,pro:0.5,carb:13,fat:0.1},{n:"Mango",cal:60,pro:0.8,carb:15,fat:0.4},{n:"Peach",cal:39,pro:0.9,carb:9.5,fat:0.3},
+  {n:"Pear",cal:57,pro:0.4,carb:15,fat:0.1},{n:"Cherries",cal:63,pro:1.1,carb:16,fat:0.2},{n:"Kiwi",cal:61,pro:1.1,carb:15,fat:0.5},
+  {n:"Raisins",cal:299,pro:3.1,carb:79,fat:0.5},{n:"Dates",cal:277,pro:1.8,carb:75,fat:0.2},{n:"Dried cranberries",cal:308,pro:0.1,carb:82,fat:1.4},
+  {n:"Almonds",cal:579,pro:21,carb:22,fat:50},{n:"Peanuts",cal:567,pro:26,carb:16,fat:49},{n:"Cashews",cal:553,pro:18,carb:30,fat:44},
+  {n:"Walnuts",cal:654,pro:15,carb:14,fat:65},{n:"Pistachios",cal:560,pro:20,carb:28,fat:45},{n:"Pecans",cal:691,pro:9.2,carb:14,fat:72},
+  {n:"Peanut butter",cal:588,pro:25,carb:20,fat:50},{n:"Almond butter",cal:614,pro:21,carb:19,fat:56},{n:"Nutella",cal:539,pro:6,carb:57,fat:31},
+  {n:"Chia seeds",cal:486,pro:17,carb:42,fat:31},{n:"Flax seeds",cal:534,pro:18,carb:29,fat:42},{n:"Sunflower seeds",cal:584,pro:21,carb:20,fat:51},
+  {n:"Olive oil",cal:884,pro:0,carb:0,fat:100},{n:"Coconut oil",cal:862,pro:0,carb:0,fat:100},{n:"Vegetable oil",cal:884,pro:0,carb:0,fat:100},
+  {n:"Mayonnaise",cal:680,pro:1,carb:0.6,fat:75},{n:"Ranch dressing",cal:430,pro:1.3,carb:6,fat:45},{n:"Italian dressing",cal:240,pro:0.4,carb:12,fat:21},
+  {n:"Caesar dressing",cal:542,pro:2,carb:4,fat:58},{n:"Ketchup",cal:101,pro:1,carb:26,fat:0.1},{n:"Mustard",cal:60,pro:4,carb:6,fat:3},
+  {n:"BBQ sauce",cal:172,pro:0.8,carb:41,fat:0.6},{n:"Soy sauce",cal:53,pro:8,carb:4.9,fat:0.6},{n:"Sriracha",cal:93,pro:2,carb:19,fat:1},
+  {n:"Marinara sauce",cal:50,pro:1.4,carb:8,fat:1.5},{n:"Alfredo sauce",cal:181,pro:3,carb:5,fat:17},{n:"Salsa",cal:29,pro:1.5,carb:6.6,fat:0.2},
+  {n:"Honey",cal:304,pro:0.3,carb:82,fat:0},{n:"Sugar",cal:387,pro:0,carb:100,fat:0},{n:"Jam/jelly",cal:278,pro:0.4,carb:69,fat:0.1},
+  {n:"Cheese pizza",cal:266,pro:11,carb:33,fat:10},{n:"Pepperoni pizza",cal:298,pro:13,carb:34,fat:12},{n:"Cheeseburger (fast food)",cal:263,pro:15,carb:29,fat:13},
+  {n:"Hamburger (fast food)",cal:254,pro:13,carb:30,fat:10},{n:"Chicken nuggets",cal:296,pro:15,carb:14,fat:20},{n:"Chicken tenders, fried",cal:260,pro:19,carb:16,fat:13},
+  {n:"Fried chicken (with skin)",cal:246,pro:24,carb:9,fat:12},{n:"Grilled chicken sandwich",cal:230,pro:17,carb:26,fat:6},{n:"Beef burrito",cal:206,pro:9,carb:24,fat:8},
+  {n:"Chicken burrito bowl (typical)",cal:135,pro:10,carb:14,fat:4.5},{n:"Beef taco (hard shell)",cal:226,pro:9,carb:20,fat:13},{n:"Quesadilla, cheese",cal:299,pro:12,carb:26,fat:16},
+  {n:"Sub sandwich, turkey (typical)",cal:180,pro:11,carb:24,fat:4.5},{n:"Grilled cheese sandwich",cal:350,pro:13,carb:31,fat:19},{n:"PB&J sandwich",cal:290,pro:9,carb:35,fat:13},
+  {n:"BLT sandwich",cal:260,pro:10,carb:24,fat:14},{n:"Chicken caesar salad",cal:127,pro:10,carb:4,fat:8},{n:"Cobb salad",cal:120,pro:9,carb:4,fat:8},
+  {n:"Fried rice",cal:163,pro:4.3,carb:24,fat:5.5},{n:"Lo mein",cal:150,pro:5,carb:22,fat:4.5},{n:"General Tso's chicken",cal:220,pro:12,carb:19,fat:11},
+  {n:"Orange chicken",cal:210,pro:10,carb:22,fat:9},{n:"Beef and broccoli",cal:110,pro:9,carb:6,fat:5.5},{n:"Sushi roll (California)",cal:150,pro:5,carb:26,fat:2.8},
+  {n:"Sushi roll (spicy tuna)",cal:175,pro:8,carb:24,fat:5},{n:"Pad thai",cal:170,pro:7,carb:22,fat:6},{n:"Chicken curry with sauce",cal:120,pro:9,carb:6,fat:7},
+  {n:"Chili with beans",cal:110,pro:8,carb:11,fat:4},{n:"Beef stew",cal:99,pro:8,carb:8,fat:4},{n:"Chicken noodle soup",cal:36,pro:2.5,carb:4.3,fat:1},
+  {n:"Tomato soup",cal:30,pro:0.8,carb:6.6,fat:0.2},{n:"Meatloaf",cal:204,pro:16,carb:8,fat:12},{n:"Lasagna",cal:135,pro:8,carb:13,fat:6},
+  {n:"Spaghetti with meat sauce",cal:130,pro:6,carb:17,fat:4},{n:"Shepherd's pie",cal:110,pro:6,carb:11,fat:5},{n:"Pot roast with vegetables",cal:120,pro:11,carb:5,fat:6},
+  {n:"Rotini pasta salad",cal:190,pro:4,carb:22,fat:9},{n:"Potato salad",cal:143,pro:2.6,carb:13,fat:9},{n:"Coleslaw",cal:150,pro:1,carb:14,fat:10},
+  {n:"Potato chips",cal:536,pro:7,carb:53,fat:34},{n:"Tortilla chips",cal:497,pro:7,carb:63,fat:24},{n:"Pretzels",cal:380,pro:10,carb:80,fat:3},
+  {n:"Popcorn, air-popped",cal:387,pro:13,carb:78,fat:4.5},{n:"Popcorn, movie butter",cal:500,pro:8,carb:50,fat:31},{n:"Crackers (typical)",cal:480,pro:7,carb:65,fat:21},
+  {n:"Rice cakes",cal:387,pro:8,carb:82,fat:2.8},{n:"Beef jerky",cal:410,pro:33,carb:11,fat:26},{n:"Trail mix",cal:462,pro:14,carb:45,fat:29},
+  {n:"Dark chocolate",cal:546,pro:4.9,carb:61,fat:31},{n:"Milk chocolate",cal:535,pro:7.7,carb:59,fat:30},{n:"Chocolate chip cookie",cal:488,pro:5.7,carb:64,fat:24},
+  {n:"Brownie",cal:466,pro:6.2,carb:50,fat:29},{n:"Donut, glazed",cal:452,pro:4.9,carb:51,fat:25},{n:"Muffin, blueberry",cal:377,pro:6,carb:54,fat:16},
+  {n:"Ice cream, vanilla",cal:207,pro:3.5,carb:24,fat:11},{n:"Frozen yogurt",cal:159,pro:4,carb:24,fat:5.6},{n:"Apple pie",cal:237,pro:1.9,carb:34,fat:11},
+  {n:"Cheesecake",cal:321,pro:5.5,carb:26,fat:23},{n:"Candy (gummy)",cal:325,pro:6.9,carb:77,fat:0.2},{n:"Granola bar",cal:471,pro:8,carb:64,fat:20},
+  {n:"Orange juice",cal:45,pro:0.7,carb:10,fat:0.2},{n:"Apple juice",cal:46,pro:0.1,carb:11,fat:0.1},{n:"Cola",cal:41,pro:0,carb:11,fat:0},
+  {n:"Sports drink",cal:26,pro:0,carb:7,fat:0},{n:"Energy drink",cal:45,pro:0.4,carb:11,fat:0},{n:"Beer (regular)",cal:43,pro:0.5,carb:3.6,fat:0},
+  {n:"Beer (light)",cal:29,pro:0.2,carb:1.6,fat:0},{n:"Red wine",cal:85,pro:0.1,carb:2.6,fat:0},{n:"White wine",cal:82,pro:0.1,carb:2.6,fat:0},
+  {n:"Whiskey/vodka (spirits)",cal:231,pro:0,carb:0,fat:0},{n:"Coffee, black",cal:1,pro:0.1,carb:0,fat:0},{n:"Latte with 2% milk",cal:42,pro:2.8,carb:4,fat:1.7},
+  {n:"Smoothie (fruit, typical)",cal:60,pro:1,carb:14,fat:0.3},{n:"Protein shake (premade)",cal:70,pro:9,carb:2.5,fat:2.5},{n:"Coconut water",cal:19,pro:0.7,carb:3.7,fat:0.2},
 ];
 
 // ================== helpers (pure) ==================
@@ -1199,7 +1364,7 @@ async function runBarcode(){
 }
 
 async function tryUSDABarcode(code){
-  if (cfg.usdaKey){
+  if (effectiveUsdaKey()){
     try {
       const hits = await searchUSDA(code); // USDA matches UPC/GTIN in query
       if (hits.length){ selectFood(hits[0]); return; }
@@ -1357,10 +1522,13 @@ function renderRecents(){
   const btn = document.getElementById("recentsOpenBtn");
   const el = document.getElementById("recentsList");
   const counts = data.foodCounts||{};
-  const list = (data.recents||[])
+  let list = (data.recents||[])
     .slice()
     .sort((a,b)=>(counts[b.name+"|"+(b.brand||"")]||0)-(counts[a.name+"|"+(a.brand||"")]||0))
     .slice(0,30);
+  if (typeof recentsFilter!=="undefined" && recentsFilter){
+    list = list.filter(r=>r.name.toLowerCase().includes(recentsFilter));
+  }
   if(!list.length){ btn.classList.add("hidden"); return; }
   btn.classList.remove("hidden");
   el.innerHTML = "";
@@ -1518,7 +1686,9 @@ function renderLibraryOptions(){
   EXERCISE_LIBRARY.forEach(x=>{ const o=document.createElement("option"); o.value=x; o.textContent=x; og1.appendChild(o); });
   const og2 = document.createElement("optgroup"); og2.label="Cardio";
   CARDIO_TYPES.forEach(x=>{ const o=document.createElement("option"); o.value="[Cardio] "+x; o.textContent=x; og2.appendChild(o); });
-  sel.appendChild(og1); sel.appendChild(og2);
+  const og3 = document.createElement("optgroup"); og3.label="Custom";
+  const oc = document.createElement("option"); oc.value="__CUSTOM__"; oc.textContent="Type my own…"; og3.appendChild(oc);
+  sel.appendChild(og1); sel.appendChild(og2); sel.appendChild(og3);
 }
 
 wDaySel.addEventListener("change", ()=>{ if (typeof editingWorkoutIdx!=="undefined" && editingWorkoutIdx!=null) endWorkoutEdit(true); extraExercises=[]; initSessionState(); renderSessionInputs(); });
@@ -1582,10 +1752,11 @@ function prefillRows(ex, lastVal){
 }
 function initSessionState(){
   sessionState = {};
+  sessionSwaps = {};
   const v = wDaySel.value;
   if (v==="__CARDIO__") return;
   const last = (v!=="__FREE__") ? lastSessionFor(v) : null;
-  currentDayExercises().concat(extraExercises).forEach(ex=>{
+  sessionList().forEach(ex=>{
     const isCardio = ex.name.indexOf("[Cardio] ")===0;
     if (isCardio){
       sessionState[ex.name] = {mode:"text", rows:[], text:"", auto:false};
@@ -1606,7 +1777,7 @@ function renderSessionInputs(){
   }
   strengthBlock.classList.remove("hidden"); cardioBlock.classList.add("hidden");
   const last = (v!=="__FREE__") ? lastSessionFor(v) : null;
-  const list = currentDayExercises().concat(extraExercises);
+  const list = sessionList();
   const container = document.getElementById("exerciseInputs");
   container.innerHTML = "";
   if (!list.length){
@@ -1642,6 +1813,26 @@ function renderSessionInputs(){
         renderSessionInputs();
       });
       tools.appendChild(sameBtn);
+    }
+    const vBtn = document.createElement("button");
+    vBtn.className = "xbtn"; vBtn.textContent = "\uD83C\uDFA5";
+    vBtn.title = "How to do this - video";
+    vBtn.addEventListener("click", ()=>openFormVideo(ex.name));
+    tools.appendChild(vBtn);
+    const origName = ex.__orig || ex.name;
+    if (ALT_MAP[origName] || ex.__orig){
+      const swBtn = document.createElement("button");
+      swBtn.className = "xbtn"; swBtn.textContent = "\u21C4";
+      swBtn.title = "Swap for an alternative";
+      swBtn.addEventListener("click", ()=>{
+        const existing = div.querySelector(".swapmenu");
+        if (existing) { existing.remove(); return; }
+        const holder = document.createElement("div");
+        holder.className = "swapmenu";
+        div.insertBefore(holder, div.children[1] || null);
+        offerSwap(origName, ex.name, holder);
+      });
+      tools.appendChild(swBtn);
     }
     const tBtn = document.createElement("button");
     tBtn.className = "xbtn"; tBtn.textContent = st.mode==="rows" ? "\u2328" : "#";
@@ -1718,8 +1909,18 @@ function renderSessionInputs(){
   });
 }
 
+document.getElementById("addExSel").addEventListener("change", ()=>{
+  document.getElementById("addExCustom").classList.toggle("hidden", document.getElementById("addExSel").value!=="__CUSTOM__");
+});
 document.getElementById("addExBtn").addEventListener("click", ()=>{
-  const name = document.getElementById("addExSel").value;
+  let name = document.getElementById("addExSel").value;
+  if (name==="__CUSTOM__"){
+    name = document.getElementById("addExCustom").value.trim();
+    if (!name){ flashSave("Type the exercise name", true); return; }
+    document.getElementById("addExCustom").value = "";
+    document.getElementById("addExCustom").classList.add("hidden");
+    document.getElementById("addExSel").selectedIndex = 0;
+  }
   extraExercises.push({name:name, scheme:""});
   renderSessionInputs();
 });
@@ -1806,18 +2007,36 @@ function renderWork(){
     return;
   }
   const sorted = data.workouts.map((s,idx)=>Object.assign({},s,{idx})).sort((a,b)=>b.date.localeCompare(a.date));
-  el.innerHTML = sorted.map(s=>{
-    const dayObj = program.days.find(p=>p.id===s.day);
-    const title = s.title || (dayObj?dayObj.title:s.day);
-    const setsHTML = Object.keys(s.sets).map(ex=>'<div>'+esc(ex)+': <span style="color:var(--text)">'+esc(formatSets(s.sets[ex]))+'</span></div>').join("");
-    return '<div style="padding:14px 16px; border-bottom:1px solid var(--border); font-size:12px;">'
-      +'<div style="display:flex; justify-content:space-between;">'
-      +'<span style="font-weight:600; color:var(--ember);">'+fmtDate(s.date)+' — '+esc(title)+'</span>'
-      +'<button class="del edtWork" data-i="'+s.idx+'" aria-label="Edit" style="color:var(--dim); margin-right:2px;">✎</button>'
-      +'<button class="del delWork" data-i="'+s.idx+'" aria-label="Delete">✕</button></div>'
-      +'<div style="color:var(--dim); margin-top:6px; line-height:1.7;">'+setsHTML
-      +(s.notes?'<div style="color:var(--ember); margin-top:3px;">Note: '+esc(s.notes)+'</div>':'')
-      +'</div></div>';
+  const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const groups = {};
+  const order = [];
+  sorted.forEach(s=>{
+    const key = s.date.slice(0,7);
+    if (!groups[key]){ groups[key] = []; order.push(key); }
+    groups[key].push(s);
+  });
+  const curKey = todayStr().slice(0,7);
+  el.innerHTML = order.map(key=>{
+    const list = groups[key];
+    const label = MONTHS[Number(key.slice(5,7))-1]+" "+key.slice(0,4);
+    const openAttr = key===curKey ? " open" : "";
+    const body = list.map(s=>{
+      const dayObj = program.days.find(p=>p.id===s.day);
+      const title = s.title || (dayObj?dayObj.title:s.day);
+      const setsHTML = Object.keys(s.sets).map(ex=>'<div>'+esc(ex)+': <span style="color:var(--text)">'+esc(formatSets(s.sets[ex]))+'</span></div>').join("");
+      return '<div style="padding:14px 16px; border-bottom:1px solid var(--border); font-size:12px;">'
+        +'<div style="display:flex; justify-content:space-between;">'
+        +'<span style="font-weight:600; color:var(--ember);">'+fmtDate(s.date)+' — '+esc(title)+'</span>'
+        +'<button class="del edtWork" data-i="'+s.idx+'" aria-label="Edit" style="color:var(--dim); margin-right:2px;">✎</button>'
+        +'<button class="del delWork" data-i="'+s.idx+'" aria-label="Delete">✕</button></div>'
+        +'<div style="color:var(--dim); margin-top:6px; line-height:1.7;">'+setsHTML
+        +(s.notes?'<div style="color:var(--ember); margin-top:3px;">Note: '+esc(s.notes)+'</div>':'')
+        +'</div></div>';
+    }).join("");
+    return '<details'+openAttr+' style="border-bottom:1px solid var(--border);">'
+      +'<summary style="padding:12px 16px; cursor:pointer; font-family:\'Oswald\',sans-serif; font-weight:600; font-size:13px; letter-spacing:.05em; text-transform:uppercase; color:var(--text); list-style:none; display:flex; justify-content:space-between;">'
+      +'<span>'+label+'</span><span style="color:var(--dim); font-size:11px;">'+list.length+' session'+(list.length===1?'':'s')+'</span></summary>'
+      +body+'</details>';
   }).join("");
   el.querySelectorAll(".delWork").forEach(b=>b.addEventListener("click",()=>{
     data.workouts.splice(Number(b.dataset.i),1); save(); renderWork(); renderDash();
@@ -2211,6 +2430,13 @@ document.getElementById("addWtBtn").addEventListener("click", ()=>{
   data.weights.push({date:dt, lbs:v});
   bumpLog();
   document.getElementById("wtVal").value="";
+  if (data.weights.length===1){
+    const cutting = cfg.goalWt < cfg.startWt;
+    if ((cutting && v > cfg.startWt) || (!cutting && v < cfg.startWt)){
+      cfg.startWt = v; saveCfg();
+      flashSave("Starting line set at "+v+" — the journey begins today \uD83D\uDD25");
+    }
+  }
   save(); renderWeight(); renderDash(); renderProjection(); renderWeek();
   if (dt===todayStr()) checkWeightAdjust(v);
 });
@@ -2233,7 +2459,7 @@ function renderWeight(){
   document.getElementById("chart").innerHTML =
   '<svg viewBox="0 0 '+w+' '+h+'">'
     +'<defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="var(--ember-deep)"/><stop offset="100%" stop-color="var(--ember)"/></linearGradient>'
-    +'<linearGradient id="fg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(255,122,61,.25)"/><stop offset="100%" stop-color="rgba(255,122,61,0)"/></linearGradient></defs>'
+    +'<linearGradient id="fg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(var(--ember-rgb),.25)"/><stop offset="100%" stop-color="rgba(var(--ember-rgb),0)"/></linearGradient></defs>'
     +grid
     +'<line x1="'+pad+'" x2="'+(w-pad)+'" y1="'+y(cfg.goalWt)+'" y2="'+y(cfg.goalWt)+'" stroke="var(--ok)" stroke-width="1.5" stroke-dasharray="6 5"/>'
     +'<text x="'+(w-pad)+'" y="'+(y(cfg.goalWt)-7)+'" text-anchor="end" font-size="11" fill="var(--ok)" font-family="IBM Plex Mono">GOAL '+cfg.goalWt+'</text>'
@@ -2656,12 +2882,184 @@ function mapUSDA(f){
   };
 }
 async function searchUSDA(q){
-  if (!cfg.usdaKey) return [];
-  const res = await fetchWithTimeout("https://api.nal.usda.gov/fdc/v1/foods/search?api_key="+encodeURIComponent(cfg.usdaKey)
+  if (!effectiveUsdaKey()) return [];
+  const res = await fetchWithTimeout("https://api.nal.usda.gov/fdc/v1/foods/search?api_key="+encodeURIComponent(effectiveUsdaKey())
     +"&query="+encodeURIComponent(q)+"&pageSize=10&dataType=Branded,Foundation,SR%20Legacy", 8000);
   const json = await res.json();
   return (json.foods||[]).map(mapUSDA).filter(Boolean);
 }
+// ================== V23: WATER / QUOTES / ACCENTS / SWAPS ==================
+// ---------- water tracking (optional) ----------
+function renderWater(){
+  const card = document.getElementById("waterCard");
+  card.classList.toggle("hidden", !cfg.waterOn);
+  if (!cfg.waterOn) return;
+  if (!data.water) data.water = {};
+  document.getElementById("waterCount").textContent = data.water[todayStr()] || 0;
+}
+document.getElementById("waterToggleBtn").addEventListener("click", ()=>{
+  cfg.waterOn = !cfg.waterOn;
+  saveCfg();
+  document.getElementById("waterToggleBtn").textContent = cfg.waterOn ? "Disable water tracking" : "Enable water tracking";
+  ackBtn("waterToggleBtn", cfg.waterOn ? "✓ Enabled" : "✓ Disabled");
+  renderWater();
+});
+document.getElementById("waterPlus").addEventListener("click", ()=>{
+  if (!data.water) data.water = {};
+  data.water[todayStr()] = (data.water[todayStr()]||0) + 1;
+  save(); renderWater();
+});
+document.getElementById("waterMinus").addEventListener("click", ()=>{
+  if (!data.water) data.water = {};
+  data.water[todayStr()] = Math.max(0, (data.water[todayStr()]||0) - 1);
+  save(); renderWater();
+});
+
+// ---------- motivation page ----------
+document.getElementById("quotesOpenBtn").addEventListener("click", ()=>{
+  const el = document.getElementById("quotesList");
+  el.innerHTML = QUOTES.map(x=>
+    '<div class="card" style="margin-bottom:12px;">'
+    +'<div style="font-size:15px; line-height:1.7;">\u201C'+esc(x.q)+'\u201D</div>'
+    +'<div style="color:var(--ember); font-family:\'Oswald\',sans-serif; font-weight:600; font-size:13px; margin-top:8px; text-transform:uppercase; letter-spacing:.05em;">\u2014 '+esc(x.a)+'</div>'
+    +'</div>').join("")
+    +'<div class="card"><div class="label" style="margin-bottom:10px;">And a few things worth remembering</div>'
+    +TIPS.map(t=>'<div style="font-size:13px; line-height:1.7; margin-bottom:10px; color:var(--dim);">\u2022 '+esc(t)+'</div>').join("")+'</div>';
+  lockScroll();
+  document.getElementById("quotesOverlay").classList.remove("hidden");
+  document.getElementById("quotesOverlay").scrollTop = 0;
+});
+document.getElementById("quotesCloseBtn").addEventListener("click", ()=>{
+  document.getElementById("quotesOverlay").classList.add("hidden");
+  unlockScroll();
+});
+
+// ---------- accent colors ----------
+const ACCENTS = {
+  ember:   {name:"Ember",   c:"#FF7A3D", deep:"#E8571F", rgb:"255,122,61"},
+  steel:   {name:"Steel",   c:"#4D9DE0", deep:"#2E6FB0", rgb:"77,157,224"},
+  emerald: {name:"Emerald", c:"#34D399", deep:"#0E9F6E", rgb:"52,211,153"},
+  crimson: {name:"Crimson", c:"#F43F5E", deep:"#BE123C", rgb:"244,63,94"},
+  violet:  {name:"Violet",  c:"#A78BFA", deep:"#7C3AED", rgb:"167,139,250"},
+  gold:    {name:"Gold",    c:"#FBBF24", deep:"#D97706", rgb:"251,191,36"},
+};
+function applyAccent(){
+  const a = ACCENTS[cfg.accent] || ACCENTS.ember;
+  const r = document.documentElement.style;
+  r.setProperty("--ember", a.c);
+  r.setProperty("--ember-deep", a.deep);
+  r.setProperty("--ember-rgb", a.rgb);
+}
+function renderAccentRow(){
+  const row = document.getElementById("accentRow");
+  row.innerHTML = "";
+  Object.keys(ACCENTS).forEach(key=>{
+    const a = ACCENTS[key];
+    const b = document.createElement("button");
+    b.setAttribute("aria-label", a.name);
+    b.title = a.name;
+    b.style.cssText = "width:36px; height:36px; border-radius:50%; cursor:pointer; background:linear-gradient(135deg,"+a.c+","+a.deep+");"
+      + "border:3px solid " + ((cfg.accent||"ember")===key ? "var(--text)" : "transparent") + ";";
+    b.addEventListener("click", ()=>{
+      cfg.accent = key;
+      saveCfg();
+      applyAccent();
+      renderAccentRow();
+      flashSave(a.name + " ✓");
+    });
+    row.appendChild(b);
+  });
+}
+
+// ---------- session exercise swaps + form videos ----------
+let sessionSwaps = {}; // original program name -> substituted name
+function sessionList(){
+  return currentDayExercises().concat(extraExercises).map(ex=>
+    sessionSwaps[ex.name] ? {name:sessionSwaps[ex.name], scheme:ex.scheme, __orig:ex.name} : ex);
+}
+function openFormVideo(name){
+  window.open("https://www.youtube.com/results?search_query="+encodeURIComponent(name.replace("[Cardio] ","")+" proper form how to"), "_blank");
+}
+function offerSwap(origName, currentShown, container){
+  const base = origName;
+  const opts = (ALT_MAP[base]||[]).filter(a=>a!==currentShown);
+  if (currentShown!==base) opts.unshift(base+" (original)");
+  const menu = document.createElement("div");
+  menu.style.cssText = "margin:6px 0 10px; display:flex; flex-direction:column; gap:6px;";
+  opts.forEach(o=>{
+    const label = o;
+    const target = o.endsWith(" (original)") ? base : o;
+    const b = document.createElement("button");
+    b.className = "xbtn";
+    b.textContent = "\u21C4 " + label;
+    b.addEventListener("click", ()=>{
+      const shownOld = sessionSwaps[base] || base;
+      delete sessionState[shownOld];
+      if (target===base) delete sessionSwaps[base];
+      else sessionSwaps[base] = target;
+      initSessionStateFor(target===base ? base : target);
+      renderSessionInputs();
+    });
+    menu.appendChild(b);
+  });
+  const cancel = document.createElement("button");
+  cancel.className = "xbtn";
+  cancel.textContent = "Cancel";
+  cancel.addEventListener("click", ()=>menu.remove());
+  menu.appendChild(cancel);
+  container.appendChild(menu);
+}
+function initSessionStateFor(exName){
+  const v = wDaySel.value;
+  const last = (v!=="__FREE__" && v!=="__CARDIO__") ? lastSessionFor(v) : null;
+  // prefill the swapped-in exercise from ITS OWN history anywhere, not just this day
+  let lastVal = last && last.sets ? last.sets[exName.replace("[Cardio] ","")] : null;
+  if (!lastVal){
+    const hist = data.workouts.slice().reverse().find(w=>w.sets && w.sets[exName.replace("[Cardio] ","")]);
+    if (hist) lastVal = hist.sets[exName.replace("[Cardio] ","")];
+  }
+  const pf = prefillRows({name:exName, scheme:""}, lastVal);
+  sessionState[exName] = exName.indexOf("[Cardio] ")===0
+    ? {mode:"text", rows:[], text:"", auto:false}
+    : {mode:"rows", rows:pf.rows, text:"", auto:pf.auto};
+}
+
+// ---------- recents search ----------
+let recentsFilter = "";
+document.getElementById("recentsSearch").addEventListener("input", ()=>{
+  recentsFilter = document.getElementById("recentsSearch").value.trim().toLowerCase();
+  renderRecents();
+});
+
+// ---------- warm journey messaging ----------
+function renderJourneyMsg(){
+  const el = document.getElementById("journeyMsg");
+  el.classList.add("hidden");
+  if (!cfg.goalWt || !cfg.startWt || cfg.goalWt===cfg.startWt) return;
+  const sorted = data.weights.slice().sort((a,b)=>a.date.localeCompare(b.date));
+  if (!sorted.length) return;
+  const cur = sorted[sorted.length-1].lbs;
+  const cutting = cfg.goalWt < cfg.startWt;
+  const spanDays = (new Date(sorted[sorted.length-1].date) - new Date(sorted[0].date))/86400000;
+  const wrongDir = cutting ? cur > cfg.startWt : cur < cfg.startWt;
+  const downOverall = cutting ? Math.round((cfg.startWt-cur)*10)/10 : Math.round((cur-cfg.startWt)*10)/10;
+  // recent drift: last 7 days moving against the goal while still ahead overall
+  const weekAgoIdx = sorted.findIndex(w=>(new Date(sorted[sorted.length-1].date)-new Date(w.date))/86400000 <= 7);
+  const weekDelta = weekAgoIdx>=0 ? cur - sorted[weekAgoIdx].lbs : 0;
+  const drifting = cutting ? weekDelta > 1 : weekDelta < -1;
+
+  if (wrongDir && spanDays < 14){
+    el.textContent = "You showed up and weighed in — that's the habit that wins. \uD83D\uDD25 Early numbers bounce around; yours will settle. Keep stacking days.";
+    el.classList.remove("hidden");
+  } else if (wrongDir){
+    el.textContent = "New starting line, same destination. Today's number is just where this stretch begins — every meal logged and every rep from here counts. You've got this. \uD83D\uDCAA";
+    el.classList.remove("hidden");
+  } else if (drifting && downOverall > 1){
+    el.textContent = "One rough stretch doesn't erase your work — you're still "+downOverall+" lb "+(cutting?"down":"up")+" overall. Champions have bad weeks; they don't have bad months. Tighten up and go. \uD83D\uDD25";
+    el.classList.remove("hidden");
+  }
+}
+
 // ================== AI ENGINE (bring-your-own-key) ==================
 const AI_MODEL = "claude-sonnet-4-6";
 function hasAIKey(){ return !!(cfg.anthropicKey && cfg.anthropicKey.trim()); }
@@ -2956,11 +3354,13 @@ document.getElementById("aiPhotoFile").addEventListener("change", async (ev)=>{
     aiFoodStatus("Coach is looking at your plate…");
     const reply = await anthropicCall([{role:"user", content:[
       {type:"image", source:{type:"base64", media_type:"image/jpeg", data:b64}},
-      {type:"text", text:"Identify the foods in this meal photo and estimate portions and macros."},
+      {type:"text", text:"Identify the foods in this meal photo and estimate portions and macros."
+        + (document.getElementById("aiPhotoCaption").value.trim() ? " Context from the user: " + document.getElementById("aiPhotoCaption").value.trim() + " — use it to identify the restaurant/dish and improve accuracy." : "")},
     ]}], FOOD_AI_SYSTEM, 1200);
     const foods = parseFoodsReply(reply);
     aiFoodStatus(null);
     showFoodConfirm(foods);
+    document.getElementById("aiPhotoCaption").value = "";
   } catch(e){
     aiFoodStatus("⚠ "+(e.message||"Could not read that photo"), true);
   }
@@ -3198,7 +3598,7 @@ function renderProjection(){
     return;
   }
   if ((toGo<0 && rate>=0) || (toGo>0 && rate<=0)){
-    el.textContent = "Trending "+(rate>0?"+":"")+rate+" lb/week — currently moving away from your "+cfg.goalWt+" lb goal.";
+    el.textContent = "Trending "+(rate>0?"+":"")+rate+" lb/week right now — but you are here, logging, which is how every turnaround starts. Refocus this week; the trend follows the work. \uD83D\uDD25";
     return;
   }
   const weeks = toGo/rate;
@@ -3451,7 +3851,7 @@ function renderSetupStep(){
 
   if (setupStep===3){
     body.innerHTML = '<div class="card"><div class="label">Step 4 · Food database</div>'
-      +'<div class="note" style="margin:8px 0 12px;">Search works out of the box (built-in foods + a worldwide barcode database). Adding a <b>free USDA key</b> unlocks 400,000+ US branded products — takes about a minute.</div>'
+      +'<div class="note" style="margin:8px 0 12px;">Food search works out of the box — hundreds of built-in staples, 400,000+ US branded products via a shared key, and a worldwide barcode database. Optionally add your own free USDA key for guaranteed speed.</div>'
       +'<a href="https://fdc.nal.usda.gov/api-key-signup.html" target="_blank" style="color:var(--ember); font-size:13px;">Get a free key at fdc.nal.usda.gov →</a>'
       +'<div class="row mt10" style="align-items:flex-end;">'
       +'<div style="flex:1;"><div class="label">Paste key (or skip)</div><input id="suUsda" placeholder="Your API key"></div>'
@@ -3504,7 +3904,7 @@ const FAQ = [
   {q:"How do I log my weight?", a:"Fastest way: the small field on the <b>Home</b> tab — type today's weight, tap Record. The Weight tab does the same plus lets you log past dates. Weigh at the same time each day and judge the weekly trend, not any single day."},
 
   {sec:"Food logging"},
-  {q:"How do I get the full food database (USDA key)?", a:"In <b>⚙ Settings → USDA food database</b>, tap the fdc.nal.usda.gov link, sign up with your name and email (free, ~1 minute), and the key arrives by email instantly. Paste it in and tap <b>Save key</b>. This adds 400,000+ US branded products — including store brands — to your searches."},
+  {q:"Do I need a USDA key for food search?", a:"No — a shared community key is built in, so 400,000+ US branded products work out of the box. If searches ever feel slow at peak times, grab your own free key in ~1 minute (⚙ Settings → the fdc.nal.usda.gov link, key arrives by email) and paste it in — yours then takes priority."},
   {q:"How does barcode scanning work?", a:"On the Food tab tap <b>📷 Scan barcode</b> and point your camera at the label (allow camera access when asked). If the product is found, it loads with full macros. You can also type the UPC number manually and tap Look up."},
   {q:"A barcode wasn't found — now what?", a:"The app opens a <b>save-it-once form</b>: copy the serving size and macros off the nutrition label, save, and that barcode belongs to you forever. Next scan of the same product loads instantly, it shows up in text search, and it lives in <b>🍱 My foods</b> where you can edit or delete it anytime."},
   {q:"What are the meal buttons (Bkfst/Lunch/Dinner/Snacks)?", a:"Every entry is filed under a meal. The right one pre-selects itself by time of day — just override by tapping if needed. The day list shows only the selected meal with its own subtotal; the Totals bars always count the whole day."},
@@ -3513,6 +3913,7 @@ const FAQ = [
   {q:"How do I adjust the amount I ate?", a:"After picking any food, use the <b>slider or the amount field</b> — calories and macros recalculate live. Units: grams, oz, lb, ml, fl oz, or the product's serving."},
 
   {sec:"Training"},
+  {q:"I don't know how to do an exercise / I want a different one", a:"Two buttons on every exercise in your session: <b>🎥</b> opens form videos for that exact movement, and <b>⇄</b> (when available) offers same-muscle alternatives — tap one and it swaps in for today's session with its own history prefilled, no program editing needed. Want it permanent? Change it in ✎ Edit this program. The AI Coach can also suggest substitutions for anything."},
   {q:"How do I log a workout?", a:"Train tab → pick your session day (or tap <b>▶ Start next</b> on Home, which knows your rotation). Each exercise shows set rows prefilled from last time — adjust with the <b>−5/+5</b> and <b>−1/+1</b> buttons, tap <b>✓</b> as you finish sets (auto-starts your rest timer), then <b>Log session</b>. The <b>= last</b> button fills an exercise identical to last time in one tap; the <b>⌨</b> button switches to free-text typing."},
   {q:"I logged something wrong — can I fix it?", a:"Yes, everything is editable. Food: tap <b>✎</b> on any entry, fix the values, tap <b>Update entry</b>. Workouts: tap <b>✎</b> on any session in history — it loads back into the set rows, change what you need, tap <b>Update session</b> (corrections don't re-trigger celebrations or false PRs). Cardio sessions, custom foods, and saved meals are all editable too."},
   {q:"What does '+5 auto' mean?", a:"You hit all your target reps at the same weight last session, so the app pre-loaded 5 lb more — progressive overload applied for you. You can always change it."},
@@ -3529,6 +3930,9 @@ const FAQ = [
   {q:"Is the AI key safe? What does it cost?", a:"Your key is stored only on this device, sent only to Anthropic with your requests, and <b>deliberately excluded from backup files</b>. You pay Anthropic directly for what you use — a coaching chat or photo estimate costs roughly a cent. No subscription, no middleman. Clear it anytime in Settings."},
   {q:"How accurate is photo / AI food logging?", a:"They're <b>estimates</b> — good ones, but the AI is judging portions from a description or a photo. Every item shows before logging so you can remove anything, and after logging you can ✎ edit values. For packaged foods with labels, the barcode scan is exact; use AI logging for plates, restaurants, and speed."},
   {q:"What is the AI Coach report?", a:"On the Home tab, the <b>🤖 AI Coach</b> card builds a progress report from your real data — weight trend, measured TDEE, nutrition adherence, per-lift progression, and your current program. Tap <b>Copy report</b>, paste it into Claude, ChatGPT, or any AI, and ask away. The report even includes your program in FORGE format, so the AI can return an adjusted program you load right back in (Train → ⬆ Load). Completely optional — the app works fully without it."},
+  {q:"Can I track water?", a:"Yes — <b>⚙ Settings → Enable water tracking</b> adds a one-tap glass counter to your Home tab. Off by default, toggle anytime."},
+  {q:"Can I change the app's color?", a:"Yes — <b>⚙ Settings → Accent color</b> has six looks: Ember, Steel, Emerald, Crimson, Violet, and Gold. One tap re-themes the whole app instantly."},
+  {q:"How do I look back at past workouts?", a:"The Train tab's history is grouped by <b>month</b> — the current month is open, tap any older month to expand it. Every session shows its full sets and is editable with ✎. For a single lift's progress over time, tap it on the PR board for the chart."},
   {q:"How do I track body measurements?", a:"It's optional: <b>⚙ Settings → Enable body measurements</b> adds a waist/chest/arm tracker to the Weight tab. On a fat-loss phase, a shrinking waist is often better evidence than the scale. Toggle it off anytime — entries stay saved."},
 
   {sec:"Legal"},
@@ -3833,6 +4237,13 @@ document.getElementById("dashWtBtn").addEventListener("click", ()=>{
   data.weights.push({date:dt, lbs:v});
   bumpLog();
   document.getElementById("dashWtInput").value="";
+  if (data.weights.length===1){
+    const cutting = cfg.goalWt < cfg.startWt;
+    if ((cutting && v > cfg.startWt) || (!cutting && v < cfg.startWt)){
+      cfg.startWt = v; saveCfg();
+      flashSave("Starting line set at "+v+" — the journey begins today \uD83D\uDD25");
+    }
+  }
   save(); renderWeight(); renderDash(); renderTDEE(); renderProjection(); renderWeek();
   flashSave("Weight recorded ✓");
   ackBtn("dashWtBtn", "✓");
@@ -3853,6 +4264,7 @@ function renderJourney(){
   document.getElementById("jyNow").textContent = (pct>=1 ? "🏁 " : "") + cur + " lb";
   document.getElementById("jyStart").textContent = cfg.startWt + " start";
   document.getElementById("jyGoal").textContent = cfg.goalWt + " goal";
+  renderJourneyMsg();
 }
 function renderDash(){
   renderJourney();
@@ -3899,12 +4311,13 @@ function renderNextWorkout(){
   btn.textContent = "▶ Start next: "+(nd.id?nd.id+" · ":"")+nd.title;
   btn.classList.remove("hidden");
 }
-function renderAll(){ renderDash(); renderFood(); renderWork(); renderWeight(); renderSettings(); renderMeals(); renderPRs(); renderTDEE(); renderNextWorkout(); renderWeek(); renderProjection(); renderMeasureToggle(); renderMeasure(); renderBackup();
+function renderAll(){ renderDash(); renderFood(); renderWork(); renderWeight(); renderSettings(); renderMeals(); renderPRs(); renderTDEE(); renderNextWorkout(); renderWeek(); renderProjection(); renderMeasureToggle(); renderMeasure(); renderWater(); renderAccentRow(); renderBackup();
   const st = computeStreak();
   const sl = document.getElementById("streakLine");
   if (st>=2){ sl.textContent = "🔥 "+st+"-day logging streak — keep the chain alive"; sl.classList.remove("hidden"); }
   else sl.classList.add("hidden");
   document.getElementById("sUsdaKey").value = cfg.usdaKey||"";
+  document.getElementById("waterToggleBtn").textContent = cfg.waterOn ? "Disable water tracking" : "Enable water tracking";
   renderAIGates();
 }
 
@@ -3912,6 +4325,7 @@ function renderAll(){ renderDash(); renderFood(); renderWork(); renderWeight(); 
 renderDayOptions();
 renderCardioOptions();
 renderLibraryOptions();
+applyAccent();
 initSessionState();
 renderSessionInputs();
 renderMealSeg();
