@@ -381,8 +381,16 @@
         <div style="flex:1;"><input id="aiPhotoCaption" placeholder="Optional: where/what (e.g. Chipotle chicken bowl)"></div>
         <button class="xbtn" id="aiPhotoBtn" style="flex:0 0 auto;">📸 Photo</button>
       </div>
+      <div id="aiHandoffControls" class="hidden">
+        <div class="row mt10">
+          <button class="btn ghost small" id="hfCopyFoodBtn">📋 Copy food prompt</button>
+          <button class="btn ghost small" id="hfShareBtn">📸 Share a photo</button>
+        </div>
+        <button class="btn ghost small mt10" id="hfPasteBtn" style="width:100%;">📥 Paste ChatGPT's reply &amp; review</button>
+        <div class="note" style="margin-top:6px;">Copy the prompt (or share a photo with it) into ChatGPT, then paste its reply back here to review before logging.</div>
+      </div>
       <input type="file" id="aiPhotoFile" accept="image/*" class="hidden">
-      <div class="note" style="margin-top:6px;">Photos are analyzed and immediately discarded — never stored, never uploaded anywhere but the AI.</div>
+      <div class="note" style="margin-top:6px;">Photos are analyzed and immediately discarded — never stored, never uploaded anywhere but the AI. Pasted replies are parsed, confirmed, then cleared.</div>
       <div id="aiFoodStatus" class="note hidden" style="margin-top:8px;"></div>
       <div id="aiFoodConfirm" class="hidden" style="margin-top:10px;"></div>
     </div>
@@ -697,12 +705,30 @@
     </div>
 
     <div class="card">
-      <div class="label" style="margin-bottom:10px;">🤖 AI Coach key (optional)</div>
-      <div class="note" style="margin:0 0 10px;">Powers the in-app Coach chat, photo meal logging, and AI quick-log. Get a key at <a href="https://console.anthropic.com/" target="_blank" rel="noopener" style="color:var(--ember);">console.anthropic.com</a> (account + billing required; usage costs pennies per chat). Stored only on this device and excluded from backups.</div>
-      <div class="row" style="align-items:flex-end;">
-        <div style="flex:1;"><input id="sAnthropicKey" placeholder="sk-ant-…" autocomplete="off"></div>
-        <button class="xbtn" id="saveAnthropicBtn" style="flex:0 0 auto;">Save key</button>
+      <div class="label" style="margin-bottom:10px;">🤖 AI Coach (optional)</div>
+      <div class="note" style="margin:0 0 10px;">Powers the in-app Coach chat, photo meal logging, and AI quick-log. Pick how BlackPyre talks to an AI — keys are stored only on this device and excluded from backups.</div>
+      <div class="label">Provider</div>
+      <select id="sAiProvider" style="margin-bottom:10px;">
+        <option value="anthropic">Claude (Anthropic API key)</option>
+        <option value="openai">ChatGPT (OpenAI API key)</option>
+        <option value="handoff">ChatGPT handoff — no key, copy &amp; paste</option>
+      </select>
+      <div id="aiKeyAnthRow">
+        <div class="label">Anthropic API key</div>
+        <input id="sAnthropicKey" placeholder="sk-ant-…" autocomplete="off" style="margin-bottom:10px;">
+        <div class="note" style="margin:0 0 10px;">Get one at <a href="https://console.anthropic.com/" target="_blank" rel="noopener" style="color:var(--ember);">console.anthropic.com</a> — separate from a Claude subscription; pay-per-use, pennies per chat.</div>
       </div>
+      <div id="aiKeyOaiRow" class="hidden">
+        <div class="label">OpenAI API key</div>
+        <input id="sOpenaiKey" placeholder="sk-…" autocomplete="off" style="margin-bottom:10px;">
+        <div class="note" style="margin:0 0 10px;">Get one at <a href="https://platform.openai.com/" target="_blank" rel="noopener" style="color:var(--ember);">platform.openai.com</a> — separate from a ChatGPT Plus subscription; pay-per-use, pennies per chat.</div>
+      </div>
+      <div id="aiModelRow">
+        <div class="label">Model (optional)</div>
+        <input id="sAiModel" placeholder="" autocomplete="off" style="margin-bottom:10px;">
+      </div>
+      <div class="note hidden" id="aiHandoffNote" style="margin:0 0 10px;">No key needed. BlackPyre writes the prompts; you paste them into the ChatGPT app (or claude.ai) and paste the reply back. Works with the subscription you already have.</div>
+      <button class="xbtn" id="saveAiBtn">Save AI settings</button>
     </div>
     <div class="card">
       <div class="label" style="margin-bottom:10px;">Data</div>
@@ -3440,25 +3466,67 @@ function renderUsual(){
 }
 
 // ================== AI ENGINE (bring-your-own-key) ==================
-const AI_MODEL = "claude-sonnet-4-6";
-function hasAIKey(){ return !!(cfg.anthropicKey && cfg.anthropicKey.trim()); }
+const AI_DEFAULT_MODELS = { anthropic:"claude-sonnet-4-6", openai:"gpt-4o" };
+function aiProvider(){ return cfg.aiProvider || "anthropic"; }
+function aiModelFor(p){
+  const override = p==="openai" ? cfg.aiModelOai : cfg.aiModelAnth;
+  return (override && override.trim()) ? override.trim() : AI_DEFAULT_MODELS[p];
+}
+function hasAIKey(){
+  const p = aiProvider();
+  if (p==="openai") return !!(cfg.openaiKey && cfg.openaiKey.trim());
+  if (p==="anthropic") return !!(cfg.anthropicKey && cfg.anthropicKey.trim());
+  return false; // handoff mode: no live API
+}
+function isHandoff(){ return aiProvider()==="handoff"; }
 
-document.getElementById("saveAnthropicBtn").addEventListener("click", ()=>{
-  cfg.anthropicKey = document.getElementById("sAnthropicKey").value.trim();
+document.getElementById("sAiProvider").addEventListener("change", ()=>{
+  cfg.aiProvider = document.getElementById("sAiProvider").value;
   saveCfg();
   renderAIGates();
-  ackBtn("saveAnthropicBtn", cfg.anthropicKey ? "✓ Key saved" : "✓ Cleared");
-  flashSave(cfg.anthropicKey ? "AI Coach unlocked ✓" : "AI key cleared");
+});
+document.getElementById("saveAiBtn").addEventListener("click", ()=>{
+  cfg.aiProvider = document.getElementById("sAiProvider").value;
+  cfg.anthropicKey = document.getElementById("sAnthropicKey").value.trim();
+  cfg.openaiKey = document.getElementById("sOpenaiKey").value.trim();
+  const m = document.getElementById("sAiModel").value.trim();
+  if (cfg.aiProvider==="openai") cfg.aiModelOai = m;
+  else if (cfg.aiProvider==="anthropic") cfg.aiModelAnth = m;
+  saveCfg();
+  renderAIGates();
+  ackBtn("saveAiBtn", "✓ Saved");
+  flashSave(isHandoff() ? "Handoff mode ready ✓" : (hasAIKey() ? "AI Coach unlocked ✓" : "Saved — add a key to go live"));
 });
 
 function renderAIGates(){
+  const p = aiProvider();
+  document.getElementById("sAiProvider").value = p;
   document.getElementById("sAnthropicKey").value = cfg.anthropicKey || "";
-  document.getElementById("aiFoodCard").classList.toggle("hidden", !hasAIKey());
+  document.getElementById("sOpenaiKey").value = cfg.openaiKey || "";
+  document.getElementById("aiKeyAnthRow").classList.toggle("hidden", p!=="anthropic");
+  document.getElementById("aiKeyOaiRow").classList.toggle("hidden", p!=="openai");
+  document.getElementById("aiModelRow").classList.toggle("hidden", p==="handoff");
+  document.getElementById("aiHandoffNote").classList.toggle("hidden", p!=="handoff");
+  const mEl = document.getElementById("sAiModel");
+  if (p!=="handoff"){
+    mEl.placeholder = "default: " + AI_DEFAULT_MODELS[p];
+    mEl.value = (p==="openai" ? cfg.aiModelOai : cfg.aiModelAnth) || "";
+  }
+  // food card: live for API modes, handoff variant otherwise
+  document.getElementById("aiFoodCard").classList.toggle("hidden", !hasAIKey() && !isHandoff());
+  document.getElementById("aiHandoffControls").classList.toggle("hidden", !isHandoff());
+  document.getElementById("aiFoodGoBtn").classList.toggle("hidden", isHandoff());
+  document.getElementById("aiPhotoBtn").classList.toggle("hidden", isHandoff());
+  // coach chat: live API only; handoff points at Copy report
+  document.getElementById("coachOpenBtn").classList.toggle("hidden", isHandoff());
   const note = document.getElementById("coachKeyNote");
-  if (hasAIKey()){ note.classList.add("hidden"); }
+  if (isHandoff()){
+    note.classList.remove("hidden");
+    note.textContent = "Handoff mode: tap 📋 Copy report and paste it into ChatGPT — it contains everything your coach needs, including how to send a program back.";
+  } else if (hasAIKey()){ note.classList.add("hidden"); }
   else {
     note.classList.remove("hidden");
-    note.textContent = "Chat needs a one-time API key — add it in ⚙ Settings → AI Coach key. Copy report works without one.";
+    note.textContent = "Chat needs a one-time API key — add it in ⚙ Settings → AI Coach. Or choose ChatGPT handoff mode there to work key-free. Copy report always works.";
   }
   renderCheckin();
 }
@@ -3472,15 +3540,43 @@ async function anthropicCall(messages, system, maxTokens){
       "anthropic-version": "2023-06-01",
       "anthropic-dangerous-direct-browser-access": "true",
     },
-    body: JSON.stringify({ model: AI_MODEL, max_tokens: maxTokens || 3000, system: system, messages: messages }),
+    body: JSON.stringify({ model: aiModelFor("anthropic"), max_tokens: maxTokens || 3000, system: system, messages: messages }),
   });
   if (!res.ok){
-    if (res.status===401 || res.status===403) throw new Error("Your API key was rejected — check it in Settings.");
+    if (res.status===401 || res.status===403) throw new Error("Your Anthropic key was rejected — check it in Settings.");
     if (res.status===429) throw new Error("Rate limited — wait a few seconds and try again.");
     throw new Error("The AI service returned an error ("+res.status+"). Try again.");
   }
   const j = await res.json();
   return (j.content||[]).map(b=>b.type==="text"?b.text:"").join("");
+}
+
+async function openaiCall(messages, system, maxTokens){
+  const msgs = [{role:"system", content:system}].concat(messages.map(m=>{
+    if (Array.isArray(m.content)){
+      return { role:m.role, content:m.content.map(b=>
+        b.type==="image"
+          ? { type:"image_url", image_url:{ url:"data:"+b.source.media_type+";base64,"+b.source.data } }
+          : { type:"text", text:b.text }) };
+    }
+    return { role:m.role, content:m.content };
+  }));
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { "content-type":"application/json", "authorization":"Bearer "+cfg.openaiKey },
+    body: JSON.stringify({ model: aiModelFor("openai"), max_tokens: maxTokens || 3000, messages: msgs }),
+  });
+  if (!res.ok){
+    if (res.status===401 || res.status===403) throw new Error("Your OpenAI key was rejected — check it in Settings.");
+    if (res.status===429) throw new Error("Rate limited — wait a few seconds and try again.");
+    throw new Error("The AI service returned an error ("+res.status+"). Try again.");
+  }
+  const j = await res.json();
+  return (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || "";
+}
+
+function aiCall(messages, system, maxTokens){
+  return aiProvider()==="openai" ? openaiCall(messages, system, maxTokens) : anthropicCall(messages, system, maxTokens);
 }
 
 // ---------- payload extraction from AI replies ----------
@@ -3586,7 +3682,7 @@ async function sendCoach(){
   typing.classList.remove("hidden");
   document.getElementById("coachSendBtn").disabled = true;
   try {
-    const reply = await anthropicCall(coachHistory, coachSystem(), 3000);
+    const reply = await aiCall(coachHistory, coachSystem(), 3000);
     coachHistory.push({role:"assistant", content: reply});
     const p = extractAIPayloads(reply);
     addCoachBubble("ai", p.display || "Here you go:", p);
@@ -3711,7 +3807,7 @@ document.getElementById("aiFoodGoBtn").addEventListener("click", async ()=>{
   document.getElementById("aiFoodConfirm").classList.add("hidden");
   document.getElementById("aiFoodGoBtn").disabled = true;
   try {
-    const reply = await anthropicCall([{role:"user", content:q}], FOOD_AI_SYSTEM, 1200);
+    const reply = await aiCall([{role:"user", content:q}], FOOD_AI_SYSTEM, 1200);
     const foods = parseFoodsReply(reply);
     aiFoodStatus(null);
     showFoodConfirm(foods);
@@ -3721,17 +3817,18 @@ document.getElementById("aiFoodGoBtn").addEventListener("click", async ()=>{
   }
   document.getElementById("aiFoodGoBtn").disabled = false;
 });
-document.getElementById("aiPhotoBtn").addEventListener("click", ()=>document.getElementById("aiPhotoFile").click());
+document.getElementById("aiPhotoBtn").addEventListener("click", ()=>{ photoMode = "api"; document.getElementById("aiPhotoFile").click(); });
 document.getElementById("aiPhotoFile").addEventListener("change", async (ev)=>{
   const file = ev.target.files && ev.target.files[0];
   ev.target.value = "";
   if (!file) return;
+  if (photoMode==="handoff"){ await handoffSharePhoto(file); return; }
   aiFoodStatus("Reading photo…");
   document.getElementById("aiFoodConfirm").classList.add("hidden");
   try {
     const b64 = await downscaleImage(file, 1024);
     aiFoodStatus("Coach is looking at your plate…");
-    const reply = await anthropicCall([{role:"user", content:[
+    const reply = await aiCall([{role:"user", content:[
       {type:"image", source:{type:"base64", media_type:"image/jpeg", data:b64}},
       {type:"text", text:"Identify the foods in this meal photo and estimate portions and macros."
         + (document.getElementById("aiPhotoCaption").value.trim() ? " Context from the user: " + document.getElementById("aiPhotoCaption").value.trim() + " — use it to identify the restaurant/dish and improve accuracy." : "")},
@@ -3763,6 +3860,62 @@ function downscaleImage(file, maxDim){
     img.src = url;
   });
 }
+
+// ================== CHATGPT HANDOFF MODE (no API key) ==================
+let photoMode = "api"; // which flow the file input feeds
+function handoffFoodPrompt(){
+  const desc = document.getElementById("aiFoodText").value.trim();
+  const cap = document.getElementById("aiPhotoCaption").value.trim();
+  return "Act as a nutrition estimator. "
+    + (desc ? "The meal: " + desc + ". " : "Identify the foods in the attached meal photo. ")
+    + (cap ? "Context: " + cap + ". " : "")
+    + "Estimate realistic portions and reply with ONLY this JSON, no prose, no code fences: "
+    + '{"foods":[{"name":"...","cal":0,"pro":0,"carb":0,"fat":0}]} '
+    + "— one entry per distinct food, calories in kcal, protein/carbs/fat in grams.";
+}
+document.getElementById("hfCopyFoodBtn").addEventListener("click", ()=>{
+  const txt = handoffFoodPrompt();
+  const done = ()=>{ ackBtn("hfCopyFoodBtn", "✓ Copied — paste into ChatGPT"); };
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(done).catch(()=>{ fallbackCopy(txt); done(); });
+  } else { fallbackCopy(txt); done(); }
+});
+document.getElementById("hfShareBtn").addEventListener("click", ()=>{
+  photoMode = "handoff";
+  document.getElementById("aiPhotoFile").click();
+});
+async function handoffSharePhoto(file){
+  const prompt = handoffFoodPrompt();
+  try {
+    if (navigator.share && navigator.canShare && navigator.canShare({files:[file]})){
+      await navigator.share({ files:[file], text: prompt });
+      aiFoodStatus("Shared — when ChatGPT replies, tap 📥 Paste reply.");
+      return;
+    }
+  } catch(e){ /* user cancelled or share failed — fall through to copy */ }
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    try { await navigator.clipboard.writeText(prompt); } catch(e){ fallbackCopy(prompt); }
+  } else fallbackCopy(prompt);
+  aiFoodStatus("Prompt copied — attach the photo in ChatGPT yourself, then paste its reply back here.");
+}
+document.getElementById("hfPasteBtn").addEventListener("click", async ()=>{
+  let text = "";
+  try {
+    if (navigator.clipboard && navigator.clipboard.readText) text = await navigator.clipboard.readText();
+  } catch(e){ /* permission denied */ }
+  if (!text) text = prompt("Paste ChatGPT's reply here:") || "";
+  if (!text.trim()) return;
+  try {
+    const foods = parseFoodsReply(text);
+    aiFoodStatus(null);
+    showFoodConfirm(foods);
+    document.getElementById("aiFoodText").value = "";
+  } catch(e){
+    aiFoodStatus("⚠ Could not read that reply — it should be the JSON the prompt asked for. Try copying ChatGPT's whole message.", true);
+  }
+  text = ""; // parsed and discarded — never stored
+});
+
 
 // ================== AI COACH REPORT ==================
 function aiReport(){
@@ -4307,8 +4460,10 @@ const FAQ = [
   {q:"What is 'Your measured metabolism'?", a:"After ~2 weeks of logging food and weigh-ins, the app computes your <b>actual TDEE</b> from your real intake vs your real weight trend — more accurate than any formula. Tap <b>Recalibrate</b> to update your calorie targets from it."},
   {q:"Why did the app ask if I want to adjust my targets?", a:"Your weight has moved 5+ lb since your targets were set, which changes your calorie needs. Tap <b>Adjust</b> and the calculator opens prefilled with your new weight — recalculate, pick your split, apply. 'Not yet' snoozes it until you've moved further."},
   {q:"What do the weekly review and goal date mean?", a:"The <b>This week</b> card on Home summarizes your last 7 days: average calories, protein compliance, sessions, and weight change. The projection under the weight chart estimates when you reach your goal at your current rate — it updates with every weigh-in and will honestly tell you if the trend is moving the wrong way."},
-  {q:"What can the AI Coach do?", a:"Two tiers. <b>Without any key:</b> the Copy report / Download buttons build a full progress briefing you can paste into any AI. <b>With your own Anthropic API key</b> (⚙ Settings → AI Coach key): a live in-app <b>Coach chat</b> that already knows your data — ask anything, and when it proposes a program or new calorie targets, a one-tap button loads them straight in. Plus <b>✨ AI quick log</b> (type \"2 eggs and toast\" → logged) and <b>📸 photo meal logging</b> (snap your plate → estimated macros to confirm). All optional; everything else works without it."},
-  {q:"Is the AI key safe? What does it cost?", a:"Your key is stored only on this device, sent only to Anthropic with your requests, and <b>deliberately excluded from backup files</b>. You pay Anthropic directly for what you use — a coaching chat or photo estimate costs roughly a cent. No subscription, no middleman. Clear it anytime in Settings."},
+  {q:"What can the AI Coach do?", a:"Three modes, all optional (⚙ Settings → AI Coach). <b>Claude API</b> or <b>ChatGPT API</b> (your own key): a live in-app <b>Coach chat</b> that already knows your data — when it proposes a program or new targets, one tap loads them — plus <b>✨ AI quick log</b> (type \"2 eggs and toast\" → logged) and <b>📸 photo meal logging</b> (snap your plate → estimated macros to confirm). <b>ChatGPT handoff</b> (no key): BlackPyre writes the prompts, you paste them into the ChatGPT you already use, then paste the reply back — same review-before-logging flow. The Copy report / Download buttons work in every mode."},
+  {q:"What is ChatGPT handoff mode?", a:"The no-key option. Pick it in ⚙ Settings → AI Coach. For food: type a description (or pick 📸 Share a photo), tap <b>📋 Copy food prompt</b>, paste into ChatGPT, then tap <b>📥 Paste reply &amp; review</b> — BlackPyre reads the name, calories, protein, carbs, and fat out of the reply and shows the normal confirm list before anything is logged. For coaching: tap <b>📋 Copy report</b> on the Home AI card — it contains your data, the questions, and instructions for sending a program back that <b>📋 Paste program from an AI</b> can load. Works with a plain ChatGPT (or claude.ai) subscription."},
+  {q:"Is the AI key safe? What does it cost?", a:"Keys (Anthropic or OpenAI) are stored only on this device, sent only to that provider with your requests, and <b>deliberately excluded from backup files</b>. You pay the provider directly for what you use — a coaching chat or photo estimate costs roughly a cent. <b>Important:</b> API access is separate from a Claude Pro or ChatGPT Plus subscription — an API key is its own pay-per-use account (no subscription needed, and a subscription doesn't include one). Clear keys anytime in Settings. A default model is chosen for you; the Model field lets you override it."},
+  {q:"Does BlackPyre store my photos or the AI's replies?", a:"No. Photos are downscaled in memory, sent to the AI (or shared to ChatGPT in handoff mode), and immediately discarded — never saved to the app, your history, or backups. Raw AI replies and pasted responses are parsed for the confirm list and then dropped; only the food entries <b>you approve</b> are saved, as normal entries."},
   {q:"How accurate is photo / AI food logging?", a:"They're <b>estimates</b> — good ones, but the AI is judging portions from a description or a photo. <b>Pro tip:</b> the optional caption field ('Chipotle chicken bowl') sharply improves restaurant and chain estimates. Every item shows before logging so you can remove anything, and after logging you can ✎ edit values. For packaged foods with labels, the barcode scan is exact. Photos are analyzed and immediately discarded — never stored."},
   {q:"What is the AI Coach report?", a:"On the Home tab, the <b>🤖 AI Coach</b> card builds a progress report from your real data — weight trend, measured TDEE, nutrition adherence, per-lift progression, and your current program. Tap <b>Copy report</b>, paste it into Claude, ChatGPT, or any AI, and ask away. The report even includes your program in BlackPyre format, so the AI can return an adjusted program you load right back in (Train → ⬆ Load). Completely optional — the app works fully without it."},
   {q:"Can I track water?", a:"Yes — <b>⚙ Settings → Enable water tracking</b> adds a one-tap glass counter to your Home tab. Off by default, toggle anytime."},
@@ -4562,7 +4717,7 @@ document.getElementById("saveSettingsBtn").addEventListener("click", ()=>{
 function doBackup(btnId){
   data.meta.lastBackup = todayStr();
   data.meta.logsSince = 0;
-  const cfgSafe = Object.assign({}, cfg); delete cfgSafe.anthropicKey;
+  const cfgSafe = Object.assign({}, cfg); delete cfgSafe.anthropicKey; delete cfgSafe.openaiKey;
   download("blackpyre-backup-"+todayStr()+".json", JSON.stringify({cfg:cfgSafe, program:program, data:data}, null, 2));
   save(); renderBackup();
   ackBtn(btnId, "✓ Backup downloaded");
