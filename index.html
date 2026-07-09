@@ -362,6 +362,11 @@
       <button class="btn ghost small hidden" id="recentsOpenBtn">★ Recent foods</button>
       <button class="btn ghost small" id="myFoodsOpenBtn">🍱 My foods</button>
     </div>
+    <div class="card hidden" id="usualCard" style="border-color:var(--ember);">
+      <div class="label">⚡ Your usual <span id="usualMealName">breakfast</span></div>
+      <div id="usualItems" style="font-size:13px; line-height:1.7; margin:6px 0 12px;"></div>
+      <button class="btn ghost small" id="usualLogBtn" style="width:100%;"></button>
+    </div>
     <div class="card hidden" id="aiFoodCard">
       <div class="label">✨ AI quick log</div>
       <div class="row" style="margin:8px 0 0; align-items:flex-end;">
@@ -1657,6 +1662,7 @@ function renderFood(){
     }));
   }
   renderRecents();
+  renderUsual();
 }
 
 // ================== TRAIN ==================
@@ -3060,6 +3066,60 @@ function renderJourneyMsg(){
   }
 }
 
+// ================== USUAL MEAL PATTERN DETECTION ==================
+function usualFor(meal){
+  // look back 14 days (excluding today): items logged for this meal on most of those days
+  const dayNames = []; // array of Set(name) per day that has this meal
+  for(let i=1;i<=14;i++){
+    const d = new Date(); d.setDate(d.getDate()-i);
+    const ds = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+    const entries = (data.food[ds]||[]).filter(f=>(f.meal||"other")===meal);
+    if (entries.length) dayNames.push(new Set(entries.map(f=>f.name)));
+  }
+  if (dayNames.length < 4) return null;
+  const counts = {};
+  dayNames.forEach(set=>set.forEach(n=>{ counts[n] = (counts[n]||0)+1; }));
+  const threshold = Math.max(3, Math.ceil(dayNames.length*0.5));
+  const names = Object.keys(counts).filter(n=>counts[n]>=threshold)
+    .sort((a,b)=>counts[b]-counts[a]).slice(0,6);
+  if (names.length < 2) return null;
+  // template each from its most recent logged instance (any date, this meal)
+  const items = [];
+  names.forEach(n=>{
+    for(let i=0;i<=14;i++){
+      const d = new Date(); d.setDate(d.getDate()-i);
+      const ds = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+      const hit = (data.food[ds]||[]).slice().reverse().find(f=>f.name===n && (f.meal||"other")===meal);
+      if (hit){ items.push({name:hit.name, cal:hit.cal, pro:hit.pro, carb:hit.carb||0, fat:hit.fat||0, meal:meal}); break; }
+    }
+  });
+  if (items.length < 2) return null;
+  return items;
+}
+function renderUsual(){
+  const card = document.getElementById("usualCard");
+  // only for today, only when a pattern exists, only when not already mostly logged
+  if (foodDateEl.value !== todayStr()){ card.classList.add("hidden"); return; }
+  const items = usualFor(currentMeal);
+  if (!items){ card.classList.add("hidden"); return; }
+  const todayNames = new Set((data.food[todayStr()]||[]).filter(f=>(f.meal||"other")===currentMeal).map(f=>f.name));
+  const remaining = items.filter(it=>!todayNames.has(it.name));
+  if (remaining.length===0 || remaining.length < Math.ceil(items.length/2)){ card.classList.add("hidden"); return; }
+  card.classList.remove("hidden");
+  document.getElementById("usualMealName").textContent = currentMeal;
+  const total = Math.round(remaining.reduce((a,x)=>a+Number(x.cal||0),0));
+  const pro = Math.round(remaining.reduce((a,x)=>a+Number(x.pro||0),0));
+  document.getElementById("usualItems").innerHTML = remaining.map(it=>esc(it.name)).join(" · ")
+    + '<div style="color:var(--dim); font-size:11px; margin-top:4px;">'+total+' kcal · '+pro+'g protein · your typical portions</div>';
+  const btn = document.getElementById("usualLogBtn");
+  btn.textContent = "⚡ Log usual "+currentMeal+" ("+remaining.length+" item"+(remaining.length===1?"":"s")+")";
+  btn.onclick = ()=>{
+    remaining.forEach(it=>addEntry(Object.assign({}, it)));
+    ackBtn("usualLogBtn", "✓ Logged "+remaining.length);
+    flashSave("Usual "+currentMeal+" logged ✓");
+  };
+}
+
 // ================== AI ENGINE (bring-your-own-key) ==================
 const AI_MODEL = "claude-sonnet-4-6";
 function hasAIKey(){ return !!(cfg.anthropicKey && cfg.anthropicKey.trim()); }
@@ -3909,6 +3969,7 @@ const FAQ = [
   {q:"A barcode wasn't found — now what?", a:"The app opens a <b>save-it-once form</b>: copy the serving size and macros off the nutrition label, save, and that barcode belongs to you forever. Next scan of the same product loads instantly, it shows up in text search, and it lives in <b>🍱 My foods</b> where you can edit or delete it anytime."},
   {q:"What are the meal buttons (Bkfst/Lunch/Dinner/Snacks)?", a:"Every entry is filed under a meal. The right one pre-selects itself by time of day — just override by tapping if needed. The day list shows only the selected meal with its own subtotal; the Totals bars always count the whole day."},
   {q:"What is My Foods?", a:"Your personal food library — tap <b>🍱 My foods</b> on the Food page. Create foods that have no barcode (homemade chili, your protein shake), edit or delete anything, add a barcode later so scanning finds it, and manage your saved meals (rename/delete). There's also a <b>＋ Save this as a reusable food</b> button under manual entry, so anything you type once can become permanent."},
+  {q:"What is the ⚡ usual meal card?", a:"FORGE learns your patterns. When you've logged the same foods for a meal on most days over the last two weeks, a card appears: <b>⚡ Your usual breakfast</b> — your regulars with your typical portions, logged in <b>one tap</b>. It only offers what you haven't logged yet today, and disappears once the meal is mostly logged. No setup — it just notices."},
   {q:"What's the fastest way to log food I eat often?", a:"Three tools: <b>★ Recent foods</b> (your most-logged items, tap one and it opens with your last portion prefilled), <b>Save today as a meal</b> (bundles the day's entries into a one-tap chip — long-press a chip to delete it), and <b>⧉ Copy yesterday</b>. The ⧉ on any logged entry duplicates it."},
   {q:"How do I adjust the amount I ate?", a:"After picking any food, use the <b>slider or the amount field</b> — calories and macros recalculate live. Units: grams, oz, lb, ml, fl oz, or the product's serving."},
 
