@@ -647,6 +647,26 @@
   </div>
 </div>
 
+<div id="disclaimerOverlay" class="hidden" style="position:fixed; inset:0; z-index:61; background:var(--bg); overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; padding:calc(20px + env(safe-area-inset-top)) 18px 40px;">
+  <div style="max-width:560px; margin:0 auto;">
+    <div style="text-align:center;">
+      <div style="font-family:'Oswald',sans-serif; font-weight:700; font-size:28px; letter-spacing:.06em;">FORGE</div>
+      <div class="label" style="margin:10px 0 14px;">Before you start</div>
+    </div>
+    <div class="card" style="font-size:13px; line-height:1.8;">
+      <b>Health & Liability Disclaimer</b><br><br>
+      FORGE is an informational logging tool, <b>not medical advice</b> and not a substitute for guidance from a physician, registered dietitian, or qualified trainer.<br><br>
+      • <b>Consult a professional first.</b> Talk to your doctor before beginning any diet, weight-change, or exercise program — especially if you have any medical condition, injury, are pregnant, or are under 18.<br><br>
+      • <b>Estimates are estimates.</b> Calorie and macro targets use published scientific formulas (Mifflin-St Jeor; Epley for estimated 1RM). Individual needs vary — no calculation replaces professional assessment.<br><br>
+      • <b>Programs are general templates,</b> not personalized prescriptions. Exercise carries inherent risk of injury. Use appropriate form and loads, and stop immediately if you feel pain, dizziness, or shortness of breath.<br><br>
+      • <b>You are responsible for your choices.</b> By using FORGE you agree that you use it at your own risk, and that the app's creators and contributors are <b>not liable</b> for any injury, health outcome, or loss arising from its use. The app is provided "as is," without warranties of any kind.<br><br>
+      • <b>Nutrition data</b> comes from public databases and user entries and may contain errors — verify labels for allergies or medical diets.
+    </div>
+    <button class="btn" id="disclaimerAgreeBtn" style="width:100%;">I understand and agree</button>
+    <div class="note" style="text-align:center; margin-top:10px;">This stays available anytime in ⚙ Settings → Help & FAQ.</div>
+  </div>
+</div>
+
 <div id="setupOverlay" class="hidden" style="position:fixed; inset:0; z-index:60; background:var(--bg); overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; padding:calc(20px + env(safe-area-inset-top)) 18px 40px;">
   <div style="max-width:520px; margin:0 auto;">
     <div style="text-align:center; margin-bottom:6px;">
@@ -3078,10 +3098,25 @@ function renderSetupStep(){
       +'🏁 Done. Log your food, log your lifts, weigh in daily — the smart stuff (metabolism tracking, projections, auto-progression) switches on as data builds.</div></div>';
   }
 }
-// show on truly fresh installs only; existing users are grandfathered silently
-if (!cfg.setupDone){
-  if (hasAnyData()){ cfg.setupDone = true; saveCfg(); }
-  else { openSetup(); }
+// disclaimer gates everything, once per install; wizard follows on fresh installs only
+function afterDisclaimer(){
+  if (!cfg.setupDone){
+    if (hasAnyData()){ cfg.setupDone = true; saveCfg(); }
+    else { openSetup(); }
+  }
+}
+document.getElementById("disclaimerAgreeBtn").addEventListener("click", ()=>{
+  cfg.disclaimerAccepted = todayStr();
+  saveCfg();
+  document.getElementById("disclaimerOverlay").classList.add("hidden");
+  unlockScroll();
+  afterDisclaimer();
+});
+if (!cfg.disclaimerAccepted){
+  lockScroll();
+  document.getElementById("disclaimerOverlay").classList.remove("hidden");
+} else {
+  afterDisclaimer();
 }
 
 // ================== HELP & FAQ ==================
@@ -3117,6 +3152,8 @@ const FAQ = [
   {q:"What is the AI Coach report?", a:"On the Home tab, the <b>🤖 AI Coach</b> card builds a progress report from your real data — weight trend, measured TDEE, nutrition adherence, per-lift progression, and your current program. Tap <b>Copy report</b>, paste it into Claude, ChatGPT, or any AI, and ask away. The report even includes your program in FORGE format, so the AI can return an adjusted program you load right back in (Train → ⬆ Load). Completely optional — the app works fully without it."},
   {q:"How do I track body measurements?", a:"It's optional: <b>⚙ Settings → Enable body measurements</b> adds a waist/chest/arm tracker to the Weight tab. On a fat-loss phase, a shrinking waist is often better evidence than the scale. Toggle it off anytime — entries stay saved."},
 
+  {sec:"Legal"},
+  {q:"Disclaimer & terms of use", a:"FORGE is an informational logging tool, <b>not medical advice</b>, and not a substitute for a physician, registered dietitian, or qualified trainer. Consult your doctor before beginning any diet or exercise program, especially with any medical condition, injury, or pregnancy, or if under 18. Calorie/macro targets use published scientific formulas (Mifflin-St Jeor; Epley for estimated 1RM) — they are estimates, and individual needs vary. Programs are general templates, not personalized prescriptions; exercise carries inherent injury risk — stop if you feel pain, dizziness, or shortness of breath. Nutrition data comes from public databases and user entries and may contain errors — verify labels for allergies or medical diets. By using FORGE you agree you use it <b>at your own risk</b> and that its creators are <b>not liable</b> for any injury, health outcome, or loss arising from its use. The app is provided \"as is,\" without warranties of any kind. You accepted this disclaimer on first use; it applies to all continued use."},
   {sec:"Your data & the app"},
   {q:"Where is my data stored? Is it private?", a:"Everything lives <b>only on your device</b> — no account, no server, nothing leaves your phone. Nobody (including whoever shared the app with you) can see your logs."},
   {q:"How do I back up or move to a new phone?", a:"<b>⚙ Settings → Back up all data</b> downloads one file containing everything. On the new phone, install the app and use <b>Restore from backup</b>. FORGE watches out for you here: Settings always shows your last backup, and a reminder card appears on Home when you've logged enough new data to be worth protecting — one tap backs it up. Keep the file somewhere safe (Files, email, cloud drive)."},
