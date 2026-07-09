@@ -1,6 +1,6 @@
 {
-  "name": "FORGE — Training & Nutrition Log",
-  "short_name": "FORGE",
+  "name": "BlackPyre — Training & Nutrition Log",
+  "short_name": "BlackPyre",
   "description": "Track food macros, workouts, and bodyweight. Load any workout program.",
   "start_url": "./",
   "scope": "./",
