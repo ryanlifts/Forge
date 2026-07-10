@@ -706,9 +706,12 @@
       <div class="label" style="margin-bottom:6px;">Calorie schedule</div>
       <select id="sCalSched" style="margin-bottom:10px;">
         <option value="same">Same target every day</option>
-        <option value="weekend">Higher Fri &amp; Sat, lower weekdays (same weekly total)</option>
-        <option value="custom">Custom per-day targets</option>
+        <option value="frisat">Higher Friday &amp; Saturday</option>
+        <option value="satsun">Higher Saturday &amp; Sunday</option>
+        <option value="frisatsun">Higher Friday–Sunday</option>
+        <option value="custom">Custom daily targets</option>
       </select>
+      <div class="note hidden" id="schedDisabledNote" style="margin-bottom:10px;">Set your calorie target first — the schedule is built from it.</div>
       <div id="schedCustom" class="hidden" style="margin-bottom:10px;">
         <div class="row" style="margin-bottom:8px;">
           <div><div class="label">Sun</div><input type="number" id="sSched0" inputmode="numeric"></div>
@@ -722,6 +725,7 @@
           <div><div class="label">Sat</div><input type="number" id="sSched6" inputmode="numeric"></div>
           <div></div>
         </div>
+        <button class="btn ghost small mt10" id="schedAutoBtn" style="width:100%;">Auto-balance to weekly budget</button>
       </div>
       <div class="note" id="schedTotalNote" style="margin-bottom:12px;"></div>
       <button class="btn" id="saveSettingsBtn">Save settings</button>
@@ -1148,23 +1152,40 @@ let cfg = Object.assign({}, DEFAULT_CFG, _rawCfg);
 function migrateCfg(){
   if (!Number.isFinite(cfg.calTarget)) cfg.calTarget = DEFAULT_CFG.calTarget;
   if (!Number.isFinite(cfg.proTarget)) cfg.proTarget = DEFAULT_CFG.proTarget;
+  if (cfg.calSchedMode==="weekend") cfg.calSchedMode = "frisat";
   if (!cfg.calSchedMode) cfg.calSchedMode = "same";
 }
 migrateCfg();
-// exact calorie target for a given date (schedule-aware); weekly total preserved by presets
-function weekendSchedDays(){
+// exact calorie target for a given date (schedule-aware); presets always rebalance to the same weekly total
+// days are Sun..Sat (JS getDay order)
+function presetDays(mode){
   const b = cfg.calTarget;
-  return [b-100, b-100, b-100, b-100, b-100, b+250, b+250]; // Sun..Sat, Fri+Sat higher, week total unchanged
+  if (mode==="frisat")    return [b-100, b-100, b-100, b-100, b-100, b+250, b+250]; // 5×(−100) = 2×(+250)
+  if (mode==="satsun")    return [b+250, b-100, b-100, b-100, b-100, b-100, b+250];
+  if (mode==="frisatsun") return [b+200, b-150, b-150, b-150, b-150, b+200, b+200]; // 4×(−150) = 3×(+200)
+  return null;
+}
+function schedDays(){
+  const m = cfg.calSchedMode || "same";
+  if (m==="custom") return (Array.isArray(cfg.calSchedDays) && cfg.calSchedDays.length===7) ? cfg.calSchedDays : null;
+  return presetDays(m); // presets derive live from calTarget — never stale
 }
 function calTargetFor(ds){
-  if (cfg.calSchedMode==="same" || !Array.isArray(cfg.calSchedDays) || cfg.calSchedDays.length!==7) return cfg.calTarget;
+  const days = schedDays();
+  if (!days) return cfg.calTarget;
   const dow = new Date(ds+"T12:00:00").getDay();
-  const v = Number(cfg.calSchedDays[dow]);
+  const v = Number(days[dow]);
   return Number.isFinite(v) && v>0 ? v : cfg.calTarget;
 }
 function weeklyCalTotal(){
-  if (cfg.calSchedMode==="same" || !Array.isArray(cfg.calSchedDays) || cfg.calSchedDays.length!==7) return cfg.calTarget*7;
-  return cfg.calSchedDays.reduce((a,x)=>a+(Number(x)||0),0);
+  const days = schedDays();
+  return days ? days.reduce((a,x)=>a+(Number(x)||0),0) : cfg.calTarget*7;
+}
+// the user schedules calories only; each day's macros scale from the base ratios
+function dayTargets(ds){
+  const cal = calTargetFor(ds);
+  const k = (Number.isFinite(cfg.calTarget) && cfg.calTarget>0) ? cal/cfg.calTarget : 1;
+  return { cal: cal, pro: Math.round(cfg.proTarget*k), carb: Math.round(cfg.carbGoal*k), fat: Math.round(cfg.fatGoal*k) };
 }
 let program = loadJSON(PROG_KEY, DEFAULT_PROGRAM);
 try { validateProgram(program); } catch(e){ program = DEFAULT_PROGRAM; }
@@ -1283,10 +1304,11 @@ function daySums(dateStr){
 }
 function allBarsHTML(s, ds){
   const d = ds || todayStr();
-  return exactBarHTML("Calories", s.cal, calTargetFor(d), "kcal", "cal")
-    + exactBarHTML("Protein", s.pro, cfg.proTarget, "g", "pro")
-    + exactBarHTML("Carbs", s.carb, cfg.carbGoal, "g", "carb")
-    + exactBarHTML("Fat", s.fat, cfg.fatGoal, "g", "fat");
+  const t = dayTargets(d);
+  return exactBarHTML("Calories", s.cal, t.cal, "kcal", "cal")
+    + exactBarHTML("Protein", s.pro, t.pro, "g", "pro")
+    + exactBarHTML("Carbs", s.carb, t.carb, "g", "carb")
+    + exactBarHTML("Fat", s.fat, t.fat, "g", "fat");
 }
 
 // --- OFF product mapping ---
@@ -3090,7 +3112,6 @@ document.getElementById("tdeeApplyBtn").addEventListener("click", ()=>{
   const losing = cfg.goalWt < cfg.startWt;
   const target = lastTDEE.tdee + (losing ? -500 : 0);
   cfg.calTarget = target;
-  if (cfg.calSchedMode==="weekend") cfg.calSchedDays = weekendSchedDays();
   const sortedW = data.weights.slice().sort((a,b)=>a.date.localeCompare(b.date));
   cfg.lastTargetWt = sortedW.length ? sortedW[sortedW.length-1].lbs : cfg.lastTargetWt || cfg.startWt;
   delete cfg.adjustPromptedAt;
@@ -3120,8 +3141,9 @@ document.getElementById("finishDayBtn").addEventListener("click", ()=>{
   data.finished[t] = true;
   save();
   const s = daySums(t);
-  const inCal = s.cal <= calTargetFor(todayStr()) + 100; // exact target with the practical buffer
-  const inPro = s.pro >= cfg.proTarget;
+  const dt = dayTargets(todayStr());
+  const inCal = s.cal <= dt.cal + 100; // exact target with the practical buffer
+  const inPro = s.pro >= dt.pro;
   const streak = computeStreak();
   const stats = Math.round(s.cal)+" kcal · "+Math.round(s.pro)+"g protein"
     +(inCal&&inPro ? " — both targets hit" : inPro ? " — protein target hit" : "")
@@ -3533,22 +3555,39 @@ function renderUsual(){
 }
 
 // ================== CALORIE SCHEDULE UI ==================
+function schedBudget(){ return cfg.calTarget*7; }
+function schedReadInputs(){ return [0,1,2,3,4,5,6].map(i=>Number(document.getElementById("sSched"+i).value)||0); }
+function schedTargetsOk(){ return Number.isFinite(cfg.calTarget) && cfg.calTarget>0; }
 function schedNote(){
-  // note reflects what's currently selected/typed in the UI
   const mode = document.getElementById("sCalSched").value;
   const note = document.getElementById("schedTotalNote");
-  if (mode==="same"){ note.textContent = "Weekly total: "+(cfg.calTarget*7)+" kcal ("+cfg.calTarget+" every day)."; }
-  else if (mode==="weekend"){
-    const d = weekendSchedDays();
-    note.textContent = "Fri & Sat "+d[5]+" kcal · other days "+d[0]+" kcal · weekly total unchanged at "+(cfg.calTarget*7)+" kcal.";
+  const budget = schedBudget();
+  if (mode==="same"){ note.style.color=""; note.textContent = "Weekly budget: "+budget+" kcal ("+cfg.calTarget+" every day)."; return; }
+  if (mode!=="custom"){
+    const d = presetDays(mode);
+    const hi = Math.max.apply(null,d), lo = Math.min.apply(null,d);
+    note.style.color="";
+    note.textContent = "Higher days "+hi+" kcal · lower days "+lo+" kcal · weekly total unchanged at "+budget+" kcal.";
+    return;
+  }
+  const total = schedReadInputs().reduce((a,x)=>a+x,0);
+  const diff = budget - total;
+  if (diff > 0){
+    note.style.color="";
+    note.textContent = "Weekly budget "+budget+" · scheduled "+total+" · remaining "+diff+" kcal (≈"+Math.round(diff/7)+"/day if spread across the week).";
+  } else if (diff < 0){
+    note.style.color = "var(--warn)";
+    note.textContent = "Over weekly budget by "+(-diff)+" calories. Lower one or more days or change your base calorie target.";
   } else {
-    const total = [0,1,2,3,4,5,6].reduce((a,i)=>a+(Number(document.getElementById("sSched"+i).value)||0),0);
-    const base = cfg.calTarget*7;
-    note.textContent = "Weekly total: "+total+" kcal (baseline "+base+(total===base?" — matched":" — you have manually changed the week")+").";
+    note.style.color="";
+    note.textContent = "Weekly budget "+budget+" · scheduled "+total+" · balanced ✓";
   }
 }
 function renderSched(){
-  // full render from saved cfg (settings page load)
+  const ok = schedTargetsOk();
+  document.getElementById("sCalSched").disabled = !ok;
+  document.getElementById("schedDisabledNote").classList.toggle("hidden", ok);
+  if (!ok){ document.getElementById("schedCustom").classList.add("hidden"); document.getElementById("schedTotalNote").textContent=""; return; }
   const mode = cfg.calSchedMode || "same";
   document.getElementById("sCalSched").value = mode;
   document.getElementById("schedCustom").classList.toggle("hidden", mode!=="custom");
@@ -3562,15 +3601,25 @@ document.getElementById("sCalSched").addEventListener("change", ()=>{
   const mode = document.getElementById("sCalSched").value;
   document.getElementById("schedCustom").classList.toggle("hidden", mode!=="custom");
   if (mode==="custom"){
-    // seed once from the most sensible source; the user's edits own the inputs from here
-    const seed = (cfg.calSchedMode==="weekend") ? weekendSchedDays()
-      : ((Array.isArray(cfg.calSchedDays)&&cfg.calSchedDays.length===7) ? cfg.calSchedDays : [0,1,2,3,4,5,6].map(()=>cfg.calTarget));
+    // prefill: every box starts at an exact daily target, never 0 — from the schedule you're leaving
+    const seed = presetDays(cfg.calSchedMode) ||
+      ((cfg.calSchedMode==="custom" && Array.isArray(cfg.calSchedDays) && cfg.calSchedDays.length===7) ? cfg.calSchedDays : [0,1,2,3,4,5,6].map(()=>cfg.calTarget));
     [0,1,2,3,4,5,6].forEach(i=>{ document.getElementById("sSched"+i).value = seed[i]; });
   }
   schedNote();
 });
 [0,1,2,3,4,5,6].forEach(i=>{
   document.getElementById("sSched"+i).addEventListener("input", schedNote);
+});
+document.getElementById("schedAutoBtn").addEventListener("click", ()=>{
+  // user-triggered: spread the gap evenly so the week lands exactly on budget
+  const days = schedReadInputs();
+  const diff = schedBudget() - days.reduce((a,x)=>a+x,0);
+  const per = Math.floor(diff/7);
+  const balanced = days.map(d=>d+per);
+  balanced[6] += diff - per*7; // rounding remainder
+  [0,1,2,3,4,5,6].forEach(i=>{ document.getElementById("sSched"+i).value = balanced[i]; });
+  schedNote();
 });
 
 // ================== POSITIVE FOOD FEEDBACK ==================
@@ -3784,7 +3833,7 @@ function addCoachBubble(role, text, payloads){
     const proT = typeof t.proTarget==="number" ? t.proTarget : (typeof t.proLo==="number" && typeof t.proHi==="number" ? Math.round((t.proLo+t.proHi)/2) : null);
     b.textContent = "Apply targets: " + (calT||"?") + " kcal";
     b.addEventListener("click", ()=>{
-      if (calT!=null){ cfg.calTarget = calT; if (cfg.calSchedMode==="weekend") cfg.calSchedDays = weekendSchedDays(); }
+      if (calT!=null){ cfg.calTarget = calT; }
       if (proT!=null) cfg.proTarget = proT;
       ["carbGoal","fatGoal"].forEach(k=>{ if (typeof t[k]==="number") cfg[k] = t[k]; });
       const sortedW = data.weights.slice().sort((a,b2)=>a.date.localeCompare(b2.date));
@@ -4141,7 +4190,7 @@ function aiReport(){
   const fullDays = logged.map(d=>daySums(d)).filter(x=>x.cal>500);
   const avgCal = fullDays.length ? Math.round(fullDays.reduce((a,x)=>a+x.cal,0)/fullDays.length) : null;
   const avgPro = fullDays.length ? Math.round(fullDays.reduce((a,x)=>a+x.pro,0)/fullDays.length) : null;
-  const proHit = logged.filter(d=>daySums(d).pro>=cfg.proTarget).length;
+  const proHit = logged.filter(d=>daySums(d).pro>=dayTargets(d).pro).length;
 
   // training: last 28 days
   const cut28 = new Date(Date.now()-28*86400000);
@@ -4292,7 +4341,7 @@ function renderWeek(){
   card.classList.remove("hidden");
   const fullDays = logged.map(d=>daySums(d)).filter(x=>x.cal>500);
   const avgCal = fullDays.length ? Math.round(fullDays.reduce((s,x)=>s+x.cal,0)/fullDays.length) : null;
-  const proDays = logged.filter(d=>daySums(d).pro>=cfg.proTarget).length;
+  const proDays = logged.filter(d=>daySums(d).pro>=dayTargets(d).pro).length;
   let html = "";
   if (avgCal!=null){
     const weekAvgT = Math.round(weeklyCalTotal()/7);
@@ -4554,7 +4603,6 @@ function renderSetupStep(){
       const r = calcMacros(sex, age, ft, inches, cfg.startWt, act, goal);
       cfg.calTarget = r.cal;
       cfg.proTarget = r.pro;
-      if (cfg.calSchedMode==="weekend") cfg.calSchedDays = weekendSchedDays();
       cfg.carbGoal = r.carb; cfg.fatGoal = r.fat;
       cfg.calcInputs = {sex:sex, age:age, ft:ft, inches:inches, act:act, goal:goal};
       cfg.lastTargetWt = cfg.startWt;
@@ -4637,7 +4685,7 @@ if (!cfg.disclaimerAccepted){
 // ================== HELP & FAQ ==================
 const FAQ = [
   {sec:"Getting started"},
-  {q:"How do I set my calorie and macro targets?", a:"New installs get walked through this in the setup wizard (including combined goals — picking <b>Lose fat + Build muscle</b> sets up a recomposition: slight deficit, high protein). Anytime after: <b>Settings → Calorie & macro calculator</b> — enter your stats, tap <b>Calculate</b>, pick a macro split (or use Recommended), then <b>Use these as my targets</b>. Every bar in the app measures against your exact numbers — one calorie target (your max on a cut), one protein goal, exact carbs and fat. Targets are exact, but color warnings allow a small practical buffer. Optional <b>calorie scheduling</b> (Settings) redistributes the same weekly calories across days — higher Fri/Sat, lower weekdays, or fully custom — it never adds calories unless you edit the daily numbers yourself in custom mode."},
+  {q:"How do I set my calorie and macro targets?", a:"New installs get walked through this in the setup wizard (including combined goals — picking <b>Lose fat + Build muscle</b> sets up a recomposition: slight deficit, high protein). Anytime after: <b>Settings → Calorie & macro calculator</b> — enter your stats, tap <b>Calculate</b>, pick a macro split (or use Recommended), then <b>Use these as my targets</b>. Every bar in the app measures against your exact numbers — one calorie target (your max on a cut), one protein goal, exact carbs and fat. Targets are exact, but color warnings allow a small practical buffer. Optional <b>calorie scheduling</b> (Settings) redistributes the same weekly calories across days — higher Fri/Sat, Sat/Sun, or Fri–Sun with the other days lowered to match, or fully custom. Each day's protein, carbs, and fat scale with that day's calories automatically. A custom week can come in under budget (you'll see by how much) but can never exceed it."},
   {q:"What's a macro split and which should I pick?", a:"It's how your calories divide between protein / carbs / fat. <b>Recommended</b> (0.9g protein per lb, 25% fat) suits most people losing fat while keeping muscle. Higher-carb splits like 40/40/20 suit hard training; the Custom option lets you set any percentages and they auto-balance to 100%. The link under the calculator goes to the peer-reviewed research."},
   {q:"Where do the celebration quotes come from?", a:"They're <b>earned, not browsed</b>. Log a session, forge a PR, or finish your day, and the celebration screen hands you one — half from the greats of sport and history, half BlackPyre originals. There are hundreds in the vault, so they stay fresh."},
   {q:"What's the bar under the BlackPyre logo?", a:"That's <b>Your Journey</b> — your whole goal on one line. Left end is your starting weight, right end is your goal, and the glowing dot is exactly where you are right now based on your latest weigh-in. It moves the moment you record a weight, on every screen. Hit the goal and the bar fills with a ✓. And when a stretch goes sideways, a short note appears under the bar — a pat on the back and a path forward, never a lecture."},
@@ -4842,7 +4890,6 @@ document.getElementById("applyMacrosBtn").addEventListener("click", ()=>{
   const g = splitGrams();
   cfg.calTarget = lastCalc.cal;
   cfg.proTarget = g.pro;
-  if (cfg.calSchedMode==="weekend") cfg.calSchedDays = weekendSchedDays();
   cfg.carbGoal = g.carb; cfg.fatGoal = g.fat;
   cfg.lastTargetWt = Number(document.getElementById("cWt").value) || cfg.lastTargetWt || cfg.startWt;
   delete cfg.adjustPromptedAt;
@@ -4907,21 +4954,36 @@ function renderSettings(){
 }
 document.getElementById("saveSettingsBtn").addEventListener("click", ()=>{
   const g = id=>Number(document.getElementById(id).value);
+  let schedSaveMsg = null;
   cfg = Object.assign({}, cfg, {
     startWt: g("sStartWt")||cfg.startWt, goalWt: g("sGoalWt")||cfg.goalWt,
     calTarget: g("sCalTarget")||cfg.calTarget,
     proTarget: g("sProTarget")||cfg.proTarget,
     carbGoal: g("sCarb")||cfg.carbGoal, fatGoal: g("sFat")||cfg.fatGoal,
   });
-  cfg.calSchedMode = document.getElementById("sCalSched").value;
-  if (cfg.calSchedMode==="weekend") cfg.calSchedDays = weekendSchedDays();
-  else if (cfg.calSchedMode==="custom"){
-    cfg.calSchedDays = [0,1,2,3,4,5,6].map(i=>Number(document.getElementById("sSched"+i).value)||cfg.calTarget);
-  } else cfg.calSchedDays = null;
+  const schedMode = document.getElementById("sCalSched").value;
+  if (schedMode==="custom"){
+    const days = [0,1,2,3,4,5,6].map(i=>Number(document.getElementById("sSched"+i).value)||cfg.calTarget);
+    const total = days.reduce((a,x)=>a+x,0);
+    const budget = cfg.calTarget*7;
+    if (total > budget){
+      schedNote();
+      flashSave("Over weekly budget by "+(total-budget)+" calories — schedule not saved", true);
+      return; // block: never exceed the weekly budget
+    }
+    cfg.calSchedMode = "custom";
+    cfg.calSchedDays = days;
+    if (total < budget){
+      schedSaveMsg = "Saved — this week is under your normal weekly budget by "+(budget-total)+" calories";
+    }
+  } else {
+    cfg.calSchedMode = schedMode;
+    cfg.calSchedDays = null; // presets derive live from the calorie target
+  }
   const sortedW2 = data.weights.slice().sort((a,b)=>a.date.localeCompare(b.date));
   cfg.lastTargetWt = sortedW2.length ? sortedW2[sortedW2.length-1].lbs : cfg.lastTargetWt || cfg.startWt;
   delete cfg.adjustPromptedAt;
-  saveCfg(); renderAll(); flashSave("Settings saved ✓");
+  saveCfg(); renderAll(); flashSave(schedSaveMsg || "Settings saved ✓");
   ackBtn("saveSettingsBtn", "✓ Saved");
 });
 function doBackup(btnId){
@@ -5035,8 +5097,9 @@ function renderDash(){
   const t=todayStr(), s=daySums(t);
   document.getElementById("dashDateLabel").textContent="Today · "+fmtDate(t);
   document.getElementById("dashBars").innerHTML=allBarsHTML(s);
-  const calLeft = Math.max(0, calTargetFor(t) - s.cal);
-  const proLeft = Math.max(0, cfg.proTarget - s.pro);
+  const dt = dayTargets(t);
+  const calLeft = Math.max(0, dt.cal - s.cal);
+  const proLeft = Math.max(0, dt.pro - s.pro);
   document.getElementById("dashRemaining").textContent =
     (calLeft>0||proLeft>0) ? ("Remaining today: "+Math.round(calLeft)+" kcal · "+Math.round(proLeft)+"g protein") : "Targets hit ✓";
   const lastArr=data.workouts.slice().sort((a,b)=>b.date.localeCompare(a.date));
