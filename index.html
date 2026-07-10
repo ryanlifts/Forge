@@ -754,14 +754,14 @@
       <textarea id="coachInput" placeholder="Ask your coach anything…" rows="1"></textarea>
       <button class="btn" id="coachSendBtn" style="flex:0 0 auto; padding:12px 18px;">Send</button>
     </div>
-    <div class="note" style="text-align:center; margin:6px 0 0;">Runs on your own API key · your data goes only to Anthropic · a chat costs about a cent</div>
+    <div class="note" style="text-align:center; margin:6px 0 0;">Runs on your own API key · your data goes only to your chosen AI provider · a chat costs about a cent</div>
   </div>
 </div>
 
 <div id="disclaimerOverlay" class="hidden" style="position:fixed; inset:0; z-index:61; background:var(--bg); overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; padding:calc(20px + env(safe-area-inset-top)) 18px 40px;">
   <div style="max-width:560px; margin:0 auto;">
     <div style="text-align:center;">
-      <div style="font-family:'Oswald',sans-serif; font-weight:700; font-size:28px; letter-spacing:.06em;">BLACKPYRE</div>
+      <div style="font-family:'Oswald',sans-serif; font-weight:700; font-size:28px; letter-spacing:.06em;">BlackPyre</div>
       <div class="label" style="margin:10px 0 14px;">Before you start</div>
     </div>
     <div class="card" style="font-size:13px; line-height:1.8;">
@@ -781,7 +781,7 @@
 <div id="setupOverlay" class="hidden" style="position:fixed; inset:0; z-index:60; background:var(--bg); overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; padding:calc(20px + env(safe-area-inset-top)) 18px 40px;">
   <div style="max-width:520px; margin:0 auto;">
     <div style="text-align:center; margin-bottom:6px;">
-      <div style="font-family:'Oswald',sans-serif; font-weight:700; font-size:28px; letter-spacing:.06em;">BLACKPYRE</div>
+      <div style="font-family:'Oswald',sans-serif; font-weight:700; font-size:28px; letter-spacing:.06em;">BlackPyre</div>
       <div class="note" style="margin:2px 0 14px;" id="setupTagline">Burn the guesswork. Forge your body.<br>Setup takes about a minute.</div>
     </div>
     <div class="su-dots" id="setupDots"></div>
@@ -3038,7 +3038,8 @@ function computeStreak(){
   const d = new Date();
   for(let i=0;i<365;i++){
     const ds = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
-    const logged = (data.food[ds]&&data.food[ds].length) || data.workouts.some(w=>w.date===ds) || (data.finished&&data.finished[ds]);
+    const foodOK = (data.food[ds]||[]).some(f=>Number(f.cal)>0 || Number(f.pro)>0 || Number(f.carb)>0 || Number(f.fat)>0);
+    const logged = foodOK || data.workouts.some(w=>w.date===ds) || data.weights.some(w=>w.date===ds);
     if (logged) streak++;
     else if (i>0) break; // today not logged yet doesn't break the streak
     d.setDate(d.getDate()-1);
@@ -4752,7 +4753,13 @@ document.getElementById("importDataFile").addEventListener("change", (e)=>{
       const b = JSON.parse(reader.result);
       if(b.data) data = b.data;
       if(!data.recents) data.recents = []; if(!data.myFoods) data.myFoods = {}; if(!data.meals) data.meals = []; if(!data.finished) data.finished = {}; if(!data.foodCounts) data.foodCounts = {}; if(!data.mealCounts) data.mealCounts = {}; if(!data.meta) data.meta = {lastBackup:null, logsSince:0};
-      if(b.cfg) cfg = Object.assign({}, DEFAULT_CFG, b.cfg);
+      if(b.cfg){
+        const keepAI = {};
+        ["anthropicKey","openaiKey","aiProvider","aiModelAnth","aiModelOai"].forEach(k=>{
+          if (b.cfg[k]===undefined && cfg[k]!==undefined) keepAI[k] = cfg[k];
+        });
+        cfg = Object.assign({}, DEFAULT_CFG, b.cfg, keepAI);
+      }
       if(b.program) program = validateProgram(b.program);
       save(); saveCfg(); saveProgram();
       renderDayOptions(); renderSessionInputs(); renderAll();
