@@ -398,6 +398,14 @@
           <button class="btn ghost small mt10" id="hfClearBtn" style="width:100%;">✕ Clear photo</button>
         </div>
         <button class="btn ghost small mt10" id="hfPasteBtn" style="width:100%;">📥 Paste ChatGPT's reply &amp; review</button>
+        <div id="hfPasteBox" class="hidden" style="margin-top:10px; padding:10px; border:1px solid var(--border); border-radius:12px; background:var(--panel);">
+          <div class="label">Paste ChatGPT reply here</div>
+          <textarea id="hfPasteText" rows="4" style="width:100%; margin:8px 0 10px; resize:vertical;" placeholder='{"foods":[{"name":"...","cal":0,"pro":0,"carb":0,"fat":0}]}'></textarea>
+          <div class="row">
+            <button class="btn ghost small" id="hfReviewBtn">✓ Review estimate</button>
+            <button class="btn ghost small" id="hfPasteCancelBtn">Cancel</button>
+          </div>
+        </div>
         <div class="note" style="margin-top:6px;">Copy the prompt into ChatGPT (attach the photo if you chose one), then paste its reply back here to review before logging.</div>
         <div class="note" style="margin-top:6px; color:var(--dim);">Some phones/browsers cannot send photos directly to ChatGPT from a home-screen app. If the photo does not appear in ChatGPT, attach the same photo manually, then paste the prompt.</div>
       </div>
@@ -3954,22 +3962,43 @@ document.getElementById("hfShareGoBtn").addEventListener("click", async ()=>{
   aiFoodStatus("Prompt copied. ChatGPT may not accept photos from this share sheet. Open ChatGPT and attach the photo manually, then paste its reply back here.", true);
 });
 document.getElementById("hfPasteBtn").addEventListener("click", async ()=>{
-  let text = "";
+  // always show the visible paste box — clipboard access is unreliable in home-screen apps
+  const box = document.getElementById("hfPasteBox");
+  const ta = document.getElementById("hfPasteText");
+  box.classList.remove("hidden");
+  document.getElementById("aiFoodConfirm").classList.add("hidden");
+  let clip = "";
   try {
-    if (navigator.clipboard && navigator.clipboard.readText) text = await navigator.clipboard.readText();
-  } catch(e){ /* permission denied */ }
-  if (!text) text = prompt("Paste ChatGPT's reply here:") || "";
-  if (!text.trim()) return;
+    if (navigator.clipboard && navigator.clipboard.readText) clip = await navigator.clipboard.readText();
+  } catch(e){ /* permission denied — user pastes manually */ }
+  if (clip && clip.trim()) ta.value = clip; // prefill for verification, still shown
+  aiFoodStatus("Paste reply below, then tap Review estimate.");
+  try { ta.focus(); } catch(e){}
+});
+function hfCloseParseBox(){
+  document.getElementById("hfPasteText").value = ""; // raw response discarded — never stored
+  document.getElementById("hfPasteBox").classList.add("hidden");
+}
+document.getElementById("hfPasteCancelBtn").addEventListener("click", ()=>{
+  hfCloseParseBox();
+  aiFoodStatus(null);
+});
+document.getElementById("hfReviewBtn").addEventListener("click", ()=>{
+  const raw = document.getElementById("hfPasteText").value;
+  if (!raw.trim()){
+    aiFoodStatus("The box is empty — paste ChatGPT's reply into it first.", true);
+    return;
+  }
   try {
-    const foods = parseFoodsReply(text);
-    aiFoodStatus(null);
+    const foods = parseFoodsReply(raw);
+    hfCloseParseBox();
+    aiFoodStatus("Estimate ready — review before logging.");
     showFoodConfirm(foods);
     document.getElementById("aiFoodText").value = "";
     hfClearPhoto(true); // result imported — the photo's flow is complete
   } catch(e){
-    aiFoodStatus("⚠ Could not read that reply — it should be the JSON the prompt asked for. Try copying ChatGPT's whole message.", true);
+    aiFoodStatus("Could not read that JSON. Copy ChatGPT's whole response and try again.", true);
   }
-  text = ""; // parsed and discarded — never stored
 });
 
 
