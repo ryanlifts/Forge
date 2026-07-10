@@ -1,5 +1,5 @@
 // FORGE service worker — offline app shell, network-first for food APIs
-const CACHE = "blackpyre-v29";
+const CACHE = "blackpyre-v30";
 const SHELL = [
   "./",
   "./index.html",
