@@ -15,7 +15,7 @@
 <style>
   :root {
     --bg:#101215; --panel:#191C21; --panel-up:#1F232A; --border:#2B3039;
-    --text:#EDEEF0; --dim:#8A919C; --ember:#FF7A3D; --ember-deep:#E8571F; --ember-rgb:255,122,61;
+    --text:#EDEEF0; --dim:#8A919C; --ember:#FF7A3D; --ember-deep:#E8571F; --ember-rgb:255,122,61; --amber:#E8B04B;
     --ok:#4ADE80; --warn:#F87171;
   }
   * { box-sizing:border-box; margin:0; padding:0; }
@@ -87,6 +87,7 @@
   .bar .band { position:absolute; top:0; bottom:0; background:rgba(74,222,128,.10); border-left:1px solid rgba(74,222,128,.5); border-right:1px solid rgba(74,222,128,.5); }
   .bar .fill { position:absolute; left:0; top:0; bottom:0; border-radius:8px; transition:width .3s ease; background:linear-gradient(90deg,var(--ember-deep),var(--ember)); }
   .bar .fill.ok { background:var(--ok); }
+  .fill.mid { background:var(--amber); }
   .bar .fill.over { background:var(--warn); }
 
   .result { padding:13px 16px; border-bottom:1px solid var(--border); cursor:pointer; }
@@ -502,6 +503,7 @@
     <div class="card">
       <div class="label" id="totalsLabel">Totals</div>
       <div id="foodBars"></div>
+      <div id="foodKudos" class="hidden" style="margin-top:8px; font-size:12px; color:var(--ok); border:1px solid var(--ok); border-radius:99px; display:inline-block; padding:4px 12px;"></div>
     </div>
 
     <div class="card flush">
@@ -694,19 +696,36 @@
       </div>
       <div class="label" style="margin-bottom:12px; margin-top:6px;">Daily nutrition targets</div>
       <div class="row" style="margin-bottom:12px;">
-        <div><div class="label">Calories min</div><input type="number" id="sCalLo" inputmode="numeric"></div>
-        <div><div class="label">Calories max</div><input type="number" id="sCalHi" inputmode="numeric"></div>
-      </div>
-      <div class="row" style="margin-bottom:12px;">
-        <div><div class="label">Protein min g</div><input type="number" id="sProLo" inputmode="numeric"></div>
-        <div><div class="label">Protein max g</div><input type="number" id="sProHi" inputmode="numeric"></div>
+        <div><div class="label">Calorie target (kcal)</div><input type="number" id="sCalTarget" inputmode="numeric"></div>
+        <div><div class="label">Protein goal (g)</div><input type="number" id="sProTarget" inputmode="numeric"></div>
       </div>
       <div class="row" style="margin-bottom:14px;">
         <div><div class="label">Carbs goal g</div><input type="number" id="sCarb" inputmode="numeric"></div>
         <div><div class="label">Fat goal g</div><input type="number" id="sFat" inputmode="numeric"></div>
       </div>
+      <div class="label" style="margin-bottom:6px;">Calorie schedule</div>
+      <select id="sCalSched" style="margin-bottom:10px;">
+        <option value="same">Same target every day</option>
+        <option value="weekend">Higher Fri &amp; Sat, lower weekdays (same weekly total)</option>
+        <option value="custom">Custom per-day targets</option>
+      </select>
+      <div id="schedCustom" class="hidden" style="margin-bottom:10px;">
+        <div class="row" style="margin-bottom:8px;">
+          <div><div class="label">Sun</div><input type="number" id="sSched0" inputmode="numeric"></div>
+          <div><div class="label">Mon</div><input type="number" id="sSched1" inputmode="numeric"></div>
+          <div><div class="label">Tue</div><input type="number" id="sSched2" inputmode="numeric"></div>
+          <div><div class="label">Wed</div><input type="number" id="sSched3" inputmode="numeric"></div>
+        </div>
+        <div class="row">
+          <div><div class="label">Thu</div><input type="number" id="sSched4" inputmode="numeric"></div>
+          <div><div class="label">Fri</div><input type="number" id="sSched5" inputmode="numeric"></div>
+          <div><div class="label">Sat</div><input type="number" id="sSched6" inputmode="numeric"></div>
+          <div></div>
+        </div>
+      </div>
+      <div class="note" id="schedTotalNote" style="margin-bottom:12px;"></div>
       <button class="btn" id="saveSettingsBtn">Save settings</button>
-      <div class="note">These drive every bar in the app. Anyone can set their own numbers — cutting, bulking, or maintaining.</div>
+      <div class="note">Targets are exact, but color warnings allow a small practical buffer. Scheduling redistributes the same weekly calories across days — it never adds calories unless you edit the daily numbers yourself in custom mode.</div>
       <div style="height:14px;"></div>
       <button class="btn ghost small" id="measureToggleBtn">Enable body measurements</button>
       <div class="note">Adds an optional waist/chest/arm tracker to the Weight tab. Toggle off any time — your entries stay saved.</div>
@@ -879,7 +898,7 @@
 // ================== storage keys & defaults ==================
 const DATA_KEY = "forge:data", CFG_KEY = "forge:cfg", PROG_KEY = "forge:program";
 
-const DEFAULT_CFG = { startWt:225, goalWt:175, calLo:1900, calHi:2100, proLo:180, proHi:200, carbGoal:160, fatGoal:60 };
+const DEFAULT_CFG = { startWt:225, goalWt:175, calTarget:2000, proTarget:190, carbGoal:160, fatGoal:60 };
 
 const DEFAULT_PROGRAM = {
   name: "Full Body Foundations (3-Day)",
@@ -1116,7 +1135,37 @@ function download(filename, text){
 // ================== state ==================
 let data = loadJSON(DATA_KEY, null) || loadJSON("ryan-cut:data", null) || { food:{}, workouts:[], weights:[], recents:[] };
 if(!data.recents) data.recents = []; if(!data.myFoods) data.myFoods = {}; if(!data.meals) data.meals = []; if(!data.finished) data.finished = {}; if(!data.foodCounts) data.foodCounts = {}; if(!data.mealCounts) data.mealCounts = {}; if(!data.meta) data.meta = {lastBackup:null, logsSince:0};
-let cfg = Object.assign({}, DEFAULT_CFG, loadJSON(CFG_KEY, {}));
+// migrate old range targets (calLo/calHi, proLo/proHi) to exact targets — must run on the RAW
+// object before defaults merge in, or the default calTarget masks the user's real numbers
+function migrateTargets(obj){
+  if (!obj) return;
+  if (!Number.isFinite(obj.calTarget) && Number.isFinite(obj.calLo) && Number.isFinite(obj.calHi)) obj.calTarget = Math.round((obj.calLo+obj.calHi)/2);
+  if (!Number.isFinite(obj.proTarget) && Number.isFinite(obj.proLo) && Number.isFinite(obj.proHi)) obj.proTarget = Math.round((obj.proLo+obj.proHi)/2);
+}
+const _rawCfg = loadJSON(CFG_KEY, {});
+migrateTargets(_rawCfg);
+let cfg = Object.assign({}, DEFAULT_CFG, _rawCfg);
+function migrateCfg(){
+  if (!Number.isFinite(cfg.calTarget)) cfg.calTarget = DEFAULT_CFG.calTarget;
+  if (!Number.isFinite(cfg.proTarget)) cfg.proTarget = DEFAULT_CFG.proTarget;
+  if (!cfg.calSchedMode) cfg.calSchedMode = "same";
+}
+migrateCfg();
+// exact calorie target for a given date (schedule-aware); weekly total preserved by presets
+function weekendSchedDays(){
+  const b = cfg.calTarget;
+  return [b-100, b-100, b-100, b-100, b-100, b+250, b+250]; // Sun..Sat, Fri+Sat higher, week total unchanged
+}
+function calTargetFor(ds){
+  if (cfg.calSchedMode==="same" || !Array.isArray(cfg.calSchedDays) || cfg.calSchedDays.length!==7) return cfg.calTarget;
+  const dow = new Date(ds+"T12:00:00").getDay();
+  const v = Number(cfg.calSchedDays[dow]);
+  return Number.isFinite(v) && v>0 ? v : cfg.calTarget;
+}
+function weeklyCalTotal(){
+  if (cfg.calSchedMode==="same" || !Array.isArray(cfg.calSchedDays) || cfg.calSchedDays.length!==7) return cfg.calTarget*7;
+  return cfg.calSchedDays.reduce((a,x)=>a+(Number(x)||0),0);
+}
 let program = loadJSON(PROG_KEY, DEFAULT_PROGRAM);
 try { validateProgram(program); } catch(e){ program = DEFAULT_PROGRAM; }
 let selected = null;
@@ -1172,34 +1221,28 @@ document.querySelectorAll(".tab").forEach(btn=>{
 });
 
 // ================== bars ==================
-function rangeBarHTML(label, value, lo, hi, unit){
-  const max = hi*1.25;
+function exactBarHTML(label, value, target, unit, kind){
+  const max = target*1.25;
   const pct = Math.min(100,(value/max)*100);
-  const loP = (lo/max)*100, hiP = (hi/max)*100;
-  const inBand = value>=lo && value<=hi, over = value>hi;
-  const cls = over?"over":inBand?"ok":"";
-  const color = over?"var(--warn)":inBand?"var(--ok)":"var(--text)";
+  const tp = Math.min(100,(target/max)*100);
+  const over = value - target;
+  let cls = "", color = "var(--text)";
+  if (kind==="pro"){
+    if (value >= target){ cls = "ok"; color = "var(--ok)"; }          // hit = green, never red for over
+    else { cls = "mid"; color = "var(--amber)"; }                      // under = unfinished amber
+  } else {
+    const redAt = kind==="cal" ? 100 : kind==="carb" ? 15 : 8;         // practical buffers
+    if (over > redAt){ cls = "over"; color = "var(--warn)"; }
+    else if (over > 0){ cls = "mid"; color = "var(--amber)"; }
+  }
   return '<div class="bar-head"><span class="label" style="margin:0;">'+label+'</span>'
-    +'<span class="bar-val" style="color:'+color+'">'+Math.round(value)+' <span class="t">/ '+lo+'–'+hi+' '+unit+'</span></span></div>'
-    +'<div class="bar"><div class="band" style="left:'+loP+'%; width:'+(hiP-loP)+'%;"></div>'
+    +'<span class="bar-val" style="color:'+color+'">'+Math.round(value)+' <span class="t">/ '+target+' '+unit+'</span></span></div>'
+    +'<div class="bar"><div class="band" style="left:'+tp+'%; width:2px;"></div>'
     +'<div class="fill '+cls+'" style="width:'+pct+'%;"></div></div>';
 }
-function goalBarHTML(label, value, goal, unit){
-  const max = goal*1.25;
-  const pct = Math.min(100,(value/max)*100);
-  const goalP = (goal/max)*100;
-  const over = value>goal;
-  const cls = over?"over":"";
-  const color = over?"var(--warn)":"var(--text)";
-  return '<div class="bar-head"><span class="label" style="margin:0;">'+label+'</span>'
-    +'<span class="bar-val" style="color:'+color+'">'+Math.round(value)+' <span class="t">/ '+goal+' '+unit+'</span></span></div>'
-    +'<div class="bar"><div class="band" style="left:'+(goalP-1)+'%; width:2%;"></div>'
-    +'<div class="fill '+cls+'" style="width:'+pct+'%;"></div></div>';
-}
-
-// ================== FOOD ==================
 const MEALS = ["breakfast","lunch","dinner","snacks"];
 const MEAL_LABEL = {breakfast:"Breakfast", lunch:"Lunch", dinner:"Dinner", snacks:"Snacks", other:"Uncategorized"};
+
 function defaultMeal(){
   const h = new Date().getHours() + new Date().getMinutes()/60;
   if (h < 10.5) return "breakfast";
@@ -1238,11 +1281,12 @@ function daySums(dateStr){
   list.forEach(f=>{ s.cal+=Number(f.cal||0); s.pro+=Number(f.pro||0); s.carb+=Number(f.carb||0); s.fat+=Number(f.fat||0); });
   return s;
 }
-function allBarsHTML(s){
-  return rangeBarHTML("Calories", s.cal, cfg.calLo, cfg.calHi, "kcal")
-    + rangeBarHTML("Protein", s.pro, cfg.proLo, cfg.proHi, "g")
-    + goalBarHTML("Carbs", s.carb, cfg.carbGoal, "g")
-    + goalBarHTML("Fat", s.fat, cfg.fatGoal, "g");
+function allBarsHTML(s, ds){
+  const d = ds || todayStr();
+  return exactBarHTML("Calories", s.cal, calTargetFor(d), "kcal", "cal")
+    + exactBarHTML("Protein", s.pro, cfg.proTarget, "g", "pro")
+    + exactBarHTML("Carbs", s.carb, cfg.carbGoal, "g", "carb")
+    + exactBarHTML("Fat", s.fat, cfg.fatGoal, "g", "fat");
 }
 
 // --- OFF product mapping ---
@@ -1655,6 +1699,7 @@ function addEntry(entry){
   data.food[d].push(entry);
   bumpLog();
   save(); renderFood(); renderDash(); renderBackup();
+  foodKudos(entry);
 }
 function removeEntry(i){
   const d = foodDateEl.value;
@@ -1667,7 +1712,7 @@ function renderFood(){
   const d = foodDateEl.value;
   const s = daySums(d);
   document.getElementById("totalsLabel").textContent = "Totals · "+fmtDate(d);
-  document.getElementById("foodBars").innerHTML = allBarsHTML(s);
+  document.getElementById("foodBars").innerHTML = allBarsHTML(s, d);
   const list = data.food[d]||[];
   const el = document.getElementById("foodList");
   if(list.length===0){
@@ -3040,11 +3085,12 @@ function renderTDEE(){
 }
 document.getElementById("tdeeApplyBtn").addEventListener("click", ()=>{
   if(!lastTDEE) return;
-  const currentDeficit = Math.round((cfg.calLo+cfg.calHi)/2) - lastTDEE.tdee; // negative = deficit intent preserved? use target rate instead:
+  const currentDeficit = cfg.calTarget - lastTDEE.tdee; // negative = deficit intent preserved? use target rate instead:
   // preserve the user's current intended rate: assume they want the same deficit they originally set vs formula; simplest robust move: keep a 500 deficit if losing, else maintain
   const losing = cfg.goalWt < cfg.startWt;
   const target = lastTDEE.tdee + (losing ? -500 : 0);
-  cfg.calLo = target-100; cfg.calHi = target+100;
+  cfg.calTarget = target;
+  if (cfg.calSchedMode==="weekend") cfg.calSchedDays = weekendSchedDays();
   const sortedW = data.weights.slice().sort((a,b)=>a.date.localeCompare(b.date));
   cfg.lastTargetWt = sortedW.length ? sortedW[sortedW.length-1].lbs : cfg.lastTargetWt || cfg.startWt;
   delete cfg.adjustPromptedAt;
@@ -3074,8 +3120,8 @@ document.getElementById("finishDayBtn").addEventListener("click", ()=>{
   data.finished[t] = true;
   save();
   const s = daySums(t);
-  const inCal = s.cal>=cfg.calLo && s.cal<=cfg.calHi;
-  const inPro = s.pro>=cfg.proLo;
+  const inCal = s.cal <= calTargetFor(todayStr()) + 100; // exact target with the practical buffer
+  const inPro = s.pro >= cfg.proTarget;
   const streak = computeStreak();
   const stats = Math.round(s.cal)+" kcal · "+Math.round(s.pro)+"g protein"
     +(inCal&&inPro ? " — both targets hit" : inPro ? " — protein target hit" : "")
@@ -3486,6 +3532,63 @@ function renderUsual(){
   };
 }
 
+// ================== CALORIE SCHEDULE UI ==================
+function schedNote(){
+  // note reflects what's currently selected/typed in the UI
+  const mode = document.getElementById("sCalSched").value;
+  const note = document.getElementById("schedTotalNote");
+  if (mode==="same"){ note.textContent = "Weekly total: "+(cfg.calTarget*7)+" kcal ("+cfg.calTarget+" every day)."; }
+  else if (mode==="weekend"){
+    const d = weekendSchedDays();
+    note.textContent = "Fri & Sat "+d[5]+" kcal · other days "+d[0]+" kcal · weekly total unchanged at "+(cfg.calTarget*7)+" kcal.";
+  } else {
+    const total = [0,1,2,3,4,5,6].reduce((a,i)=>a+(Number(document.getElementById("sSched"+i).value)||0),0);
+    const base = cfg.calTarget*7;
+    note.textContent = "Weekly total: "+total+" kcal (baseline "+base+(total===base?" — matched":" — you have manually changed the week")+").";
+  }
+}
+function renderSched(){
+  // full render from saved cfg (settings page load)
+  const mode = cfg.calSchedMode || "same";
+  document.getElementById("sCalSched").value = mode;
+  document.getElementById("schedCustom").classList.toggle("hidden", mode!=="custom");
+  if (mode==="custom"){
+    const days = (Array.isArray(cfg.calSchedDays) && cfg.calSchedDays.length===7) ? cfg.calSchedDays : [0,1,2,3,4,5,6].map(()=>cfg.calTarget);
+    [0,1,2,3,4,5,6].forEach(i=>{ document.getElementById("sSched"+i).value = days[i]; });
+  }
+  schedNote();
+}
+document.getElementById("sCalSched").addEventListener("change", ()=>{
+  const mode = document.getElementById("sCalSched").value;
+  document.getElementById("schedCustom").classList.toggle("hidden", mode!=="custom");
+  if (mode==="custom"){
+    // seed once from the most sensible source; the user's edits own the inputs from here
+    const seed = (cfg.calSchedMode==="weekend") ? weekendSchedDays()
+      : ((Array.isArray(cfg.calSchedDays)&&cfg.calSchedDays.length===7) ? cfg.calSchedDays : [0,1,2,3,4,5,6].map(()=>cfg.calTarget));
+    [0,1,2,3,4,5,6].forEach(i=>{ document.getElementById("sSched"+i).value = seed[i]; });
+  }
+  schedNote();
+});
+[0,1,2,3,4,5,6].forEach(i=>{
+  document.getElementById("sSched"+i).addEventListener("input", schedNote);
+});
+
+// ================== POSITIVE FOOD FEEDBACK ==================
+let kudosTimer = null;
+function foodKudos(entry){
+  const pro = Number(entry.pro)||0, cal = Number(entry.cal)||0;
+  let msg = null;
+  if (pro >= 20 && cal > 0 && cal/pro <= 12) msg = "✓ Efficient protein";
+  else if (pro >= 20) msg = "✓ Strong protein source";
+  else if (pro >= Math.max(15, Math.round(cfg.proTarget*0.15))) msg = "✓ Helps hit protein goal";
+  if (!msg) return;
+  const el = document.getElementById("foodKudos");
+  el.textContent = msg;
+  el.classList.remove("hidden");
+  if (kudosTimer) clearTimeout(kudosTimer);
+  kudosTimer = setTimeout(()=>el.classList.add("hidden"), 3500);
+}
+
 // ================== AI ENGINE (bring-your-own-key) ==================
 const AI_DEFAULT_MODELS = { anthropic:"claude-sonnet-4-6", openai:"gpt-4o" };
 function aiProvider(){ return cfg.aiProvider || "anthropic"; }
@@ -3624,7 +3727,7 @@ function coachSystem(){
     + aiReport()
     + "\n\n---\nResponse contract:\n"
     + "- If you propose a new or edited training program, include EXACTLY ONE ```json code block containing the COMPLETE program: {\"name\":..., \"days\":[{\"id\":\"D1\",\"title\":...,\"exercises\":[{\"name\":...,\"scheme\":...}]}]}. Keep exercise names the user is progressing on unchanged so their history stays connected. Schemes like \"4×5\" power the app's auto-progression.\n"
-    + "- If you propose new nutrition targets, include a ```json block: {\"bpTargets\":{\"calLo\":...,\"calHi\":...,\"proLo\":...,\"proHi\":...,\"carbGoal\":...,\"fatGoal\":...}}.\n"
+    + "- If you propose new nutrition targets, include a ```json block: {\"bpTargets\":{\"calTarget\":...,\"proTarget\":...,\"carbGoal\":...,\"fatGoal\":...}} — exact daily numbers, not ranges.\n"
     + "- Otherwise reply in plain prose. Keep replies under 300 words unless asked for detail.";
 }
 function openCoach(prefillSend){
@@ -3676,9 +3779,14 @@ function addCoachBubble(role, text, payloads){
     const t = payloads.targets;
     const b = document.createElement("button");
     b.className = "act";
-    b.textContent = "Apply targets: " + (t.calLo||"?") + "–" + (t.calHi||"?") + " kcal";
+    // accept exact keys; tolerate legacy range keys from older prompts by averaging
+    const calT = typeof t.calTarget==="number" ? t.calTarget : (typeof t.calLo==="number" && typeof t.calHi==="number" ? Math.round((t.calLo+t.calHi)/2) : null);
+    const proT = typeof t.proTarget==="number" ? t.proTarget : (typeof t.proLo==="number" && typeof t.proHi==="number" ? Math.round((t.proLo+t.proHi)/2) : null);
+    b.textContent = "Apply targets: " + (calT||"?") + " kcal";
     b.addEventListener("click", ()=>{
-      ["calLo","calHi","proLo","proHi","carbGoal","fatGoal"].forEach(k=>{ if (typeof t[k]==="number") cfg[k] = t[k]; });
+      if (calT!=null){ cfg.calTarget = calT; if (cfg.calSchedMode==="weekend") cfg.calSchedDays = weekendSchedDays(); }
+      if (proT!=null) cfg.proTarget = proT;
+      ["carbGoal","fatGoal"].forEach(k=>{ if (typeof t[k]==="number") cfg[k] = t[k]; });
       const sortedW = data.weights.slice().sort((a,b2)=>a.date.localeCompare(b2.date));
       cfg.lastTargetWt = sortedW.length ? sortedW[sortedW.length-1].lbs : cfg.lastTargetWt;
       delete cfg.adjustPromptedAt;
@@ -4033,7 +4141,7 @@ function aiReport(){
   const fullDays = logged.map(d=>daySums(d)).filter(x=>x.cal>500);
   const avgCal = fullDays.length ? Math.round(fullDays.reduce((a,x)=>a+x.cal,0)/fullDays.length) : null;
   const avgPro = fullDays.length ? Math.round(fullDays.reduce((a,x)=>a+x.pro,0)/fullDays.length) : null;
-  const proHit = logged.filter(d=>daySums(d).pro>=cfg.proLo).length;
+  const proHit = logged.filter(d=>daySums(d).pro>=cfg.proTarget).length;
 
   // training: last 28 days
   const cut28 = new Date(Date.now()-28*86400000);
@@ -4070,7 +4178,7 @@ function aiReport(){
   if (tdee && tdee.tdee) L.push("- Measured TDEE from my actual logs: ~"+tdee.tdee+" kcal/day");
   L.push("");
   L.push("## Nutrition (last 14 days)");
-  L.push("- Targets: "+cfg.calLo+"–"+cfg.calHi+" kcal · protein "+cfg.proLo+"–"+cfg.proHi+"g · carbs "+cfg.carbGoal+"g · fat "+cfg.fatGoal+"g");
+  L.push("- Daily targets (exact): "+cfg.calTarget+" kcal"+(cfg.calSchedMode!=="same"?" (scheduled by day; weekly total "+weeklyCalTotal()+")":"")+" · protein "+cfg.proTarget+"g · carbs "+cfg.carbGoal+"g · fat "+cfg.fatGoal+"g");
   L.push(logged.length ? "- Logged "+logged.length+" of 14 days · avg "+ (avgCal!=null ? avgCal+" kcal, "+avgPro+"g protein" : "insufficient full days") + " · protein target hit "+proHit+"/"+logged.length+" days" : "- No food logged in the last 14 days");
   L.push("");
   L.push("## Training (last 28 days)");
@@ -4184,11 +4292,12 @@ function renderWeek(){
   card.classList.remove("hidden");
   const fullDays = logged.map(d=>daySums(d)).filter(x=>x.cal>500);
   const avgCal = fullDays.length ? Math.round(fullDays.reduce((s,x)=>s+x.cal,0)/fullDays.length) : null;
-  const proDays = logged.filter(d=>daySums(d).pro>=cfg.proLo).length;
+  const proDays = logged.filter(d=>daySums(d).pro>=cfg.proTarget).length;
   let html = "";
   if (avgCal!=null){
-    const inBand = avgCal>=cfg.calLo && avgCal<=cfg.calHi;
-    html += 'Avg calories: <b style="color:'+(inBand?'var(--ok)':'var(--text)')+'">'+avgCal+'</b> <span style="color:var(--dim)">/ '+cfg.calLo+'–'+cfg.calHi+'</span><br>';
+    const weekAvgT = Math.round(weeklyCalTotal()/7);
+    const inBand = Math.abs(avgCal-weekAvgT) <= 100;
+    html += 'Avg calories: <b style="color:'+(inBand?'var(--ok)':'var(--text)')+'">'+avgCal+'</b> <span style="color:var(--dim)">/ '+weekAvgT+'</span><br>';
   }
   if (logged.length) html += 'Protein target hit: <b>'+proDays+' of '+logged.length+'</b> logged days<br>';
   html += 'Sessions: <b>'+sessions+'</b> this week<br>';
@@ -4443,8 +4552,9 @@ function renderSetupStep(){
       const goal = setupGoalAdj();
       if(!age || !ft){ flashSave("Fill age and height", true); return; }
       const r = calcMacros(sex, age, ft, inches, cfg.startWt, act, goal);
-      cfg.calLo = r.cal-100; cfg.calHi = r.cal+100;
-      cfg.proLo = Math.max(0, r.pro-10); cfg.proHi = r.pro+10;
+      cfg.calTarget = r.cal;
+      cfg.proTarget = r.pro;
+      if (cfg.calSchedMode==="weekend") cfg.calSchedDays = weekendSchedDays();
       cfg.carbGoal = r.carb; cfg.fatGoal = r.fat;
       cfg.calcInputs = {sex:sex, age:age, ft:ft, inches:inches, act:act, goal:goal};
       cfg.lastTargetWt = cfg.startWt;
@@ -4527,7 +4637,7 @@ if (!cfg.disclaimerAccepted){
 // ================== HELP & FAQ ==================
 const FAQ = [
   {sec:"Getting started"},
-  {q:"How do I set my calorie and macro targets?", a:"New installs get walked through this in the setup wizard (including combined goals — picking <b>Lose fat + Build muscle</b> sets up a recomposition: slight deficit, high protein). Anytime after: <b>Settings → Calorie & macro calculator</b> — enter your stats, tap <b>Calculate</b>, pick a macro split (or use Recommended), then <b>Use these as my targets</b>. Every bar in the app measures against your numbers, and you can always type targets directly into the fields below the calculator."},
+  {q:"How do I set my calorie and macro targets?", a:"New installs get walked through this in the setup wizard (including combined goals — picking <b>Lose fat + Build muscle</b> sets up a recomposition: slight deficit, high protein). Anytime after: <b>Settings → Calorie & macro calculator</b> — enter your stats, tap <b>Calculate</b>, pick a macro split (or use Recommended), then <b>Use these as my targets</b>. Every bar in the app measures against your exact numbers — one calorie target (your max on a cut), one protein goal, exact carbs and fat. Targets are exact, but color warnings allow a small practical buffer. Optional <b>calorie scheduling</b> (Settings) redistributes the same weekly calories across days — higher Fri/Sat, lower weekdays, or fully custom — it never adds calories unless you edit the daily numbers yourself in custom mode."},
   {q:"What's a macro split and which should I pick?", a:"It's how your calories divide between protein / carbs / fat. <b>Recommended</b> (0.9g protein per lb, 25% fat) suits most people losing fat while keeping muscle. Higher-carb splits like 40/40/20 suit hard training; the Custom option lets you set any percentages and they auto-balance to 100%. The link under the calculator goes to the peer-reviewed research."},
   {q:"Where do the celebration quotes come from?", a:"They're <b>earned, not browsed</b>. Log a session, forge a PR, or finish your day, and the celebration screen hands you one — half from the greats of sport and history, half BlackPyre originals. There are hundreds in the vault, so they stay fresh."},
   {q:"What's the bar under the BlackPyre logo?", a:"That's <b>Your Journey</b> — your whole goal on one line. Left end is your starting weight, right end is your goal, and the glowing dot is exactly where you are right now based on your latest weigh-in. It moves the moment you record a weight, on every screen. Hit the goal and the bar fills with a ✓. And when a stretch goes sideways, a short note appears under the bar — a pat on the back and a path forward, never a lecture."},
@@ -4730,8 +4840,9 @@ document.getElementById("calcMacrosBtn").addEventListener("click", ()=>{
 document.getElementById("applyMacrosBtn").addEventListener("click", ()=>{
   if(!lastCalc) return;
   const g = splitGrams();
-  cfg.calLo = lastCalc.cal-100; cfg.calHi = lastCalc.cal+100;
-  cfg.proLo = Math.max(0,g.pro-10); cfg.proHi = g.pro+10;
+  cfg.calTarget = lastCalc.cal;
+  cfg.proTarget = g.pro;
+  if (cfg.calSchedMode==="weekend") cfg.calSchedDays = weekendSchedDays();
   cfg.carbGoal = g.carb; cfg.fatGoal = g.fat;
   cfg.lastTargetWt = Number(document.getElementById("cWt").value) || cfg.lastTargetWt || cfg.startWt;
   delete cfg.adjustPromptedAt;
@@ -4788,10 +4899,9 @@ document.getElementById("adjustYesBtn").addEventListener("click", ()=>{
 function renderSettings(){
   document.getElementById("sStartWt").value = cfg.startWt;
   document.getElementById("sGoalWt").value = cfg.goalWt;
-  document.getElementById("sCalLo").value = cfg.calLo;
-  document.getElementById("sCalHi").value = cfg.calHi;
-  document.getElementById("sProLo").value = cfg.proLo;
-  document.getElementById("sProHi").value = cfg.proHi;
+  document.getElementById("sCalTarget").value = cfg.calTarget;
+  document.getElementById("sProTarget").value = cfg.proTarget;
+  renderSched();
   document.getElementById("sCarb").value = cfg.carbGoal;
   document.getElementById("sFat").value = cfg.fatGoal;
 }
@@ -4799,12 +4909,15 @@ document.getElementById("saveSettingsBtn").addEventListener("click", ()=>{
   const g = id=>Number(document.getElementById(id).value);
   cfg = Object.assign({}, cfg, {
     startWt: g("sStartWt")||cfg.startWt, goalWt: g("sGoalWt")||cfg.goalWt,
-    calLo: g("sCalLo")||cfg.calLo, calHi: g("sCalHi")||cfg.calHi,
-    proLo: g("sProLo")||cfg.proLo, proHi: g("sProHi")||cfg.proHi,
+    calTarget: g("sCalTarget")||cfg.calTarget,
+    proTarget: g("sProTarget")||cfg.proTarget,
     carbGoal: g("sCarb")||cfg.carbGoal, fatGoal: g("sFat")||cfg.fatGoal,
   });
-  if (cfg.calHi < cfg.calLo){ const t=cfg.calLo; cfg.calLo=cfg.calHi; cfg.calHi=t; }
-  if (cfg.proHi < cfg.proLo){ const t=cfg.proLo; cfg.proLo=cfg.proHi; cfg.proHi=t; }
+  cfg.calSchedMode = document.getElementById("sCalSched").value;
+  if (cfg.calSchedMode==="weekend") cfg.calSchedDays = weekendSchedDays();
+  else if (cfg.calSchedMode==="custom"){
+    cfg.calSchedDays = [0,1,2,3,4,5,6].map(i=>Number(document.getElementById("sSched"+i).value)||cfg.calTarget);
+  } else cfg.calSchedDays = null;
   const sortedW2 = data.weights.slice().sort((a,b)=>a.date.localeCompare(b.date));
   cfg.lastTargetWt = sortedW2.length ? sortedW2[sortedW2.length-1].lbs : cfg.lastTargetWt || cfg.startWt;
   delete cfg.adjustPromptedAt;
@@ -4854,7 +4967,9 @@ document.getElementById("importDataFile").addEventListener("change", (e)=>{
         ["anthropicKey","openaiKey","aiProvider","aiModelAnth","aiModelOai"].forEach(k=>{
           if (b.cfg[k]===undefined && cfg[k]!==undefined) keepAI[k] = cfg[k];
         });
+        migrateTargets(b.cfg);
         cfg = Object.assign({}, DEFAULT_CFG, b.cfg, keepAI);
+        migrateCfg();
       }
       if(b.program) program = validateProgram(b.program);
       save(); saveCfg(); saveProgram();
@@ -4920,10 +5035,10 @@ function renderDash(){
   const t=todayStr(), s=daySums(t);
   document.getElementById("dashDateLabel").textContent="Today · "+fmtDate(t);
   document.getElementById("dashBars").innerHTML=allBarsHTML(s);
-  const calLeft = Math.max(0, cfg.calLo - s.cal);
-  const proLeft = Math.max(0, cfg.proLo - s.pro);
+  const calLeft = Math.max(0, calTargetFor(t) - s.cal);
+  const proLeft = Math.max(0, cfg.proTarget - s.pro);
   document.getElementById("dashRemaining").textContent =
-    (calLeft>0||proLeft>0) ? ("Remaining to minimum: "+Math.round(calLeft)+" kcal · "+Math.round(proLeft)+"g protein") : "Minimums hit ✓";
+    (calLeft>0||proLeft>0) ? ("Remaining today: "+Math.round(calLeft)+" kcal · "+Math.round(proLeft)+"g protein") : "Targets hit ✓";
   const lastArr=data.workouts.slice().sort((a,b)=>b.date.localeCompare(a.date));
   const last=lastArr[0];
   const el=document.getElementById("dashLast");
