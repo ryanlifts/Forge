@@ -235,11 +235,11 @@
     <div class="card hidden" id="backupCard" style="border-color:var(--warn);">
       <div class="label" style="color:var(--warn);">Backup recommended</div>
       <div id="backupText" style="font-size:13px; line-height:1.7; margin:6px 0 12px;"></div>
-      <button class="btn ghost small" id="backupNowBtn">⬇ Back up now</button>
+      <button class="btn ghost small" id="backupNowBtn">Back up now</button>
     </div>
     <div class="card hidden" id="waterCard">
       <div style="display:flex; justify-content:space-between; align-items:center;">
-        <div><div class="label">💧 Water</div><div style="font-family:'Oswald',sans-serif; font-weight:700; font-size:22px;"><span id="waterCount">0</span> <small style="font-size:12px; color:var(--dim);">glasses today</small></div></div>
+        <div><div class="label">Water</div><div style="font-family:'Oswald',sans-serif; font-weight:700; font-size:22px;"><span id="waterCount">0</span> <small style="font-size:12px; color:var(--dim);">glasses today</small></div></div>
         <div class="row" style="flex:0 0 auto;">
           <button class="step" id="waterMinus" style="width:44px; height:44px;">−</button>
           <button class="step" id="waterPlus" style="width:44px; height:44px; border-color:var(--ember);">＋</button>
@@ -247,9 +247,9 @@
       </div>
     </div>
     <div class="card hidden" id="checkinCard" style="border-color:var(--ember);">
-      <div class="label">🤖 Coach check-in</div>
+      <div class="label">Coach check-in</div>
       <div style="font-size:13px; line-height:1.7; margin:6px 0 12px;">A week of new data since your last review. Want your coach to take a look?</div>
-      <button class="btn ghost small" id="checkinBtn">💬 Get my weekly review</button>
+      <button class="btn ghost small" id="checkinBtn">Get my weekly review</button>
     </div>
     <div class="card hidden" id="weekCard">
       <div class="label">This week</div>
@@ -286,19 +286,19 @@
       <div class="label">Last session</div>
       <div id="dashLast" style="font-size:13px; color:var(--dim);">No sessions yet.</div>
     </div>
-    <button class="btn" id="finishDayBtn" style="margin-bottom:12px;">🏁 Finish today's log</button>
+    <button class="btn" id="finishDayBtn" style="margin-bottom:12px;">Finish today's log</button>
     <div class="card" id="aiCoachCard">
-      <div class="label">🤖 AI Coach</div>
+      <div class="label">AI Coach</div>
       <div style="font-size:13px; line-height:1.7; margin:6px 0 12px;">
         Turn any AI into your personal trainer. One tap builds a progress report from your real data —
         weight trend, nutrition adherence, lift progression, and your current program — ready to paste into
         Claude, ChatGPT, or any AI. It can assess your progress and hand back an adjusted program that loads
         straight into BlackPyre. <span style="color:var(--dim);">Totally optional — BlackPyre works fully without it.</span>
       </div>
-      <button class="btn" id="coachOpenBtn" style="width:100%; margin-bottom:10px;">💬 Chat with your Coach</button>
+      <button class="btn" id="coachOpenBtn" style="width:100%; margin-bottom:10px;">Chat with your Coach</button>
       <div class="row">
-        <button class="btn ghost small" id="aiCopyBtn">📋 Copy report</button>
-        <button class="btn ghost small" id="aiDownloadBtn">⬇ Download</button>
+        <button class="btn ghost small" id="aiCopyBtn">Copy report</button>
+        <button class="btn ghost small" id="aiDownloadBtn">Download</button>
       </div>
       <div class="note hidden" id="coachKeyNote"></div>
     </div>
@@ -319,9 +319,9 @@
       <div style="height:12px;"></div>
       <div class="label">Search any food or brand</div>
       <input id="foodQuery" placeholder='e.g. "Chobani vanilla" or "chicken breast"' style="margin-bottom:10px;" enterkeyhint="search">
-      <button class="btn" id="searchBtn">🔍 Search food database</button>
+      <button class="btn" id="searchBtn">Search food database</button>
       <div class="row mt10">
-        <button class="btn ghost small" id="scanBtn" style="flex:1;">📷 Scan barcode</button>
+        <button class="btn ghost small" id="scanBtn" style="flex:1;">Scan barcode</button>
         <input id="barcodeInput" placeholder="or type UPC" inputmode="numeric" style="flex:1.4;">
         <button class="btn ghost small" id="barcodeBtn" style="flex:0.8;">Look up</button>
       </div>
@@ -363,28 +363,28 @@
     </div>
 
     <div class="row" style="margin-bottom:12px;">
-      <button class="btn ghost small hidden" id="recentsOpenBtn">★ Recent foods</button>
-      <button class="btn ghost small" id="myFoodsOpenBtn">🍱 My foods</button>
+      <button class="btn ghost small hidden" id="recentsOpenBtn">Recent foods</button>
+      <button class="btn ghost small" id="myFoodsOpenBtn">My foods</button>
     </div>
     <div class="card hidden" id="usualCard" style="border-color:var(--ember);">
-      <div class="label">⚡ Your usual <span id="usualMealName">breakfast</span></div>
+      <div class="label">Your usual <span id="usualMealName">breakfast</span></div>
       <div id="usualItems" style="font-size:13px; line-height:1.7; margin:6px 0 12px;"></div>
       <button class="btn ghost small" id="usualLogBtn" style="width:100%;"></button>
     </div>
     <div class="card hidden" id="aiFoodCard">
-      <div class="label">✨ AI quick log</div>
+      <div class="label">AI quick log</div>
       <div class="row" style="margin:8px 0 0; align-items:flex-end;">
         <div style="flex:1;"><input id="aiFoodText" placeholder="e.g. 2 eggs, toast with butter, black coffee"></div>
         <button class="xbtn" id="aiFoodGoBtn" style="flex:0 0 auto;">Log it</button>
       </div>
       <div class="row mt10" style="align-items:flex-end;">
         <div style="flex:1;"><input id="aiPhotoCaption" placeholder="Optional: where/what (e.g. Chipotle chicken bowl)"></div>
-        <button class="xbtn" id="aiPhotoBtn" style="flex:0 0 auto;">📸 Photo</button>
+        <button class="xbtn" id="aiPhotoBtn" style="flex:0 0 auto;">Photo</button>
       </div>
       <div id="aiHandoffControls" class="hidden">
         <div class="row mt10">
-          <button class="btn ghost small" id="hfCopyFoodBtn">📋 Copy prompt (text only)</button>
-          <button class="btn ghost small" id="hfShareBtn">📸 Choose a photo</button>
+          <button class="btn ghost small" id="hfCopyFoodBtn">Copy prompt (text only)</button>
+          <button class="btn ghost small" id="hfShareBtn">Choose a photo</button>
         </div>
         <div id="hfPhotoStage" class="hidden" style="margin-top:10px; padding:10px; border:1px solid var(--border); border-radius:12px; background:var(--panel);">
           <div style="display:flex; gap:10px; align-items:center;">
@@ -392,12 +392,12 @@
             <div class="note" id="hfPhotoStatus" style="margin:0;">Photo selected — now share to ChatGPT or attach it manually.</div>
           </div>
           <div class="row mt10">
-            <button class="btn ghost small" id="hfShareGoBtn">📤 Share photo + prompt</button>
-            <button class="btn ghost small" id="hfCopy2Btn">📋 Copy prompt only</button>
+            <button class="btn ghost small" id="hfShareGoBtn">Share photo + prompt</button>
+            <button class="btn ghost small" id="hfCopy2Btn">Copy prompt only</button>
           </div>
           <button class="btn ghost small mt10" id="hfClearBtn" style="width:100%;">✕ Clear photo</button>
         </div>
-        <button class="btn ghost small mt10" id="hfPasteBtn" style="width:100%;">📥 Paste ChatGPT's reply &amp; review</button>
+        <button class="btn ghost small mt10" id="hfPasteBtn" style="width:100%;">Paste ChatGPT's reply &amp; review</button>
         <div id="hfPasteBox" class="hidden" style="margin-top:10px; padding:10px; border:1px solid var(--border); border-radius:12px; background:var(--panel);">
           <div class="label">Paste ChatGPT reply here</div>
           <textarea id="hfPasteText" rows="4" style="width:100%; margin:8px 0 10px; resize:vertical;" placeholder='{"foods":[{"name":"...","cal":0,"pro":0,"carb":0,"fat":0}]}'></textarea>
@@ -515,18 +515,18 @@
       <div class="label">Current program</div>
       <div id="programName" style="font-family:'Oswald',sans-serif; font-weight:600; font-size:18px; text-transform:uppercase; margin-bottom:10px;"></div>
       <div class="row">
-        <button class="btn ghost small" id="importBtn">⬆ Load</button>
-        <button class="btn ghost small" id="exportBtn">⬇ Save file</button>
-        <button class="btn ghost small" id="shareBtn">📤 Share</button>
+        <button class="btn ghost small" id="importBtn">Load</button>
+        <button class="btn ghost small" id="exportBtn">Save file</button>
+        <button class="btn ghost small" id="shareBtn">Share</button>
       </div>
       <div class="row mt10">
         <button class="btn ghost small" id="editProgBtn">✎ Edit this program</button>
         <button class="btn ghost small" id="newProgBtn">＋ Build new program</button>
       </div>
-      <button class="btn ghost small mt10" id="pasteProgBtn" style="width:100%;">📋 Paste program from an AI</button>
+      <button class="btn ghost small mt10" id="pasteProgBtn" style="width:100%;">Paste program from an AI</button>
       <input type="file" id="importFile" accept=".json,application/json" class="hidden">
       <div class="err hidden" id="programErr"></div>
-      <div class="note">Load any BlackPyre program file (.json) — from Claude, a coach, a friend — or build your own right here.</div>
+      <div class="note">Load any program file (.json) — from any AI, a coach, a friend — or build your own right here.</div>
     </div>
 
     <!-- program builder -->
@@ -611,10 +611,10 @@
   <!-- ============ WEIGHT ============ -->
   <div id="view-weight" class="view">
     <div class="card">
-      <div class="row" style="align-items:flex-end;">
-        <div style="flex:0 0 175px;"><div class="label">Date</div><input type="date" id="wtDate"></div>
-        <div style="flex:0 0 130px;"><div class="label">Weight (lb)</div><input type="number" id="wtVal" placeholder="e.g. 221.4" inputmode="decimal" step="any"></div>
-        <div style="flex:1; min-width:120px;"><button class="btn" id="addWtBtn">Record</button></div>
+      <div>
+        <div class="label">Date</div><input type="date" id="wtDate" style="max-width:190px; margin-bottom:12px;">
+        <div class="label">Weight (lb)</div><input type="number" id="wtVal" placeholder="e.g. 221.4" inputmode="decimal" step="any" style="margin-bottom:12px;">
+        <button class="btn" id="addWtBtn" style="width:100%;">Record</button>
       </div>
       <div class="note">Weigh same time of day · trust the weekly trend, not the daily number</div>
     </div>
@@ -639,7 +639,7 @@
 
   <!-- ============ SETTINGS ============ -->
   <div id="view-settings" class="view">
-    <button class="btn ghost small" id="faqOpenBtn" style="width:100%; margin-bottom:12px;">❓ Help & FAQ — how everything works</button>
+    <button class="btn ghost small" id="faqOpenBtn" style="width:100%; margin-bottom:12px;">Help & FAQ — how everything works</button>
     <div class="card">
       <div class="label" style="margin-bottom:12px;">Calorie & macro calculator</div>
       <div class="row" style="margin-bottom:12px;">
@@ -725,7 +725,7 @@
     </div>
 
     <div class="card">
-      <div class="label" style="margin-bottom:10px;">🤖 AI Coach (optional)</div>
+      <div class="label" style="margin-bottom:10px;">AI Coach (optional)</div>
       <div class="note" style="margin:0 0 10px;">Powers the in-app Coach chat, photo meal logging, and AI quick-log. Pick how BlackPyre talks to an AI — keys are stored only on this device and excluded from backups.</div>
       <div class="label">Provider</div>
       <select id="sAiProvider" style="margin-bottom:10px;">
@@ -752,9 +752,9 @@
     </div>
     <div class="card">
       <div class="label" style="margin-bottom:10px;">Data</div>
-      <button class="btn ghost small" id="exportDataBtn">⬇ Back up all data (.json)</button>
+      <button class="btn ghost small" id="exportDataBtn">Back up all data (.json)</button>
       <div style="height:10px;"></div>
-      <button class="btn ghost small" id="importDataBtn">⬆ Restore from backup</button>
+      <button class="btn ghost small" id="importDataBtn">Restore from backup</button>
       <div class="note" id="backupMetaLine" style="margin-top:8px;"></div>
       <input type="file" id="importDataFile" accept=".json,application/json" class="hidden">
       <div class="note">Data lives only on this device. Back up occasionally or when moving phones.</div>
@@ -794,7 +794,7 @@
       • <b>Nutrition data</b> comes from public databases and user entries and may contain errors — verify labels for allergies or medical diets.
     </div>
     <button class="btn" id="disclaimerAgreeBtn" style="width:100%;">I understand and agree</button>
-    <div class="note" style="text-align:center; margin-top:10px;">This stays available anytime in ⚙ Settings → Help & FAQ.</div>
+    <div class="note" style="text-align:center; margin-top:10px;">This stays available anytime in Settings → Help & FAQ.</div>
   </div>
 </div>
 
@@ -870,7 +870,7 @@
     <button class="tab" data-view="food">Food</button>
     <button class="tab" data-view="work">Train</button>
     <button class="tab" data-view="weight">Weight</button>
-    <button class="tab" data-view="settings">⚙</button>
+    <button class="tab" data-view="settings">Settings</button>
   </div>
 </div>
 
@@ -1324,7 +1324,7 @@ async function runSearch(){
   }
 
   renderResults([...myHits, ...localHits, ...usdaHits, ...offHits]);
-  searchBtn.disabled = false; searchBtn.textContent = "🔍 Search food database";
+  searchBtn.disabled = false; searchBtn.textContent = "Search food database";
 }
 
 // --- camera barcode scanning (lazy-loads scanner library on first use) ---
@@ -1861,7 +1861,7 @@ function renderSessionInputs(){
       tools.appendChild(sameBtn);
     }
     const vBtn = document.createElement("button");
-    vBtn.className = "xbtn"; vBtn.textContent = "\uD83C\uDFA5";
+    vBtn.className = "xbtn"; vBtn.textContent = "Video";
     vBtn.title = "How to do this - video";
     vBtn.addEventListener("click", ()=>openFormVideo(ex.name));
     tools.appendChild(vBtn);
@@ -1881,7 +1881,7 @@ function renderSessionInputs(){
       tools.appendChild(swBtn);
     }
     const tBtn = document.createElement("button");
-    tBtn.className = "xbtn"; tBtn.textContent = st.mode==="rows" ? "\u2328" : "#";
+    tBtn.className = "xbtn"; tBtn.textContent = st.mode==="rows" ? "Aa" : "#";
     tBtn.title = "Toggle text entry";
     tBtn.addEventListener("click", ()=>{
       if (st.mode==="rows"){
@@ -2462,7 +2462,7 @@ document.getElementById("importFile").addEventListener("change", (e)=>{
   e.target.value = "";
 });
 document.getElementById("exportBtn").addEventListener("click", ()=>{
-  download((program.name||"forge-program").replace(/[^a-z0-9]+/gi,"-").toLowerCase()+".json", JSON.stringify(program,null,2));
+  download((program.name||"blackpyre-program").replace(/[^a-z0-9]+/gi,"-").toLowerCase()+".json", JSON.stringify(program,null,2));
   ackBtn("exportBtn", "✓ Downloaded");
 });
 
@@ -2480,7 +2480,7 @@ document.getElementById("addWtBtn").addEventListener("click", ()=>{
     const cutting = cfg.goalWt < cfg.startWt;
     if ((cutting && v > cfg.startWt) || (!cutting && v < cfg.startWt)){
       cfg.startWt = v; saveCfg();
-      flashSave("Starting line set at "+v+" — the journey begins today \uD83D\uDD25");
+      flashSave("Starting line set at "+v+" — the journey begins today");
     }
   }
   save(); renderWeight(); renderDash(); renderProjection(); renderWeek();
@@ -2931,7 +2931,7 @@ function showCelebration(title, prLines, statsText){
   const qu = pick(QUOTES);
   document.getElementById("celQuote").textContent = "\u201C"+qu.q+"\u201D";
   document.getElementById("celAttr").textContent = "— "+qu.a;
-  document.getElementById("celTip").textContent = "💡 " + pick(TIPS);
+  document.getElementById("celTip").textContent = "" + pick(TIPS);
   document.getElementById("celebrate").classList.remove("hidden");
 }
 document.getElementById("celCloseBtn").addEventListener("click", ()=>document.getElementById("celebrate").classList.add("hidden"));
@@ -2985,7 +2985,7 @@ function renderPRs(){
   card.classList.remove("hidden");
   names.sort((a,b)=>map[b].e1rm-map[a].e1rm);
   document.getElementById("prList").innerHTML = names.slice(0,8).map(ex=>
-    '<div class="list-item" style="cursor:pointer;" data-ex="'+esc(ex)+'"><span style="flex:2;">'+esc(ex)+' <span style="color:var(--dim); font-size:10px;">📈</span></span>'
+    '<div class="list-item" style="cursor:pointer;" data-ex="'+esc(ex)+'"><span style="flex:2;">'+esc(ex)+' <span style="color:var(--dim); font-size:10px;"></span></span>'
     +'<span style="flex:1.4; text-align:right; color:var(--dim);">'+map[ex].w+'×'+map[ex].r+'</span>'
     +'<span style="flex:1; text-align:right; font-weight:600; color:var(--ember);">~'+Math.round(map[ex].e1rm)+'</span></div>'
   ).join("");
@@ -3078,8 +3078,8 @@ document.getElementById("finishDayBtn").addEventListener("click", ()=>{
   const inPro = s.pro>=cfg.proLo;
   const streak = computeStreak();
   const stats = Math.round(s.cal)+" kcal · "+Math.round(s.pro)+"g protein"
-    +(inCal&&inPro ? " — both targets hit 🎯" : inPro ? " — protein target hit" : "")
-    +(streak>1 ? "  ·  🔥 "+streak+"-day streak" : "");
+    +(inCal&&inPro ? " — both targets hit" : inPro ? " — protein target hit" : "")
+    +(streak>1 ? "  ·  "+streak+"-day streak" : "");
   showCelebration("Day Forged", null, stats);
   renderDash();
 });
@@ -3234,7 +3234,7 @@ document.getElementById("restCustomSet").addEventListener("click", ()=>{
 // ================== SHARE PROGRAM ==================
 document.getElementById("shareBtn").addEventListener("click", async ()=>{
   const json = JSON.stringify(program,null,2);
-  const fname = (program.name||"forge-program").replace(/[^a-z0-9]+/gi,"-").toLowerCase()+".json";
+  const fname = (program.name||"blackpyre-program").replace(/[^a-z0-9]+/gi,"-").toLowerCase()+".json";
   try {
     if (navigator.canShare && window.File){
       const file = new File([json], fname, {type:"application/json"});
@@ -3421,13 +3421,13 @@ function renderJourneyMsg(){
   const drifting = cutting ? weekDelta > 1 : weekDelta < -1;
 
   if (wrongDir && spanDays < 14){
-    el.textContent = "You showed up and weighed in — that's the habit that wins. \uD83D\uDD25 Early numbers bounce around; yours will settle. Keep stacking days.";
+    el.textContent = "You showed up and weighed in — that's the habit that wins. Early numbers bounce around; yours will settle. Keep stacking days.";
     el.classList.remove("hidden");
   } else if (wrongDir){
-    el.textContent = "New starting line, same destination. Today's number is just where this stretch begins — every meal logged and every rep from here counts. You've got this. \uD83D\uDCAA";
+    el.textContent = "New starting line, same destination. Today's number is just where this stretch begins — every meal logged and every rep from here counts. You've got this.";
     el.classList.remove("hidden");
   } else if (drifting && downOverall > 1){
-    el.textContent = "One rough stretch doesn't erase your work — you're still "+downOverall+" lb "+(cutting?"down":"up")+" overall. Champions have bad weeks; they don't have bad months. Tighten up and go. \uD83D\uDD25";
+    el.textContent = "One rough stretch doesn't erase your work — you're still "+downOverall+" lb "+(cutting?"down":"up")+" overall. Champions have bad weeks; they don't have bad months. Tighten up and go.";
     el.classList.remove("hidden");
   }
 }
@@ -3478,7 +3478,7 @@ function renderUsual(){
   document.getElementById("usualItems").innerHTML = remaining.map(it=>esc(it.name)).join(" · ")
     + '<div style="color:var(--dim); font-size:11px; margin-top:4px;">'+total+' kcal · '+pro+'g protein · your typical portions</div>';
   const btn = document.getElementById("usualLogBtn");
-  btn.textContent = "⚡ Log usual "+currentMeal+" ("+remaining.length+" item"+(remaining.length===1?"":"s")+")";
+  btn.textContent = "Log usual "+currentMeal+" ("+remaining.length+" item"+(remaining.length===1?"":"s")+")";
   btn.onclick = ()=>{
     remaining.forEach(it=>addEntry(Object.assign({}, it)));
     ackBtn("usualLogBtn", "✓ Logged "+remaining.length);
@@ -3543,11 +3543,11 @@ function renderAIGates(){
   const note = document.getElementById("coachKeyNote");
   if (isHandoff()){
     note.classList.remove("hidden");
-    note.textContent = "Handoff mode: tap 📋 Copy report and paste it into ChatGPT — it contains everything your coach needs, including how to send a program back.";
+    note.textContent = "Handoff mode: tap Copy report and paste it into ChatGPT — it contains everything your coach needs, including how to send a program back.";
   } else if (hasAIKey()){ note.classList.add("hidden"); }
   else {
     note.classList.remove("hidden");
-    note.textContent = "Chat needs a one-time API key — add it in ⚙ Settings → AI Coach. Or choose ChatGPT handoff mode there to work key-free. Copy report always works.";
+    note.textContent = "Chat needs a one-time API key — add it in Settings → AI Coach. Or choose ChatGPT handoff mode there to work key-free. Copy report always works.";
   }
   renderCheckin();
 }
@@ -3611,7 +3611,7 @@ function extractAIPayloads(text){
     try {
       const j = JSON.parse(b.body);
       if (j && Array.isArray(j.days)){ out.program = j; out.display = out.display.replace(b.raw, "").trim(); }
-      else if (j && j.forgeTargets){ out.targets = j.forgeTargets; out.display = out.display.replace(b.raw, "").trim(); }
+      else if (j && j.bpTargets){ out.targets = j.bpTargets; out.display = out.display.replace(b.raw, "").trim(); }
     } catch(e){ /* not JSON — leave it visible */ }
   });
   return out;
@@ -3624,7 +3624,7 @@ function coachSystem(){
     + aiReport()
     + "\n\n---\nResponse contract:\n"
     + "- If you propose a new or edited training program, include EXACTLY ONE ```json code block containing the COMPLETE program: {\"name\":..., \"days\":[{\"id\":\"D1\",\"title\":...,\"exercises\":[{\"name\":...,\"scheme\":...}]}]}. Keep exercise names the user is progressing on unchanged so their history stays connected. Schemes like \"4×5\" power the app's auto-progression.\n"
-    + "- If you propose new nutrition targets, include a ```json block: {\"forgeTargets\":{\"calLo\":...,\"calHi\":...,\"proLo\":...,\"proHi\":...,\"carbGoal\":...,\"fatGoal\":...}}.\n"
+    + "- If you propose new nutrition targets, include a ```json block: {\"bpTargets\":{\"calLo\":...,\"calHi\":...,\"proLo\":...,\"proHi\":...,\"carbGoal\":...,\"fatGoal\":...}}.\n"
     + "- Otherwise reply in plain prose. Keep replies under 300 words unless asked for detail.";
 }
 function openCoach(prefillSend){
@@ -3658,7 +3658,7 @@ function addCoachBubble(role, text, payloads){
   if (payloads && payloads.program){
     const b = document.createElement("button");
     b.className = "act";
-    b.textContent = "📥 Load program: " + (payloads.program.name || "Updated program");
+    b.textContent = "Load program: " + (payloads.program.name || "Updated program");
     b.addEventListener("click", ()=>{
       try {
         program = validateProgram(payloads.program);
@@ -3676,7 +3676,7 @@ function addCoachBubble(role, text, payloads){
     const t = payloads.targets;
     const b = document.createElement("button");
     b.className = "act";
-    b.textContent = "🎯 Apply targets: " + (t.calLo||"?") + "–" + (t.calHi||"?") + " kcal";
+    b.textContent = "Apply targets: " + (t.calLo||"?") + "–" + (t.calHi||"?") + " kcal";
     b.addEventListener("click", ()=>{
       ["calLo","calHi","proLo","proHi","carbGoal","fatGoal"].forEach(k=>{ if (typeof t[k]==="number") cfg[k] = t[k]; });
       const sortedW = data.weights.slice().sort((a,b2)=>a.date.localeCompare(b2.date));
@@ -3711,7 +3711,7 @@ async function sendCoach(){
     saveCfg();
     renderCheckin();
   } catch(e){
-    addCoachBubble("ai", "⚠ " + e.message, null);
+    addCoachBubble("ai", "" + e.message, null);
   }
   typing.classList.add("hidden");
   document.getElementById("coachSendBtn").disabled = false;
@@ -3846,7 +3846,7 @@ document.getElementById("aiFoodGoBtn").addEventListener("click", async ()=>{
     showFoodConfirm(foods);
     document.getElementById("aiFoodText").value = "";
   } catch(e){
-    aiFoodStatus("⚠ "+(e.message||"Could not estimate that"), true);
+    aiFoodStatus(""+(e.message||"Could not estimate that"), true);
   }
   document.getElementById("aiFoodGoBtn").disabled = false;
 });
@@ -3871,7 +3871,7 @@ document.getElementById("aiPhotoFile").addEventListener("change", async (ev)=>{
     showFoodConfirm(foods);
     document.getElementById("aiPhotoCaption").value = "";
   } catch(e){
-    aiFoodStatus("⚠ "+(e.message||"Could not read that photo"), true);
+    aiFoodStatus(""+(e.message||"Could not read that photo"), true);
   }
 });
 function downscaleImage(file, maxDim){
@@ -3959,7 +3959,7 @@ document.getElementById("hfShareGoBtn").addEventListener("click", async ()=>{
     try {
       await navigator.share({ files:[hfPhoto], title:"BlackPyre food estimate", text: promptTxt });
       hfClearPhoto(true); // successful share: photo's job is done
-      aiFoodStatus("Shared ✓ — when ChatGPT replies, tap 📥 Paste reply.");
+      aiFoodStatus("Shared ✓ — when ChatGPT replies, tap Paste reply.");
       return;
     } catch(e){
       if (e && e.name==="AbortError"){
@@ -4227,7 +4227,7 @@ function renderProjection(){
     return;
   }
   if ((toGo<0 && rate>=0) || (toGo>0 && rate<=0)){
-    el.textContent = "Trending "+(rate>0?"+":"")+rate+" lb/week right now — but you are here, logging, which is how every turnaround starts. Refocus this week; the trend follows the work. \uD83D\uDD25";
+    el.textContent = "Trending "+(rate>0?"+":"")+rate+" lb/week right now — but you are here, logging, which is how every turnaround starts. Refocus this week; the trend follows the work.";
     return;
   }
   const weeks = toGo/rate;
@@ -4426,7 +4426,7 @@ function renderSetupStep(){
       +'</select>'
       +'<button class="btn ghost small" id="suCalcBtn" style="width:100%;">Calculate & apply my targets</button>'
       +'<div id="suOut" style="font-size:13px; line-height:1.8; margin-top:10px;"></div>'
-      +'<div class="note">Uses the Mifflin-St Jeor formula. Fine-tune targets or pick a custom macro split anytime in ⚙ Settings.</div></div>';
+      +'<div class="note">Uses the Mifflin-St Jeor formula. Fine-tune targets or pick a custom macro split anytime in Settings.</div></div>';
     if (cfg.calcInputs && setupChoice.cw){
       document.getElementById("suSex").value = cfg.calcInputs.sex;
       document.getElementById("suAge").value = cfg.calcInputs.age;
@@ -4498,9 +4498,9 @@ function renderSetupStep(){
   if (setupStep===4){
     body.innerHTML = '<div class="card"><div class="label">Step 5 · Your data</div>'
       +'<div style="font-size:14px; line-height:1.9; margin-top:8px;">'
-      +'🔒 Everything you log stays <b>only on this device</b>. No account, no server, no ads — nobody can see your data.<br><br>'
-      +'💾 The flip side: <b>you</b> are the backup plan. BlackPyre will remind you on the Home screen once logs build up — one tap downloads a file that restores everything on any phone.<br><br>'
-      +'🏁 Done. Log your food, log your lifts, weigh in daily — the smart stuff (metabolism tracking, projections, auto-progression) switches on as data builds.</div></div>';
+      +'Everything you log stays <b>only on this device</b>. No account, no server, no ads — nobody can see your data.<br><br>'
+      +'The flip side: <b>you</b> are the backup plan. BlackPyre will remind you on the Home screen once logs build up — one tap downloads a file that restores everything on any phone.<br><br>'
+      +'Done. Log your food, log your lifts, weigh in daily — the smart stuff (metabolism tracking, projections, auto-progression) switches on as data builds.</div></div>';
   }
 }
 // disclaimer gates everything, once per install; wizard follows on fresh installs only
@@ -4527,52 +4527,52 @@ if (!cfg.disclaimerAccepted){
 // ================== HELP & FAQ ==================
 const FAQ = [
   {sec:"Getting started"},
-  {q:"How do I set my calorie and macro targets?", a:"New installs get walked through this in the setup wizard (including combined goals — picking <b>Lose fat + Build muscle</b> sets up a recomposition: slight deficit, high protein). Anytime after: <b>⚙ Settings → Calorie & macro calculator</b> — enter your stats, tap <b>Calculate</b>, pick a macro split (or use Recommended), then <b>Use these as my targets</b>. Every bar in the app measures against your numbers, and you can always type targets directly into the fields below the calculator."},
+  {q:"How do I set my calorie and macro targets?", a:"New installs get walked through this in the setup wizard (including combined goals — picking <b>Lose fat + Build muscle</b> sets up a recomposition: slight deficit, high protein). Anytime after: <b>Settings → Calorie & macro calculator</b> — enter your stats, tap <b>Calculate</b>, pick a macro split (or use Recommended), then <b>Use these as my targets</b>. Every bar in the app measures against your numbers, and you can always type targets directly into the fields below the calculator."},
   {q:"What's a macro split and which should I pick?", a:"It's how your calories divide between protein / carbs / fat. <b>Recommended</b> (0.9g protein per lb, 25% fat) suits most people losing fat while keeping muscle. Higher-carb splits like 40/40/20 suit hard training; the Custom option lets you set any percentages and they auto-balance to 100%. The link under the calculator goes to the peer-reviewed research."},
   {q:"Where do the celebration quotes come from?", a:"They're <b>earned, not browsed</b>. Log a session, forge a PR, or finish your day, and the celebration screen hands you one — half from the greats of sport and history, half BlackPyre originals. There are hundreds in the vault, so they stay fresh."},
-  {q:"What's the bar under the BlackPyre logo?", a:"That's <b>Your Journey</b> — your whole goal on one line. Left end is your starting weight, right end is your goal, and the glowing dot is exactly where you are right now based on your latest weigh-in. It moves the moment you record a weight, on every screen. Hit the goal and you get the 🏁. And when a stretch goes sideways, a short note appears under the bar — a pat on the back and a path forward, never a lecture."},
+  {q:"What's the bar under the BlackPyre logo?", a:"That's <b>Your Journey</b> — your whole goal on one line. Left end is your starting weight, right end is your goal, and the glowing dot is exactly where you are right now based on your latest weigh-in. It moves the moment you record a weight, on every screen. Hit the goal and the bar fills with a ✓. And when a stretch goes sideways, a short note appears under the bar — a pat on the back and a path forward, never a lecture."},
   {q:"How do I log my weight?", a:"Fastest way: the small field on the <b>Home</b> tab — type today's weight, tap Record. The Weight tab does the same plus lets you log past dates. Weigh at the same time each day and judge the weekly trend, not any single day."},
 
   {sec:"Food logging"},
-  {q:"Do I need a USDA key for food search?", a:"No — a shared community key is built in, so 400,000+ US branded products work out of the box. If searches ever feel slow at peak times, grab your own free key in ~1 minute (⚙ Settings → the fdc.nal.usda.gov link, key arrives by email) and paste it in — yours then takes priority."},
-  {q:"How does barcode scanning work?", a:"On the Food tab tap <b>📷 Scan barcode</b> and point your camera at the label (allow camera access when asked). If the product is found, it loads with full macros. You can also type the UPC number manually and tap Look up."},
-  {q:"A barcode wasn't found — now what?", a:"The app opens a <b>save-it-once form</b>: copy the serving size and macros off the nutrition label, save, and that barcode belongs to you forever. Next scan of the same product loads instantly, it shows up in text search, and it lives in <b>🍱 My foods</b> where you can edit or delete it anytime."},
+  {q:"Do I need a USDA key for food search?", a:"No — a shared community key is built in, so 400,000+ US branded products work out of the box. If searches ever feel slow at peak times, grab your own free key in ~1 minute (Settings → the fdc.nal.usda.gov link, key arrives by email) and paste it in — yours then takes priority."},
+  {q:"How does barcode scanning work?", a:"On the Food tab tap <b>Scan barcode</b> and point your camera at the label (allow camera access when asked). If the product is found, it loads with full macros. You can also type the UPC number manually and tap Look up."},
+  {q:"A barcode wasn't found — now what?", a:"The app opens a <b>save-it-once form</b>: copy the serving size and macros off the nutrition label, save, and that barcode belongs to you forever. Next scan of the same product loads instantly, it shows up in text search, and it lives in <b>My foods</b> where you can edit or delete it anytime."},
   {q:"What are the meal buttons (Bkfst/Lunch/Dinner/Snacks)?", a:"Every entry is filed under a meal. The right one pre-selects itself by time of day — just override by tapping if needed. The day list shows only the selected meal with its own subtotal; the Totals bars always count the whole day."},
-  {q:"What is My Foods?", a:"Your personal food library — tap <b>🍱 My foods</b> on the Food page. Create foods that have no barcode (homemade chili, your protein shake), edit or delete anything, add a barcode later so scanning finds it, and manage your saved meals (rename/delete). There's also a <b>＋ Save this as a reusable food</b> button under manual entry, so anything you type once can become permanent."},
-  {q:"What is the ⚡ usual meal card?", a:"BlackPyre learns your patterns. When you've logged the same foods for a meal on most days over the last two weeks, a card appears: <b>⚡ Your usual breakfast</b> — your regulars with your typical portions, logged in <b>one tap</b>. It only offers what you haven't logged yet today, and disappears once the meal is mostly logged. No setup — it just notices."},
-  {q:"What's the fastest way to log food I eat often?", a:"Four tools: the <b>⚡ usual meal card</b> (one tap logs your whole regular meal), <b>★ Recent foods</b> (your most-logged items with a search box, tap one and it opens with your last portion prefilled), <b>Save today as a meal</b> (bundles the day's entries into a one-tap chip — long-press a chip to delete it), and <b>⧉ Copy yesterday</b>. The ⧉ on any logged entry duplicates it."},
+  {q:"What is My Foods?", a:"Your personal food library — tap <b>My foods</b> on the Food page. Create foods that have no barcode (homemade chili, your protein shake), edit or delete anything, add a barcode later so scanning finds it, and manage your saved meals (rename/delete). There's also a <b>＋ Save this as a reusable food</b> button under manual entry, so anything you type once can become permanent."},
+  {q:"What is the usual meal card?", a:"BlackPyre learns your patterns. When you've logged the same foods for a meal on most days over the last two weeks, a card appears: <b>Your usual breakfast</b> — your regulars with your typical portions, logged in <b>one tap</b>. It only offers what you haven't logged yet today, and disappears once the meal is mostly logged. No setup — it just notices."},
+  {q:"What's the fastest way to log food I eat often?", a:"Four tools: the <b>usual meal card</b> (one tap logs your whole regular meal), <b>Recent foods</b> (your most-logged items with a search box, tap one and it opens with your last portion prefilled), <b>Save today as a meal</b> (bundles the day's entries into a one-tap chip — long-press a chip to delete it), and <b>⧉ Copy yesterday</b>. The ⧉ on any logged entry duplicates it."},
   {q:"How do I adjust the amount I ate?", a:"After picking any food, use the <b>slider or the amount field</b> — calories and macros recalculate live. Units: grams, oz, lb, ml, fl oz, or the product's serving."},
 
   {sec:"Training"},
-  {q:"I don't know how to do an exercise / I want a different one", a:"Two buttons on every exercise in your session: <b>🎥</b> opens form videos for that exact movement, and <b>⇄</b> (when available) offers same-muscle alternatives — tap one and it swaps in for today's session with its own history prefilled, no program editing needed. Want it permanent? Change it in ✎ Edit this program. The AI Coach can also suggest substitutions for anything."},
-  {q:"How do I log a workout?", a:"Train tab → pick your session day (or tap <b>▶ Start next</b> on Home, which knows your rotation). Each exercise shows set rows prefilled from last time — adjust with the <b>−5/+5</b> and <b>−1/+1</b> buttons, tap <b>✓</b> as you finish sets (auto-starts your rest timer), then <b>Log session</b>. The <b>= last</b> button fills an exercise identical to last time in one tap; the <b>⌨</b> button switches to free-text typing."},
+  {q:"I don't know how to do an exercise / I want a different one", a:"Two buttons on every exercise in your session: <b></b> opens form videos for that exact movement, and <b>⇄</b> (when available) offers same-muscle alternatives — tap one and it swaps in for today's session with its own history prefilled, no program editing needed. Want it permanent? Change it in ✎ Edit this program. The AI Coach can also suggest substitutions for anything."},
+  {q:"How do I log a workout?", a:"Train tab → pick your session day (or tap <b>Start next</b> on Home, which knows your rotation). Each exercise shows set rows prefilled from last time — adjust with the <b>−5/+5</b> and <b>−1/+1</b> buttons, tap <b>✓</b> as you finish sets (auto-starts your rest timer), then <b>Log session</b>. The <b>= last</b> button fills an exercise identical to last time in one tap the <b>Aa</b> button switches to free-text typing."},
   {q:"I logged something wrong — can I fix it?", a:"Yes, everything is editable. Food: tap <b>✎</b> on any entry, fix the values, tap <b>Update entry</b>. Workouts: tap <b>✎</b> on any session in history — it loads back into the set rows, change what you need, tap <b>Update session</b> (corrections don't re-trigger celebrations or false PRs). Cardio sessions, custom foods, and saved meals are all editable too."},
   {q:"What does '+5 auto' mean?", a:"You hit all your target reps at the same weight last session, so the app pre-loaded 5 lb more — progressive overload applied for you. You can always change it."},
-  {q:"How do programs work?", a:"The Train tab runs whatever program is loaded. <b>＋ Build new program</b> creates your own (any number of days, 60+ exercise library plus custom names, schemes like 4×5). <b>✎ Edit</b> modifies the current one. <b>⬆ Load</b> imports any BlackPyre .json file — from a friend, a coach, or an AI. <b>⬇/📤</b> exports and shares yours."},
-  {q:"Can an AI build me a program?", a:"Yes, two ways. Easiest: copy the AI's reply and tap <b>📋 Paste program from an AI</b> in the Train tab — BlackPyre finds the program in the text and loads it. Or load a downloaded .json with ⬆ Load. To get one, ask any AI: 'Build me a workout program as a JSON file for the BlackPyre app' with your goals, days, and equipment — or better, use the in-app Coach, which already knows your history."},
-  {q:"What are the PR board and the 📈 charts?", a:"Every set you log is converted to an estimated 1RM (Epley formula). Your best per exercise ranks on the PR board — tap any row for a progress chart over time, and set a goal weight to draw a target line. Beating a previous best triggers the PR FORGED screen when you log."},
+  {q:"How do programs work?", a:"The Train tab runs whatever program is loaded. <b>＋ Build new program</b> creates your own (any number of days, 60+ exercise library plus custom names, schemes like 4×5). <b>✎ Edit</b> modifies the current one. <b>Load</b> imports any BlackPyre .json file — from a friend, a coach, or an AI. <b>/</b> exports and shares yours."},
+  {q:"Can an AI build me a program?", a:"Yes, two ways. Easiest: copy the AI's reply and tap <b>Paste program from an AI</b> in the Train tab — BlackPyre finds the program in the text and loads it. Or load a downloaded .json with Load. To get one, ask any AI: 'Build me a workout program as a JSON file for the BlackPyre app' with your goals, days, and equipment — or better, use the in-app Coach, which already knows your history."},
+  {q:"What are the PR board and the charts?", a:"Every set you log is converted to an estimated 1RM (Epley formula). Your best per exercise ranks on the PR board — tap any row for a progress chart over time, and set a goal weight to draw a target line. Beating a previous best triggers the PR FORGED screen when you log."},
   {q:"What's plate math and the rest timer?", a:"Type a target weight and the app tells you which plates to load per side. Rest timer: tap a preset to start, tap the running numbers to cancel, and ＋ adds custom durations (they stick around as presets — ✕ removes them). Checking ✓ on a set auto-starts your last-used duration."},
 
   {sec:"Progress & smart features"},
   {q:"What is 'Your measured metabolism'?", a:"After ~2 weeks of logging food and weigh-ins, the app computes your <b>actual TDEE</b> from your real intake vs your real weight trend — more accurate than any formula. Tap <b>Recalibrate</b> to update your calorie targets from it."},
   {q:"Why did the app ask if I want to adjust my targets?", a:"Your weight has moved 5+ lb since your targets were set, which changes your calorie needs. Tap <b>Adjust</b> and the calculator opens prefilled with your new weight — recalculate, pick your split, apply. 'Not yet' snoozes it until you've moved further."},
   {q:"What do the weekly review and goal date mean?", a:"The <b>This week</b> card on Home summarizes your last 7 days: average calories, protein compliance, sessions, and weight change. The projection under the weight chart estimates when you reach your goal at your current rate — it updates with every weigh-in and will honestly tell you if the trend is moving the wrong way."},
-  {q:"What can the AI Coach do?", a:"Three modes, all optional (⚙ Settings → AI Coach). <b>Claude API</b> or <b>ChatGPT API</b> (your own key): a live in-app <b>Coach chat</b> that already knows your data — when it proposes a program or new targets, one tap loads them — plus <b>✨ AI quick log</b> (type \"2 eggs and toast\" → logged) and <b>📸 photo meal logging</b> (snap your plate → estimated macros to confirm). <b>ChatGPT handoff</b> (no key): BlackPyre writes the prompts, you paste them into the ChatGPT you already use, then paste the reply back — same review-before-logging flow. The Copy report / Download buttons work in every mode."},
-  {q:"What is ChatGPT handoff mode?", a:"The no-key option. Pick it in ⚙ Settings → AI Coach. For food: type a description (or pick 📸 Share a photo), tap <b>📋 Copy food prompt</b>, paste into ChatGPT, then tap <b>📥 Paste reply &amp; review</b> — BlackPyre reads the name, calories, protein, carbs, and fat out of the reply and shows the normal confirm list before anything is logged. For coaching: tap <b>📋 Copy report</b> on the Home AI card — it contains your data, the questions, and instructions for sending a program back that <b>📋 Paste program from an AI</b> can load. Works with a plain ChatGPT (or claude.ai) subscription."},
+  {q:"What can the AI Coach do?", a:"Three modes, all optional (Settings → AI Coach). <b>Claude API</b> or <b>ChatGPT API</b> (your own key): a live in-app <b>Coach chat</b> that already knows your data — when it proposes a program or new targets, one tap loads them — plus <b>AI quick log</b> (type \"2 eggs and toast\" → logged) and <b>photo meal logging</b> (snap your plate → estimated macros to confirm). <b>ChatGPT handoff</b> (no key): BlackPyre writes the prompts, you paste them into the ChatGPT you already use, then paste the reply back — same review-before-logging flow. The Copy report / Download buttons work in every mode."},
+  {q:"What is ChatGPT handoff mode?", a:"The no-key option. Pick it in Settings → AI Coach. For food: type a description (or pick Share a photo), tap <b>Copy food prompt</b>, paste into ChatGPT, then tap <b>Paste reply &amp; review</b> — BlackPyre reads the name, calories, protein, carbs, and fat out of the reply and shows the normal confirm list before anything is logged. For coaching: tap <b>Copy report</b> on the Home AI card — it contains your data, the questions, and instructions for sending a program back that <b>Paste program from an AI</b> can load. Works with a plain ChatGPT (or claude.ai) subscription."},
   {q:"Is the AI key safe? What does it cost?", a:"Keys (Anthropic or OpenAI) are stored only on this device, sent only to that provider with your requests, and <b>deliberately excluded from backup files</b>. You pay the provider directly for what you use — a coaching chat or photo estimate costs roughly a cent. <b>Important:</b> API access is separate from a Claude Pro or ChatGPT Plus subscription — an API key is its own pay-per-use account (no subscription needed, and a subscription doesn't include one). Clear keys anytime in Settings. A default model is chosen for you; the Model field lets you override it."},
   {q:"Does BlackPyre store my photos or the AI's replies?", a:"No. Photos are downscaled in memory, sent to the AI (or shared to ChatGPT in handoff mode), and immediately discarded — never saved to the app, your history, or backups. Raw AI replies and pasted responses are parsed for the confirm list and then dropped; only the food entries <b>you approve</b> are saved, as normal entries."},
   {q:"How accurate is photo / AI food logging?", a:"They're <b>estimates</b> — good ones, but the AI is judging portions from a description or a photo. <b>Pro tip:</b> the optional caption field ('Chipotle chicken bowl') sharply improves restaurant and chain estimates. Every item shows before logging so you can remove anything, and after logging you can ✎ edit values. For packaged foods with labels, the barcode scan is exact. Photos are analyzed and immediately discarded — never stored."},
-  {q:"What is the AI Coach report?", a:"On the Home tab, the <b>🤖 AI Coach</b> card builds a progress report from your real data — weight trend, measured TDEE, nutrition adherence, per-lift progression, and your current program. Tap <b>Copy report</b>, paste it into Claude, ChatGPT, or any AI, and ask away. The report even includes your program in BlackPyre format, so the AI can return an adjusted program you load right back in (Train → ⬆ Load). Completely optional — the app works fully without it."},
-  {q:"Can I track water?", a:"Yes — <b>⚙ Settings → Enable water tracking</b> adds a one-tap glass counter to your Home tab. Off by default, toggle anytime."},
-  {q:"Can I change the app's color?", a:"Yes — <b>⚙ Settings → Accent color</b> has six looks: Ember, Steel, Emerald, Crimson, Violet, and Gold. One tap re-themes the whole app instantly."},
+  {q:"What is the AI Coach report?", a:"On the Home tab, the <b>AI Coach</b> card builds a progress report from your real data — weight trend, measured TDEE, nutrition adherence, per-lift progression, and your current program. Tap <b>Copy report</b>, paste it into Claude, ChatGPT, or any AI, and ask away. The report even includes your program in BlackPyre format, so the AI can return an adjusted program you load right back in (Train → Load). Completely optional — the app works fully without it."},
+  {q:"Can I track water?", a:"Yes — <b>Settings → Enable water tracking</b> adds a one-tap glass counter to your Home tab. Off by default, toggle anytime."},
+  {q:"Can I change the app's color?", a:"Yes — <b>Settings → Accent color</b> has six looks: Ember, Steel, Emerald, Crimson, Violet, and Gold. One tap re-themes the whole app instantly."},
   {q:"How do I look back at past workouts?", a:"The Train tab's history is grouped by <b>month</b> — the current month is open, tap any older month to expand it. Every session shows its full sets and is editable with ✎. For a single lift's progress over time, tap it on the PR board for the chart."},
-  {q:"How do I track body measurements?", a:"It's optional: <b>⚙ Settings → Enable body measurements</b> adds a waist/chest/arm tracker to the Weight tab. On a fat-loss phase, a shrinking waist is often better evidence than the scale. Toggle it off anytime — entries stay saved."},
+  {q:"How do I track body measurements?", a:"It's optional: <b>Settings → Enable body measurements</b> adds a waist/chest/arm tracker to the Weight tab. On a fat-loss phase, a shrinking waist is often better evidence than the scale. Toggle it off anytime — entries stay saved."},
 
   {sec:"Legal"},
   {q:"Disclaimer & terms of use", a:"BlackPyre is an informational logging tool, <b>not medical advice</b>, and not a substitute for a physician, registered dietitian, or qualified trainer. Consult your doctor before beginning any diet or exercise program, especially with any medical condition, injury, or pregnancy, or if under 18. Calorie/macro targets use published scientific formulas (Mifflin-St Jeor; Epley for estimated 1RM) — they are estimates, and individual needs vary. Programs are general templates, not personalized prescriptions; exercise carries inherent injury risk — stop if you feel pain, dizziness, or shortness of breath. Nutrition data comes from public databases and user entries and may contain errors — verify labels for allergies or medical diets. By using BlackPyre you agree you use it <b>at your own risk</b> and that its creators are <b>not liable</b> for any injury, health outcome, or loss arising from its use. The app is provided \"as is,\" without warranties of any kind. You accepted this disclaimer on first use; it applies to all continued use."},
   {sec:"Your data & the app"},
   {q:"Where is my data stored? Is it private?", a:"Everything lives <b>only on your device</b> — no account, no server, nothing leaves your phone. Nobody (including whoever shared the app with you) can see your logs."},
-  {q:"How do I back up or move to a new phone?", a:"<b>⚙ Settings → Back up all data</b> downloads one file containing everything. On the new phone, install the app and use <b>Restore from backup</b>. BlackPyre watches out for you here: Settings always shows your last backup, and a reminder card appears on Home when you've logged enough new data to be worth protecting — one tap backs it up. Keep the file somewhere safe (Files, email, cloud drive)."},
+  {q:"How do I back up or move to a new phone?", a:"<b>Settings → Back up all data</b> downloads one file containing everything. On the new phone, install the app and use <b>Restore from backup</b>. BlackPyre watches out for you here: Settings always shows your last backup, and a reminder card appears on Home when you've logged enough new data to be worth protecting — one tap backs it up. Keep the file somewhere safe (Files, email, cloud drive)."},
   {q:"How do I share this app with someone?", a:"Send them the web address. iPhone: open in Safari → Share → <b>Add to Home Screen</b>. Android: open in Chrome → <b>Install app</b> when prompted (or ⋮ menu → Add to Home Screen). They get their own fresh copy with their own private data."},
   {q:"Search isn't returning results — why?", a:"Online food search needs a connection; without one you still get 300+ built-in staples (meats, grains, fruits, common dishes), your saved foods, and manual entry. If branded results seem thin, make sure your free USDA key is saved in Settings. For products, the barcode scan is the most reliable route."},
   {q:"The app doesn't seem to update / looks stuck?", a:"Close it fully (swipe it away), reopen, close again, reopen. The first open downloads the new version in the background; the second runs it."},
@@ -4683,7 +4683,7 @@ function renderSplit(){
   const wt = Number(document.getElementById("cWt").value) || cfg.startWt;
   const warn = document.getElementById("splitWarn");
   if (g.pro < wt*0.7){
-    warn.textContent = "⚠ This split gives only "+g.pro+"g protein ("+(Math.round(g.pro/wt*100)/100)+" g/lb). For muscle retention while losing weight, research supports a higher protein share.";
+    warn.textContent = "This split gives only "+g.pro+"g protein ("+(Math.round(g.pro/wt*100)/100)+" g/lb). For muscle retention while losing weight, research supports a higher protein share.";
     warn.classList.remove("hidden");
   } else {
     warn.classList.add("hidden");
@@ -4880,7 +4880,7 @@ document.getElementById("dashWtBtn").addEventListener("click", ()=>{
     const cutting = cfg.goalWt < cfg.startWt;
     if ((cutting && v > cfg.startWt) || (!cutting && v < cfg.startWt)){
       cfg.startWt = v; saveCfg();
-      flashSave("Starting line set at "+v+" — the journey begins today \uD83D\uDD25");
+      flashSave("Starting line set at "+v+" — the journey begins today");
     }
   }
   save(); renderWeight(); renderDash(); renderTDEE(); renderProjection(); renderWeek();
@@ -4900,7 +4900,7 @@ function renderJourney(){
   pct = Math.max(0, Math.min(1, pct));
   document.getElementById("jyFill").style.width = (pct*100)+"%";
   document.getElementById("jyDot").style.left = (pct*100)+"%";
-  document.getElementById("jyNow").textContent = (pct>=1 ? "🏁 " : "") + cur + " lb";
+  document.getElementById("jyNow").textContent = (pct>=1 ? "✓ " : "") + cur + " lb";
   document.getElementById("jyStart").textContent = cfg.startWt + " start";
   document.getElementById("jyGoal").textContent = cfg.goalWt + " goal";
   renderJourneyMsg();
@@ -4947,13 +4947,13 @@ function renderNextWorkout(){
   const btn = document.getElementById("nextWorkoutBtn");
   const nd = nextProgramDay();
   if (!nd){ btn.classList.add("hidden"); return; }
-  btn.textContent = "▶ Start next: "+(nd.id?nd.id+" · ":"")+nd.title;
+  btn.textContent = "Start next: "+(nd.id?nd.id+" · ":"")+nd.title;
   btn.classList.remove("hidden");
 }
 function renderAll(){ renderDash(); renderFood(); renderWork(); renderWeight(); renderSettings(); renderMeals(); renderPRs(); renderTDEE(); renderNextWorkout(); renderWeek(); renderProjection(); renderMeasureToggle(); renderMeasure(); renderWater(); renderAccentRow(); renderBackup();
   const st = computeStreak();
   const sl = document.getElementById("streakLine");
-  if (st>=2){ sl.textContent = "🔥 "+st+"-day logging streak — keep the chain alive"; sl.classList.remove("hidden"); }
+  if (st>=2){ sl.textContent = ""+st+"-day logging streak — keep the chain alive"; sl.classList.remove("hidden"); }
   else sl.classList.add("hidden");
   document.getElementById("sUsdaKey").value = cfg.usdaKey||"";
   document.getElementById("waterToggleBtn").textContent = cfg.waterOn ? "Disable water tracking" : "Enable water tracking";
