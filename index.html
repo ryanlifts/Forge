@@ -3762,14 +3762,26 @@ document.getElementById("pasteProgBtn").addEventListener("click", async ()=>{
 // ================== AI FOOD LOGGING (text + photo) ==================
 const FOOD_AI_SYSTEM = 'You are a nutrition estimator. Given a meal description or photo, respond with ONLY a JSON object, no prose, no code fences: {"foods":[{"name":"...","cal":0,"pro":0,"carb":0,"fat":0}]} — one entry per distinct food, realistic portion estimates, calories as kcal, macros in grams. If you cannot identify any food, return {"foods":[]}.';
 function parseFoodsReply(text){
-  let t = text.trim().replace(/```(?:json)?/g, "").replace(/```/g, "").trim();
+  let t = String(text||"")
+    // smart/curly quotes from iPhone & ChatGPT copying -> straight quotes
+    .replace(/[\u201C\u201D\u201E\u201F\u2033]/g, '"')
+    .replace(/[\u2018\u2019\u201A\u201B\u2032]/g, "'")
+    // zero-width & BOM junk -> gone; non-breaking spaces -> normal spaces
+    .replace(/[\u200B\u200C\u200D\uFEFF\u2060]/g, "")
+    .replace(/\u00A0/g, " ")
+    .trim()
+    .replace(/```(?:json)?/gi, "").replace(/```/g, "").trim();
   const m = t.match(/\{[\s\S]*\}/);
   if (m) t = m[0];
+  t = t.trim();
   const j = JSON.parse(t);
   if (!j || !Array.isArray(j.foods)) throw new Error("bad shape");
-  return j.foods.filter(f=>f && f.name && Number(f.cal)>=0).map(f=>({
-    name:String(f.name), cal:Number(f.cal)||0, pro:Number(f.pro)||0, carb:Number(f.carb)||0, fat:Number(f.fat)||0,
-  }));
+  // strict shape: name + numeric cal/pro/carb/fat on every kept entry
+  return j.foods.filter(f=>f && typeof f.name==="string" && f.name.trim()
+      && ["cal","pro","carb","fat"].every(k=>Number.isFinite(Number(f[k]))))
+    .map(f=>({
+      name:String(f.name).trim(), cal:Number(f.cal), pro:Number(f.pro), carb:Number(f.carb), fat:Number(f.fat),
+    }));
 }
 function aiFoodStatus(msg, isErr){
   const el = document.getElementById("aiFoodStatus");
