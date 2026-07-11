@@ -15,7 +15,7 @@
 <style>
   :root {
     --bg:#101215; --panel:#191C21; --panel-up:#1F232A; --border:#2B3039;
-    --text:#EDEEF0; --dim:#8A919C; --ember:#FF7A3D; --ember-deep:#E8571F; --ember-rgb:255,122,61; --amber:#E8B04B;
+    --text:#EDEEF0; --dim:#8A919C; --ember:#FBBF24; --ember-deep:#D97706; --ember-rgb:251,191,36; --amber:#E8B04B;
     --ok:#4ADE80; --warn:#F87171; --progress:#FBBF24;
   }
   * { box-sizing:border-box; margin:0; padding:0; }
@@ -1476,7 +1476,7 @@ async function runBarcode(){
   try {
     // Open Food Facts API v3.6 product schema (v3 product-by-barcode endpoint)
     const fields = "code,product_name,brands,quantity,serving_size,serving_quantity,nutriments";
-    const res = await fetchWithTimeout("https://world.openfoodfacts.org/api/v3/product/"+encodeURIComponent(code)+".json?fields="+fields, 10000);
+    const res = await fetchWithTimeout("https://world.openfoodfacts.org/api/v3.6/product/"+encodeURIComponent(code)+".json?fields="+fields, 10000);
     if (!res.ok){ await tryUSDABarcode(code); }
     else {
       const json = await res.json();
@@ -2572,13 +2572,22 @@ document.getElementById("addWtBtn").addEventListener("click", ()=>{
 });
 
 function renderWeight(){
-  document.getElementById("chartLabel").textContent = "Trend · "+cfg.startWt+" → "+cfg.goalWt;
+  const goals = Number(cfg.startWt)>0 && Number(cfg.goalWt)>0;
+  document.getElementById("chartLabel").textContent = goals ? ("Trend · "+cfg.startWt+" → "+cfg.goalWt) : "Trend";
   const sorted = data.weights.slice().sort((a,b)=>a.date.localeCompare(b.date));
   const w=640,h=230,pad=38;
-  const all=[{date:"start",lbs:cfg.startWt}].concat(sorted);
+  const all=(goals?[{date:"start",lbs:cfg.startWt}]:[]).concat(sorted);
+  if (!all.length){
+    document.getElementById("chart").innerHTML = '<svg viewBox="0 0 '+w+' '+h+'">'
+      +'<text x="'+(w/2)+'" y="'+(h/2)+'" text-anchor="middle" font-size="12" fill="var(--dim)" font-family="IBM Plex Mono">Record a weigh-in to start the chart</text></svg>';
+    document.getElementById("wtListCard").classList.add("hidden");
+    return;
+  }
   const lbsList = all.map(p=>p.lbs);
-  const minY=Math.min(cfg.goalWt,cfg.startWt,Math.min.apply(null,lbsList))-5;
-  const maxY=Math.max(cfg.goalWt,cfg.startWt,Math.max.apply(null,lbsList))+5;
+  const gLo = goals ? Math.min(cfg.goalWt,cfg.startWt) : Math.min.apply(null,lbsList);
+  const gHi = goals ? Math.max(cfg.goalWt,cfg.startWt) : Math.max.apply(null,lbsList);
+  const minY=Math.min(gLo,Math.min.apply(null,lbsList))-5;
+  const maxY=Math.max(gHi,Math.max.apply(null,lbsList))+5;
   const y=v=>h-pad-((v-minY)/(maxY-minY))*(h-pad*2);
   const n=Math.max(all.length-1,1);
   const x=i=>pad+(i/n)*(w-pad*2);
@@ -2591,8 +2600,8 @@ function renderWeight(){
     +'<defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="var(--ember-deep)"/><stop offset="100%" stop-color="var(--ember)"/></linearGradient>'
     +'<linearGradient id="fg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(var(--ember-rgb),.25)"/><stop offset="100%" stop-color="rgba(var(--ember-rgb),0)"/></linearGradient></defs>'
     +grid
-    +'<line x1="'+pad+'" x2="'+(w-pad)+'" y1="'+y(cfg.goalWt)+'" y2="'+y(cfg.goalWt)+'" stroke="var(--ok)" stroke-width="1.5" stroke-dasharray="6 5"/>'
-    +'<text x="'+(w-pad)+'" y="'+(y(cfg.goalWt)-7)+'" text-anchor="end" font-size="11" fill="var(--ok)" font-family="IBM Plex Mono">GOAL '+cfg.goalWt+'</text>'
+    +(goals ? '<line x1="'+pad+'" x2="'+(w-pad)+'" y1="'+y(cfg.goalWt)+'" y2="'+y(cfg.goalWt)+'" stroke="var(--ok)" stroke-width="1.5" stroke-dasharray="6 5"/>'
+    +'<text x="'+(w-pad)+'" y="'+(y(cfg.goalWt)-7)+'" text-anchor="end" font-size="11" fill="var(--ok)" font-family="IBM Plex Mono">GOAL '+cfg.goalWt+'</text>' : "")
     +(all.length>1?('<polygon points="'+pts+' '+x(all.length-1)+','+(h-pad)+' '+x(0)+','+(h-pad)+'" fill="url(#fg)"/>'
       +'<polyline points="'+pts+'" fill="none" stroke="url(#lg)" stroke-width="3" stroke-linecap="round"/>'):"")
     +dots
@@ -3158,9 +3167,10 @@ document.getElementById("finishDayBtn").addEventListener("click", ()=>{
   data.finished[t] = true;
   save();
   const s = daySums(t);
+  const ready = nutritionTargetsReady();
   const dt = dayTargets(todayStr());
-  const inCal = s.cal <= dt.cal + 100; // exact target with the practical buffer
-  const inPro = s.pro >= dt.pro;
+  const inCal = ready && s.cal <= dt.cal + 100; // exact target with the practical buffer
+  const inPro = ready && s.pro >= dt.pro;
   const streak = computeStreak();
   const stats = Math.round(s.cal)+" kcal · "+Math.round(s.pro)+"g protein"
     +(inCal&&inPro ? " — both targets hit" : inPro ? " — protein target hit" : "")
