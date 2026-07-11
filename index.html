@@ -4641,9 +4641,9 @@ function renderSetupStep(){
 
   if(setupStep===0){
     body.innerHTML='<div class="card"><div class="label">Step 1 · Bodyweight goal</div><div class="row" style="margin:10px 0 12px;">'
-      +'<div><div class="label">Current / start weight (lb)</div><input type="number" id="suWt" inputmode="decimal" placeholder="e.g. 225"></div>'
+      +'<div><div class="label">Current weight (lb)</div><input type="number" id="suWt" inputmode="decimal" placeholder="e.g. 225"></div>'
       +'<div><div class="label">Goal weight (lb)</div><input type="number" id="suGoalWt" inputmode="decimal" placeholder="e.g. 175"></div></div>'
-      +'<div class="note">Enter current weight once. BlackPyre saves it as both your first weigh-in and your starting-weight baseline.</div></div>';
+      +'<div class="note">Enter your current weight once. BlackPyre saves it as your first weigh-in and starting baseline.</div></div>';
     document.getElementById("suWt").value=setupChoice.cw||""; document.getElementById("suGoalWt").value=setupChoice.gw||"";
   }
   if(setupStep===1){
