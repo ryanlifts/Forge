@@ -16,7 +16,7 @@
   :root {
     --bg:#101215; --panel:#191C21; --panel-up:#1F232A; --border:#2B3039;
     --text:#EDEEF0; --dim:#8A919C; --ember:#FF7A3D; --ember-deep:#E8571F; --ember-rgb:255,122,61; --amber:#E8B04B;
-    --ok:#4ADE80; --warn:#F87171;
+    --ok:#4ADE80; --warn:#F87171; --progress:#FBBF24;
   }
   * { box-sizing:border-box; margin:0; padding:0; }
   body {
@@ -87,7 +87,7 @@
   .bar .band { position:absolute; top:0; bottom:0; background:rgba(74,222,128,.10); border-left:1px solid rgba(74,222,128,.5); border-right:1px solid rgba(74,222,128,.5); }
   .bar .fill { position:absolute; left:0; top:0; bottom:0; border-radius:8px; transition:width .3s ease; background:linear-gradient(90deg,var(--ember-deep),var(--ember)); }
   .bar .fill.ok { background:var(--ok); }
-  .fill.mid { background:var(--amber); }
+  .fill.mid { background:var(--progress); }
   .bar .fill.over { background:var(--warn); }
 
   .result { padding:13px 16px; border-bottom:1px solid var(--border); cursor:pointer; }
@@ -1260,14 +1260,13 @@ function exactBarHTML(label, value, target, unit, kind){
   const pct = Math.min(100,(value/max)*100);
   const tp = Math.min(100,(target/max)*100);
   const over = value - target;
-  let cls = "", color = "var(--text)";
-  if (kind==="pro"){
-    if (value >= target){ cls = "ok"; color = "var(--ok)"; }          // hit = green, never red for over
-    else { cls = "mid"; color = "var(--amber)"; }                      // under = unfinished amber
-  } else {
-    const redAt = kind==="cal" ? 100 : kind==="carb" ? 15 : 8;         // practical buffers
-    if (over > redAt){ cls = "over"; color = "var(--warn)"; }
-    else if (over > 0){ cls = "mid"; color = "var(--amber)"; }
+  let cls = "mid", color = "var(--progress)";                         // below target = in-progress gold
+  if (value >= target){
+    cls = "ok"; color = "var(--ok)";                                  // target reached = green
+    if (kind!=="pro"){
+      const redAt = kind==="cal" ? 100 : kind==="carb" ? 15 : 8;      // allowed buffer above target
+      if (over >= redAt){ cls = "over"; color = "var(--warn)"; }       // past buffer = red
+    }
   }
   return '<div class="bar-head"><span class="label" style="margin:0;">'+label+'</span>'
     +'<span class="bar-val" style="color:'+color+'">'+Math.round(value)+' <span class="t">/ '+target+' '+unit+'</span></span></div>'
