@@ -780,7 +780,7 @@
       <button class="btn ghost small" id="importDataBtn">Restore from backup</button>
       <div class="note" id="backupMetaLine" style="margin-top:8px;"></div>
       <input type="file" id="importDataFile" accept=".json,application/json" class="hidden">
-      <div class="note">Data lives only on this device. Back up occasionally or when moving phones.</div>
+      <div class="note">BlackPyre stores data on this device. Use backup/restore to move data between devices. True cross-device sync would require optional cloud/account support in a future version.</div>
     </div>
   </div>
 </div>
@@ -902,7 +902,8 @@
 // ================== storage keys & defaults ==================
 const DATA_KEY = "forge:data", CFG_KEY = "forge:cfg", PROG_KEY = "forge:program";
 
-const DEFAULT_CFG = { startWt:225, goalWt:175, calTarget:2000, proTarget:190, carbGoal:160, fatGoal:60 };
+const DEFAULT_CFG = { startWt:0, goalWt:0, calTarget:0, proTarget:0, carbGoal:0, fatGoal:0, accent:"gold" };
+const ACCENT_KEYS = ["ember","steel","emerald","crimson","violet","gold","pink"];
 
 const DEFAULT_PROGRAM = {
   name: "Full Body Foundations (3-Day)",
@@ -1150,10 +1151,13 @@ const _rawCfg = loadJSON(CFG_KEY, {});
 migrateTargets(_rawCfg);
 let cfg = Object.assign({}, DEFAULT_CFG, _rawCfg);
 function migrateCfg(){
-  if (!Number.isFinite(cfg.calTarget)) cfg.calTarget = DEFAULT_CFG.calTarget;
-  if (!Number.isFinite(cfg.proTarget)) cfg.proTarget = DEFAULT_CFG.proTarget;
+  ["startWt","goalWt","calTarget","proTarget","carbGoal","fatGoal"].forEach(k=>{
+    const v = Number(cfg[k]);
+    cfg[k] = Number.isFinite(v) && v>0 ? v : 0;
+  });
   if (cfg.calSchedMode==="weekend") cfg.calSchedMode = "frisat";
   if (!cfg.calSchedMode) cfg.calSchedMode = "same";
+  if (!ACCENT_KEYS.includes(cfg.accent)) cfg.accent = "gold";
 }
 migrateCfg();
 // exact calorie target for a given date (schedule-aware); presets always rebalance to the same weekly total
@@ -1171,21 +1175,29 @@ function schedDays(){
   return presetDays(m); // presets derive live from calTarget — never stale
 }
 function calTargetFor(ds){
+  const base = Number(cfg.calTarget)||0;
+  if (base<=0) return 0;
   const days = schedDays();
-  if (!days) return cfg.calTarget;
+  if (!days) return base;
   const dow = new Date(ds+"T12:00:00").getDay();
   const v = Number(days[dow]);
-  return Number.isFinite(v) && v>0 ? v : cfg.calTarget;
+  return Number.isFinite(v) && v>0 ? v : base;
 }
 function weeklyCalTotal(){
+  const base = Number(cfg.calTarget)||0;
+  if (base<=0) return 0;
   const days = schedDays();
-  return days ? days.reduce((a,x)=>a+(Number(x)||0),0) : cfg.calTarget*7;
+  return days ? days.reduce((a,x)=>a+(Number(x)||0),0) : base*7;
+}
+function nutritionTargetsReady(){
+  return [cfg.calTarget,cfg.proTarget,cfg.carbGoal,cfg.fatGoal].every(v=>Number.isFinite(Number(v)) && Number(v)>0);
 }
 // the user schedules calories only; each day's macros scale from the base ratios
 function dayTargets(ds){
+  if (!nutritionTargetsReady()) return {cal:0, pro:0, carb:0, fat:0};
   const cal = calTargetFor(ds);
-  const k = (Number.isFinite(cfg.calTarget) && cfg.calTarget>0) ? cal/cfg.calTarget : 1;
-  return { cal: cal, pro: Math.round(cfg.proTarget*k), carb: Math.round(cfg.carbGoal*k), fat: Math.round(cfg.fatGoal*k) };
+  const k = cal/cfg.calTarget;
+  return { cal:cal, pro:Math.round(cfg.proTarget*k), carb:Math.round(cfg.carbGoal*k), fat:Math.round(cfg.fatGoal*k) };
 }
 let program = loadJSON(PROG_KEY, DEFAULT_PROGRAM);
 try { validateProgram(program); } catch(e){ program = DEFAULT_PROGRAM; }
@@ -1243,6 +1255,7 @@ document.querySelectorAll(".tab").forEach(btn=>{
 
 // ================== bars ==================
 function exactBarHTML(label, value, target, unit, kind){
+  if (!Number.isFinite(Number(target)) || Number(target)<=0) return "";
   const max = target*1.25;
   const pct = Math.min(100,(value/max)*100);
   const tp = Math.min(100,(target/max)*100);
@@ -1303,6 +1316,9 @@ function daySums(dateStr){
   return s;
 }
 function allBarsHTML(s, ds){
+  if (!nutritionTargetsReady()){
+    return '<div class="note" style="font-size:12px; margin:0;">Set targets in Settings.</div>';
+  }
   const d = ds || todayStr();
   const t = dayTargets(d);
   return exactBarHTML("Calories", s.cal, t.cal, "kcal", "cal")
@@ -1313,17 +1329,18 @@ function allBarsHTML(s, ds){
 
 // --- OFF product mapping ---
 function mapOFFProduct(p){
+  if (!p || typeof p!=="object") return null;
   const nu = p.nutriments || {};
-  if (!p.product_name || nu["energy-kcal_100g"]==null) return null;
+  const vals = [nu["energy-kcal_100g"], nu["proteins_100g"], nu["carbohydrates_100g"], nu["fat_100g"]].map(Number);
+  const name = String(p.product_name || "").trim();
+  if (!name || vals.some(v=>!Number.isFinite(v) || v<0)) return null;
+  const serving = Number(p.serving_quantity);
   return {
-    name: p.product_name,
-    brand: p.brands || "Generic",
-    cal100: Number(nu["energy-kcal_100g"]),
-    pro100: Number(nu["proteins_100g"]||0),
-    carb100: Number(nu["carbohydrates_100g"]||0),
-    fat100: Number(nu["fat_100g"]||0),
-    servingG: p.serving_quantity ? Number(p.serving_quantity) : null,
-    servingLabel: p.serving_size || null,
+    name:name,
+    brand:String(p.brands || "Generic").trim() || "Generic",
+    cal100:vals[0], pro100:vals[1], carb100:vals[2], fat100:vals[3],
+    servingG:Number.isFinite(serving) && serving>0 ? serving : null,
+    servingLabel:p.serving_size || p.quantity || null,
   };
 }
 
@@ -1458,18 +1475,19 @@ async function runBarcode(){
   const btn = document.getElementById("barcodeBtn");
   btn.disabled = true; btn.textContent = "…";
   try {
-    const res = await fetch("https://world.openfoodfacts.org/api/v2/product/"+code+".json?fields=product_name,brands,nutriments,serving_size,serving_quantity");
-    const json = await res.json();
-    if (json.status===1 && json.product){
-      const h = mapOFFProduct(json.product);
-      if (h){ selectFood(h); }
-      else { await tryUSDABarcode(code); }
-    } else {
-      await tryUSDABarcode(code);
+    // Open Food Facts API v3.6 product schema (v3 product-by-barcode endpoint)
+    const fields = "code,product_name,brands,quantity,serving_size,serving_quantity,nutriments";
+    const res = await fetchWithTimeout("https://world.openfoodfacts.org/api/v3/product/"+encodeURIComponent(code)+".json?fields="+fields, 10000);
+    if (!res.ok){ await tryUSDABarcode(code); }
+    else {
+      const json = await res.json();
+      const h = mapOFFProduct(json && json.product);
+      if (h) selectFood(h);
+      else await tryUSDABarcode(code);
     }
   } catch(e){
-    errEl.textContent = "Couldn't reach the database — check connection.";
-    errEl.classList.remove("hidden");
+    // Network/malformed OFF responses still continue through USDA, then manual entry.
+    await tryUSDABarcode(code);
   }
   btn.disabled = false; btn.textContent = "Look up";
 }
@@ -3382,9 +3400,10 @@ const ACCENTS = {
   crimson: {name:"Crimson", c:"#F43F5E", deep:"#BE123C", rgb:"244,63,94"},
   violet:  {name:"Violet",  c:"#A78BFA", deep:"#7C3AED", rgb:"167,139,250"},
   gold:    {name:"Gold",    c:"#FBBF24", deep:"#D97706", rgb:"251,191,36"},
+  pink:    {name:"Pink",    c:"#F472B6", deep:"#DB2777", rgb:"244,114,182"},
 };
 function applyAccent(){
-  const a = ACCENTS[cfg.accent] || ACCENTS.ember;
+  const a = ACCENTS[cfg.accent] || ACCENTS.gold;
   const r = document.documentElement.style;
   r.setProperty("--ember", a.c);
   r.setProperty("--ember-deep", a.deep);
@@ -3399,7 +3418,7 @@ function renderAccentRow(){
     b.setAttribute("aria-label", a.name);
     b.title = a.name;
     b.style.cssText = "width:36px; height:36px; border-radius:50%; cursor:pointer; background:linear-gradient(135deg,"+a.c+","+a.deep+");"
-      + "border:3px solid " + ((cfg.accent||"ember")===key ? "var(--text)" : "transparent") + ";";
+      + "border:3px solid " + ((ACCENTS[cfg.accent] ? cfg.accent : "gold")===key ? "var(--text)" : "transparent") + ";";
     b.addEventListener("click", ()=>{
       cfg.accent = key;
       saveCfg();
@@ -4722,7 +4741,7 @@ const FAQ = [
   {q:"How accurate is photo / AI food logging?", a:"They're <b>estimates</b> — good ones, but the AI is judging portions from a description or a photo. <b>Pro tip:</b> the optional caption field ('Chipotle chicken bowl') sharply improves restaurant and chain estimates. Every item shows before logging so you can remove anything, and after logging you can ✎ edit values. For packaged foods with labels, the barcode scan is exact. Photos are analyzed and immediately discarded — never stored."},
   {q:"What is the AI Coach report?", a:"On the Home tab, the <b>AI Coach</b> card builds a progress report from your real data — weight trend, measured TDEE, nutrition adherence, per-lift progression, and your current program. Tap <b>Copy report</b>, paste it into Claude, ChatGPT, or any AI, and ask away. The report even includes your program in BlackPyre format, so the AI can return an adjusted program you load right back in (Train → Load). Completely optional — the app works fully without it."},
   {q:"Can I track water?", a:"Yes — <b>Settings → Enable water tracking</b> adds a one-tap glass counter to your Home tab. Off by default, toggle anytime."},
-  {q:"Can I change the app's color?", a:"Yes — <b>Settings → Accent color</b> has six looks: Ember, Steel, Emerald, Crimson, Violet, and Gold. One tap re-themes the whole app instantly."},
+  {q:"Can I change the app's color?", a:"Yes — <b>Settings → Accent color</b> has seven looks: Ember, Steel, Emerald, Crimson, Violet, Gold, and Pink. Gold is the default BlackPyre look. One tap re-themes the whole app instantly."},
   {q:"How do I look back at past workouts?", a:"The Train tab's history is grouped by <b>month</b> — the current month is open, tap any older month to expand it. Every session shows its full sets and is editable with ✎. For a single lift's progress over time, tap it on the PR board for the chart."},
   {q:"How do I track body measurements?", a:"It's optional: <b>Settings → Enable body measurements</b> adds a waist/chest/arm tracker to the Weight tab. On a fat-loss phase, a shrinking waist is often better evidence than the scale. Toggle it off anytime — entries stay saved."},
 
@@ -4730,7 +4749,7 @@ const FAQ = [
   {q:"Disclaimer & terms of use", a:"BlackPyre is an informational logging tool, <b>not medical advice</b>, and not a substitute for a physician, registered dietitian, or qualified trainer. Consult your doctor before beginning any diet or exercise program, especially with any medical condition, injury, or pregnancy, or if under 18. Calorie/macro targets use published scientific formulas (Mifflin-St Jeor; Epley for estimated 1RM) — they are estimates, and individual needs vary. Programs are general templates, not personalized prescriptions; exercise carries inherent injury risk — stop if you feel pain, dizziness, or shortness of breath. Nutrition data comes from public databases and user entries and may contain errors — verify labels for allergies or medical diets. By using BlackPyre you agree you use it <b>at your own risk</b> and that its creators are <b>not liable</b> for any injury, health outcome, or loss arising from its use. The app is provided \"as is,\" without warranties of any kind. You accepted this disclaimer on first use; it applies to all continued use."},
   {sec:"Your data & the app"},
   {q:"Where is my data stored? Is it private?", a:"Everything lives <b>only on your device</b> — no account, no server, nothing leaves your phone. Nobody (including whoever shared the app with you) can see your logs."},
-  {q:"How do I back up or move to a new phone?", a:"<b>Settings → Back up all data</b> downloads one file containing everything. On the new phone, install the app and use <b>Restore from backup</b>. BlackPyre watches out for you here: Settings always shows your last backup, and a reminder card appears on Home when you've logged enough new data to be worth protecting — one tap backs it up. Keep the file somewhere safe (Files, email, cloud drive)."},
+  {q:"How do I back up or move to a new phone?", a:"<b>Settings → Back up all data</b> downloads one file containing everything. On the new phone, install the app and use <b>Restore from backup</b>. BlackPyre watches out for you here: Settings always shows your last backup, and a reminder card appears on Home when you've logged enough new data to be worth protecting — one tap backs it up. Keep the file somewhere safe (Files, email, cloud drive). BlackPyre stores data on this device; true cross-device sync would require optional cloud/account support in a future version."},
   {q:"How do I share this app with someone?", a:"Send them the web address. iPhone: open in Safari → Share → <b>Add to Home Screen</b>. Android: open in Chrome → <b>Install app</b> when prompted (or ⋮ menu → Add to Home Screen). They get their own fresh copy with their own private data."},
   {q:"Search isn't returning results — why?", a:"Online food search needs a connection; without one you still get 300+ built-in staples (meats, grains, fruits, common dishes), your saved foods, and manual entry. If branded results seem thin, make sure your free USDA key is saved in Settings. For products, the barcode scan is the most reliable route."},
   {q:"The app doesn't seem to update / looks stuck?", a:"Close it fully (swipe it away), reopen, close again, reopen. The first open downloads the new version in the background; the second runs it."},
@@ -4944,13 +4963,14 @@ document.getElementById("adjustYesBtn").addEventListener("click", ()=>{
 
 // ================== SETTINGS ==================
 function renderSettings(){
-  document.getElementById("sStartWt").value = cfg.startWt;
-  document.getElementById("sGoalWt").value = cfg.goalWt;
-  document.getElementById("sCalTarget").value = cfg.calTarget;
-  document.getElementById("sProTarget").value = cfg.proTarget;
+  const shown = v=>Number(v)>0 ? v : "";
+  document.getElementById("sStartWt").value = shown(cfg.startWt);
+  document.getElementById("sGoalWt").value = shown(cfg.goalWt);
+  document.getElementById("sCalTarget").value = shown(cfg.calTarget);
+  document.getElementById("sProTarget").value = shown(cfg.proTarget);
   renderSched();
-  document.getElementById("sCarb").value = cfg.carbGoal;
-  document.getElementById("sFat").value = cfg.fatGoal;
+  document.getElementById("sCarb").value = shown(cfg.carbGoal);
+  document.getElementById("sFat").value = shown(cfg.fatGoal);
 }
 document.getElementById("saveSettingsBtn").addEventListener("click", ()=>{
   const g = id=>Number(document.getElementById(id).value);
@@ -5085,13 +5105,20 @@ function renderJourney(){
 function renderDash(){
   renderJourney();
   const sorted=data.weights.slice().sort((a,b)=>a.date.localeCompare(b.date));
-  const cur=sorted.length?sorted[sorted.length-1].lbs:cfg.startWt;
-  const total=Math.abs(cfg.startWt-cfg.goalWt)||1;
-  const moved=cfg.startWt>cfg.goalWt ? cfg.startWt-cur : cur-cfg.startWt;
-  const toGo=Math.abs(cur-cfg.goalWt);
-  const pct=Math.max(0,Math.min(100,(moved/total)*100));
-  document.getElementById("dashWt").textContent=cur;
-  document.getElementById("dashWtNote").textContent=(moved>0?((cfg.startWt>cfg.goalWt?"−":"+")+moved.toFixed(1)+" lb · "):"Baseline · ")+toGo.toFixed(1)+" to go";
+  const hasStart = Number(cfg.startWt)>0;
+  const hasGoal = Number(cfg.goalWt)>0;
+  const cur=sorted.length?sorted[sorted.length-1].lbs:(hasStart?cfg.startWt:null);
+  let moved=0, toGo=0, pct=0;
+  if (cur!=null && hasStart && hasGoal && cfg.startWt!==cfg.goalWt){
+    const total=Math.abs(cfg.startWt-cfg.goalWt);
+    moved=cfg.startWt>cfg.goalWt ? cfg.startWt-cur : cur-cfg.startWt;
+    toGo=Math.abs(cur-cfg.goalWt);
+    pct=Math.max(0,Math.min(100,(moved/total)*100));
+  }
+  document.getElementById("dashWt").textContent=cur==null?"—":cur;
+  document.getElementById("dashWtNote").textContent=(cur==null||!hasStart||!hasGoal)
+    ? "Set your bodyweight goal in Settings"
+    : (moved>0?((cfg.startWt>cfg.goalWt?"−":"+")+moved.toFixed(1)+" lb · "):"Baseline · ")+toGo.toFixed(1)+" to go";
   document.getElementById("dashPct").textContent=pct.toFixed(0);
   document.getElementById("dashPctFill").style.width=pct+"%";
   const t=todayStr(), s=daySums(t);
@@ -5100,8 +5127,9 @@ function renderDash(){
   const dt = dayTargets(t);
   const calLeft = Math.max(0, dt.cal - s.cal);
   const proLeft = Math.max(0, dt.pro - s.pro);
-  document.getElementById("dashRemaining").textContent =
-    (calLeft>0||proLeft>0) ? ("Remaining today: "+Math.round(calLeft)+" kcal · "+Math.round(proLeft)+"g protein") : "Targets hit ✓";
+  document.getElementById("dashRemaining").textContent = !nutritionTargetsReady()
+    ? "Set targets in Settings."
+    : (calLeft>0||proLeft>0) ? ("Remaining today: "+Math.round(calLeft)+" kcal · "+Math.round(proLeft)+"g protein") : "Targets hit ✓";
   const lastArr=data.workouts.slice().sort((a,b)=>b.date.localeCompare(a.date));
   const last=lastArr[0];
   const el=document.getElementById("dashLast");
@@ -5137,6 +5165,25 @@ function renderAll(){ renderDash(); renderFood(); renderWork(); renderWeight(); 
   document.getElementById("waterToggleBtn").textContent = cfg.waterOn ? "Disable water tracking" : "Enable water tracking";
   renderAIGates();
 }
+
+
+// Select an existing numeric value on tap/focus so the next keystroke replaces it.
+// Delegation covers fields created later by dynamic renders; date/text/select/textarea are excluded.
+function selectNumericOnFocus(e){
+  const el = e.target;
+  if (!el || el.tagName!=="INPUT" || el.type!=="number" || el.disabled || el.readOnly) return;
+  if (el.value==="") return;
+  requestAnimationFrame(()=>{
+    try { el.select(); } catch(err){}
+  });
+}
+document.addEventListener("focusin", selectNumericOnFocus);
+document.addEventListener("pointerup", e=>{
+  const el=e.target;
+  if (!el || el.tagName!=="INPUT" || el.type!=="number" || el.value==="") return;
+  e.preventDefault();
+  requestAnimationFrame(()=>{ try { el.select(); } catch(err){} });
+});
 
 // ================== boot ==================
 renderDayOptions();
