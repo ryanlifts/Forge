@@ -1,0 +1,15 @@
+# BlackPyre test gate — every push must pass the permanent gauntlet.
+# The green check on a commit now means "all tests passed", not just "Pages deployed".
+name: tests
+on:
+  push:
+  pull_request:
+jobs:
+  gauntlet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: bash tests/run-tests.sh
