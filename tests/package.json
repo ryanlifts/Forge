@@ -1,0 +1,8 @@
+{
+  "name": "blackpyre-tests",
+  "private": true,
+  "description": "Permanent test gauntlet for BlackPyre. npm ci here, then run the suites from the repo root. Never a build step - the app itself has no dependencies.",
+  "devDependencies": {
+    "jsdom": "26.1.0"
+  }
+}
