@@ -121,7 +121,14 @@ ev("pointerdown"); await wait(3150);
 check("3s hold reveals Bella", dG.getElementById("bellaEgg").style.opacity==="1" && dG.getElementById("bpTitleText").style.opacity==="0");
 await wait(4300);
 check("title dissolves back on its own", dG.getElementById("bellaEgg").style.opacity==="0" && dG.getElementById("bpTitleText").style.opacity==="1");
-check("her handwriting embedded exactly once per mask prefix", (html.match(/base64,/g)||[]).length>=1);
+// Memorial integrity: tests/bella-reference.b64 is the frozen byte truth of her handwriting
+// (extracted from v41, whose embed was verified byte-identical to the processed original).
+// v41 embeds it twice (once per mask prefix). Phase 1 dedup flips the expected count to 1 —
+// that count change is the ONLY permitted edit to these checks. The reference file never changes.
+const bellaRef = fs.readFileSync(path.join(__dirname, "bella-reference.b64"), "utf8").trim();
+const bellaCount = html.split(bellaRef).length - 1;
+check("her handwriting embedded byte-identically to the frozen reference", bellaCount >= 1);
+check("embed count matches expectation (2 pre-dedup; becomes 1 after Phase 1)", bellaCount === 2);
 
 summary("INTEGRATION");
 })().catch(e=>{ console.error(e); process.exit(1); });

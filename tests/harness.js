@@ -10,13 +10,19 @@ const ROOT = path.join(__dirname, "..");
 
 function assembleHTML(){
   let html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8");
-  html = html.replace(/<script src="([^"]+)"><\/script>/g, (m, src)=>{
+  // tolerant of attribute order and extras (defer, media, crossorigin, ...);
+  // only local repo files are inlined — external URLs pass through untouched
+  html = html.replace(/<script\b[^>]*\bsrc="([^"]+)"[^>]*>\s*<\/script>/g, (m, src)=>{
+    if (/^https?:/.test(src)) return m;
     const p = path.join(ROOT, src);
-    return fs.existsSync(p) ? "<script>" + fs.readFileSync(p, "utf8") + "</script>" : m;
+    return fs.existsSync(p) ? "<script>\n" + fs.readFileSync(p, "utf8") + "\n</script>" : m;
   });
-  html = html.replace(/<link rel="stylesheet" href="([^"]+)">/g, (m, href)=>{
+  html = html.replace(/<link\b[^>]*>/g, (m)=>{
+    if (!/rel="stylesheet"/.test(m)) return m;
+    const href = (m.match(/href="([^"]+)"/)||[])[1];
+    if (!href || /^https?:/.test(href)) return m;
     const p = path.join(ROOT, href);
-    return fs.existsSync(p) ? "<style>" + fs.readFileSync(p, "utf8") + "</style>" : m;
+    return fs.existsSync(p) ? "<style>\n" + fs.readFileSync(p, "utf8") + "\n</style>" : m;
   });
   return html;
 }
@@ -28,6 +34,7 @@ function boot(cfgObj, dataObj, hooks){
       if (cfgObj) w.localStorage.setItem("forge:cfg", JSON.stringify(cfgObj));
       if (dataObj) w.localStorage.setItem("forge:data", JSON.stringify(dataObj));
       w.URL.createObjectURL = ()=>"blob:x"; w.URL.revokeObjectURL = ()=>{};
+      w.scrollTo = ()=>{}; // jsdom doesn't implement it; the app's calls are cosmetic
       if (hooks) hooks(w);
     }});
 }

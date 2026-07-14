@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# BlackPyre permanent test gauntlet — run from the repo root or tests/
+# BlackPyre permanent test gauntlet - 95 automated checks against the shipped app.
+# Reproducible installs via the committed lockfile (npm ci). No build step, ever.
 set -e
-cd "$(dirname "$0")/.."
-if [ ! -d node_modules/jsdom ]; then npm install jsdom --no-save --silent; fi
+cd "$(dirname "$0")"
+npm ci --silent
+cd ..
 node tests/unit.test.js
 node tests/integration.test.js
 echo ""
