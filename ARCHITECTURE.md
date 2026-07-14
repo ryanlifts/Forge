@@ -1,4 +1,3 @@
-[ARCHITECTURE.md](https://github.com/user-attachments/files/29948097/ARCHITECTURE.md)
 # BlackPyre Architecture
 
 A single-page PWA: vanilla HTML/CSS/JS, no framework, no build step, localStorage only.
@@ -25,7 +24,7 @@ below exists to keep that workflow safe.
 | `sw.js` | Offline shell (cache-first), OFF API network-only, cache name = release version |
 | `manifest.json` | PWA identity — name/short_name **BlackPyre** |
 | `icon-*.png`, `apple-touch-icon.png` | Gold dumbbell icons |
-| `tests/` | Permanent gauntlet (harness + unit + integration). Not precached |
+| `tests/` | Permanent gauntlet — 96 automated checks (62 unit + 34 integration) plus `package.json`/`package-lock.json` pinning jsdom for reproducible runs, and `bella-reference.b64` (frozen byte truth of the memorial image — never edited). Not precached |
 | `.github/workflows/tests.yml` | Runs the gauntlet on every push |
 | `DATA-MODEL.md` | Storage schema + migration history |
 
@@ -44,15 +43,27 @@ the planned Phase-2 slice boundaries.
 
 ## Testing conventions
 
+- Run with `bash tests/run-tests.sh` — it does `npm ci` against the committed lockfile
+  (reproducible, no floating versions), then runs both suites. This is test tooling only;
+  the app itself has zero dependencies and no build step.
 - Harness (`tests/harness.js`) boots the **shipped** app in jsdom and inlines any local
   `<script src>` / stylesheet first, so the suite keeps working after the Phase-2 slicing.
+  Inlining tolerates extra attributes in any order; Phase 2 should still prefer the plain
+  canonical forms `<script src="NAME.js"></script>` and
+  `<link rel="stylesheet" href="NAME.css">` with double quotes and repo-relative paths.
+  External (http/https) URLs are never inlined.
+- Memorial integrity is enforced by test: the embedded handwriting must match
+  `tests/bella-reference.b64` byte-for-byte, with an exact embed count (2 today; 1 after the
+  Phase-1 dedup — that count is the only permitted edit, the reference file never changes).
 - Unit suite: pure math and parsers (Mifflin-St Jeor, Epley, schedule sums, macro scaling,
   streak, migrations, AI-reply parsing, bar thresholds, dates).
 - Integration suite: fresh-user boot, ID resolution/duplication, no-fake-values sweep,
   logging/kudos/finish-day, settings/schedule flows, barcode fallback matrix,
   backup→restore→migration round-trip, handoff paste flow, Easter egg timing.
-- When adding a feature: add its checks to the suite **in the same release**. Tests are
-  cumulative, never recreated.
+- The permanent suite is **96 automated checks** and only grows. When adding a feature: add
+  its checks in the same release. Tests are cumulative, never recreated. (Historical note:
+  before Phase 0, roughly 700 ad-hoc checks were written and discarded across v29–v41 —
+  that figure describes the old throwaway process, not this suite.)
 - jsdom quirks: stub `URL.createObjectURL`, ignore `scrollTo` warnings, `select()` runs via
   rAF (wait ≥50 ms), boot must pass the disclaimer + wizard for fresh-user tests.
 
