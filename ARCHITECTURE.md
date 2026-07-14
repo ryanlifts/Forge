@@ -20,11 +20,14 @@ below exists to keep that workflow safe.
 
 | File | Role |
 |---|---|
-| `index.html` | The entire app: markup, styles, logic, embedded data (Phase 1/2 will thin this — see the restructuring plan) |
+| `index.html` | The app shell: markup, styles, logic (~332 KB after Phase 1; Phase 2 will slice the JS) |
+| `data-quotes.js` | QUOTES vault — classic script, loads before the main script, shares global scope |
+| `data-foods.js` | LOCAL_DB food database + ALT_MAP exercise swaps — classic script |
+| `data-faq.js` | FAQ content — classic script |
 | `sw.js` | Offline shell (cache-first), OFF API network-only, cache name = release version |
 | `manifest.json` | PWA identity — name/short_name **BlackPyre** |
 | `icon-*.png`, `apple-touch-icon.png` | Gold dumbbell icons |
-| `tests/` | Permanent gauntlet — 96 automated checks (62 unit + 34 integration) plus `package.json`/`package-lock.json` pinning jsdom for reproducible runs, and `bella-reference.b64` (frozen byte truth of the memorial image — never edited). Not precached |
+| `tests/` | Permanent gauntlet — 104 automated checks (62 unit + 42 integration) plus `package.json`/`package-lock.json` pinning jsdom for reproducible runs, and `bella-reference.b64` (frozen byte truth of the memorial image — never edited). Not precached |
 | `.github/workflows/tests.yml` | Runs the gauntlet on every push |
 | `DATA-MODEL.md` | Storage schema + migration history |
 
@@ -32,9 +35,10 @@ below exists to keep that workflow safe.
 
 storage keys & defaults → migrations → pure helpers → state → tabs → bars →
 FOOD (meals, logging, USDA/OFF/barcode, usual-meal, kudos, schedule UI) →
+*(QUOTES / LOCAL_DB / ALT_MAP / FAQ now live in the data-*.js files, loaded first)* →
 TRAIN (sessions, e1RM/PR engine, plate math, rest timer, programs/share) →
 WEIGHT (chart, measurements, adaptive TDEE, projections) →
-streak → finish day → quotes vault → AI ENGINE (BYOK, multi-provider) →
+streak → finish day → AI ENGINE (BYOK, multi-provider) →
 coach chat → weekly check-in → handoff mode → AI report → analytics →
 setup wizard → FAQ → macro calculator → settings → dash → easter egg → boot.
 
@@ -60,7 +64,7 @@ the planned Phase-2 slice boundaries.
 - Integration suite: fresh-user boot, ID resolution/duplication, no-fake-values sweep,
   logging/kudos/finish-day, settings/schedule flows, barcode fallback matrix,
   backup→restore→migration round-trip, handoff paste flow, Easter egg timing.
-- The permanent suite is **96 automated checks** and only grows. When adding a feature: add
+- The permanent suite is **104 automated checks** and only grows. When adding a feature: add
   its checks in the same release. Tests are cumulative, never recreated. (Historical note:
   before Phase 0, roughly 700 ad-hoc checks were written and discarded across v29–v41 —
   that figure describes the old throwaway process, not this suite.)
