@@ -1,4 +1,3 @@
-[DATA-MODEL.md](https://github.com/user-attachments/files/29948084/DATA-MODEL.md)
 # BlackPyre Data Model
 
 Everything BlackPyre stores lives in three localStorage keys on the user's device.
