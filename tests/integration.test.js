@@ -15,7 +15,7 @@ clickA("disclaimerAgreeBtn"); clickA("setupSkip");
 check("fresh boot completes", dA.getElementById("setupOverlay").classList.contains("hidden"));
 
 // every referenced ID exists; no duplicates (wizard su* IDs are rendered dynamically)
-const jsSrc = html.match(/<script>([\s\S]*?)<\/script>/)[1];
+const jsSrc = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m=>m[1]).join("\n");
 const refs = [...new Set([...jsSrc.matchAll(/getElementById\("([^"]+)"\)/g)].map(m=>m[1]))];
 const missing = refs.filter(id=>!id.startsWith("su") && !dA.getElementById(id));
 check("no missing element IDs ("+refs.length+" referenced)", missing.length===0 || (console.log("   missing:",missing),false));
@@ -128,7 +128,23 @@ check("title dissolves back on its own", dG.getElementById("bellaEgg").style.opa
 const bellaRef = fs.readFileSync(path.join(__dirname, "bella-reference.b64"), "utf8").trim();
 const bellaCount = html.split(bellaRef).length - 1;
 check("her handwriting embedded byte-identically to the frozen reference", bellaCount >= 1);
-check("embed count matches expectation (2 pre-dedup; becomes 1 after Phase 1)", bellaCount === 2);
+check("embed count is exactly 1 (Phase 1 dedup landed; was 2 in v41)", bellaCount === 1);
+
+// ================= Phase 1: extracted data payloads =================
+const P = boot(EXISTING_CFG, EMPTY_DATA);
+check("QUOTES loads from data-quotes.js", P.window.eval("Array.isArray(QUOTES) && QUOTES.length > 100"));
+check("LOCAL_DB loads from data-foods.js", P.window.eval("Array.isArray(LOCAL_DB) && LOCAL_DB.length > 100"));
+check("ALT_MAP loads from data-foods.js", P.window.eval("typeof ALT_MAP==='object' && Object.keys(ALT_MAP).length > 10"));
+check("FAQ loads from data-faq.js", P.window.eval("Array.isArray(FAQ) && FAQ.length > 10"));
+check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.some(f=>/chicken breast/i.test(f.n))`));
+const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
+check("SW precaches the three data files", ["data-quotes.js","data-foods.js","data-faq.js"].every(f=>sw.includes('"./'+f+'"')));
+check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+"/.test(sw));
+const rawIndex = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+check("data scripts load before the main app script (raw file order)",
+  ["data-quotes.js","data-foods.js","data-faq.js"].every(f=>
+    rawIndex.indexOf('src="'+f+'"') > -1 &&
+    rawIndex.indexOf('src="'+f+'"') < rawIndex.indexOf("const DEFAULT_CFG")));
 
 summary("INTEGRATION");
 })().catch(e=>{ console.error(e); process.exit(1); });
