@@ -103,20 +103,28 @@ check("existing exact targets never overwritten", (()=>{ E(`var o3={calTarget:17
 const schemaDataRaw = JSON.stringify({food:{},workouts:[],weights:[]});
 const schemaProgramRaw = JSON.stringify({name:"Test",days:[{id:"D1",title:"Day 1",exercises:[{name:"Squat"}]}]});
 let prep = E(`prepareState(${JSON.stringify(JSON.stringify({calLo:1500,calHi:1700,proLo:160,proHi:180}))}, ${JSON.stringify(schemaDataRaw)}, ${JSON.stringify(schemaProgramRaw)})`);
-check("prepareState migrates legacy whole-state to schema 1", prep.ok && prep.state.cfg.schemaVersion===1);
+check("prepareState migrates legacy whole-state to schema 2", prep.ok && prep.state.cfg.schemaVersion===2 && prep.state.data.activeWorkoutDraft===null);
 check("prepareState preserves migrateTargets-before-defaults ordering", prep.state.cfg.calTarget===1600 && prep.state.cfg.proTarget===170);
-check("legacy migration marks settings only", prep.changed.cfg===true && prep.changed.data===false && prep.changed.program===false);
-prep = E(`prepareState(${JSON.stringify(JSON.stringify(Object.assign({}, EXISTING_CFG,{schemaVersion:1, futureField:"keep-me"})))}, ${JSON.stringify(schemaDataRaw)}, ${JSON.stringify(schemaProgramRaw)})`);
+check("legacy migration marks settings and adds the v56 draft field", prep.changed.cfg===true && prep.changed.data===true && prep.changed.program===false);
+prep = E(`prepareState(${JSON.stringify(JSON.stringify(Object.assign({}, EXISTING_CFG,{schemaVersion:2, futureField:"keep-me"})))}, ${JSON.stringify(schemaDataRaw)}, ${JSON.stringify(schemaProgramRaw)})`);
 check("current schema short-circuits without migration writes", prep.ok && !prep.changed.cfg && !prep.changed.data && !prep.changed.program);
+const v1Prep = E(`prepareState(${JSON.stringify(JSON.stringify(Object.assign({}, EXISTING_CFG,{schemaVersion:1})))}, ${JSON.stringify(schemaDataRaw)}, ${JSON.stringify(schemaProgramRaw)})`);
+check("schema 1 migrates to schema 2 with an empty workout draft", v1Prep.ok && v1Prep.state.cfg.schemaVersion===2 && v1Prep.state.data.activeWorkoutDraft===null && v1Prep.changed.cfg && v1Prep.changed.data);
+const v1Fail = E(`prepareState(${JSON.stringify(JSON.stringify(Object.assign({}, EXISTING_CFG,{schemaVersion:1})))}, ${JSON.stringify(schemaDataRaw)}, ${JSON.stringify(schemaProgramRaw)}, {forceMigrationFailureAt:2})`);
+check("schema 1→2 migration failure returns no prepared state for commit", !v1Fail.ok && /1→2 failed/.test(v1Fail.reason));
+const validDraftData = JSON.stringify({food:{},workouts:[],weights:[],activeWorkoutDraft:{date:"2026-07-15",day:"D1",title:"Day 1",sets:{Squat:[{w:225,r:5}]},notes:"",updatedAt:"2026-07-15T12:00:00.000Z"}});
+check("valid persisted workout drafts pass whole-state validation", E(`prepareState(${JSON.stringify(JSON.stringify(Object.assign({}, EXISTING_CFG,{schemaVersion:2})))}, ${JSON.stringify(validDraftData)}, ${JSON.stringify(schemaProgramRaw)}).ok`)===true);
+const badDraftData = JSON.stringify({food:{},workouts:[],weights:[],activeWorkoutDraft:{date:"2026-07-15",day:"D1",sets:{Squat:[{w:0,r:5}]}}});
+check("invalid persisted workout draft sets are rejected", E(`prepareState(${JSON.stringify(JSON.stringify(Object.assign({}, EXISTING_CFG,{schemaVersion:2})))}, ${JSON.stringify(badDraftData)}, ${JSON.stringify(schemaProgramRaw)}).ok`)===false);
 check("unknown settings fields survive preparation", prep.state.cfg.futureField==="keep-me");
-check("current custom rest arrays remain valid", E(`prepareState(${JSON.stringify(JSON.stringify(Object.assign({}, EXISTING_CFG,{schemaVersion:1,customRests:[75,120]})))}, ${JSON.stringify(schemaDataRaw)}, ${JSON.stringify(schemaProgramRaw)}).ok`)===true);
+check("current custom rest arrays remain valid", E(`prepareState(${JSON.stringify(JSON.stringify(Object.assign({}, EXISTING_CFG,{schemaVersion:2,customRests:[75,120]})))}, ${JSON.stringify(schemaDataRaw)}, ${JSON.stringify(schemaProgramRaw)}).ok`)===true);
 check("newer schema is refused", E(`prepareState('${JSON.stringify({schemaVersion:99})}', ${JSON.stringify(schemaDataRaw)}, ${JSON.stringify(schemaProgramRaw)}).kind`)==="newer");
 check("malformed schema type is refused", E(`prepareState('${JSON.stringify({schemaVersion:"1"})}', ${JSON.stringify(schemaDataRaw)}, ${JSON.stringify(schemaProgramRaw)}).ok`)===false);
-check("unusable log structures fail validation", E(`prepareState('${JSON.stringify({schemaVersion:1})}', '${JSON.stringify({food:{},workouts:{},weights:[]})}', ${JSON.stringify(schemaProgramRaw)}).ok`)===false);
-check("legacy null optional log fields normalize instead of quarantining", (()=>{ const q=E(`prepareState('${JSON.stringify({schemaVersion:1})}', '${JSON.stringify({food:{},workouts:[],weights:[],recents:null,myFoods:null,meta:null})}', ${JSON.stringify(schemaProgramRaw)})`); return q.ok && Array.isArray(q.state.data.recents) && q.state.data.meta && typeof q.state.data.myFoods==="object"; })());
+check("unusable log structures fail validation", E(`prepareState('${JSON.stringify({schemaVersion:2})}', '${JSON.stringify({food:{},workouts:{},weights:[]})}', ${JSON.stringify(schemaProgramRaw)}).ok`)===false);
+check("legacy null optional log fields normalize instead of quarantining", (()=>{ const q=E(`prepareState('${JSON.stringify({schemaVersion:2})}', '${JSON.stringify({food:{},workouts:[],weights:[],recents:null,myFoods:null,meta:null})}', ${JSON.stringify(schemaProgramRaw)})`); return q.ok && Array.isArray(q.state.data.recents) && q.state.data.meta && typeof q.state.data.myFoods==="object"; })());
 
 // ---------- v46 recovery record parsers & diagnostics ----------
-const v46CfgRaw = JSON.stringify(Object.assign({}, EXISTING_CFG, {schemaVersion:1}));
+const v46CfgRaw = JSON.stringify(Object.assign({}, EXISTING_CFG, {schemaVersion:2}));
 const v46LkgObj = {recoveryFormatVersion:1,savedAt:"2026-07-14T12:00:00.000Z",strings:{cfg:v46CfgRaw,data:schemaDataRaw,program:schemaProgramRaw},legacyData:null};
 check("structured diagnostics identify parse stage and area", (()=>{ const x=E(`prepareState("{bad",${JSON.stringify(schemaDataRaw)},${JSON.stringify(schemaProgramRaw)})`); return !x.ok && x.diagnostic.stage==="parse" && x.diagnostic.part==="cfg" && x.diagnostic.code==="json-parse"; })());
 check("structured diagnostics identify validation area", (()=>{ const x=E(`prepareState(${JSON.stringify(v46CfgRaw)},'${JSON.stringify({food:{},workouts:{},weights:[]})}',${JSON.stringify(schemaProgramRaw)})`); return !x.ok && x.diagnostic.stage==="validation" && x.diagnostic.part==="data"; })());
@@ -133,7 +141,7 @@ check("recovery original equality treats omitted and null consistently", E(`same
 check("readable recovery summary names every keep/reset decision", E(`recoverySummary({cfg:{usable:true},data:{usable:false},program:{usable:true}})`)==="Keep settings · Reset logs · Keep training program");
 check("recovery records are not accepted as backup envelopes", E(`prepareRecoveryBackupEnvelope(${JSON.stringify(v46LkgObj)}).code`)==="recovery-record");
 check("recovery record marker is rejected even when primary-looking members are added", E(`prepareRecoveryBackupEnvelope(${JSON.stringify(Object.assign({},v46LkgObj,{cfg:JSON.parse(v46CfgRaw)}))}).code`)==="recovery-record");
-check("primary schema and recovery record format remain separate version 1 contracts", E(`SCHEMA_VERSION===1 && RECOVERY_FORMAT_VERSION===1 && !Object.prototype.hasOwnProperty.call(DEFAULT_CFG,"schemaVersion")`)===true);
+check("primary schema 2 and recovery format 1 remain separate contracts", E(`SCHEMA_VERSION===2 && RECOVERY_FORMAT_VERSION===1 && !Object.prototype.hasOwnProperty.call(DEFAULT_CFG,"schemaVersion")`)===true);
 
 // ---------- parseFoodsReply ----------
 const straight = '{"foods":[{"name":"Chicken","cal":610,"pro":42,"carb":22,"fat":38}]}';

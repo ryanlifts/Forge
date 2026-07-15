@@ -64,7 +64,17 @@ function renderWeight(){
     +'<button class="del delWt" data-d="'+wp.date+'" aria-label="Delete">✕</button></div>'
   ).join("");
   document.getElementById("wtList").querySelectorAll(".delWt").forEach(b=>b.addEventListener("click",()=>{
-    data.weights=data.weights.filter(w=>w.date!==b.dataset.d); save(); renderWeight(); renderDash();
+    const i = data.weights.findIndex(w=>w.date===b.dataset.d);
+    if (i<0) return;
+    const removed = data.weights[i];
+    data.weights.splice(i,1);
+    if (!save()){ data.weights.splice(i,0,removed); renderWeight(); renderDash(); return; }
+    renderWeight(); renderDash(); renderProjection(); renderWeek();
+    offerUndo("Deleted weigh-in from "+fmtDate(removed.date), ()=>{
+      data.weights.splice(Math.min(i,data.weights.length),0,removed);
+      save(); renderWeight(); renderDash(); renderProjection(); renderWeek();
+      flashSave("Weigh-in restored ✓");
+    });
   }));
 }
 
@@ -305,7 +315,7 @@ function renderMeals(){
     });
     b.addEventListener("contextmenu",(e)=>{
       e.preventDefault();
-      if(confirm("Delete meal '"+m.name+"'?")){ data.meals.splice(i,1); save(); renderMeals(); }
+      deleteSavedMealAt(i);
     });
     el.appendChild(b);
   });

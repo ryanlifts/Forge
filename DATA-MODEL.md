@@ -1,6 +1,6 @@
 # BlackPyre Data Model
 
-**Current as of v55 (July 2026). Primary schemaVersion: 1. Recovery format: 1.**
+**Current as of v56 (July 2026). Primary schemaVersion: 2. Recovery format: 1.**
 
 ## Storage keys
 
@@ -29,11 +29,12 @@ removes, or modifies that legacy key.
 `schemaVersion` is physically stored in `forge:cfg`, but versions the complete **primary**
 state and normal backup envelope: settings, logged data, and program.
 
-| Raw value | Meaning / behavior in v55 |
+| Raw value | Meaning / behavior in v56 |
 |---|---|
 | property absent or integer `0` | Pre-versioning legacy state; run numbered migrations from step 0 |
-| integer `1` | Current primary schema; no migration step |
-| integer greater than `1` | Newer primary data; protected boot / refused restore; no downgrade path |
+| integer `1` | v45–v55 state; migrate 1 → 2 by adding an empty active-workout draft field |
+| integer `2` | Current primary schema; no migration step |
+| integer greater than `2` | Newer primary data; protected boot / refused restore; no downgrade path |
 | anything else | Invalid; protected boot / refused restore |
 
 The version is read from raw parsed settings before `DEFAULT_CFG` merges. A migration stamps
@@ -65,7 +66,7 @@ treat unset values as real measurements or targets.
 
 | Field | Type | Meaning | Notes |
 |---|---|---|---|
-| `schemaVersion` | integer | Generation of complete primary state | Current = `1`; strict interpretation above |
+| `schemaVersion` | integer | Generation of complete primary state | Current = `2`; strict interpretation above |
 | `setupDone` | bool | Onboarding completed or skipped | |
 | `disclaimerAccepted` | string date | Date disclaimer gate was accepted | Gate blocks normal app until set |
 | `startWt` | number | Starting bodyweight (lb) | 0 = unset |
@@ -105,6 +106,7 @@ treat unset values as real measurements or targets.
 | `mealCounts` | `{meal:{foodKey:n}}` | Per-meal frequency |
 | `meals` | array/object legacy-tolerant | Saved meal combinations |
 | `meta` | `{lastBackup,logsSince}` | Backup reminder bookkeeping |
+| `activeWorkoutDraft` | `null` or `{date,day,title,programName,sets,notes,updatedAt}` | Durable saved-exercise draft; contains only exercises explicitly saved with valid sets; cleared after successful session logging or confirmed discard |
 
 ## forge:program
 
@@ -226,6 +228,7 @@ fallback. The app cannot verify a browser download and states that limit honestl
 | v53 | No storage-schema change | Mobile set-row alignment patch |
 | v54 | No storage-schema change | Manual rest controls and compact current-program/Manage layout |
 | v55 | No storage-schema change | Consolidated floating rest timer, Home/Settings disclosure hierarchy, accessibility touch targets, and offline status clarity |
+| v56 | Whole-state primary schema 1 → 2 | Adds `forge:data.activeWorkoutDraft` for durable saved-exercise work; migration adds `null`, stamps settings last, and never promotes the read-only `ryan-cut:data` fallback into `forge:data` implicitly |
 
 Old backups from any era must continue restoring correctly; the permanent suite proves the
 range-era path.

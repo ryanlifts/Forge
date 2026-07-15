@@ -2,7 +2,7 @@
 // ================== storage keys & defaults ==================
 const DATA_KEY = "forge:data", CFG_KEY = "forge:cfg", PROG_KEY = "forge:program";
 const LKG_KEY = "forge:lkg", QUARANTINE_KEY = "forge:quarantine";
-const SCHEMA_VERSION = 1, RECOVERY_FORMAT_VERSION = 1;
+const SCHEMA_VERSION = 2, RECOVERY_FORMAT_VERSION = 1;
 const AI_CFG_FIELDS = ["anthropicKey","openaiKey","aiProvider","aiModelAnth","aiModelOai"];
 
 const DEFAULT_CFG = { startWt:0, goalWt:0, calTarget:0, proTarget:0, carbGoal:0, fatGoal:0, accent:"gold" };
@@ -98,7 +98,7 @@ function download(filename, text){
 }
 
 // ================== migrations & prepared state ==================
-function makeDefaultData(){ return { food:{}, workouts:[], weights:[], recents:[] }; }
+function makeDefaultData(){ return { food:{}, workouts:[], weights:[], recents:[], activeWorkoutDraft:null }; }
 function normalizeDataState(obj){
   const out = obj || makeDefaultData();
   if(!out.food) out.food = {};
@@ -111,6 +111,7 @@ function normalizeDataState(obj){
   if(!out.foodCounts) out.foodCounts = {};
   if(!out.mealCounts) out.mealCounts = {};
   if(!out.meta) out.meta = {lastBackup:null, logsSince:0};
+  if(!hasOwn(out,"activeWorkoutDraft")) out.activeWorkoutDraft = null;
   return out;
 }
 // migrate old range targets (calLo/calHi, proLo/proHi) to exact targets — must run on the RAW
@@ -141,11 +142,20 @@ function parseStatePart(raw, label, part){
 }
 function validateDataShape(obj){
   if (!isPlainObject(obj)) throw new Error("Saved logs are not an object.");
-  const objectFields = ["food","water","finished","myFoods","foodCounts","mealCounts","meta"];
+  const objectFields = ["food","water","finished","myFoods","foodCounts","mealCounts","meta","activeWorkoutDraft"];
   objectFields.forEach(k=>{ if (hasOwn(obj,k) && obj[k] && !isPlainObject(obj[k])) throw new Error("Saved logs field "+k+" has an unusable shape."); });
   const arrayFields = ["workouts","weights","measure","recents","meals"];
   arrayFields.forEach(k=>{ if (hasOwn(obj,k) && obj[k] && !Array.isArray(obj[k])) throw new Error("Saved logs field "+k+" has an unusable shape."); });
   if (isPlainObject(obj.food)) Object.keys(obj.food).forEach(day=>{ if (!Array.isArray(obj.food[day])) throw new Error("A saved food day is not a list."); });
+  if (obj.activeWorkoutDraft!=null){
+    const d = obj.activeWorkoutDraft;
+    if (!isPlainObject(d) || typeof d.date!=="string" || typeof d.day!=="string" || !isPlainObject(d.sets)) throw new Error("Saved workout draft has an unusable shape.");
+    Object.keys(d.sets).forEach(name=>{
+      const val = d.sets[name];
+      if (!Array.isArray(val) && typeof val!=="string") throw new Error("Saved workout draft exercise has an unusable shape.");
+      if (Array.isArray(val) && val.some(row=>!isPlainObject(row) || !(Number(row.w)>0) || !(Number(row.r)>0))) throw new Error("Saved workout draft set has an unusable shape.");
+    });
+  }
 }
 function validateCfgShape(obj){
   if (!isPlainObject(obj)) throw new Error("Saved settings are not an object.");
@@ -219,6 +229,15 @@ function prepareState(rawCfg, rawData, rawProgram, options){
         state.cfg.schemaVersion = 1; // stamp only after the complete step succeeds
         changed.cfg = true;
         current = 1;
+      } else if (current===1){
+        if (opts.forceMigrationFailureAt===2) throw new Error("Migration step 1→2 failed.");
+        if (!hasOwn(state.data,"activeWorkoutDraft")){
+          state.data.activeWorkoutDraft = null;
+          changed.data = true;
+        }
+        state.cfg.schemaVersion = 2; // whole-state draft contract; stamp after the step succeeds
+        changed.cfg = true;
+        current = 2;
       } else {
         throw new Error("No migration path from schema "+current+".");
       }
@@ -686,7 +705,12 @@ if (_bootRead.ok){
 }
 let _bootState = _bootPrepared.state;
 if (_bootPrepared.ok){
-  const committed = commitState(_bootPrepared);
+  // A legacy fallback remains evidence at its original key. Migrations may normalize
+  // the in-memory copy and LKG, but boot never promotes it into forge:data implicitly.
+  const bootCommitOptions = _bootRead.ok && _bootRead.dataSource==="legacy" && _bootRead.originals.data===null
+    ? {writeMask:{cfg:_bootPrepared.changed.cfg, data:false, program:_bootPrepared.changed.program}}
+    : undefined;
+  const committed = commitState(_bootPrepared, bootCommitOptions);
   if (!committed.ok){
     protectedMode = true;
     protectedModeKind = "failure";
@@ -854,6 +878,36 @@ function flashSave(msg, bad){
   clearTimeout(saveTimer); saveTimer = setTimeout(()=>{ el.textContent=""; }, 1500);
 }
 
+// One six-second Undo service for routine log/library deletions.
+let pendingUndoAction = null, pendingUndoTimer = null;
+function dismissUndo(){
+  const toast = document.getElementById("undoToast");
+  if (toast) toast.classList.add("hidden");
+  if (pendingUndoTimer) clearTimeout(pendingUndoTimer);
+  pendingUndoTimer = null;
+  pendingUndoAction = null;
+}
+function offerUndo(message, action){
+  const toast = document.getElementById("undoToast");
+  const msg = document.getElementById("undoMsg");
+  if (!toast || !msg || typeof action!=="function") return;
+  if (pendingUndoTimer) clearTimeout(pendingUndoTimer);
+  pendingUndoAction = action;
+  msg.textContent = message;
+  toast.classList.remove("hidden");
+  pendingUndoTimer = setTimeout(dismissUndo, 6000);
+}
+document.getElementById("undoBtn").addEventListener("click", ()=>{
+  if (!pendingUndoAction) return;
+  const action = pendingUndoAction;
+  pendingUndoAction = null;
+  if (pendingUndoTimer) clearTimeout(pendingUndoTimer);
+  pendingUndoTimer = null;
+  document.getElementById("undoToast").classList.add("hidden");
+  action();
+});
+function isOffline(){ return navigator.onLine===false; }
+
 // ================== NETWORK STATUS ==================
 function renderNetworkStatus(){
   const banner = document.getElementById("offlineBanner");
@@ -899,7 +953,7 @@ document.querySelectorAll(".tab").forEach(btn=>{
     if (current && current.dataset.view==="work" && btn.dataset.view!=="work"
         && typeof unsavedExerciseNames==="function" && unsavedExerciseNames().length){
       const pretty = unsavedExerciseNames().map(n=>n.replace("[Cardio] ","")).join(", ");
-      if (!confirm("Unsaved exercise work: "+pretty+".\n\nLeave Train anyway? (Your entries stay until the app closes \u2014 tap Save Exercise to keep them in today's session.)")) return;
+      if (!confirm("Unsaved exercise work: "+pretty+".\n\nLeave Train anyway? (Only exercises already saved are protected as a workout draft.)")) return;
     }
     activateView(btn.dataset.view, null, true);
   });

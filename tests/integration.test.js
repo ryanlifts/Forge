@@ -72,9 +72,13 @@ check("restore preserves AI key + provider", B.window.eval("cfg.anthropicKey")==
 
 // ================= v45: schemaVersion & protected migrations =================
 const V1_CFG = Object.assign({}, EXISTING_CFG, {schemaVersion:1});
+const V2_CFG = Object.assign({}, EXISTING_CFG, {schemaVersion:2});
+const V2_DATA = Object.assign({}, EMPTY_DATA, {activeWorkoutDraft:null});
 const TEST_PROGRAM = {name:"Test Program",author:"Suite",days:[{id:"D1",title:"Day 1",exercises:[{name:"Bench Press",scheme:"3×5"}]}]};
 const RAW_V1_CFG = JSON.stringify(V1_CFG);
+const RAW_V2_CFG = JSON.stringify(V2_CFG);
 const RAW_DATA = JSON.stringify(EMPTY_DATA);
+const RAW_V2_DATA = JSON.stringify(V2_DATA);
 const RAW_PROGRAM = JSON.stringify(TEST_PROGRAM);
 const sacredBytes = dom=>({
   cfg:dom.window.localStorage.getItem("forge:cfg"),
@@ -104,6 +108,9 @@ check("unparseable program protects all keys byte-for-byte", PP.window.eval("pro
 let PM = bootRaw({cfg:JSON.stringify(EXISTING_CFG), data:RAW_DATA, program:RAW_PROGRAM}, w=>{ w.__BP_TEST_PREPARE_OPTIONS={forceMigrationFailure:true}; });
 const pmOriginal = sacredBytes(PM);
 check("forced mid-chain migration failure makes zero writes", PM.window.eval("protectedMode") && zeroSacredWrites(PM) && sameBytes(pmOriginal,sacredBytes(PM)));
+let PM2 = bootRaw({cfg:RAW_V1_CFG, data:RAW_DATA, program:RAW_PROGRAM}, w=>{ w.__BP_TEST_PREPARE_OPTIONS={forceMigrationFailureAt:2}; });
+const pm2Original = sacredBytes(PM2);
+check("forced schema 1→2 draft migration failure makes zero writes", PM2.window.eval("protectedMode") && zeroSacredWrites(PM2) && sameBytes(pm2Original,sacredBytes(PM2)));
 let PV = bootRaw({cfg:RAW_V1_CFG, data:JSON.stringify({food:{},workouts:{},weights:[]}), program:RAW_PROGRAM});
 const pvOriginal = sacredBytes(PV);
 check("validation rejection makes zero writes", PV.window.eval("protectedMode") && zeroSacredWrites(PV) && sameBytes(pvOriginal,sacredBytes(PV)));
@@ -153,13 +160,13 @@ check("protected export does not mutate backup metadata", PC.window.eval("JSON.s
 // Healthy boot paths: one-time cfg stamp only, then no-op forever.
 let Fresh45 = bootRaw({});
 const freshCalls = sacredCalls(Fresh45);
-check("fresh install stamps schemaVersion 1", JSON.parse(Fresh45.window.localStorage.getItem("forge:cfg")).schemaVersion===1);
+check("fresh install stamps schemaVersion 2", JSON.parse(Fresh45.window.localStorage.getItem("forge:cfg")).schemaVersion===2);
 check("fresh install writes only stamped settings", freshCalls.length===1 && freshCalls[0].method==="setItem" && freshCalls[0].key==="forge:cfg");
 const rawV44Cfg = JSON.stringify(Object.assign({},EXISTING_CFG,{futureField:"survives"}));
 let H45 = bootRaw({cfg:rawV44Cfg,data:RAW_DATA,program:RAW_PROGRAM});
 const h45Calls = sacredCalls(H45);
-check("v44-shaped install gains only the schema stamp", h45Calls.length===1 && h45Calls[0].key==="forge:cfg" && JSON.parse(h45Calls[0].value).schemaVersion===1);
-check("healthy migration leaves logs and program byte-identical", H45.window.localStorage.getItem("forge:data")===RAW_DATA && H45.window.localStorage.getItem("forge:program")===RAW_PROGRAM);
+check("legacy-shaped install adds the draft field then stamps schema 2", h45Calls.length===2 && h45Calls.map(c=>c.key).join(",")==="forge:data,forge:cfg" && JSON.parse(h45Calls[1].value).schemaVersion===2 && JSON.parse(H45.window.localStorage.getItem("forge:data")).activeWorkoutDraft===null);
+check("healthy migration leaves program byte-identical", H45.window.localStorage.getItem("forge:program")===RAW_PROGRAM);
 check("unknown settings fields survive migration", H45.window.eval("cfg.futureField")==="survives");
 let H45b = bootRaw(sacredBytes(H45));
 check("second boot performs zero sacred-key writes", zeroSacredWrites(H45b));
@@ -220,7 +227,7 @@ tProto.setItem = tSpySet;
 check("commit order writes data and program before settings stamp", sacredCalls(T45).slice(0,2).map(c=>c.key).join(",")==="forge:data,forge:program");
 check("simulated interrupted commit reports failed rollback", tornCommit.ok===false && tornCommit.rollbackFailed===true && JSON.parse(tStore.getItem("forge:cfg")).schemaVersion===undefined);
 let Healed45 = bootRaw({cfg:tStore.getItem("forge:cfg"),data:tStore.getItem("forge:data"),program:tStore.getItem("forge:program")});
-check("next boot heals an unstamped interrupted commit", Healed45.window.eval("protectedMode")===false && Healed45.window.eval("cfg.schemaVersion")===1 && Healed45.window.eval("cfg.calTarget")===1600);
+check("next boot heals an unstamped interrupted commit", Healed45.window.eval("protectedMode")===false && Healed45.window.eval("cfg.schemaVersion")===2 && Healed45.window.eval("cfg.calTarget")===1600 && Healed45.window.eval("data.activeWorkoutDraft")===null);
 
 // ================= v46: recovery vault, quarantine, and LKG =================
 const fiveBytes = dom=>({
@@ -235,14 +242,14 @@ const callsFor = (dom,key)=>allBlackPyreCalls(dom).filter(c=>c.key===key);
 const validQuarantineRaw = originals=>JSON.stringify({recoveryFormatVersion:1,quarantinedAt:"2026-07-14T12:00:00.000Z",diagnostic:{stage:"parse",part:"cfg",code:"json-parse",reason:"test"},originals:originals});
 
 // Healthy v46 boot creates one validated LKG without changing current primary schema or bytes.
-let H46 = bootRaw({cfg:RAW_V1_CFG,data:RAW_DATA,program:RAW_PROGRAM});
+let H46 = bootRaw({cfg:RAW_V2_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM});
 let h46LkgRaw = H46.window.localStorage.getItem("forge:lkg");
 let h46Lkg = JSON.parse(h46LkgRaw);
-check("v46 healthy boot keeps primary schemaVersion 1", H46.window.eval("cfg.schemaVersion")===1 && JSON.parse(H46.window.localStorage.getItem("forge:cfg")).schemaVersion===1);
+check("v46 recovery behavior keeps current primary schemaVersion 2", H46.window.eval("cfg.schemaVersion")===2 && JSON.parse(H46.window.localStorage.getItem("forge:cfg")).schemaVersion===2);
 check("v46 healthy boot creates a format-1 whole-state LKG", h46Lkg.recoveryFormatVersion===1 && ["cfg","data","program"].every(k=>typeof h46Lkg.strings[k]==="string"));
 check("creating LKG does not rewrite unchanged primary keys", sacredCalls(H46).length===0 && callsFor(H46,"forge:lkg").length===1);
 check("LKG final strings pass the shared prepare pipeline", H46.window.eval(`inspectLkgRaw(${JSON.stringify(h46LkgRaw)}).ok`)===true);
-let H46b = bootRaw({cfg:RAW_V1_CFG,data:RAW_DATA,program:RAW_PROGRAM,lkg:h46LkgRaw});
+let H46b = bootRaw({cfg:RAW_V2_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM,lkg:h46LkgRaw});
 check("identical second boot retains LKG timestamp and writes nothing", allBlackPyreCalls(H46b).length===0 && JSON.parse(H46b.window.localStorage.getItem("forge:lkg")).savedAt===h46Lkg.savedAt);
 check("Settings reports automatic recovery ready", /ready/i.test(H46b.window.document.getElementById("recoveryStatusLine").textContent));
 
@@ -275,7 +282,7 @@ check("invalid unsaved in-memory candidate cannot replace persisted LKG", invali
 H46.window.eval(`data=JSON.parse(localStorage.getItem("forge:data")); normalizeDataState(data);`);
 
 // LKG failure is secondary: live save succeeds and previous snapshot remains.
-let LkgFail = bootRaw({cfg:RAW_V1_CFG,data:RAW_DATA,program:RAW_PROGRAM,lkg:h46LkgRaw});
+let LkgFail = bootRaw({cfg:RAW_V2_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM,lkg:h46LkgRaw});
 const lkgFailBefore = LkgFail.window.localStorage.getItem("forge:lkg");
 const lfProto = Object.getPrototypeOf(LkgFail.window.localStorage), lfSpySet=lfProto.setItem;
 lfProto.setItem=function(k,v){ if(k==="forge:lkg") throw new Error("snapshot denied"); return lfSpySet.call(this,k,v); };
@@ -283,7 +290,7 @@ const lkgFailSave = LkgFail.window.eval(`data.weights.push({date:"2026-07-14",lb
 lfProto.setItem=lfSpySet;
 check("LKG write failure leaves primary save successful", lkgFailSave===true && JSON.parse(LkgFail.window.localStorage.getItem("forge:data")).weights[0].lbs===216);
 check("LKG write failure leaves previous snapshot intact and reports unavailable", LkgFail.window.localStorage.getItem("forge:lkg")===lkgFailBefore && LkgFail.window.eval("lkgStatus.state")==="unavailable");
-let LkgVerifyFail=bootRaw({cfg:RAW_V1_CFG,data:RAW_DATA,program:RAW_PROGRAM,lkg:lkgFailBefore});
+let LkgVerifyFail=bootRaw({cfg:RAW_V2_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM,lkg:lkgFailBefore});
 const lvProto=Object.getPrototypeOf(LkgVerifyFail.window.localStorage), lvSet=lvProto.setItem, lvGet=lvProto.getItem;
 let lvWrote=false, lvMismatch=false;
 lvProto.setItem=function(k,v){ const out=lvSet.call(this,k,v); if(k==="forge:lkg") lvWrote=true; return out; };
@@ -294,7 +301,7 @@ check("LKG verification failure rolls back to the previous snapshot", LkgVerifyF
 
 // A quota-caused primary failure may sacrifice LKG once, never quarantine.
 const quotaQuarantine = validQuarantineRaw({cfg:"old",data:"old",program:"old",legacyData:null});
-let Quota46 = bootRaw({cfg:RAW_V1_CFG,data:RAW_DATA,program:RAW_PROGRAM,lkg:h46LkgRaw,quarantine:quotaQuarantine});
+let Quota46 = bootRaw({cfg:RAW_V2_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM,lkg:h46LkgRaw,quarantine:quotaQuarantine});
 const qProto=Object.getPrototypeOf(Quota46.window.localStorage), qSpySet=qProto.setItem;
 let qFirst=true; const qOrder=[];
 qProto.setItem=function(k,v){
@@ -311,14 +318,14 @@ check("quota retry sacrifices LKG then saves live data once", quotaSaved===true 
 check("quota retry never sacrifices quarantine", Quota46.window.localStorage.getItem("forge:quarantine")===quotaQuarantine && !qOrder.includes("remove:forge:quarantine"));
 
 // Bad LKG cannot poison healthy data; malformed is rebuilt, newer format is untouched.
-let BadLkg = bootRaw({cfg:RAW_V1_CFG,data:RAW_DATA,program:RAW_PROGRAM,lkg:"{broken"});
+let BadLkg = bootRaw({cfg:RAW_V2_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM,lkg:"{broken"});
 check("malformed LKG never protects healthy live data", BadLkg.window.eval("protectedMode")===false);
 check("malformed LKG is rebuilt as a valid snapshot", BadLkg.window.eval(`inspectLkgRaw(localStorage.getItem("forge:lkg")).ok`)===true && callsFor(BadLkg,"forge:lkg").some(c=>c.method==="setItem"));
 const newerLkgRaw=JSON.stringify({recoveryFormatVersion:99,savedAt:"future",strings:{}});
-let NewLkg = bootRaw({cfg:RAW_V1_CFG,data:RAW_DATA,program:RAW_PROGRAM,lkg:newerLkgRaw});
+let NewLkg = bootRaw({cfg:RAW_V2_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM,lkg:newerLkgRaw});
 check("newer-format LKG is not used or overwritten", NewLkg.window.eval("protectedMode")===false && NewLkg.window.localStorage.getItem("forge:lkg")===newerLkgRaw && NewLkg.window.eval("lkgStatus.state")==="newer" && callsFor(NewLkg,"forge:lkg").length===0);
 const newerStateLkgRaw=JSON.stringify({recoveryFormatVersion:1,savedAt:"future",strings:{cfg:JSON.stringify({schemaVersion:99}),data:RAW_DATA,program:RAW_PROGRAM},legacyData:null});
-let NewStateLkg=bootRaw({cfg:RAW_V1_CFG,data:RAW_DATA,program:RAW_PROGRAM,lkg:newerStateLkgRaw});
+let NewStateLkg=bootRaw({cfg:RAW_V2_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM,lkg:newerStateLkgRaw});
 check("LKG carrying newer primary schema is not overwritten", NewStateLkg.window.localStorage.getItem("forge:lkg")===newerStateLkgRaw && NewStateLkg.window.eval("lkgStatus.state")==="newer" && callsFor(NewStateLkg,"forge:lkg").length===0);
 
 // Protected boot diagnoses exact area, shows recovery before gates, and never refreshes LKG.
@@ -327,7 +334,7 @@ check("v46 diagnosis identifies corrupt settings", DiagCfg.window.eval(`protecte
 check("corruption recovery panel appears before gates", !DiagCfg.window.document.getElementById("recoveryOverlay").classList.contains("hidden") && DiagCfg.window.document.getElementById("disclaimerOverlay").classList.contains("hidden") && DiagCfg.window.document.getElementById("setupOverlay").classList.contains("hidden"));
 check("protected boot never refreshes or replaces LKG", DiagCfg.window.localStorage.getItem("forge:lkg")===h46LkgRaw && callsFor(DiagCfg,"forge:lkg").length===0);
 let DiagData=bootRaw({cfg:RAW_V1_CFG,data:"{broken",program:RAW_PROGRAM,lkg:h46LkgRaw});
-let DiagProgram=bootRaw({cfg:RAW_V1_CFG,data:RAW_DATA,program:"{broken",lkg:h46LkgRaw});
+let DiagProgram=bootRaw({cfg:RAW_V2_CFG,data:RAW_V2_DATA,program:"{broken",lkg:h46LkgRaw});
 check("v46 diagnosis distinguishes logs and program", DiagData.window.eval("protectedModeDiagnostic.part")==="data" && DiagProgram.window.eval("protectedModeDiagnostic.part")==="program");
 let MigrationDiag46=bootRaw({cfg:JSON.stringify(EXISTING_CFG),data:RAW_DATA,program:RAW_PROGRAM,lkg:h46LkgRaw},w=>{w.__BP_TEST_PREPARE_OPTIONS={forceMigrationFailure:true};});
 check("structured boot diagnosis identifies migration failure", MigrationDiag46.window.eval(`protectedModeDiagnostic.stage+":"+protectedModeDiagnostic.part`)==="migration:state" && MigrationDiag46.window.eval("recoveryWritesAllowed()")===true);
@@ -338,7 +345,7 @@ let BootCommitDiag46=bootRaw({cfg:JSON.stringify(EXISTING_CFG),data:RAW_DATA,pro
 check("structured boot diagnosis identifies commit failure", BootCommitDiag46.window.eval(`protectedModeDiagnostic.stage+":"+protectedModeDiagnostic.code`)==="commit:boot-commit-failed" && BootCommitDiag46.window.eval("recoveryWritesAllowed()")===true);
 let Newer46=bootRaw({cfg:JSON.stringify(Object.assign({},V1_CFG,{schemaVersion:99})),data:RAW_DATA,program:RAW_PROGRAM,lkg:h46LkgRaw});
 check("newer primary data offers no downgrade recovery", Newer46.window.document.getElementById("protectedRecoveryBtn").classList.contains("hidden") && Newer46.window.document.getElementById("recoveryOverlay").classList.contains("hidden") && Newer46.window.eval("recoveryWritesAllowed()")===false);
-let StorageRead46=bootRaw({cfg:RAW_V1_CFG,data:RAW_DATA,program:RAW_PROGRAM},w=>{
+let StorageRead46=bootRaw({cfg:RAW_V2_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM},w=>{
   const p=Object.getPrototypeOf(w.localStorage), g=p.getItem;
   p.getItem=function(k){ if(k==="forge:cfg") throw new Error("read denied"); return g.call(this,k); };
 });
@@ -545,7 +552,7 @@ check("malformed nutrition rejected → USDA", C.window.document.getElementById(
 
 // ================= v49: training-session integrity =================
 const priorWorkout = {date:"2026-07-01",day:"D1",title:"Day 1",sets:{"Bench Press":[{w:100,r:5},{w:100,r:5},{w:100,r:5}]},notes:""};
-const T49 = boot(V1_CFG, {food:{},workouts:[priorWorkout],weights:[],meta:{lastBackup:null,logsSince:0}}, null, TEST_PROGRAM);
+const T49 = boot(V2_CFG, {food:{},workouts:[priorWorkout],weights:[],meta:{lastBackup:null,logsSince:0}}, null, TEST_PROGRAM);
 const dT49 = T49.window.document;
 const clickT49 = el=>(typeof el==="string"?dT49.getElementById(el):el).dispatchEvent(new T49.window.Event("click",{bubbles:true}));
 const plannedRows = [...dT49.querySelectorAll("#exerciseInputs .srow")];
@@ -564,7 +571,7 @@ clickT49("logWorkoutBtn");
 check("logging saves only the genuinely saved set", T49.window.eval(`data.workouts.length===2 && data.workouts[1].sets["Bench Press"].length===1 && data.workouts[1].sets["Bench Press"][0].w===105`));
 check("partial saved history cannot trigger false progression next time", T49.window.eval(`sessionState["Bench Press"].auto===false && sessionState["Bench Press"].rows.length===1 && sessionState["Bench Press"].rows[0].w===105`));
 
-const T49Invalid = boot(V1_CFG, EMPTY_DATA, null, TEST_PROGRAM);
+const T49Invalid = boot(V2_CFG, EMPTY_DATA, null, TEST_PROGRAM);
 const dT49Invalid = T49Invalid.window.document;
 const rIn49 = dT49Invalid.querySelector('#exerciseInputs input[data-field="reps"]');
 rIn49.value="5"; rIn49.dispatchEvent(new T49Invalid.window.Event("input",{bubbles:true}));
@@ -580,7 +587,7 @@ dT49Invalid.getElementById("wDay").dispatchEvent(new T49Invalid.window.Event("ch
 dT49Invalid.getElementById("logWorkoutBtn").dispatchEvent(new T49Invalid.window.Event("click",{bubbles:true}));
 check("cardio without minutes is refused with an explanation", T49Invalid.window.eval("data.workouts.length")===0 && /Enter cardio minutes/.test(dT49Invalid.getElementById("workoutErr").textContent));
 
-const T49Switch = boot(V1_CFG, EMPTY_DATA, null, TEST_PROGRAM);
+const T49Switch = boot(V2_CFG, EMPTY_DATA, null, TEST_PROGRAM);
 const dT49Switch = T49Switch.window.document;
 const touchedWeight = dT49Switch.querySelector('#exerciseInputs input[data-field="weight"]');
 touchedWeight.value="135";
@@ -596,7 +603,7 @@ dT49Switch.getElementById("wDay").dispatchEvent(new T49Switch.window.Event("chan
 check("confirming session-type change discards the in-progress draft only", dT49Switch.getElementById("wDay").value==="__CARDIO__" && T49Switch.window.eval("Object.keys(sessionState).length")===0 && T49Switch.window.eval("data.workouts.length")===0);
 
 // ================= v50: daily navigation + mobile consistency =================
-const T50 = boot(V1_CFG, EMPTY_DATA, null, TEST_PROGRAM);
+const T50 = boot(V2_CFG, EMPTY_DATA, null, TEST_PROGRAM);
 const dT50 = T50.window.document;
 const workChildren = [...dT50.getElementById("view-work").children];
 const identityPos = workChildren.indexOf(dT50.getElementById("programIdentityCard"));
@@ -626,7 +633,7 @@ check("workout step controls have 44px touch targets", !!stepTarget && T50.windo
 check("workout completion controls have 44px touch targets", !!saveTarget && T50.window.getComputedStyle(saveTarget).minHeight==="44px");
 
 // ================= v51: exercise-level completion =================
-const T51 = boot(V1_CFG, EMPTY_DATA, null, TEST_PROGRAM);
+const T51 = boot(V2_CFG, EMPTY_DATA, null, TEST_PROGRAM);
 const dT51 = T51.window.document;
 const clickT51 = el=>(typeof el==="string"?dT51.getElementById(el):el).dispatchEvent(new T51.window.Event("click",{bubbles:true}));
 function enterSet51(dom, dd, w, r){
@@ -652,7 +659,7 @@ clickT51("logWorkoutBtn");
 check("v51 save-and-log path: valid unsaved work is saved then logged, never silently dropped", T51.window.eval(`data.workouts.length===1 && data.workouts[0].sets["Bench Press"].length===1 && data.workouts[0].sets["Bench Press"][0].w===135`));
 
 // leaving Train with unsaved work warns; canceling stays
-const T51b = boot(V1_CFG, EMPTY_DATA, null, TEST_PROGRAM);
+const T51b = boot(V2_CFG, EMPTY_DATA, null, TEST_PROGRAM);
 const dT51b = T51b.window.document;
 dT51b.querySelector('.tab[data-view="work"]').dispatchEvent(new T51b.window.Event("click",{bubbles:true}));
 enterSet51(T51b, dT51b, 95, 8);
@@ -664,7 +671,7 @@ T51b.window.confirm = ()=>true;
 dT51b.querySelector('.tab[data-view="food"]').dispatchEvent(new T51b.window.Event("click",{bubbles:true}));
 check("v51 leave-Train warning: confirming leaves (entries remain in memory)", dT51b.getElementById("view-food").classList.contains("active") && T51b.window.eval(`sessionState["Bench Press"].rows[0].w`)===95);
 // saved-but-unlogged work also counts as meaningful for session-type switching
-const T51c = boot(V1_CFG, EMPTY_DATA, null, TEST_PROGRAM);
+const T51c = boot(V2_CFG, EMPTY_DATA, null, TEST_PROGRAM);
 const dT51c = T51c.window.document;
 enterSet51(T51c, dT51c, 115, 5);
 dT51c.querySelector("#exerciseInputs .saveExBtn").dispatchEvent(new T51c.window.Event("click",{bubbles:true}));
@@ -675,7 +682,7 @@ dT51c.getElementById("wDay").dispatchEvent(new T51c.window.Event("change",{bubbl
 check("v51 saved-but-unlogged work still guards session-type switching", switch51===1 && dT51c.getElementById("wDay").value==="D1");
 
 // ================= v51: food-flow improvements =================
-const F51 = boot(V1_CFG, EMPTY_DATA);
+const F51 = boot(V2_CFG, EMPTY_DATA);
 const dF51 = F51.window.document;
 F51.window.eval(`currentMeal="lunch"; renderMealSeg();`);
 F51.window.eval(`addEntry({name:"Chicken", cal:165, pro:31, carb:0, fat:3.6, meal:"lunch"});`);
@@ -744,7 +751,7 @@ check("her handwriting embedded byte-identically to the frozen reference", bella
 check("embed count is exactly 1 (Phase 1 dedup landed; was 2 in v41)", bellaCount === 1);
 
 // ================= v54: manual rest + program identity =================
-const T54 = boot(V1_CFG, EMPTY_DATA, null, TEST_PROGRAM);
+const T54 = boot(V2_CFG, EMPTY_DATA, null, TEST_PROGRAM);
 const dT54 = T54.window.document;
 check("v54 current-program card identifies the loaded program and selected session", dT54.getElementById("programName").textContent===TEST_PROGRAM.name && /Selected session:/.test(dT54.getElementById("programDayName").textContent));
 dT54.getElementById("wDay").value="__CARDIO__";
@@ -795,6 +802,11 @@ check("FAQ documents food deletion Undo", P.window.eval(`FAQ.some(x=>x.a&&x.a.in
 check("FAQ documents protected mode and recovery", P.window.eval(`FAQ.some(x=>x.q==="What are Protected mode and recovery?"&&/last-known-good snapshot/.test(x.a)&&/do not uninstall/.test(x.a))`));
 check("FAQ documents the update toast", P.window.eval(`FAQ.some(x=>x.q&&/updates work/.test(x.q)&&/Use it now/.test(x.a)&&/Later/.test(x.a))`));
 check("FAQ states the rest timer is manual and Save Exercise never starts it", P.window.eval(`FAQ.some(x=>x.q==="What's plate math and the rest timer?"&&/never starts automatically/.test(x.a)&&/Saving an exercise does not start/.test(x.a)&&x.a.includes("Pause/Resume"))`));
+check("v56 FAQ explains durable workout drafts and Resume/Discard", P.window.eval(`FAQ.some(x=>x.q==="How do I log a workout?"&&/workout draft/.test(x.a)&&x.a.includes("Resume")&&x.a.includes("Discard"))`));
+check("v56 FAQ documents shared Undo across routine deletions", P.window.eval(`FAQ.some(x=>x.q==="I logged something wrong — can I fix it?"&&/weigh-ins/.test(x.a)&&/measurements/.test(x.a)&&/personal foods/.test(x.a))`));
+check("v56 FAQ documents confirmed program replacement", P.window.eval(`FAQ.some(x=>x.q==="How do programs work?"&&/current and incoming names/.test(x.a)&&/workout history stays intact/.test(x.a))`));
+check("v56 FAQ documents offline fast-fail and handoff availability", P.window.eval(`FAQ.some(x=>x.q==="What works when BlackPyre says Offline?"&&/immediately shows local matches/.test(x.a)&&/ChatGPT handoff/.test(x.a))`));
+
 check("FAQ uses current program identity and Manage labels", P.window.eval(`FAQ.some(x=>x.q==="How do programs work?"&&x.a.includes("Current program")&&x.a.includes("Manage")&&x.a.includes("Save file")&&x.a.includes("Share"))`));
 check("FAQ no longer sends users to the retired Program tools label", P.window.eval(`!FAQ.some(x=>x.a&&x.a.includes("Program tools"))`));
 check("FAQ privacy copy distinguishes local data from optional network requests", P.window.eval(`FAQ.some(x=>x.q==="Where is my data stored? Is it private?"&&/on this device/.test(x.a)&&/Online food searches/.test(x.a)&&/Optional AI features/.test(x.a))`));
@@ -802,6 +814,7 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the three data files", ["data-quotes.js","data-foods.js","data-faq.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+"/.test(sw));
+check("v56 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v56"'));
 const rawIndex = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 check("data scripts load before the app scripts (raw file order)",
   ["data-quotes.js","data-foods.js","data-faq.js"].every(f=>
@@ -851,7 +864,7 @@ check("SW update mechanics unchanged (skipWaiting, clients.claim, cache-first sh
   sw.includes("skipWaiting()") && sw.includes("clients.claim()") && sw.includes("caches.open(CACHE)"));
 
 // ================= v55: interface simplification, timer consolidation, offline clarity =================
-const T55 = boot(Object.assign({}, EXISTING_CFG, {schemaVersion:1}), EMPTY_DATA);
+const T55 = boot(V2_CFG, EMPTY_DATA);
 const dT55 = T55.window.document;
 const clickT55 = id=>dT55.getElementById(id).dispatchEvent(new T55.window.Event("click",{bubbles:true}));
 check("v55 Home keeps secondary content collapsed by default",
@@ -886,6 +899,98 @@ check("v55 common compact controls retain practical touch targets",
   /\.xbtn \{[^}]*min-height:44px/.test(rawIndex) && /\.btn\.small, \.chip, \.faq-q, \.seg button \{ min-height:44px; \}/.test(rawIndex));
 check("v55 FAQ documents consolidated timer, collapsed sections, and offline behavior",
   T55.window.eval(`FAQ.some(x=>x.q==="What's plate math and the rest timer?"&&/floating timer/.test(x.a)&&/tap the displayed duration/.test(x.a)) && FAQ.some(x=>x.q==="Why are parts of Home and Settings collapsed?") && FAQ.some(x=>x.q==="What works when BlackPyre says Offline?")`));
+
+
+// ================= v56: persistent drafts, action safety, offline fast-fail =================
+const D56 = boot(V2_CFG, V2_DATA, null, TEST_PROGRAM);
+const dD56 = D56.window.document;
+const wD56=dD56.querySelector('#exerciseInputs input[data-field="weight"]');
+const rD56=dD56.querySelector('#exerciseInputs input[data-field="reps"]');
+wD56.value="145"; wD56.dispatchEvent(new D56.window.Event("input",{bubbles:true}));
+rD56.value="5"; rD56.dispatchEvent(new D56.window.Event("input",{bubbles:true}));
+dD56.querySelector("#exerciseInputs .saveExBtn").dispatchEvent(new D56.window.Event("click",{bubbles:true}));
+const draft56Raw=D56.window.localStorage.getItem("forge:data");
+const draft56=JSON.parse(draft56Raw).activeWorkoutDraft;
+check("v56 Save Exercise persists a resumable workout draft", !!draft56 && draft56.day==="D1" && draft56.sets["Bench Press"][0].w===145);
+check("v56 saved draft refreshes last-known-good recovery", JSON.parse(JSON.parse(D56.window.localStorage.getItem("forge:lkg")).strings.data).activeWorkoutDraft.sets["Bench Press"][0].w===145);
+check("v56 active draft stays out of the way while the workout is already open", dD56.getElementById("workoutDraftCard").classList.contains("hidden"));
+const D56Reload=bootRaw({cfg:D56.window.localStorage.getItem("forge:cfg"),data:draft56Raw,program:D56.window.localStorage.getItem("forge:program"),lkg:D56.window.localStorage.getItem("forge:lkg")});
+const dD56R=D56Reload.window.document;
+check("v56 reload offers Resume or Discard instead of losing saved exercise work", !dD56R.getElementById("workoutDraftCard").classList.contains("hidden") && dD56R.getElementById("resumeWorkoutDraftBtn") && dD56R.getElementById("discardWorkoutDraftBtn"));
+dD56R.getElementById("resumeWorkoutDraftBtn").dispatchEvent(new D56Reload.window.Event("click",{bubbles:true}));
+check("v56 Resume restores the exercise as Completed", D56Reload.window.eval(`workoutDraftLoaded && sessionState["Bench Press"].status==="saved" && sessionState["Bench Press"].saved[0].w===145`) && /Completed/.test(dD56R.getElementById("exerciseInputs").textContent));
+dD56R.getElementById("logWorkoutBtn").dispatchEvent(new D56Reload.window.Event("click",{bubbles:true}));
+check("v56 successful Log Session clears the draft and saves history", D56Reload.window.eval(`data.activeWorkoutDraft===null && data.workouts.length===1 && data.workouts[0].sets["Bench Press"][0].w===145`) && JSON.parse(D56Reload.window.localStorage.getItem("forge:data")).activeWorkoutDraft===null);
+
+const D56Fail=bootRaw({cfg:D56.window.localStorage.getItem("forge:cfg"),data:draft56Raw,program:D56.window.localStorage.getItem("forge:program")});
+D56Fail.window.document.getElementById("resumeWorkoutDraftBtn").dispatchEvent(new D56Fail.window.Event("click",{bubbles:true}));
+const d56Proto=Object.getPrototypeOf(D56Fail.window.localStorage), d56Set=d56Proto.setItem;
+d56Proto.setItem=function(k,v){ if(k==="forge:data") throw new Error("blocked"); return d56Set.call(this,k,v); };
+D56Fail.window.document.getElementById("logWorkoutBtn").dispatchEvent(new D56Fail.window.Event("click",{bubbles:true}));
+d56Proto.setItem=d56Set;
+check("v56 failed Log Session preserves the persisted and in-memory draft", D56Fail.window.eval(`data.activeWorkoutDraft!==null && data.workouts.length===0`) && JSON.parse(D56Fail.window.localStorage.getItem("forge:data")).activeWorkoutDraft!==null);
+const D56Discard=bootRaw({cfg:D56.window.localStorage.getItem("forge:cfg"),data:draft56Raw,program:D56.window.localStorage.getItem("forge:program")});
+D56Discard.window.confirm=()=>true;
+D56Discard.window.document.getElementById("discardWorkoutDraftBtn").dispatchEvent(new D56Discard.window.Event("click",{bubbles:true}));
+check("v56 confirmed Discard removes the saved draft", D56Discard.window.eval("data.activeWorkoutDraft===null") && JSON.parse(D56Discard.window.localStorage.getItem("forge:data")).activeWorkoutDraft===null);
+
+const deleteDay=dstr(0);
+const deleteData={food:{},workouts:[{date:deleteDay,day:"D1",title:"Delete Me",sets:{Squat:[{w:100,r:5}]},notes:""}],weights:[{date:deleteDay,lbs:200}],measure:[{date:deleteDay,waist:36,chest:42,arm:15}],myFoods:{abc:{name:"Saved Food",brand:"Mine",cal100:100,pro100:10,carb100:5,fat100:2}},meals:[{name:"Saved Meal",items:[{name:"Food",cal:100,pro:10,carb:5,fat:2,meal:"other"}]}],meta:{lastBackup:null,logsSince:0},activeWorkoutDraft:null};
+deleteData.food[deleteDay]=[{name:"Food Entry",cal:100,pro:10,carb:5,fat:2,meal:"other"}];
+const U56=boot(Object.assign({},V2_CFG,{measureOn:true}),deleteData,null,TEST_PROGRAM);
+const dU56=U56.window.document;
+dU56.querySelector("#workHistory .delWork").dispatchEvent(new U56.window.Event("click",{bubbles:true}));
+check("v56 workout deletion offers working Undo", U56.window.eval("data.workouts.length")===0 && !dU56.getElementById("undoToast").classList.contains("hidden"));
+dU56.getElementById("undoBtn").dispatchEvent(new U56.window.Event("click",{bubbles:true}));
+check("v56 Undo restores a deleted workout", U56.window.eval("data.workouts.length")===1);
+dU56.querySelector("#wtList .delWt").dispatchEvent(new U56.window.Event("click",{bubbles:true}));
+dU56.getElementById("undoBtn").dispatchEvent(new U56.window.Event("click",{bubbles:true}));
+check("v56 Undo restores a deleted weigh-in", U56.window.eval("data.weights.length")===1);
+dU56.querySelector("#mList .mdel").dispatchEvent(new U56.window.Event("click",{bubbles:true}));
+dU56.getElementById("undoBtn").dispatchEvent(new U56.window.Event("click",{bubbles:true}));
+check("v56 Undo restores deleted body measurements", U56.window.eval("data.measure.length")===1);
+U56.window.eval("removeEntry(0)");
+dU56.getElementById("undoBtn").dispatchEvent(new U56.window.Event("click",{bubbles:true}));
+check("v56 food-entry deletion uses the shared Undo service", U56.window.eval(`data.food[${JSON.stringify(deleteDay)}].length`)===1);
+U56.window.eval("renderMyFoods()");
+dU56.querySelector("#mfList .del").dispatchEvent(new U56.window.Event("click",{bubbles:true}));
+dU56.getElementById("undoBtn").dispatchEvent(new U56.window.Event("click",{bubbles:true}));
+check("v56 Undo restores a deleted personal food", U56.window.eval("!!data.myFoods.abc"));
+U56.window.eval("deleteSavedMealAt(0)");
+dU56.getElementById("undoBtn").dispatchEvent(new U56.window.Event("click",{bubbles:true}));
+check("v56 Undo restores a deleted saved meal", U56.window.eval("data.meals.length")===1);
+
+const M56=boot(V2_CFG,V2_DATA);
+const dM56=M56.window.document;
+dM56.getElementById("mCal").value="200";
+dM56.getElementById("addManualBtn").dispatchEvent(new M56.window.Event("click",{bubbles:true}));
+check("v56 manual food missing a name explains and focuses the name field", dM56.activeElement===dM56.getElementById("mName") && /food name/.test(dM56.getElementById("saveState").textContent));
+dM56.getElementById("mName").value="Test food"; dM56.getElementById("mCal").value="";
+dM56.getElementById("addManualBtn").dispatchEvent(new M56.window.Event("click",{bubbles:true}));
+check("v56 manual food missing calories explains and focuses calories", dM56.activeElement===dM56.getElementById("mCal") && /calories greater than 0/.test(dM56.getElementById("saveState").textContent));
+
+const P56=boot(V2_CFG,Object.assign({},V2_DATA,{workouts:[{date:deleteDay,day:"D1",title:"History",sets:{},notes:""}]}),null,TEST_PROGRAM);
+P56.window.confirm=()=>false;
+let replace56=P56.window.eval(`replaceActiveProgram({name:"New Program",days:[{id:"N1",title:"New",exercises:[{name:"Squat"}]}]})`);
+check("v56 canceling program replacement preserves the active program and history", replace56.cancelled && P56.window.eval("program.name")===TEST_PROGRAM.name && P56.window.eval("data.workouts.length")===1);
+P56.window.confirm=()=>true;
+replace56=P56.window.eval(`replaceActiveProgram({name:"New Program",days:[{id:"N1",title:"New",exercises:[{name:"Squat"}]}]})`);
+check("v56 confirmed program replacement changes only the program", replace56.ok && P56.window.eval("program.name")==="New Program" && P56.window.eval("data.workouts.length")===1);
+
+const O56=boot(Object.assign({},V2_CFG,{usdaKey:"k",anthropicKey:"sk-test",aiProvider:"anthropic"}),V2_DATA,w=>{w.__netCalls=[];w.fetch=(...a)=>{w.__netCalls.push(a);return Promise.reject(new Error("should not fetch"));};});
+const dO56=O56.window.document;
+Object.defineProperty(O56.window.navigator,"onLine",{configurable:true,value:false});
+dO56.getElementById("foodQuery").value="chicken";
+await O56.window.eval("runSearch()");
+check("v56 offline food search skips network and shows local results immediately", O56.window.__netCalls.length===0 && dO56.getElementById("results").children.length>0 && /online databases were skipped/.test(dO56.getElementById("searchErr").textContent));
+dO56.getElementById("barcodeInput").value="999999";
+await O56.window.eval("runBarcode()");
+check("v56 offline barcode lookup skips network and opens manual entry", O56.window.__netCalls.length===0 && !dO56.getElementById("customCard").classList.contains("hidden") && /online barcode lookup was skipped/.test(dO56.getElementById("searchErr").textContent));
+dO56.getElementById("scanBtn").dispatchEvent(new O56.window.Event("click",{bubbles:true}));
+await wait(5);
+check("v56 offline scanner fast-fails without loading its external library", O56.window.__netCalls.length===0 && /needs a connection/.test(dO56.getElementById("scanErr").textContent) && ![...dO56.querySelectorAll('script[src]')].some(x=>/html5-qrcode/.test(x.src)));
+await O56.window.eval(`anthropicCall([],"",10).catch(e=>{window.__offlineAI=e.message;})`);
+check("v56 direct-provider AI fast-fails offline and points to handoff", O56.window.__netCalls.length===0 && /offline/.test(O56.window.__offlineAI) && /handoff/.test(O56.window.__offlineAI));
 
 // ================= v53: mobile set-row alignment =================
 check("mobile set controls stay together after checkmark removal",

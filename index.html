@@ -107,6 +107,9 @@
   .unsavedChip{ font-size:11px; letter-spacing:.04em; color:var(--progress); text-transform:uppercase; }
   .savedLine{ display:flex; align-items:center; gap:10px; font-size:13px; margin:4px 0 8px; }
   .savedChip{ color:var(--ok); font-weight:600; font-size:12px; }
+  .workout-draft-card{ border-color:rgba(var(--ember-rgb),.55); background:rgba(var(--ember-rgb),.06); }
+  .workout-draft-title{ font-family:'Oswald',sans-serif; font-size:17px; font-weight:650; text-transform:uppercase; letter-spacing:.04em; }
+  .workout-draft-meta{ color:var(--dim); font-size:12px; line-height:1.55; margin:5px 0 12px; }
   #bellaEgg{
     /* Bella's handwriting — embedded once, byte-for-byte, painted by the live accent.
        The image data below is a memorial and is read-only. Never regenerate or re-render it. */
@@ -630,6 +633,15 @@
         <div id="programDayName" class="program-identity-day"></div>
       </div>
       <button class="btn ghost small" id="programManageBtn" aria-expanded="false" aria-controls="programToolsCard">Manage</button>
+    </div>
+
+    <div class="card workout-draft-card hidden" id="workoutDraftCard">
+      <div class="workout-draft-title">Saved workout draft</div>
+      <div class="workout-draft-meta" id="workoutDraftText"></div>
+      <div class="row">
+        <button class="btn small" id="resumeWorkoutDraftBtn">Resume</button>
+        <button class="btn ghost small" id="discardWorkoutDraftBtn">Discard</button>
+      </div>
     </div>
 
     <div class="card hidden" id="programToolsCard">

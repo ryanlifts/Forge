@@ -56,6 +56,10 @@ wDaySel.addEventListener("change", ()=>{
       wDaySel.value = activeSessionType;
       return;
     }
+    if (workoutDraftLoaded && !discardWorkoutDraft(false,false)){
+      wDaySel.value = activeSessionType;
+      return;
+    }
     clearSessionDraftFields();
   }
   if (typeof editingWorkoutIdx!=="undefined" && editingWorkoutIdx!=null) endWorkoutEdit(true);
@@ -99,8 +103,34 @@ document.getElementById("programManageBtn").addEventListener("click", ()=>{
 });
 document.getElementById("programManageCloseBtn").addEventListener("click", ()=>setProgramManagerOpen(false));
 
+
+function replaceActiveProgram(candidate){
+  let next;
+  try { next = validateProgram(cloneJSON(candidate)); }
+  catch(e){ return {ok:false, reason:e.message}; }
+  const currentName = (program && program.name) || "Unnamed program";
+  const nextName = next.name || "Unnamed program";
+  const draftNote = data.activeWorkoutDraft ? "\n\nYour saved workout draft will remain available." : "";
+  if (!confirm('Replace current program "'+currentName+'" with "'+nextName+'"?\n\nWorkout history will stay intact.'+draftNote)) return {ok:false, cancelled:true};
+  const previous = program;
+  program = next;
+  if (!saveProgram()){
+    program = previous;
+    return {ok:false, reason:"The new program could not be saved."};
+  }
+  extraExercises = [];
+  initSessionState();
+  renderDayOptions();
+  renderSessionInputs();
+  renderWork();
+  renderDash();
+  if (typeof renderNextWorkout==="function") renderNextWorkout();
+  return {ok:true, program:next};
+}
+
 // ---------- set-row engine ----------
 let sessionState = {}; // exName -> rows track planned/completed/touched state; text tracks explicit entry
+let workoutDraftLoaded = false;
 
 function toRows(val){
   // converts a stored sets value (array or legacy string) into editable rows
@@ -154,6 +184,7 @@ function prefillRows(ex, lastVal){
   return {rows:rows, auto:false};
 }
 function initSessionState(){
+  workoutDraftLoaded = false;
   sessionState = {};
   sessionSwaps = {};
   const v = wDaySel.value;
@@ -206,8 +237,18 @@ function saveExercise(exName){
     showWorkoutError(key+" — enter at least one set before saving this exercise.", null);
     return {ok:false};
   }
+  const previousSaved = st.saved;
+  const previousStatus = st.status;
   st.saved = v.value;
   st.status = "saved";
+  const persisted = persistWorkoutDraft();
+  if (!persisted.ok){
+    st.saved = previousSaved;
+    st.status = previousStatus==="saved" ? "saved" : "unsaved";
+    renderSessionInputs();
+    showWorkoutError(persisted.cancelled ? "The existing saved workout draft was kept. Resume or discard it before starting a different session." : "This exercise could not be saved to the workout draft.", null);
+    return {ok:false};
+  }
   clearWorkoutError();
   renderSessionInputs();
   return {ok:true};
@@ -232,6 +273,108 @@ function collectSavedSessionSets(state){
   }
   return {ok:true, sets:sets, completedRows:completedRows, error:null};
 }
+
+function draftTitleFor(dayId){
+  if (dayId==="__FREE__") return "Freestyle";
+  const d = program.days.find(x=>x.id===dayId);
+  return d ? d.title : "Saved workout";
+}
+function buildWorkoutDraft(){
+  const collected = collectSavedSessionSets(sessionState);
+  if (!Object.keys(collected.sets).length) return null;
+  return {
+    date:document.getElementById("wDate").value || todayStr(),
+    day:wDaySel.value,
+    title:draftTitleFor(wDaySel.value),
+    programName:program.name || "Unnamed program",
+    sets:cloneJSON(collected.sets),
+    notes:document.getElementById("wNotes").value.trim(),
+    updatedAt:new Date().toISOString()
+  };
+}
+function sameDraftSession(a,b){ return !!a && !!b && a.date===b.date && a.day===b.day; }
+function persistWorkoutDraft(){
+  if (editingWorkoutIdx!=null) return {ok:true, skipped:true};
+  const next = buildWorkoutDraft();
+  if (!next) return {ok:true, skipped:true};
+  const previous = data.activeWorkoutDraft ? cloneJSON(data.activeWorkoutDraft) : null;
+  if (previous && !sameDraftSession(previous,next) && !workoutDraftLoaded){
+    if (!confirm('A saved workout draft already exists for "'+(previous.title||"another session")+'".\n\nDiscard that draft and save this exercise as a new draft?')) return {ok:false, cancelled:true};
+  }
+  data.activeWorkoutDraft = next;
+  if (!save()){
+    data.activeWorkoutDraft = previous;
+    return {ok:false, reason:"Workout draft could not be saved."};
+  }
+  workoutDraftLoaded = true;
+  renderWorkoutDraftCard();
+  return {ok:true};
+}
+function renderWorkoutDraftCard(){
+  const card = document.getElementById("workoutDraftCard");
+  const text = document.getElementById("workoutDraftText");
+  if (!card || !text) return;
+  const d = data.activeWorkoutDraft;
+  // While the draft is already open in this session, Completed cards are the status UI.
+  // Resume/Discard appears only after a reload or when another saved draft is not loaded.
+  if (!d || workoutDraftLoaded){ card.classList.add("hidden"); text.textContent=""; return; }
+  const count = Object.keys(d.sets||{}).length;
+  text.textContent = (d.title||"Workout")+" · "+fmtDate(d.date)+" · "+count+" saved exercise"+(count===1?"":"s")+". Resume it or deliberately discard it.";
+  card.classList.remove("hidden");
+}
+function resumeWorkoutDraft(){
+  const d = data.activeWorkoutDraft;
+  if (!d) return false;
+  if (sessionDraftHasMeaningfulWork() && !workoutDraftLoaded){
+    if (!confirm("Replace the current in-progress screen with the saved workout draft?")) return false;
+  }
+  document.getElementById("wDate").value = d.date || todayStr();
+  document.getElementById("wNotes").value = d.notes || "";
+  const hasDay = [...wDaySel.options].some(o=>o.value===d.day);
+  wDaySel.value = hasDay ? d.day : "__FREE__";
+  const dayObj = program.days.find(x=>x.id===wDaySel.value);
+  const planned = dayObj ? dayObj.exercises.map(ex=>ex.name.replace("[Cardio] ","")) : [];
+  extraExercises = Object.keys(d.sets||{}).filter(name=>planned.indexOf(name)===-1).map(name=>({name:name,scheme:""}));
+  initSessionState();
+  Object.keys(d.sets||{}).forEach(key=>{
+    const stateName = Object.keys(sessionState).find(n=>n.replace("[Cardio] ","")===key) || key;
+    const val = d.sets[key];
+    if (!sessionState[stateName]) sessionState[stateName] = {mode:"rows",rows:[],text:"",textTouched:false,auto:false,saved:null,status:"plan"};
+    if (Array.isArray(val)) sessionState[stateName] = {mode:"rows",rows:[],text:"",textTouched:false,auto:false,saved:cloneJSON(val),status:"saved"};
+    else sessionState[stateName] = {mode:"text",rows:[],text:"",textTouched:false,auto:false,saved:String(val),status:"saved"};
+  });
+  activeSessionType = wDaySel.value;
+  workoutDraftLoaded = true;
+  clearWorkoutError();
+  renderSessionInputs();
+  renderWorkoutDraftCard();
+  activateView("work","trainingSessionCard",false);
+  flashSave("Workout draft resumed ✓");
+  return true;
+}
+function discardWorkoutDraft(ask, resetSession){
+  const old = data.activeWorkoutDraft;
+  if (!old) return true;
+  if (ask!==false && !confirm('Discard the saved workout draft for "'+(old.title||"this session")+'"?')) return false;
+  data.activeWorkoutDraft = null;
+  if (!save()){
+    data.activeWorkoutDraft = old;
+    return false;
+  }
+  const wasLoaded = workoutDraftLoaded;
+  workoutDraftLoaded = false;
+  if (resetSession!==false && wasLoaded){
+    extraExercises=[];
+    clearSessionDraftFields();
+    initSessionState();
+    renderSessionInputs();
+  }
+  renderWorkoutDraftCard();
+  flashSave("Workout draft discarded");
+  return true;
+}
+document.getElementById("resumeWorkoutDraftBtn").addEventListener("click", resumeWorkoutDraft);
+document.getElementById("discardWorkoutDraftBtn").addEventListener("click", ()=>discardWorkoutDraft(true,true));
 function clearWorkoutError(){
   const el = document.getElementById("workoutErr");
   if (!el) return;
@@ -526,18 +669,27 @@ document.getElementById("logWorkoutBtn").addEventListener("click", ()=>{
   });
   const day = program.days.find(p=>p.id===v);
   const wasEdit = editingWorkoutIdx!=null;
+  const beforeLogData = cloneJSON(data);
   if (wasEdit){
     const orig = data.workouts[editingWorkoutIdx];
     data.workouts[editingWorkoutIdx] = {date:date, day:orig.day, title:orig.title, sets:sets, notes:notes};
   } else {
     data.workouts.push({date:date, day:v, title: v==="__FREE__" ? "Freestyle" : (day?day.title:v), sets:sets, notes:notes});
+    data.activeWorkoutDraft = null;
     bumpLog();
   }
+  if (!save()){
+    data = beforeLogData;
+    showWorkoutError("The session could not be saved. Your workout draft is still available.", null);
+    renderWorkoutDraftCard();
+    return;
+  }
+  workoutDraftLoaded = false;
   extraExercises=[];
   initSessionState();
   renderSessionInputs();
   document.getElementById("wNotes").value="";
-  save(); renderWork(); renderDash(); renderNextWorkout(); renderBackup();
+  renderWork(); renderDash(); renderNextWorkout(); renderBackup();
   if (wasEdit){
     endWorkoutEdit();
     ackBtn("logWorkoutBtn", "\u2713 Session updated");
@@ -550,6 +702,7 @@ document.getElementById("logWorkoutBtn").addEventListener("click", ()=>{
 });
 
 function renderWork(){
+  renderWorkoutDraftCard();
   renderPRs();
   renderProgramIdentity();
   const el = document.getElementById("workHistory");
@@ -590,7 +743,17 @@ function renderWork(){
       +body+'</details>';
   }).join("");
   el.querySelectorAll(".delWork").forEach(b=>b.addEventListener("click",()=>{
-    data.workouts.splice(Number(b.dataset.i),1); save(); renderWork(); renderDash();
+    const i = Number(b.dataset.i);
+    const removed = data.workouts[i];
+    if (!removed) return;
+    data.workouts.splice(i,1);
+    if (!save()){ data.workouts.splice(i,0,removed); renderWork(); return; }
+    renderWork(); renderDash();
+    offerUndo('Deleted workout "'+(removed.title||removed.day||"session")+'"', ()=>{
+      data.workouts.splice(Math.min(i,data.workouts.length),0,removed);
+      save(); renderWork(); renderDash();
+      flashSave("Workout restored ✓");
+    });
   }));
   el.querySelectorAll(".edtWork").forEach(b=>b.addEventListener("click",()=>startEditWorkout(Number(b.dataset.i))));
 }
@@ -739,13 +902,36 @@ function renderMyFoods(){
     const dBtn = document.createElement("button");
     dBtn.className = "del"; dBtn.textContent = "✕"; dBtn.setAttribute("aria-label","Delete");
     dBtn.addEventListener("click", ()=>{
+      const removed = data.myFoods[key];
       delete data.myFoods[key];
+      if (!save()){ data.myFoods[key]=removed; renderMyFoods(); return; }
       if (mfEditKey===key) mfResetForm();
-      save(); renderMyFoods();
+      renderMyFoods();
+      offerUndo('Deleted saved food "'+(removed.name||"food")+'"', ()=>{
+        data.myFoods[key]=removed;
+        save(); renderMyFoods();
+        flashSave("Saved food restored ✓");
+      });
     });
     row.appendChild(dBtn);
     el.appendChild(row);
   });
+}
+function deleteSavedMealAt(i){
+  const meal = data.meals && data.meals[i];
+  if (!meal) return false;
+  data.meals.splice(i,1);
+  if (!save()){ data.meals.splice(i,0,meal); return false; }
+  if (typeof renderMFMeals==="function") renderMFMeals();
+  if (typeof renderMeals==="function") renderMeals();
+  offerUndo('Deleted saved meal "'+(meal.name||"meal")+'"', ()=>{
+    data.meals.splice(Math.min(i,data.meals.length),0,meal);
+    save();
+    if (typeof renderMFMeals==="function") renderMFMeals();
+    if (typeof renderMeals==="function") renderMeals();
+    flashSave("Saved meal restored ✓");
+  });
+  return true;
 }
 function renderMFMeals(){
   const el = document.getElementById("mfMeals");
@@ -769,7 +955,7 @@ function renderMFMeals(){
     row.appendChild(rBtn);
     const dBtn = document.createElement("button");
     dBtn.className = "del"; dBtn.textContent = "✕"; dBtn.setAttribute("aria-label","Delete");
-    dBtn.addEventListener("click", ()=>{ data.meals.splice(i,1); save(); renderMFMeals(); renderMeals(); });
+    dBtn.addEventListener("click", ()=>deleteSavedMealAt(i));
     row.appendChild(dBtn);
     el.appendChild(row);
   });
@@ -816,14 +1002,14 @@ document.getElementById("bSaveBtn").addEventListener("click", ()=>{
   if (builderProg.days.length===0){ errEl.textContent="Add at least one day."; errEl.classList.remove("hidden"); return; }
   if (bad>=0){ errEl.textContent='"'+(builderProg.days[bad].title||("Day "+(bad+1)))+'" has no exercises yet.'; errEl.classList.remove("hidden"); return; }
   builderProg.days.forEach((d,i)=>{ d.id = "D"+(i+1); if(!d.title) d.title = "Day "+(i+1); });
-  try {
-    program = validateProgram(JSON.parse(JSON.stringify(builderProg)));
-  } catch(e){ errEl.textContent = e.message; errEl.classList.remove("hidden"); return; }
-  saveProgram();
+  let candidate;
+  try { candidate = validateProgram(cloneJSON(builderProg)); }
+  catch(e){ errEl.textContent = e.message; errEl.classList.remove("hidden"); return; }
+  const replaced = replaceActiveProgram(candidate);
+  if (replaced.cancelled) return;
+  if (!replaced.ok){ errEl.textContent = replaced.reason || "Program could not be saved."; errEl.classList.remove("hidden"); return; }
   builderProg = null;
   document.getElementById("builderCard").classList.add("hidden");
-  extraExercises = [];
-  renderDayOptions(); initSessionState(); renderSessionInputs(); renderWork(); renderDash();
   flashSave("Program saved ✓");
 });
 
@@ -947,11 +1133,10 @@ document.getElementById("importFile").addEventListener("change", (e)=>{
   const reader = new FileReader();
   reader.onload = ()=>{
     try {
-      program = validateProgram(JSON.parse(reader.result));
-      saveProgram();
-      extraExercises=[];
-      renderDayOptions(); renderSessionInputs(); renderWork();
-      flashSave("Program loaded ✓");
+      const candidate = validateProgram(JSON.parse(reader.result));
+      const replaced = replaceActiveProgram(candidate);
+      if (replaced.ok) flashSave("Program loaded ✓");
+      else if (!replaced.cancelled) throw new Error(replaced.reason || "Program could not be saved.");
     } catch(err){
       errEl.textContent = "Couldn't load that file: "+err.message;
       errEl.classList.remove("hidden");

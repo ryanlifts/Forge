@@ -23,6 +23,7 @@ function mapUSDA(f){
   };
 }
 async function searchUSDA(q){
+  if (isOffline()) return [];
   if (!effectiveUsdaKey()) return [];
   const res = await fetchWithTimeout("https://api.nal.usda.gov/fdc/v1/foods/search?api_key="+encodeURIComponent(effectiveUsdaKey())
     +"&query="+encodeURIComponent(q)+"&pageSize=10&dataType=Branded,Foundation,SR%20Legacy", 8000);
@@ -389,6 +390,7 @@ function renderAIGates(){
 }
 
 async function anthropicCall(messages, system, maxTokens){
+  if (isOffline()) throw new Error("You're offline — reconnect to use the live AI coach, or switch to ChatGPT handoff mode in Settings.");
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -409,6 +411,7 @@ async function anthropicCall(messages, system, maxTokens){
 }
 
 async function openaiCall(messages, system, maxTokens){
+  if (isOffline()) throw new Error("You're offline — reconnect to use the live AI coach, or switch to ChatGPT handoff mode in Settings.");
   const msgs = [{role:"system", content:system}].concat(messages.map(m=>{
     if (Array.isArray(m.content)){
       return { role:m.role, content:m.content.map(b=>
@@ -496,15 +499,14 @@ function addCoachBubble(role, text, payloads){
     b.className = "act";
     b.textContent = "Load program: " + (payloads.program.name || "Updated program");
     b.addEventListener("click", ()=>{
-      try {
-        program = validateProgram(payloads.program);
-        saveProgram();
-        extraExercises = [];
-        renderDayOptions(); initSessionState(); renderSessionInputs(); renderWork(); renderDash(); renderNextWorkout();
+      const replaced = replaceActiveProgram(payloads.program);
+      if (replaced.ok){
         b.textContent = "✓ Loaded — it's your active program";
         b.disabled = true;
         flashSave("Program loaded ✓");
-      } catch(e){ flashSave("Program invalid: "+e.message, true); }
+      } else if (!replaced.cancelled){
+        flashSave("Program invalid: "+(replaced.reason||"could not be saved"), true);
+      }
     });
     div.appendChild(b);
   }
@@ -590,14 +592,13 @@ document.getElementById("pasteProgBtn").addEventListener("click", async ()=>{
     if (m){ try { const j = JSON.parse(m[0]); if (Array.isArray(j.days)) prog = j; } catch(e){} }
   }
   if (!prog){ flashSave("No program found in that text", true); return; }
-  try {
-    program = validateProgram(prog);
-    saveProgram();
-    extraExercises = [];
-    renderDayOptions(); initSessionState(); renderSessionInputs(); renderWork(); renderDash(); renderNextWorkout();
+  const replaced = replaceActiveProgram(prog);
+  if (replaced.ok){
     ackBtn("pasteProgBtn", "✓ Loaded: "+(program.name||"program"));
     flashSave("Program loaded ✓");
-  } catch(e){ flashSave("Program invalid: "+e.message, true); }
+  } else if (!replaced.cancelled){
+    flashSave("Program invalid: "+(replaced.reason||"could not be saved"), true);
+  }
 });
 
 // ================== AI FOOD LOGGING (text + photo) ==================
@@ -1140,8 +1141,17 @@ function renderMeasure(){
       +'<button class="del mdel" data-d="'+m.date+'" aria-label="Delete">✕</button></div>';
   }).join("");
   el.querySelectorAll(".mdel").forEach(b=>b.addEventListener("click",()=>{
-    data.measure = data.measure.filter(m=>m.date!==b.dataset.d);
-    save(); renderMeasure();
+    const i = data.measure.findIndex(m=>m.date===b.dataset.d);
+    if (i<0) return;
+    const removed = data.measure[i];
+    data.measure.splice(i,1);
+    if (!save()){ data.measure.splice(i,0,removed); renderMeasure(); return; }
+    renderMeasure();
+    offerUndo("Deleted measurements from "+fmtDate(removed.date), ()=>{
+      data.measure.splice(Math.min(i,data.measure.length),0,removed);
+      save(); renderMeasure();
+      flashSave("Measurements restored ✓");
+    });
   }));
 }
 

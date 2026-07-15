@@ -1,32 +1,33 @@
-# BLACKPYRE HANDOFF — current as of v55 (July 2026)
+# BLACKPYRE HANDOFF — current as of v56 (July 2026)
 
 You are a collaborator on BlackPyre, a fitness PWA at
-`ryanlifts.github.io/Forge/` (repo: `ryanlifts/Forge`). This repository represents **v55**,
-a focused Phase 4 interface-simplification release built on the completed v46 hardening foundation.
-Confirm the GitHub Pages deployment/cache before calling it live on a user's device.
+`ryanlifts.github.io/Forge/` (repo: `ryanlifts/Forge`). This repository represents **v56**,
+a focused Phase 4 data-integrity and action-safety release built on the completed v46
+hardening foundation. Confirm the GitHub Pages deployment/cache before calling it live.
 
 The two documents reproduced below (`ARCHITECTURE.md` and `DATA-MODEL.md`) live in the repo
-root, are binding, and are current as of v55. Read them before proposing or writing code.
+root, are binding, and are current as of v56. Read them before proposing or writing code.
 
 ## Current state
 
-1. The permanent `/tests` gauntlet has **348 checks: 101 unit + 247 integration**. GitHub
+1. The permanent `/tests` gauntlet has **381 checks: 105 unit + 276 integration**. GitHub
    Actions runs it on every push. Tests are cumulative and are never deleted or weakened.
 2. `tests/bella-reference.b64` is the frozen memorial byte truth. Exact identity and embed
    count 1 are test-enforced; never regenerate, re-render, edit, or replace it.
 3. App structure remains markup/styles in `index.html`, three static data scripts, then
    `scripts/01-storage.js` through `scripts/07-boot.js` in strict order. Classic scripts,
    shared global scope, no ES modules, no build step — permanent.
-4. Primary state remains `forge:cfg`, `forge:data`, `forge:program` with `schemaVersion:1`.
-   Internal `forge:lkg` and `forge:quarantine` remain `recoveryFormatVersion:1`; v55 changes
-   no storage shape, migration, workout history, food history, backup, or recovery contract.
-5. v51 established exercise-level Save/Completed/Edit and food-flow safeguards; v52 refreshed
-   FAQ; v53 fixed mobile set alignment; v54 made rest manual and surfaced Current program.
-6. v55 consolidates duration selection and timer actions into the floating Train timer,
-   removes the duplicate Train rest-duration row, collapses secondary Home and Settings
-   content into native disclosures, improves compact-control touch targets, and adds a
-   restrained offline notice that disappears automatically when connectivity returns.
-7. Cache: `blackpyre-v55`.
+4. Primary state remains `forge:cfg`, `forge:data`, `forge:program`; v56 advances the
+   whole-state primary schema from 1 to **2** by adding `forge:data.activeWorkoutDraft`.
+   Internal `forge:lkg` and `forge:quarantine` remain `recoveryFormatVersion:1`.
+5. Saved exercises now persist immediately as a resumable workout draft. The draft clears
+   only after successful Log Session or confirmed Discard; failed final saves retain it.
+6. Routine workout, weigh-in, measurement, personal-food, saved-meal, and food-entry
+   deletion use one six-second Undo service. Manual food validation identifies/focuses the
+   missing field. Whole-program replacement requires confirmation.
+7. Offline food search/barcode/scanner and direct-provider AI paths now fail fast instead
+   of waiting for timeouts; built-in/saved food and ChatGPT handoff remain available.
+8. Cache: `blackpyre-v56`.
 
 ## Five-phase status
 
@@ -35,24 +36,24 @@ root, are binding, and are current as of v55. Read them before proposing or writ
 - **Phase 2 — DONE (v43):** seven ordered classic-script slices; proof preserved.
 - **Phase 3 — DONE (v44–v46):** update toast, safe schema migrations/protected mode,
   validated LKG/quarantine/recovery.
-- **Phase 4 — IN PROGRESS:** focused usability releases v47–v55. v56 remains the planned
-  final full-app audit and polish release, subject to Ryan's separate approval.
+- **Phase 4 — IN PROGRESS:** focused usability releases v47–v56. v57 remains the planned
+  accessibility completion and Phase 4 closeout, subject to Ryan's separate approval.
 
-## v55 — interface simplification, accessibility, offline clarity, timer consolidation
+## v56 — workout-draft integrity and action safety
 
-- One floating Train timer now contains the displayed duration, quick presets, reusable
-  custom durations, Start, Pause/Resume, +30, and End. Save Exercise remains manual-only
-  and never starts or resets rest. Plate math remains in Training tools; the duplicate
-  rest-duration controls were removed from that card.
-- Home keeps daily actions visible and puts measured metabolism/last session and AI Coach
-  behind clear native disclosures.
-- Settings groups goals/tracking, optional food/AI services, and data/recovery. The recovery
-  section opens automatically when protected mode or a quarantine copy needs attention.
-- A non-blocking offline notice states what still works and which online lookups/AI requests
-  need connectivity; it hides automatically on reconnect.
-- Common compact controls retain 44px minimum touch targets; editable controls remain
-  zoom-safe at 16px. Browser zoom remains enabled.
-- No storage/schema change. Tests: 348 (101 unit + 247 integration).
+- `Save Exercise` persists only validated completed exercise values in
+  `data.activeWorkoutDraft`; touched-but-unsaved rows are not persisted.
+- Train displays Resume/Discard for a saved draft after reload. Resume restores completed
+  exercises; confirmed discard clears the draft. Successful Log Session moves it into
+  history and clears it in the same data save. Failed session save restores the draft.
+- Schema 1→2 adds `activeWorkoutDraft:null`; settings are stamped last. The read-only
+  `ryan-cut:data` fallback is normalized in memory/LKG but never implicitly promoted.
+- One generic Undo covers routine log/library deletions. Recovery/quarantine deletion rules
+  remain separate and unchanged.
+- Program builder/import/paste/AI load routes through one confirmed replacement helper;
+  workout history is untouched.
+- No workout-history, program, food-history, LKG, quarantine, or recovery-format change.
+- Tests: 381 (105 unit + 276 integration).
 
 ## Workflow constraints
 
@@ -67,7 +68,7 @@ notice or close/reopen as directed. Every release gets a plain-language report a
 
 # BlackPyre Architecture
 
-**Current as of v55 (July 2026).**
+**Current as of v56 (July 2026).**
 
 A single-page PWA: vanilla HTML/CSS/JS, no framework, no build step, localStorage only.
 Deployed on GitHub Pages. Developed AI-assisted (Claude / ChatGPT) from a phone — every rule
@@ -89,12 +90,12 @@ below exists to keep that workflow safe.
 
 | File | Role |
 |---|---|
-| `index.html` | Markup + styles only (~165 KB in v55); loads the data files then the 7 app slices; includes protected/recovery UI, Home/Settings disclosures, offline notice, compact program identity, and the consolidated Train-only rest dock |
-| `scripts/01-storage.js` | primary/recovery keys, defaults, pure prepare-state migration pipeline, commit/rollback, LKG lifecycle, structured diagnosis, quarantine transaction, protected-mode guards, state, network-status UI, predictable view activation/tabs |
-| `scripts/02-food.js` | bars, meals, food logging |
-| `scripts/03-train.js` | training sessions, compact current-program identity and separate Manage panel, exercise-level Save/Completed/Edit integrity, protected session-type changes, clear validation, conservative auto-progression, aligned mobile set controls and touch targets |
-| `scripts/04-weight.js` | weight chart, motivation render, e1RM/PR engine, TDEE, streak, finish day, plate math, consolidated manual rest timer with duration chooser, share |
-| `scripts/05-ai.js` | USDA/barcode lookups, usual-meal, schedule UI, kudos, AI engine, coach chat, check-in, handoff food flow with first-item review positioning, AI report, analytics |
+| `index.html` | Markup + styles only (~166 KB in v56); loads the data files then the 7 app slices; includes protected/recovery UI, Home/Settings disclosures, offline notice, compact program identity, persistent-workout-draft controls, and the consolidated Train-only rest dock |
+| `scripts/01-storage.js` | primary/recovery keys, defaults, schema 0→1→2 preparation, commit/rollback, LKG lifecycle, structured diagnosis, quarantine transaction, protected-mode guards, shared Undo service, state, network-status UI, predictable view activation/tabs |
+| `scripts/02-food.js` | bars, meals, food logging, clear manual-entry validation, shared deletion Undo, offline local-search/barcode/scanner fast-fail |
+| `scripts/03-train.js` | training sessions, durable saved-exercise drafts with Resume/Discard, compact current-program identity and confirmed replacement, exercise-level Save/Completed/Edit integrity, protected session-type changes, clear validation, conservative auto-progression, aligned mobile set controls and touch targets |
+| `scripts/04-weight.js` | weight chart, weigh-in/saved-meal Undo, motivation render, e1RM/PR engine, TDEE, streak, finish day, plate math, consolidated manual rest timer with duration chooser, share |
+| `scripts/05-ai.js` | USDA/barcode lookups, usual-meal, schedule UI, kudos, offline direct-AI fast-fail, confirmed AI/pasted program replacement, measurement Undo, coach chat, check-in, handoff food flow with first-item review positioning, AI report, analytics |
 | `scripts/06-settings.js` | setup wizard, FAQ, macro calculator, grouped settings, normal/partial/raw exports, restore, recovery status and quarantine cleanup with automatic disclosure when attention is needed |
 | `scripts/07-boot.js` | dash, Easter egg, protected/recovery panel orchestration, network-status initialization, approved update toast, boot |
 | `data-quotes.js` | QUOTES vault — classic script, loads before the app slices, shares global scope |
@@ -104,7 +105,7 @@ below exists to keep that workflow safe.
 | `manifest.json` | PWA identity — name/short_name **BlackPyre** |
 | `icon-*.png`, `apple-touch-icon.png` | Gold dumbbell icons |
 | `tests/PHASE2-PROOF.md` | Permanent historical record of the Phase 2 byte-identity proof |
-| `tests/` | Permanent gauntlet — 348 automated checks (101 unit + 247 integration), reproducible jsdom lockfile, and `bella-reference.b64` (frozen memorial byte truth; never edited). Not precached |
+| `tests/` | Permanent gauntlet — 381 automated checks (105 unit + 276 integration), reproducible jsdom lockfile, and `bella-reference.b64` (frozen memorial byte truth; never edited). Not precached |
 | `.github/workflows/tests.yml` | Runs the gauntlet on every push |
 | `DATA-MODEL.md` | Primary storage schema, recovery-record contracts, and migration history |
 
@@ -139,7 +140,7 @@ Slice rules from here on:
 ## Storage safety conventions (v45–v46)
 
 - `schemaVersion` versions the complete primary state (`forge:cfg`, `forge:data`,
-  `forge:program`) and is physically stored in `forge:cfg`; current primary schema = 1.
+  `forge:program`) and is physically stored in `forge:cfg`; current primary schema = 2. v56 adds `forge:data.activeWorkoutDraft` so completed exercises survive reload before session finalization.
 - Boot preserves the original primary strings and runs parse → numbered migration → tolerant
   validation → serialization on copies in pure `prepareState()`, then commits separately.
 - Present unparseable/invalid/newer primary data enters protected mode before disclaimer/setup.
@@ -165,13 +166,13 @@ Slice rules from here on:
   styles. It records `setItem`, `removeItem`, and `clear` calls across all five BlackPyre keys.
 - Memorial integrity is enforced byte-for-byte against `tests/bella-reference.b64`, with
   an exact embed count of 1. The reference file never changes.
-- Unit suite: pure math/parsers, schema preparation, strict recovery-record parsing,
+- Unit suite: pure math/parsers, schema preparation including 1→2 draft migration/validation, strict recovery-record parsing,
   structured diagnostics, candidate summaries, and version-separation rules.
 - Integration suite: all historic app flows plus protected zero-write behavior, mutation
   re-sync, interrupted commits, LKG create/refresh/failure/quota rules, area diagnosis,
   all three recovery sources, quarantine ordering/retention/export/deletion, legacy fallback,
-  API-key boundaries, read-back failure, exercise-level workout saving, protected session-type changes, clear workout validation, conservative progression, compact program identity/separate management, consolidated Train-only rest duration/control dock, Home/Settings disclosure hierarchy, offline status transitions, practical compact-control touch targets, predictable tab/session positioning, 16px editable controls, handoff paste/log and first-item review positioning, update toast, and Easter egg timing.
-- The permanent suite is **348 automated checks** and only grows. New features add tests in
+  API-key boundaries, read-back failure, durable workout-draft save/resume/discard/failure behavior, exercise-level workout saving, protected session-type changes, routine-deletion Undo, manual-food validation, confirmed program replacement, offline network fast-fail, conservative progression, compact program identity/separate management, consolidated Train-only rest duration/control dock, Home/Settings disclosure hierarchy, offline status transitions, practical compact-control touch targets, predictable tab/session positioning, 16px editable controls, handoff paste/log and first-item review positioning, update toast, and Easter egg timing.
+- The permanent suite is **381 automated checks** and only grows. New features add tests in
   the same release; existing checks are never deleted or weakened. The roughly 700 checks
   written before Phase 0 were old throwaway checks, not this permanent suite.
 - jsdom quirks: stub `URL.createObjectURL`, ignore `scrollTo` warnings, `select()` runs via
@@ -193,7 +194,7 @@ Slice rules from here on:
 
 # BlackPyre Data Model
 
-**Current as of v55 (July 2026). Primary schemaVersion: 1. Recovery format: 1.**
+**Current as of v56 (July 2026). Primary schemaVersion: 2. Recovery format: 1.**
 
 ## Storage keys
 
@@ -222,11 +223,12 @@ removes, or modifies that legacy key.
 `schemaVersion` is physically stored in `forge:cfg`, but versions the complete **primary**
 state and normal backup envelope: settings, logged data, and program.
 
-| Raw value | Meaning / behavior in v55 |
+| Raw value | Meaning / behavior in v56 |
 |---|---|
 | property absent or integer `0` | Pre-versioning legacy state; run numbered migrations from step 0 |
-| integer `1` | Current primary schema; no migration step |
-| integer greater than `1` | Newer primary data; protected boot / refused restore; no downgrade path |
+| integer `1` | v45–v55 state; migrate 1 → 2 by adding an empty active-workout draft field |
+| integer `2` | Current primary schema; no migration step |
+| integer greater than `2` | Newer primary data; protected boot / refused restore; no downgrade path |
 | anything else | Invalid; protected boot / refused restore |
 
 The version is read from raw parsed settings before `DEFAULT_CFG` merges. A migration stamps
@@ -258,7 +260,7 @@ treat unset values as real measurements or targets.
 
 | Field | Type | Meaning | Notes |
 |---|---|---|---|
-| `schemaVersion` | integer | Generation of complete primary state | Current = `1`; strict interpretation above |
+| `schemaVersion` | integer | Generation of complete primary state | Current = `2`; strict interpretation above |
 | `setupDone` | bool | Onboarding completed or skipped | |
 | `disclaimerAccepted` | string date | Date disclaimer gate was accepted | Gate blocks normal app until set |
 | `startWt` | number | Starting bodyweight (lb) | 0 = unset |
@@ -298,6 +300,7 @@ treat unset values as real measurements or targets.
 | `mealCounts` | `{meal:{foodKey:n}}` | Per-meal frequency |
 | `meals` | array/object legacy-tolerant | Saved meal combinations |
 | `meta` | `{lastBackup,logsSince}` | Backup reminder bookkeeping |
+| `activeWorkoutDraft` | `null` or `{date,day,title,programName,sets,notes,updatedAt}` | Durable saved-exercise draft; contains only exercises explicitly saved with valid sets; cleared after successful session logging or confirmed discard |
 
 ## forge:program
 
@@ -419,6 +422,7 @@ fallback. The app cannot verify a browser download and states that limit honestl
 | v53 | No storage-schema change | Mobile set-row alignment patch |
 | v54 | No storage-schema change | Manual rest controls and compact current-program/Manage layout |
 | v55 | No storage-schema change | Consolidated floating rest timer, Home/Settings disclosure hierarchy, accessibility touch targets, and offline status clarity |
+| v56 | Whole-state primary schema 1 → 2 | Adds `forge:data.activeWorkoutDraft` for durable saved-exercise work; migration adds `null`, stamps settings last, and never promotes the read-only `ryan-cut:data` fallback into `forge:data` implicitly |
 
 Old backups from any era must continue restoring correctly; the permanent suite proves the
 range-era path.

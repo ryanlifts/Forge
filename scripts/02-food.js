@@ -140,6 +140,14 @@ async function runSearch(){
     .slice(0,4)
     .map(x=>({ name:x.f.n, brand:"Built-in · whole food", cal100:x.f.cal, pro100:x.f.pro, carb100:x.f.carb, fat100:x.f.fat, servingG:null, servingLabel:null }));
 
+  if (isOffline()){
+    renderResults([...myHits, ...localHits]);
+    errEl.textContent = "Offline — showing saved and built-in foods; online databases were skipped.";
+    errEl.classList.remove("hidden");
+    searchBtn.disabled = false; searchBtn.textContent = "Search food database";
+    return;
+  }
+
   let usdaHits = [], offHits = [];
   try { usdaHits = await searchUSDA(q); } catch(e){ /* USDA optional */ }
   try {
@@ -174,6 +182,11 @@ document.getElementById("scanBtn").addEventListener("click", async ()=>{
   const scanErr = document.getElementById("scanErr");
   scanErr.classList.add("hidden");
   overlay.classList.remove("hidden");
+  if (isOffline() && !window.Html5Qrcode){
+    scanErr.textContent = "The barcode scanner needs a connection the first time it loads. Type the barcode instead, or reconnect and try again.";
+    scanErr.classList.remove("hidden");
+    return;
+  }
   try {
     await loadScannerLib();
     scanner = new window.Html5Qrcode("scanRegion");
@@ -215,6 +228,12 @@ async function runBarcode(){
   // personal library first
   if (data.myFoods && data.myFoods[code]){
     selectFood(data.myFoods[code]);
+    return;
+  }
+  if (isOffline()){
+    openCustomForm(code);
+    errEl.textContent = "Offline — online barcode lookup was skipped. Add the label details manually, or reconnect and try again.";
+    errEl.classList.remove("hidden");
     return;
   }
   const btn = document.getElementById("barcodeBtn");
@@ -455,9 +474,22 @@ document.getElementById("cancelEditFoodBtn").addEventListener("click", ()=>{
   cancelEditFood();
 });
 document.getElementById("addManualBtn").addEventListener("click", ()=>{
-  const n = document.getElementById("mName").value.trim();
-  const c = Number(document.getElementById("mCal").value);
-  if(!n || !c) return;
+  const nameInput = document.getElementById("mName");
+  const calInput = document.getElementById("mCal");
+  const n = nameInput.value.trim();
+  const c = Number(calInput.value);
+  if(!n){
+    flashSave("Enter a food name before adding this entry", true);
+    nameInput.focus();
+    if (nameInput.scrollIntoView) nameInput.scrollIntoView({behavior:"smooth", block:"center"});
+    return;
+  }
+  if(!Number.isFinite(c) || c<=0){
+    flashSave("Enter calories greater than 0 before adding this entry", true);
+    calInput.focus();
+    if (calInput.scrollIntoView) calInput.scrollIntoView({behavior:"smooth", block:"center"});
+    return;
+  }
   const entry = {
     name:n, cal:c,
     pro:Number(document.getElementById("mPro").value||0),
@@ -496,32 +528,25 @@ function addEntry(entry){
   save(); renderFood(); renderDash(); renderBackup();
   foodKudos(entry);
 }
-let _undoDel = null, _undoTimer = null;
 function removeEntry(i){
   const d = foodDateEl.value;
   const entry = data.food[d] && data.food[d][i];
   if (!entry) return;
   data.food[d].splice(i,1);
   cancelEditFood();
-  save(); renderFood(); renderDash();
-  // v51: deletion is undoable for a few seconds instead of instantly irreversible
-  _undoDel = {d:d, i:i, entry:entry};
-  const t = document.getElementById("undoToast");
-  document.getElementById("undoMsg").textContent = 'Deleted "'+entry.name+'"';
-  t.classList.remove("hidden");
-  if (_undoTimer) clearTimeout(_undoTimer);
-  _undoTimer = setTimeout(()=>{ t.classList.add("hidden"); _undoDel = null; _undoTimer = null; }, 6000);
+  if (!save()){
+    data.food[d].splice(Math.min(i,data.food[d].length),0,entry);
+    renderFood(); renderDash();
+    return;
+  }
+  renderFood(); renderDash();
+  offerUndo('Deleted "'+entry.name+'"', ()=>{
+    if(!data.food[d]) data.food[d] = [];
+    data.food[d].splice(Math.min(i,data.food[d].length),0,entry);
+    save(); renderFood(); renderDash();
+    flashSave("Restored ✓");
+  });
 }
-document.getElementById("undoBtn").addEventListener("click", ()=>{
-  if (!_undoDel) return;
-  const u = _undoDel; _undoDel = null;
-  if (_undoTimer){ clearTimeout(_undoTimer); _undoTimer = null; }
-  document.getElementById("undoToast").classList.add("hidden");
-  if(!data.food[u.d]) data.food[u.d] = [];
-  data.food[u.d].splice(Math.min(u.i, data.food[u.d].length), 0, u.entry); // back where it was, no dup-guard, no kudos
-  save(); renderFood(); renderDash();
-  flashSave("Restored \u2713");
-});
 
 function renderFood(){
   const d = foodDateEl.value;
