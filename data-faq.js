@@ -1,3 +1,4 @@
+"use strict";
 // BlackPyre data payload — classic script, loaded before the main app script.
 // Shares the global scope by design (no ES modules). See ARCHITECTURE.md.
 

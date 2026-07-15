@@ -1,7 +1,7 @@
-# BLACKPYRE HANDOFF — post-Phase 1 (July 2026)
+# BLACKPYRE HANDOFF — post-Phase 2 (July 2026)
 
 You are a collaborator on BlackPyre, a fitness PWA at
-ryanlifts.github.io/Forge/ (repo: ryanlifts/Forge). Live version: v42 (Phase 1 complete).
+ryanlifts.github.io/Forge/ (repo: ryanlifts/Forge). Live version: v43 (Phase 2 complete).
 
 The two documents included below (ARCHITECTURE.md and DATA-MODEL.md) live in the
 repo root, are binding, and are current. Read them before proposing or writing
@@ -9,31 +9,38 @@ any code.
 
 ## Current state
 
-1. A permanent test suite lives in /tests: 104 automated checks (62 unit,
-   42 integration) that boot the real shipped app in jsdom. GitHub Actions
+1. A permanent test suite lives in /tests: 112 automated checks (62 unit,
+   50 integration) that boot the real shipped app in jsdom. GitHub Actions
    runs it on every push — a green check means "tests passed."
    Tests are cumulative: new features must add checks in the same release,
    and existing checks are never deleted or weakened.
 2. tests/bella-reference.b64 is the frozen byte truth of the memorial
-   image. The suite enforces byte-identity and an exact embed count (now 1).
+   image. The suite enforces byte-identity and an exact embed count (1).
    Never regenerate, re-render, or edit this file or the embedded image.
-3. The app is no longer strictly single-file: index.html (~332 KB) plus three
-   classic-script data payloads (data-quotes.js, data-foods.js, data-faq.js)
-   that load before the main script and share the global scope. No ES modules,
-   no build step — that is permanent.
+3. App structure: index.html (~147 KB, markup+styles) loads three data
+   payloads (data-quotes.js, data-foods.js, data-faq.js) then seven app
+   slices (scripts/01-storage.js … scripts/07-boot.js) in strict order.
+   All classic scripts sharing one global scope. No ES modules, no build
+   step — permanent. Slice contents are listed in ARCHITECTURE.md; edit
+   slices directly, never reorder the script tags.
 
 ## Restructuring plan status (five phases, each gated on Ryan's approval)
 
 - Phase 0 (DONE): test suite + CI gate + documentation. Zero app changes.
-- Phase 1 (DONE, shipped as v42): Bella's mask deduped via one CSS custom
-  property (still embedded, byte-identical, count 2 -> 1); QUOTES / LOCAL_DB /
-  ALT_MAP / FAQ extracted to the three data files; sw.js SHELL precaches them;
-  index.html 482 KB -> 332 KB.
-- Phase 2 (NEXT, not started): slice the main JS at existing section markers
-  into ~7 numbered classic scripts IN CURRENT ORDER, proven by byte-identical
-  concatenation. No ES modules. No reorganizing.
-- Phase 3: hardening (storage quarantine, last-known-good, schemaVersion,
-  update toast). Phase 4: usability review.
+- Phase 1 (DONE, v42): Bella mask deduped (still embedded, byte-identical,
+  count 2 -> 1); QUOTES/LOCAL_DB/ALT_MAP/FAQ extracted to data files.
+- Phase 2 (DONE, v43): main JS sliced at existing section markers into the
+  seven scripts/ files in original order. Every local classic script begins
+  with "use strict"; (each file is its own parsing/evaluation unit). Migration
+  proof, enforced as a permanent check: strip the directives added to slices
+  02-07, concatenate, and the result equals the v42 inline JS exactly
+  (189,847 chars / 190,324 UTF-8 bytes, sha256 63ea5e9b...).
+  index.html 333 KB -> 147 KB. Script order (load-bearing, test-enforced):
+  data-quotes, data-foods, data-faq, then scripts/01..07.
+- Phase 3 (NEXT, not started): hardening — storage quarantine,
+  last-known-good snapshot, cfg.schemaVersion, SW update toast, offline
+  indicators. Each item independently shipped and tested.
+- Phase 4: usability review.
 
 Every phase ships as its own version, passes the full gauntlet, ends with a
 plain-language report, and STOPS for Ryan's approval. Do not start or continue
@@ -74,14 +81,21 @@ below exists to keep that workflow safe.
 
 | File | Role |
 |---|---|
-| `index.html` | The app shell: markup, styles, logic (~332 KB after Phase 1; Phase 2 will slice the JS) |
+| `index.html` | Markup + styles only (~147 KB after Phase 2); loads the data files then the 7 app slices |
+| `scripts/01-storage.js` | storage keys & defaults, migrations, pure helpers, state, tabs |
+| `scripts/02-food.js` | bars, meals, food logging |
+| `scripts/03-train.js` | training sessions, programs |
+| `scripts/04-weight.js` | weight chart, motivation render, e1RM/PR engine, TDEE, streak, finish day, plate math, share |
+| `scripts/05-ai.js` | USDA/barcode lookups, usual-meal, schedule UI, kudos, AI engine, coach chat, check-in, handoff, AI report, analytics |
+| `scripts/06-settings.js` | setup wizard, FAQ render, macro calculator, settings |
+| `scripts/07-boot.js` | dash, Easter egg, boot |
 | `data-quotes.js` | QUOTES vault — classic script, loads before the main script, shares global scope |
 | `data-foods.js` | LOCAL_DB food database + ALT_MAP exercise swaps — classic script |
 | `data-faq.js` | FAQ content — classic script |
 | `sw.js` | Offline shell (cache-first), OFF API network-only, cache name = release version |
 | `manifest.json` | PWA identity — name/short_name **BlackPyre** |
 | `icon-*.png`, `apple-touch-icon.png` | Gold dumbbell icons |
-| `tests/` | Permanent gauntlet — 104 automated checks (62 unit + 42 integration) plus `package.json`/`package-lock.json` pinning jsdom for reproducible runs, and `bella-reference.b64` (frozen byte truth of the memorial image — never edited). Not precached |
+| `tests/` | Permanent gauntlet — 112 automated checks (62 unit + 50 integration) plus `package.json`/`package-lock.json` pinning jsdom for reproducible runs, and `bella-reference.b64` (frozen byte truth of the memorial image — never edited). Not precached |
 | `.github/workflows/tests.yml` | Runs the gauntlet on every push |
 | `DATA-MODEL.md` | Storage schema + migration history |
 
@@ -96,8 +110,26 @@ streak → finish day → AI ENGINE (BYOK, multi-provider) →
 coach chat → weekly check-in → handoff mode → AI report → analytics →
 setup wizard → FAQ → macro calculator → settings → dash → easter egg → boot.
 
-Section headers look like `// ================== NAME ==================` — keep them; they are
-the planned Phase-2 slice boundaries.
+Section headers look like `// ================== NAME ==================` — keep them.
+The Phase-2 slicing cut the original inline JS at these markers into scripts/01–07
+**in the original order**. Migration proof: strip the strict-mode directives added to
+slices 02–07 (01's is original), concatenate in order, and the result equals the v42
+inline JS exactly — 189,847 characters, 190,324 UTF-8 bytes, sha256 63ea5e9b… . This is
+enforced as a permanent suite check that must be consciously retired in the first
+approved post-v43 commit that legitimately changes a slice. Slice names describe their *dominant* content; exact contents are in
+the file table above — 04 and 05 intentionally contain some food/progress sections that
+sat between markers in the original order, because Phase 2 never reorders code.
+
+Slice rules from here on:
+- The slices are the source of truth and are edited directly. Execution order is
+  01 → 07 and is load-bearing; never reorder the `<script src>` tags in index.html.
+- Classic scripts, shared global scope — but each file is a SEPARATE parsing and
+  evaluation unit (strict-mode directives, hoisting, and directive prologues are
+  per-file). Declarations and slice boundaries must remain unchanged unless a future
+  approved plan specifically covers them. Every local classic script begins with
+  `"use strict";` — enforced by the suite.
+- New sections go into whichever slice their document position falls in; if a slice
+  grows unwieldy, splitting it further is a plan-level decision, not a drive-by.
 
 ## Testing conventions
 
@@ -106,19 +138,19 @@ the planned Phase-2 slice boundaries.
   the app itself has zero dependencies and no build step.
 - Harness (`tests/harness.js`) boots the **shipped** app in jsdom and inlines any local
   `<script src>` / stylesheet first, so the suite keeps working after the Phase-2 slicing.
-  Inlining tolerates extra attributes in any order; Phase 2 should still prefer the plain
+  Inlining tolerates extra attributes in any order; the shipped app uses the plain
   canonical forms `<script src="NAME.js"></script>` and
   `<link rel="stylesheet" href="NAME.css">` with double quotes and repo-relative paths.
   External (http/https) URLs are never inlined.
 - Memorial integrity is enforced by test: the embedded handwriting must match
-  `tests/bella-reference.b64` byte-for-byte, with an exact embed count (2 today; 1 after the
-  Phase-1 dedup — that count is the only permitted edit, the reference file never changes).
+  `tests/bella-reference.b64` byte-for-byte, with an exact embed count of 1 (a single CSS custom
+  property serves both mask prefixes). The reference file never changes.
 - Unit suite: pure math and parsers (Mifflin-St Jeor, Epley, schedule sums, macro scaling,
   streak, migrations, AI-reply parsing, bar thresholds, dates).
 - Integration suite: fresh-user boot, ID resolution/duplication, no-fake-values sweep,
   logging/kudos/finish-day, settings/schedule flows, barcode fallback matrix,
   backup→restore→migration round-trip, handoff paste flow, Easter egg timing.
-- The permanent suite is **104 automated checks** and only grows. When adding a feature: add
+- The permanent suite is **112 automated checks** and only grows. When adding a feature: add
   its checks in the same release. Tests are cumulative, never recreated. (Historical note:
   before Phase 0, roughly 700 ad-hoc checks were written and discarded across v29–v41 —
   that figure describes the old throwaway process, not this suite.)
