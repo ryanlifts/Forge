@@ -546,16 +546,18 @@ check("malformed nutrition rejected → USDA", C.window.document.getElementById(
 // ================= ChatGPT handoff paste flow =================
 const H = boot(Object.assign({}, EXISTING_CFG, {aiProvider:"handoff"}), EMPTY_DATA);
 const dH = H.window.document;
-H.window.HTMLElement.prototype.scrollIntoView = function(opts){ H.window.__aiScroll={id:this.id, block:opts&&opts.block}; };
+H.window.HTMLElement.prototype.scrollIntoView = function(opts){ H.window.__aiScroll={id:this.id, className:this.className, block:opts&&opts.block}; };
 const clickH = id=>dH.getElementById(id).dispatchEvent(new H.window.Event("click",{bubbles:true}));
 H.window.eval(`currentMeal="dinner"; renderMealSeg();`);
 clickH("hfPasteBtn"); await wait(30);
 check("paste box always visible (iOS clipboard-proof)", !dH.getElementById("hfPasteBox").classList.contains("hidden"));
 check("handoff textarea uses 16px text to prevent mobile focus zoom", H.window.getComputedStyle(dH.getElementById("hfPasteText")).fontSize==="16px");
+const trainNumberInput = dH.querySelector(".snum");
+check("training weight and rep inputs use 16px text to prevent mobile focus zoom", !!trainNumberInput && H.window.getComputedStyle(trainNumberInput).fontSize==="16px");
 dH.getElementById("hfPasteText").value = 'Here! {\u201Cfoods\u201D:[{\u201Cname\u201D:\u201CRice\u201D,\u201Ccal\u201D:260,\u201Cpro\u201D:5,\u201Ccarb\u201D:57,\u201Cfat\u201D:1}]}';
 clickH("hfReviewBtn"); await wait(30);
 check("curly-quote paste reaches review card", dH.querySelectorAll("#aiFoodConfirm .list-item").length===1);
-check("review flow brings the confirmation into view", H.window.eval("window.__aiScroll && window.__aiScroll.id")==="aiFoodConfirm");
+check("review flow centers the first item instead of clipping it above the viewport", /list-item/.test(H.window.eval("window.__aiScroll && window.__aiScroll.className")||"") && H.window.eval("window.__aiScroll && window.__aiScroll.block")==="center");
 const hfLogBtn = dH.querySelector("#aiFoodConfirm .ai-confirm-log");
 check("review log action stays visible while reviewing", !!hfLogBtn);
 check("nothing logged before confirm", H.window.eval("(data.food[todayStr()]||[]).length")===0);

@@ -686,7 +686,9 @@ function showFoodConfirm(foods){
     flashSave("Logged "+loggedCount+" ✓");
   });
   el.appendChild(add);
-  scrollAiFoodIntoView(el, "start");
+  // Keep the first reviewed item comfortably inside the viewport instead of
+  // pinning the confirmation container against the top edge on mobile.
+  scrollAiFoodIntoView(list.firstElementChild || el, "center");
 }
 document.getElementById("aiFoodGoBtn").addEventListener("click", async ()=>{
   const q = document.getElementById("aiFoodText").value.trim();
