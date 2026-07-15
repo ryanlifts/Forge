@@ -631,6 +631,12 @@ function aiFoodStatus(msg, isErr){
   el.textContent = msg;
   el.style.color = isErr ? "var(--warn)" : "var(--dim)";
 }
+function scrollAiFoodIntoView(el, block){
+  if (!el || typeof el.scrollIntoView!=="function") return;
+  requestAnimationFrame(()=>{
+    try { el.scrollIntoView({behavior:"smooth", block:block||"start"}); } catch(e){}
+  });
+}
 function showFoodConfirm(foods){
   const el = document.getElementById("aiFoodConfirm");
   el.classList.remove("hidden");
@@ -642,7 +648,7 @@ function showFoodConfirm(foods){
   const items = foods.slice();
   const list = document.createElement("div");
   const add = document.createElement("button");
-  add.className = "btn ghost small mt10";
+  add.className = "btn ghost small mt10 ai-confirm-log";
   add.style.width = "100%";
   function redraw(){
     list.innerHTML = "";
@@ -667,12 +673,20 @@ function showFoodConfirm(foods){
   totals.textContent = "Estimates — edit anything after logging with ✎.";
   el.appendChild(totals);
   add.addEventListener("click", ()=>{
+    const loggedCount = items.length;
     items.forEach(f=>addEntry(Object.assign({}, f)));
     el.classList.add("hidden");
-    aiFoodStatus(null);
-    flashSave("Logged "+items.length+" ✓");
+    if (isHandoff()){
+      hfCloseParseBox();
+      aiFoodStatus("Logged "+loggedCount+" ✓ — ready for another.");
+      scrollAiFoodIntoView(document.getElementById("aiFoodCard"), "start");
+    } else {
+      aiFoodStatus(null);
+    }
+    flashSave("Logged "+loggedCount+" ✓");
   });
   el.appendChild(add);
+  scrollAiFoodIntoView(el, "start");
 }
 document.getElementById("aiFoodGoBtn").addEventListener("click", async ()=>{
   const q = document.getElementById("aiFoodText").value.trim();

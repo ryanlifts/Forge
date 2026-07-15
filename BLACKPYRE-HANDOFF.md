@@ -1,16 +1,16 @@
-# BLACKPYRE HANDOFF — current as of v46 (July 2026)
+# BLACKPYRE HANDOFF — current as of v47 (July 2026)
 
 You are a collaborator on BlackPyre, a fitness PWA at
-`ryanlifts.github.io/Forge/` (repo: `ryanlifts/Forge`). This repository represents **v46**,
-the completed Phase 3 hardening release. Confirm the GitHub Pages deployment/cache before
-calling it live on a user's device.
+`ryanlifts.github.io/Forge/` (repo: `ryanlifts/Forge`). This repository represents **v47**,
+a focused Phase 4 usability release built on the completed v46 hardening foundation.
+Confirm the GitHub Pages deployment/cache before calling it live on a user's device.
 
 The two documents reproduced below (`ARCHITECTURE.md` and `DATA-MODEL.md`) live in the repo
-root, are binding, and are current as of v46. Read them before proposing or writing code.
+root, are binding, and are current as of v47. Read them before proposing or writing code.
 
 ## Current state
 
-1. The permanent `/tests` gauntlet has **253 checks: 87 unit + 166 integration**. It boots
+1. The permanent `/tests` gauntlet has **267 checks: 95 unit + 172 integration**. It boots
    the shipped app in jsdom; GitHub Actions runs it on every push. Tests are cumulative and
    are never deleted or weakened to make a release pass.
 2. `tests/bella-reference.b64` is the frozen memorial byte truth. The suite enforces exact
@@ -19,13 +19,14 @@ root, are binding, and are current as of v46. Read them before proposing or writ
    `scripts/01-storage.js` through `scripts/07-boot.js` in strict load order. Classic scripts,
    shared global scope, no ES modules, no build step — permanent.
 4. Primary state remains in `forge:cfg`, `forge:data`, `forge:program`, with whole-state
-   `schemaVersion:1`. v46 adds internal device-only `forge:lkg` and `forge:quarantine`, each
-   using strict `recoveryFormatVersion:1`; all five names are now invariants.
-5. v45's pure prepare pipeline/protected mode remains the authority. v46 adds structured
-   diagnosis, validated last-known-good refresh, exact quarantine-before-recovery, three
-   controlled recovery sources, and post-write read-back validation.
-6. The approved v44 update toast remains unchanged. v46 changes only recovery orchestration
-   around it. The service-worker cache for this release is `blackpyre-v46`.
+   `schemaVersion:1`. Internal device-only `forge:lkg` and `forge:quarantine` remain on
+   strict `recoveryFormatVersion:1`; v47 changes no storage shape or migration behavior.
+5. v47 changes two user-facing behaviors only: auto-progression now requires at least the
+   programmed set count and the top of a rep range at one positive weight; ChatGPT handoff
+   paste/review uses 16px text, keeps the log action accessible, and returns to the top ready
+   for another entry after logging.
+6. The approved v44 update toast and v45-v46 storage/recovery systems remain unchanged.
+   The service-worker cache for this release is `blackpyre-v47`.
 
 ## Five-phase plan status
 
@@ -35,16 +36,13 @@ root, are binding, and are current as of v46. Read them before proposing or writ
 - **Phase 2 — DONE (v43):** JavaScript split into seven classic scripts in original order;
   byte-identity proof preserved in `tests/PHASE2-PROOF.md`.
 - **Phase 3 — DONE:**
-  - **v44:** first-install-safe update toast, once-per-session display, exactly-once reload,
-    session-only dismissal.
-  - **v45:** formal whole-state schemaVersion 1; pure parse/migrate/validate/serialize
-    preparation; separate settings-last commit/rollback; protected read-only mode; shared
-    boot/restore migration; safe backup refusal/partial rules.
-  - **v46:** one rolling validated LKG; structured failure diagnosis; exact-original
-    quarantine; LKG/readable/backup recovery; raw/readable exports; explicit quarantine
-    retention/deletion; 83 new permanent checks (170 → 253).
-- **Phase 4 — NOT STARTED:** complete friction and usability review. It requires a new plan
-  and Ryan's explicit approval. Do not begin it automatically.
+  - **v44:** first-install-safe update toast.
+  - **v45:** formal schemaVersion, safe migration preparation/commit, protected mode.
+  - **v46:** validated LKG, quarantine, diagnosis, and controlled recovery.
+- **Phase 4 — IN PROGRESS:**
+  - **v47:** focused fixes for workout auto-progression and ChatGPT handoff food logging.
+  - The broader friction/usability review remains open. Do not begin another release without
+    Ryan's explicit approval.
 
 ## Workflow constraints
 
@@ -60,7 +58,7 @@ release gets a plain-language report and stops for approval.
 
 # BlackPyre Architecture
 
-**Current as of v46 (July 2026).**
+**Current as of v47 (July 2026).**
 
 A single-page PWA: vanilla HTML/CSS/JS, no framework, no build step, localStorage only.
 Deployed on GitHub Pages. Developed AI-assisted (Claude / ChatGPT) from a phone — every rule
@@ -82,12 +80,12 @@ below exists to keep that workflow safe.
 
 | File | Role |
 |---|---|
-| `index.html` | Markup + styles only (~156 KB in v46); loads the data files then the 7 app slices; includes protected/recovery UI |
+| `index.html` | Markup + styles only (~156 KB in v47); loads the data files then the 7 app slices; includes protected/recovery UI |
 | `scripts/01-storage.js` | primary/recovery keys, defaults, pure prepare-state migration pipeline, commit/rollback, LKG lifecycle, structured diagnosis, quarantine transaction, protected-mode guards, state, tabs |
 | `scripts/02-food.js` | bars, meals, food logging |
-| `scripts/03-train.js` | training sessions, programs |
+| `scripts/03-train.js` | training sessions, programs, conservative set-count/top-of-range auto-progression |
 | `scripts/04-weight.js` | weight chart, motivation render, e1RM/PR engine, TDEE, streak, finish day, plate math, share |
-| `scripts/05-ai.js` | USDA/barcode lookups, usual-meal, schedule UI, kudos, AI engine, coach chat, check-in, handoff, AI report, analytics |
+| `scripts/05-ai.js` | USDA/barcode lookups, usual-meal, schedule UI, kudos, AI engine, coach chat, check-in, handoff food flow, AI report, analytics |
 | `scripts/06-settings.js` | setup wizard, FAQ, macro calculator, settings, normal/partial/raw exports, restore, recovery status and quarantine cleanup |
 | `scripts/07-boot.js` | dash, Easter egg, protected/recovery panel orchestration, approved update toast, boot |
 | `data-quotes.js` | QUOTES vault — classic script, loads before the app slices, shares global scope |
@@ -97,7 +95,7 @@ below exists to keep that workflow safe.
 | `manifest.json` | PWA identity — name/short_name **BlackPyre** |
 | `icon-*.png`, `apple-touch-icon.png` | Gold dumbbell icons |
 | `tests/PHASE2-PROOF.md` | Permanent historical record of the Phase 2 byte-identity proof |
-| `tests/` | Permanent gauntlet — 253 automated checks (87 unit + 166 integration), reproducible jsdom lockfile, and `bella-reference.b64` (frozen memorial byte truth; never edited). Not precached |
+| `tests/` | Permanent gauntlet — 267 automated checks (95 unit + 172 integration), reproducible jsdom lockfile, and `bella-reference.b64` (frozen memorial byte truth; never edited). Not precached |
 | `.github/workflows/tests.yml` | Runs the gauntlet on every push |
 | `DATA-MODEL.md` | Primary storage schema, recovery-record contracts, and migration history |
 
@@ -163,8 +161,9 @@ Slice rules from here on:
 - Integration suite: all historic app flows plus protected zero-write behavior, mutation
   re-sync, interrupted commits, LKG create/refresh/failure/quota rules, area diagnosis,
   all three recovery sources, quarantine ordering/retention/export/deletion, legacy fallback,
-  API-key boundaries, read-back failure, update toast, and Easter egg timing.
-- The permanent suite is **253 automated checks** and only grows. New features add tests in
+  API-key boundaries, read-back failure, conservative workout progression, handoff paste/log
+  positioning, update toast, and Easter egg timing.
+- The permanent suite is **267 automated checks** and only grows. New features add tests in
   the same release; existing checks are never deleted or weakened. The roughly 700 checks
   written before Phase 0 were old throwaway checks, not this permanent suite.
 - jsdom quirks: stub `URL.createObjectURL`, ignore `scrollTo` warnings, `select()` runs via
@@ -186,7 +185,7 @@ Slice rules from here on:
 
 # BlackPyre Data Model
 
-**Current as of v46 (July 2026). Primary schemaVersion: 1. Recovery format: 1.**
+**Current as of v47 (July 2026). Primary schemaVersion: 1. Recovery format: 1.**
 
 ## Storage keys
 
@@ -215,7 +214,7 @@ removes, or modifies that legacy key.
 `schemaVersion` is physically stored in `forge:cfg`, but versions the complete **primary**
 state and normal backup envelope: settings, logged data, and program.
 
-| Raw value | Meaning / behavior in v46 |
+| Raw value | Meaning / behavior in v47 |
 |---|---|
 | property absent or integer `0` | Pre-versioning legacy state; run numbered migrations from step 0 |
 | integer `1` | Current primary schema; no migration step |
@@ -403,6 +402,7 @@ fallback. The app cannot verify a browser download and states that limit honestl
 | v36+ | Fake defaults removed | Personal fields default to 0/unset; consumers guard |
 | v45 | Whole-state primary schema 0 → 1 | Pure prepare pipeline, strict versioning, protected boot, shared boot/restore path |
 | v46 | Recovery format 1 introduced; primary schema remains 1 | Device-only LKG, structured diagnosis, quarantine-before-write, validated recovery/read-back |
+| v47 | No storage-schema change | Focused Phase 4 progression and AI handoff usability fixes only |
 
 Old backups from any era must continue restoring correctly; the permanent suite proves the
 range-era path.

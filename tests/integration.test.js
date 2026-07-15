@@ -546,14 +546,23 @@ check("malformed nutrition rejected → USDA", C.window.document.getElementById(
 // ================= ChatGPT handoff paste flow =================
 const H = boot(Object.assign({}, EXISTING_CFG, {aiProvider:"handoff"}), EMPTY_DATA);
 const dH = H.window.document;
+H.window.HTMLElement.prototype.scrollIntoView = function(opts){ H.window.__aiScroll={id:this.id, block:opts&&opts.block}; };
 const clickH = id=>dH.getElementById(id).dispatchEvent(new H.window.Event("click",{bubbles:true}));
 H.window.eval(`currentMeal="dinner"; renderMealSeg();`);
 clickH("hfPasteBtn"); await wait(30);
 check("paste box always visible (iOS clipboard-proof)", !dH.getElementById("hfPasteBox").classList.contains("hidden"));
+check("handoff textarea uses 16px text to prevent mobile focus zoom", H.window.getComputedStyle(dH.getElementById("hfPasteText")).fontSize==="16px");
 dH.getElementById("hfPasteText").value = 'Here! {\u201Cfoods\u201D:[{\u201Cname\u201D:\u201CRice\u201D,\u201Ccal\u201D:260,\u201Cpro\u201D:5,\u201Ccarb\u201D:57,\u201Cfat\u201D:1}]}';
-clickH("hfReviewBtn"); await wait(20);
+clickH("hfReviewBtn"); await wait(30);
 check("curly-quote paste reaches review card", dH.querySelectorAll("#aiFoodConfirm .list-item").length===1);
+check("review flow brings the confirmation into view", H.window.eval("window.__aiScroll && window.__aiScroll.id")==="aiFoodConfirm");
+const hfLogBtn = dH.querySelector("#aiFoodConfirm .ai-confirm-log");
+check("review log action stays visible while reviewing", !!hfLogBtn);
 check("nothing logged before confirm", H.window.eval("(data.food[todayStr()]||[]).length")===0);
+hfLogBtn.dispatchEvent(new H.window.Event("click",{bubbles:true})); await wait(30);
+check("handoff confirmation logs the reviewed food", H.window.eval("(data.food[todayStr()]||[]).length")===1);
+check("handoff logging clears raw reply and resets the review", dH.getElementById("hfPasteText").value==="" && dH.getElementById("aiFoodConfirm").classList.contains("hidden"));
+check("handoff logging returns to the top ready for another", /ready for another/i.test(dH.getElementById("aiFoodStatus").textContent) && H.window.eval("window.__aiScroll && window.__aiScroll.id")==="aiFoodCard");
 
 // ================= easter egg =================
 const G = boot(EXISTING_CFG, EMPTY_DATA);

@@ -32,6 +32,24 @@ check("legacy string sets parse (both x and ×)", r && Math.abs(r.e1rm - Math.ma
 check("reps > 30 rejected (formula breaks down)", E(`parseBestSet([{w:100,r:31}])`)===null);
 check("zero/missing values rejected", E(`parseBestSet([{w:0,r:5},{r:5},{w:100}])`)===null);
 
+// ---------- workout auto-progression ----------
+r = E(`parseScheme("4×5")`);
+check("fixed-rep scheme exposes one progression target", r.sets===4 && r.reps===5 && r.topReps===5);
+r = E(`parseScheme("3x8-12")`);
+check("rep-range scheme keeps start reps and top progression reps", r.sets===3 && r.reps===8 && r.topReps===12);
+r = E(`prefillRows({scheme:"4×5"}, [{w:100,r:5},{w:100,r:5},{w:100,r:5}])`);
+check("auto-progression requires the programmed set count", r.auto===false && r.rows[0].w===100);
+r = E(`prefillRows({scheme:"4×5"}, [{w:100,r:5},{w:100,r:5},{w:100,r:5},{w:100,r:5}])`);
+check("all fixed-rep sets at one weight trigger +5", r.auto===true && r.rows.every(x=>x.w===105 && x.r===5));
+r = E(`prefillRows({scheme:"3×8-12"}, [{w:100,r:8},{w:100,r:8},{w:100,r:8}])`);
+check("bottom of a rep range does not trigger progression", r.auto===false);
+r = E(`prefillRows({scheme:"3×8-12"}, [{w:100,r:12},{w:100,r:12},{w:100,r:12}])`);
+check("top of a rep range triggers +5 and resets to range start", r.auto===true && r.rows.every(x=>x.w===105 && x.r===8));
+r = E(`prefillRows({scheme:"4×5"}, [{w:100,r:5},{w:100,r:5},{w:95,r:5},{w:100,r:5}])`);
+check("mixed weights never auto-progress", r.auto===false);
+r = E(`prefillRows({scheme:"4×5"}, [{w:0,r:5},{w:0,r:5},{w:0,r:5},{w:0,r:5}])`);
+check("zero weight never auto-progresses", r.auto===false);
+
 // ---------- calorie schedule presets ----------
 for (const mode of ["frisat","satsun","frisatsun"]){
   for (const target of [1500, 1800, 2000, 2350]){

@@ -1,6 +1,6 @@
 # BlackPyre Data Model
 
-**Current as of v46 (July 2026). Primary schemaVersion: 1. Recovery format: 1.**
+**Current as of v47 (July 2026). Primary schemaVersion: 1. Recovery format: 1.**
 
 ## Storage keys
 
@@ -29,7 +29,7 @@ removes, or modifies that legacy key.
 `schemaVersion` is physically stored in `forge:cfg`, but versions the complete **primary**
 state and normal backup envelope: settings, logged data, and program.
 
-| Raw value | Meaning / behavior in v46 |
+| Raw value | Meaning / behavior in v47 |
 |---|---|
 | property absent or integer `0` | Pre-versioning legacy state; run numbered migrations from step 0 |
 | integer `1` | Current primary schema; no migration step |
@@ -217,6 +217,7 @@ fallback. The app cannot verify a browser download and states that limit honestl
 | v36+ | Fake defaults removed | Personal fields default to 0/unset; consumers guard |
 | v45 | Whole-state primary schema 0 → 1 | Pure prepare pipeline, strict versioning, protected boot, shared boot/restore path |
 | v46 | Recovery format 1 introduced; primary schema remains 1 | Device-only LKG, structured diagnosis, quarantine-before-write, validated recovery/read-back |
+| v47 | No storage-schema change | Focused Phase 4 progression and AI handoff usability fixes only |
 
 Old backups from any era must continue restoring correctly; the permanent suite proves the
 range-era path.

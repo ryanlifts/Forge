@@ -207,6 +207,10 @@
   .xbtn:active { border-color:var(--ember); }
   .x-tools { display:flex; gap:6px; }
   .autoUp { color:var(--ok); font-size:10px; }
+  #hfPasteText { font-family:inherit; font-size:16px; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--panel-up); color:var(--text); outline:none; color-scheme:dark; }
+  #hfPasteText::placeholder { color:#565D68; }
+  #hfPasteText:focus-visible { outline:2px solid var(--ember); outline-offset:2px; }
+  .ai-confirm-log { position:sticky; bottom:calc(70px + env(safe-area-inset-bottom, 0px)); z-index:3; box-shadow:0 6px 20px rgba(0,0,0,.35); }
   /* builder */
   .bday { border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:12px; }
   .bex { display:flex; align-items:center; gap:6px; margin-bottom:8px; }

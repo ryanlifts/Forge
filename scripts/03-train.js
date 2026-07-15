@@ -62,19 +62,23 @@ function formatSets(val){
   return String(val);
 }
 function parseScheme(scheme){
-  // "4\u00d75" or "3x8-12" -> {sets:4, reps:5} (reps = lower bound of a range)
+  // "4\u00d75" -> 4 sets at 5; "3x8-12" -> start at 8, progress only after 12
   if (!scheme) return null;
-  const m = String(scheme).match(/(\d+)\s*[x\u00d7]\s*(\d+)/);
-  return m ? {sets:parseInt(m[1],10), reps:parseInt(m[2],10)} : null;
+  const m = String(scheme).match(/(\d+)\s*[x\u00d7]\s*(\d+)(?:\s*[-\u2013\u2014]\s*(\d+))?/);
+  if (!m) return null;
+  const reps = parseInt(m[2],10);
+  const topReps = m[3] ? Math.max(reps, parseInt(m[3],10)) : reps;
+  return {sets:parseInt(m[1],10), reps:reps, topReps:topReps};
 }
 function prefillRows(ex, lastVal){
   const sch = parseScheme(ex.scheme);
   if (lastVal){
     const rows = toRows(lastVal);
     if (rows.length){
-      // auto-progression: all reps hit target and weights uniform -> suggest +5
+      // auto-progression: complete the programmed sets at the top of the rep target,
+      // with every logged set using the same positive weight, before suggesting +5
       let auto = false;
-      if (sch && rows.every(r=>r.r>=sch.reps)){
+      if (sch && rows.length>=sch.sets && rows.every(r=>r.r>=sch.topReps)){
         const w0 = rows[0].w;
         if (rows.every(r=>r.w===w0) && w0>0){
           rows.forEach(r=>{ r.w = w0+5; r.r = sch.reps; });
