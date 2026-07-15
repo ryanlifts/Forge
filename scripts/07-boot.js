@@ -131,7 +131,20 @@ function eggDisarm(){
   t.addEventListener("contextmenu", e=>e.preventDefault()); // iOS long-press callout
 })();
 
+function showProtectedBanner(){
+  const banner = document.getElementById("protectedBanner");
+  const text = document.getElementById("protectedBannerText");
+  if (!protectedMode){ banner.classList.add("hidden"); text.textContent=""; return; }
+  banner.classList.remove("hidden");
+  if (protectedModeKind==="newer"){
+    text.textContent = "This saved data came from a newer BlackPyre version. This older copy will not change it. Close and reopen the app — or use the update notice — to load the current version. Do not uninstall the app.";
+  } else {
+    text.textContent = "BlackPyre couldn't safely read or update part of your saved data, so nothing will be saved or changed. Your original saved data has been left untouched wherever browser storage allowed it. "+protectedModeReason+" A future update will offer recovery; for now, do not uninstall the app.";
+  }
+}
+
 // ================== boot ==================
+showProtectedBanner();
 renderDayOptions();
 renderCardioOptions();
 renderLibraryOptions();

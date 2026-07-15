@@ -1,5 +1,7 @@
 # BlackPyre Architecture
 
+**Current as of v45 (July 2026).**
+
 A single-page PWA: vanilla HTML/CSS/JS, no framework, no build step, localStorage only.
 Deployed on GitHub Pages. Developed AI-assisted (Claude / ChatGPT) from a phone — every rule
 below exists to keep that workflow safe.
@@ -21,13 +23,13 @@ below exists to keep that workflow safe.
 | File | Role |
 |---|---|
 | `index.html` | Markup + styles only (~147 KB after Phase 2); loads the data files then the 7 app slices |
-| `scripts/01-storage.js` | storage keys & defaults, migrations, pure helpers, state, tabs |
+| `scripts/01-storage.js` | storage keys/defaults, pure prepare-state migration pipeline, commit/rollback, protected-mode guards, state, tabs |
 | `scripts/02-food.js` | bars, meals, food logging |
 | `scripts/03-train.js` | training sessions, programs |
 | `scripts/04-weight.js` | weight chart, motivation render, e1RM/PR engine, TDEE, streak, finish day, plate math, share |
 | `scripts/05-ai.js` | USDA/barcode lookups, usual-meal, schedule UI, kudos, AI engine, coach chat, check-in, handoff, AI report, analytics |
-| `scripts/06-settings.js` | setup wizard, FAQ render, macro calculator, settings |
-| `scripts/07-boot.js` | dash, Easter egg, update toast, boot |
+| `scripts/06-settings.js` | setup wizard, FAQ, macro calculator, settings, backup/export and shared-pipeline restore |
+| `scripts/07-boot.js` | dash, Easter egg, protected-mode banner, update toast, boot |
 | `data-quotes.js` | QUOTES vault — classic script, loads before the main script, shares global scope |
 | `data-foods.js` | LOCAL_DB food database + ALT_MAP exercise swaps — classic script |
 | `data-faq.js` | FAQ content — classic script |
@@ -35,7 +37,7 @@ below exists to keep that workflow safe.
 | `manifest.json` | PWA identity — name/short_name **BlackPyre** |
 | `icon-*.png`, `apple-touch-icon.png` | Gold dumbbell icons |
 | `tests/PHASE2-PROOF.md` | Permanent historical record of the Phase 2 byte-identity proof |
-| `tests/` | Permanent gauntlet — 122 automated checks (62 unit + 60 integration) plus `package.json`/`package-lock.json` pinning jsdom for reproducible runs, and `bella-reference.b64` (frozen byte truth of the memorial image — never edited). Not precached |
+| `tests/` | Permanent gauntlet — 170 automated checks (72 unit + 98 integration) plus `package.json`/`package-lock.json` pinning jsdom for reproducible runs, and `bella-reference.b64` (frozen byte truth of the memorial image — never edited). Not precached |
 | `.github/workflows/tests.yml` | Runs the gauntlet on every push |
 | `DATA-MODEL.md` | Storage schema + migration history |
 
@@ -73,6 +75,19 @@ Slice rules from here on:
 - New sections go into whichever slice their document position falls in; if a slice
   grows unwieldy, splitting it further is a plan-level decision, not a drive-by.
 
+## Storage safety conventions (v45)
+
+- `schemaVersion` versions the complete stored state (`forge:cfg`, `forge:data`, and
+  `forge:program`) and is physically stored in `forge:cfg`; current schema = 1.
+- Boot reads the original three strings, runs parse → numbered migration → tolerant
+  validation → serialization on copies in pure `prepareState()`, then commits separately.
+- Present unparseable/invalid/newer data enters protected mode before disclaimer/setup.
+  All three save routines restore the protected in-memory snapshot and perform no write.
+- Restore uses the same preparation pipeline. Bad/newer backups are refused without
+  changing the healthy running app; absent envelope members leave that device area untouched.
+- localStorage is not transactional. Commit skips unchanged keys, writes settings last,
+  and attempts rollback on failure; the suite proves the documented interrupted-commit path.
+
 ## Testing conventions
 
 - Run with `bash tests/run-tests.sh` — it does `npm ci` against the committed lockfile
@@ -88,11 +103,12 @@ Slice rules from here on:
   `tests/bella-reference.b64` byte-for-byte, with an exact embed count of 1 (a single CSS custom
   property serves both mask prefixes). The reference file never changes.
 - Unit suite: pure math and parsers (Mifflin-St Jeor, Epley, schedule sums, macro scaling,
-  streak, migrations, AI-reply parsing, bar thresholds, dates).
+  streak, prepare-state/schema migrations, AI-reply parsing, bar thresholds, dates).
 - Integration suite: fresh-user boot, ID resolution/duplication, no-fake-values sweep,
   logging/kudos/finish-day, settings/schedule flows, barcode fallback matrix,
-  backup→restore→migration round-trip, handoff paste flow, Easter egg timing.
-- The permanent suite is **122 automated checks** and only grows. When adding a feature: add
+  backup→restore→migration round-trip, protected-mode zero-write matrix and mutation re-sync,
+  interrupted-commit healing, handoff paste flow, Easter egg timing, update toast.
+- The permanent suite is **170 automated checks** and only grows. When adding a feature: add
   its checks in the same release. Tests are cumulative, never recreated. (Historical note:
   before Phase 0, roughly 700 ad-hoc checks were written and discarded across v29–v41 —
   that figure describes the old throwaway process, not this suite.)

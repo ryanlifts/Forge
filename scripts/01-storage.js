@@ -1,6 +1,8 @@
 "use strict";
 // ================== storage keys & defaults ==================
 const DATA_KEY = "forge:data", CFG_KEY = "forge:cfg", PROG_KEY = "forge:program";
+const SCHEMA_VERSION = 1;
+const AI_CFG_FIELDS = ["anthropicKey","openaiKey","aiProvider","aiModelAnth","aiModelOai"];
 
 const DEFAULT_CFG = { startWt:0, goalWt:0, calTarget:0, proTarget:0, carbGoal:0, fatGoal:0, accent:"gold" };
 const ACCENT_KEYS = ["ember","steel","emerald","crimson","violet","gold","pink"];
@@ -47,6 +49,13 @@ function effectiveUsdaKey(){ return (cfg.usdaKey && cfg.usdaKey.trim()) || DEFAU
 
 
 // ================== helpers (pure) ==================
+function hasOwn(obj, key){ return Object.prototype.hasOwnProperty.call(obj, key); }
+function isPlainObject(v){
+  if (!v || Object.prototype.toString.call(v)!=="[object Object]") return false;
+  const p = Object.getPrototypeOf(v);
+  return p===Object.prototype || p===null;
+}
+function cloneJSON(v){ return JSON.parse(JSON.stringify(v)); }
 function loadJSON(key, fallback){
   try { const raw = localStorage.getItem(key); if (raw) return JSON.parse(raw); } catch(e){}
   return fallback;
@@ -68,13 +77,14 @@ function toGrams(amt, unit, servingG){
 }
 function scaleMacro(per100, grams){ return per100*grams/100; }
 function validateProgram(p){
-  if(!p || typeof p!=="object") throw new Error("Not a program file");
+  if(!p || typeof p!=="object" || Array.isArray(p)) throw new Error("Not a program file");
   if(!p.days || !Array.isArray(p.days) || !p.days.length) throw new Error("Missing days array");
   p.days.forEach((d,i)=>{
+    if(!d || typeof d!=="object" || Array.isArray(d)) throw new Error("Invalid day "+(i+1));
     if(!d.title) d.title = "Day "+(i+1);
     if(!d.id) d.id = "D"+(i+1);
     if(!Array.isArray(d.exercises)) throw new Error("Day "+(i+1)+" missing exercises");
-    d.exercises.forEach(ex=>{ if(!ex.name) throw new Error("Exercise missing name in day "+(i+1)); });
+    d.exercises.forEach(ex=>{ if(!ex || typeof ex!=="object" || Array.isArray(ex) || !ex.name) throw new Error("Exercise missing name in day "+(i+1)); });
   });
   return p;
 }
@@ -86,9 +96,22 @@ function download(filename, text){
   setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 500);
 }
 
-// ================== state ==================
-let data = loadJSON(DATA_KEY, null) || loadJSON("ryan-cut:data", null) || { food:{}, workouts:[], weights:[], recents:[] };
-if(!data.recents) data.recents = []; if(!data.myFoods) data.myFoods = {}; if(!data.meals) data.meals = []; if(!data.finished) data.finished = {}; if(!data.foodCounts) data.foodCounts = {}; if(!data.mealCounts) data.mealCounts = {}; if(!data.meta) data.meta = {lastBackup:null, logsSince:0};
+// ================== migrations & prepared state ==================
+function makeDefaultData(){ return { food:{}, workouts:[], weights:[], recents:[] }; }
+function normalizeDataState(obj){
+  const out = obj || makeDefaultData();
+  if(!out.food) out.food = {};
+  if(!out.workouts) out.workouts = [];
+  if(!out.weights) out.weights = [];
+  if(!out.recents) out.recents = [];
+  if(!out.myFoods) out.myFoods = {};
+  if(!out.meals) out.meals = [];
+  if(!out.finished) out.finished = {};
+  if(!out.foodCounts) out.foodCounts = {};
+  if(!out.mealCounts) out.mealCounts = {};
+  if(!out.meta) out.meta = {lastBackup:null, logsSince:0};
+  return out;
+}
 // migrate old range targets (calLo/calHi, proLo/proHi) to exact targets — must run on the RAW
 // object before defaults merge in, or the default calTarget masks the user's real numbers
 function migrateTargets(obj){
@@ -96,19 +119,217 @@ function migrateTargets(obj){
   if (!Number.isFinite(obj.calTarget) && Number.isFinite(obj.calLo) && Number.isFinite(obj.calHi)) obj.calTarget = Math.round((obj.calLo+obj.calHi)/2);
   if (!Number.isFinite(obj.proTarget) && Number.isFinite(obj.proLo) && Number.isFinite(obj.proHi)) obj.proTarget = Math.round((obj.proLo+obj.proHi)/2);
 }
-const _rawCfg = loadJSON(CFG_KEY, {});
-migrateTargets(_rawCfg);
-let cfg = Object.assign({}, DEFAULT_CFG, _rawCfg);
-function migrateCfg(){
+function migrateCfgObject(obj){
   ["startWt","goalWt","calTarget","proTarget","carbGoal","fatGoal"].forEach(k=>{
-    const v = Number(cfg[k]);
-    cfg[k] = Number.isFinite(v) && v>0 ? v : 0;
+    const v = Number(obj[k]);
+    obj[k] = Number.isFinite(v) && v>0 ? v : 0;
   });
-  if (cfg.calSchedMode==="weekend") cfg.calSchedMode = "frisat";
-  if (!cfg.calSchedMode) cfg.calSchedMode = "same";
-  if (!ACCENT_KEYS.includes(cfg.accent)) cfg.accent = "gold";
+  if (obj.calSchedMode==="weekend") obj.calSchedMode = "frisat";
+  if (!obj.calSchedMode) obj.calSchedMode = "same";
+  if (!ACCENT_KEYS.includes(obj.accent)) obj.accent = "gold";
+  return obj;
 }
-migrateCfg();
+function migrateCfg(){ migrateCfgObject(cfg); }
+function parseStatePart(raw, label){
+  if (raw===null || raw===undefined) return {ok:true, missing:true, value:undefined};
+  try { return {ok:true, missing:false, value:JSON.parse(raw)}; }
+  catch(e){ return {ok:false, reason:label+" could not be parsed."}; }
+}
+function validateDataShape(obj){
+  if (!isPlainObject(obj)) throw new Error("Saved logs are not an object.");
+  const objectFields = ["food","water","finished","myFoods","foodCounts","mealCounts","meta"];
+  objectFields.forEach(k=>{ if (hasOwn(obj,k) && obj[k] && !isPlainObject(obj[k])) throw new Error("Saved logs field "+k+" has an unusable shape."); });
+  const arrayFields = ["workouts","weights","measure","recents","meals"];
+  arrayFields.forEach(k=>{ if (hasOwn(obj,k) && obj[k] && !Array.isArray(obj[k])) throw new Error("Saved logs field "+k+" has an unusable shape."); });
+  if (isPlainObject(obj.food)) Object.keys(obj.food).forEach(day=>{ if (!Array.isArray(obj.food[day])) throw new Error("A saved food day is not a list."); });
+}
+function validateCfgShape(obj){
+  if (!isPlainObject(obj)) throw new Error("Saved settings are not an object.");
+  if (obj.schemaVersion!==SCHEMA_VERSION) throw new Error("Settings were not migrated to the current schema.");
+  ["calSchedDays"].forEach(k=>{ if (hasOwn(obj,k) && obj[k]!==null && !Array.isArray(obj[k])) throw new Error("Saved settings field "+k+" has an unusable shape."); });
+  ["calcInputs","splitState","liftGoals"].forEach(k=>{ if (hasOwn(obj,k) && obj[k]!==null && !isPlainObject(obj[k])) throw new Error("Saved settings field "+k+" has an unusable shape."); });
+  if (hasOwn(obj,"customRests") && obj.customRests!==null && !Array.isArray(obj.customRests) && !isPlainObject(obj.customRests)) throw new Error("Saved settings field customRests has an unusable shape.");
+}
+function safeProtectedState(parsed){
+  let safeCfg = Object.assign({}, DEFAULT_CFG);
+  if (parsed.cfg && isPlainObject(parsed.cfg.value)){
+    safeCfg = Object.assign({}, DEFAULT_CFG, cloneJSON(parsed.cfg.value));
+    migrateCfgObject(safeCfg);
+  }
+  if (!hasOwn(safeCfg,"schemaVersion")) safeCfg.schemaVersion = SCHEMA_VERSION;
+
+  let safeData = makeDefaultData();
+  if (parsed.data && isPlainObject(parsed.data.value)){
+    try { validateDataShape(parsed.data.value); safeData = cloneJSON(parsed.data.value); } catch(e){}
+  }
+  normalizeDataState(safeData);
+
+  let safeProgram = cloneJSON(DEFAULT_PROGRAM);
+  if (parsed.program && isPlainObject(parsed.program.value)){
+    try { safeProgram = validateProgram(cloneJSON(parsed.program.value)); } catch(e){}
+  }
+  return {cfg:safeCfg, data:safeData, program:safeProgram};
+}
+function failedPreparation(reason, kind, parsed, originals){
+  return {ok:false, reason:reason, kind:kind||"failure", state:safeProtectedState(parsed||{}), originalStrings:originals};
+}
+function prepareState(rawCfg, rawData, rawProgram, options){
+  const opts = options || {};
+  const originals = opts.originalStrings || {cfg:rawCfg, data:rawData, program:rawProgram};
+  const parsed = {};
+  parsed.cfg = parseStatePart(rawCfg, "Saved settings");
+  parsed.data = parseStatePart(rawData, "Saved logs");
+  parsed.program = parseStatePart(rawProgram, "Saved program");
+  const parseFailure = [parsed.cfg,parsed.data,parsed.program].find(part=>!part.ok);
+  if (parseFailure) return failedPreparation(parseFailure.reason, "failure", parsed, originals);
+
+  if (!parsed.cfg.missing && !isPlainObject(parsed.cfg.value)) return failedPreparation("Saved settings are not an object.", "failure", parsed, originals);
+  if (!parsed.data.missing && !isPlainObject(parsed.data.value)) return failedPreparation("Saved logs are not an object.", "failure", parsed, originals);
+  if (!parsed.program.missing && !isPlainObject(parsed.program.value)) return failedPreparation("Saved program is not an object.", "failure", parsed, originals);
+
+  const rawCfgObj = parsed.cfg.missing ? {} : cloneJSON(parsed.cfg.value);
+  const hasVersion = hasOwn(rawCfgObj, "schemaVersion");
+  const version = hasVersion ? rawCfgObj.schemaVersion : 0;
+  if (!Number.isInteger(version) || version<0){
+    return failedPreparation("schemaVersion is invalid.", "failure", parsed, originals);
+  }
+  if (version>SCHEMA_VERSION){
+    return failedPreparation("This data was written by a newer BlackPyre version.", "newer", parsed, originals);
+  }
+
+  const state = {
+    cfg:rawCfgObj,
+    data:parsed.data.missing ? makeDefaultData() : cloneJSON(parsed.data.value),
+    program:parsed.program.missing ? cloneJSON(DEFAULT_PROGRAM) : cloneJSON(parsed.program.value)
+  };
+  const changed = {cfg:false, data:false, program:false};
+  try {
+    let current = version;
+    while (current<SCHEMA_VERSION){
+      if (current===0){
+        if (opts.forceMigrationFailure) throw new Error("Migration step 0→1 failed.");
+        migrateTargets(state.cfg); // raw object, before defaults — ordering is load-bearing
+        state.cfg = Object.assign({}, DEFAULT_CFG, state.cfg);
+        migrateCfgObject(state.cfg);
+        state.cfg.schemaVersion = 1; // stamp only after the complete step succeeds
+        changed.cfg = true;
+        current = 1;
+      } else {
+        throw new Error("No migration path from schema "+current+".");
+      }
+    }
+    if (version===SCHEMA_VERSION){
+      state.cfg = Object.assign({}, DEFAULT_CFG, state.cfg);
+      migrateCfgObject(state.cfg);
+    }
+    validateCfgShape(state.cfg);
+    validateDataShape(state.data);
+    state.program = validateProgram(state.program);
+    if (opts.forceValidationFailure) throw new Error("Validation was forced to fail.");
+    normalizeDataState(state.data);
+
+    const finalStrings = {
+      cfg:JSON.stringify(state.cfg),
+      data:JSON.stringify(state.data),
+      program:JSON.stringify(state.program)
+    };
+    if (opts.forceSerializationFailure) throw new Error("Serialization was forced to fail.");
+    return {ok:true, state:state, finalStrings:finalStrings, originalStrings:originals, changed:changed, sourceVersion:version};
+  } catch(e){
+    return failedPreparation(e && e.message ? e.message : "Saved data could not be prepared safely.", "failure", parsed, originals);
+  }
+}
+function commitState(prepared, options){
+  if (!prepared || !prepared.ok) return {ok:false, reason:"State was not prepared."};
+  const opts = options || {};
+  const force = opts.forceWrite || {};
+  const writeMask = opts.writeMask || null;
+  const keyInfo = [
+    {part:"data", key:DATA_KEY},
+    {part:"program", key:PROG_KEY},
+    {part:"cfg", key:CFG_KEY} // schema stamp last: interrupted migrations remain unstamped
+  ];
+  const written = [];
+  try {
+    keyInfo.forEach(info=>{
+      const shouldWrite = writeMask ? !!writeMask[info.part] : (!!force[info.part] || !!prepared.changed[info.part]);
+      if (!shouldWrite) return;
+      const before = prepared.originalStrings[info.part];
+      const after = prepared.finalStrings[info.part];
+      if (before===after) return;
+      localStorage.setItem(info.key, after);
+      written.push(info);
+    });
+    return {ok:true, written:written.map(x=>x.part)};
+  } catch(e){
+    let rollbackFailed = false;
+    for (let i=written.length-1;i>=0;i--){
+      const info = written[i];
+      try {
+        const before = prepared.originalStrings[info.part];
+        if (before===null || before===undefined) localStorage.removeItem(info.key);
+        else localStorage.setItem(info.key, before);
+      } catch(rollbackErr){ rollbackFailed = true; }
+    }
+    return {ok:false, reason:"Storage commit failed.", rollbackFailed:rollbackFailed, error:e};
+  }
+}
+function readStorageStrings(){
+  try {
+    const originals = {
+      cfg:localStorage.getItem(CFG_KEY),
+      data:localStorage.getItem(DATA_KEY),
+      program:localStorage.getItem(PROG_KEY)
+    };
+    let dataForRead = originals.data;
+    if (dataForRead===null){
+      const legacy = localStorage.getItem("ryan-cut:data");
+      if (legacy!==null) dataForRead = legacy; // preserve the pre-forge fallback without renaming keys
+    }
+    return {ok:true, originals:originals, inputs:{cfg:originals.cfg, data:dataForRead, program:originals.program}};
+  } catch(e){ return {ok:false, reason:"Browser storage could not be read."}; }
+}
+
+// ================== state ==================
+let protectedMode = false;
+let protectedModeKind = null;
+let protectedModeReason = "";
+let protectedSnapshotStrings = null;
+let protectedResyncPending = false;
+let protectedResyncing = false;
+
+const _bootRead = readStorageStrings();
+let _bootPrepared;
+if (_bootRead.ok){
+  const testOptions = (typeof window!=="undefined" && window.__BP_TEST_PREPARE_OPTIONS) || {};
+  _bootPrepared = prepareState(_bootRead.inputs.cfg, _bootRead.inputs.data, _bootRead.inputs.program,
+    Object.assign({}, testOptions, {originalStrings:_bootRead.originals}));
+} else {
+  _bootPrepared = failedPreparation(_bootRead.reason, "failure", {}, {cfg:null,data:null,program:null});
+}
+let _bootState = _bootPrepared.state;
+if (_bootPrepared.ok){
+  const committed = commitState(_bootPrepared);
+  if (!committed.ok){
+    protectedMode = true;
+    protectedModeKind = "failure";
+    protectedModeReason = committed.rollbackFailed
+      ? "BlackPyre could not finish updating browser storage, and the browser also refused a full rollback. Do not uninstall the app."
+      : "BlackPyre could not finish updating browser storage. Your previous saved values were restored where the browser allowed it.";
+  }
+} else {
+  protectedMode = true;
+  protectedModeKind = _bootPrepared.kind;
+  protectedModeReason = _bootPrepared.reason;
+}
+let data = _bootState.data;
+let cfg = _bootState.cfg;
+let program = _bootState.program;
+if (protectedMode){
+  protectedSnapshotStrings = {
+    data:JSON.stringify(data), cfg:JSON.stringify(cfg), program:JSON.stringify(program)
+  };
+}
 // exact calorie target for a given date (schedule-aware); presets always rebalance to the same weekly total
 // days are Sun..Sat (JS getDay order)
 function presetDays(mode){
@@ -148,17 +369,57 @@ function dayTargets(ds){
   const k = cal/cfg.calTarget;
   return { cal:cal, pro:Math.round(cfg.proTarget*k), carb:Math.round(cfg.carbGoal*k), fat:Math.round(cfg.fatGoal*k) };
 }
-let program = loadJSON(PROG_KEY, DEFAULT_PROGRAM);
-try { validateProgram(program); } catch(e){ program = DEFAULT_PROGRAM; }
 let selected = null;
 let extraExercises = [];
 
-function save(){
-  try { localStorage.setItem(DATA_KEY, JSON.stringify(data)); flashSave("Saved ✓"); }
-  catch(e){ flashSave("Save failed", true); }
+function applyPreparedState(prepared){
+  data = prepared.state.data;
+  cfg = prepared.state.cfg;
+  program = prepared.state.program;
 }
-function saveCfg(){ try{ localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }catch(e){} }
-function saveProgram(){ try{ localStorage.setItem(PROG_KEY, JSON.stringify(program)); }catch(e){} }
+function restoreProtectedSnapshot(){
+  if (!protectedMode || !protectedSnapshotStrings) return;
+  data = JSON.parse(protectedSnapshotStrings.data);
+  cfg = JSON.parse(protectedSnapshotStrings.cfg);
+  program = JSON.parse(protectedSnapshotStrings.program);
+}
+function rerenderProtectedState(){
+  if (!protectedMode || protectedResyncing) return;
+  protectedResyncing = true;
+  try {
+    restoreProtectedSnapshot();
+    if (typeof renderDayOptions==="function") renderDayOptions();
+    if (typeof renderSessionInputs==="function") renderSessionInputs();
+    if (typeof renderAll==="function") renderAll();
+  } finally { protectedResyncing = false; }
+}
+function blockProtectedWrite(){
+  if (!protectedMode) return false;
+  restoreProtectedSnapshot();
+  if (!protectedResyncPending){
+    protectedResyncPending = true;
+    setTimeout(()=>{
+      protectedResyncPending = false;
+      rerenderProtectedState();
+      flashSave("Not saved — protected mode", true);
+    }, 0);
+  }
+  flashSave("Not saved — protected mode", true);
+  return true;
+}
+function save(){
+  if (blockProtectedWrite()) return false;
+  try { localStorage.setItem(DATA_KEY, JSON.stringify(data)); flashSave("Saved ✓"); return true; }
+  catch(e){ flashSave("Save failed", true); return false; }
+}
+function saveCfg(){
+  if (blockProtectedWrite()) return false;
+  try{ localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); return true; }catch(e){ flashSave("Save failed", true); return false; }
+}
+function saveProgram(){
+  if (blockProtectedWrite()) return false;
+  try{ localStorage.setItem(PROG_KEY, JSON.stringify(program)); return true; }catch(e){ flashSave("Save failed", true); return false; }
+}
 
 let lockScrollY = 0;
 function lockScroll(){
@@ -171,6 +432,7 @@ function unlockScroll(){
 }
 function ackBtn(id, label){
   const b = typeof id==="string" ? document.getElementById(id) : id;
+  if (protectedMode && protectedResyncPending){ flashSave("Not saved — protected mode", true); return; }
   if (!b || b.dataset.acking) return;
   b.dataset.acking = "1";
   const origText = b.textContent;
@@ -186,6 +448,9 @@ function ackBtn(id, label){
 }
 let saveTimer;
 function flashSave(msg, bad){
+  if (protectedMode && protectedResyncPending && msg!=="Not saved — protected mode"){
+    msg = "Not saved — protected mode"; bad = true;
+  }
   const el = document.getElementById("saveState");
   el.textContent = msg; el.style.color = bad ? "var(--warn)" : "var(--dim)";
   clearTimeout(saveTimer); saveTimer = setTimeout(()=>{ el.textContent=""; }, 1500);

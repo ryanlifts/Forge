@@ -1,8 +1,7 @@
 // BlackPyre permanent integration suite — boots the shipped app and exercises whole flows.
-const { boot, check, summary, dstr, wait, EXISTING_CFG, EMPTY_DATA } = require("./harness");
+const { boot, bootRaw, assembleHTML, sacredCalls, check, summary, dstr, wait, EXISTING_CFG, EMPTY_DATA } = require("./harness");
 const fs = require("fs");
 const path = require("path");
-const { assembleHTML } = require("./harness");
 
 (async ()=>{
 const html = assembleHTML();
@@ -70,6 +69,157 @@ B.window.eval(`
 `);
 check("old-range backup restores + migrates", B.window.eval("cfg.calTarget")===1600);
 check("restore preserves AI key + provider", B.window.eval("cfg.anthropicKey")==="sk-test-A" && B.window.eval("cfg.aiProvider")==="anthropic");
+
+// ================= v45: schemaVersion & protected migrations =================
+const V1_CFG = Object.assign({}, EXISTING_CFG, {schemaVersion:1});
+const TEST_PROGRAM = {name:"Test Program",author:"Suite",days:[{id:"D1",title:"Day 1",exercises:[{name:"Bench Press",scheme:"3×5"}]}]};
+const RAW_V1_CFG = JSON.stringify(V1_CFG);
+const RAW_DATA = JSON.stringify(EMPTY_DATA);
+const RAW_PROGRAM = JSON.stringify(TEST_PROGRAM);
+const sacredBytes = dom=>({
+  cfg:dom.window.localStorage.getItem("forge:cfg"),
+  data:dom.window.localStorage.getItem("forge:data"),
+  program:dom.window.localStorage.getItem("forge:program")
+});
+const sameBytes = (a,b)=>a.cfg===b.cfg && a.data===b.data && a.program===b.program;
+const zeroSacredWrites = dom=>sacredCalls(dom).length===0;
+
+// Parse failures: each present-but-unparseable key protects all three sacred keys.
+let PC = bootRaw({cfg:"{broken", data:RAW_DATA, program:RAW_PROGRAM});
+const pcOriginal = sacredBytes(PC);
+check("unparseable settings enter protected mode with banner", PC.window.eval("protectedMode")===true && !PC.window.document.getElementById("protectedBanner").classList.contains("hidden"));
+check("protected mode suppresses disclaimer and setup gates", PC.window.document.getElementById("disclaimerOverlay").classList.contains("hidden") && PC.window.document.getElementById("setupOverlay").classList.contains("hidden"));
+check("unparseable settings cause zero sacred-key writes", zeroSacredWrites(PC) && sameBytes(pcOriginal,sacredBytes(PC)));
+
+let PReadable = bootRaw({cfg:"{broken", data:JSON.stringify({food:{},workouts:[],weights:[{date:"2026-07-01",lbs:220}]}), program:JSON.stringify({name:"Readable program",days:[{id:"D1",title:"Day 1",exercises:[{name:"Squat"}]}]})});
+check("protected fallback still loads other readable storage areas", PReadable.window.eval("data.weights.length")===1 && PReadable.window.eval("program.name")==="Readable program");
+
+let PD = bootRaw({cfg:RAW_V1_CFG, data:"{broken", program:RAW_PROGRAM});
+const pdOriginal = sacredBytes(PD);
+check("unparseable logs protect all keys byte-for-byte", PD.window.eval("protectedMode") && zeroSacredWrites(PD) && sameBytes(pdOriginal,sacredBytes(PD)));
+let PP = bootRaw({cfg:RAW_V1_CFG, data:RAW_DATA, program:"{broken"});
+const ppOriginal = sacredBytes(PP);
+check("unparseable program protects all keys byte-for-byte", PP.window.eval("protectedMode") && zeroSacredWrites(PP) && sameBytes(ppOriginal,sacredBytes(PP)));
+
+let PM = bootRaw({cfg:JSON.stringify(EXISTING_CFG), data:RAW_DATA, program:RAW_PROGRAM}, w=>{ w.__BP_TEST_PREPARE_OPTIONS={forceMigrationFailure:true}; });
+const pmOriginal = sacredBytes(PM);
+check("forced mid-chain migration failure makes zero writes", PM.window.eval("protectedMode") && zeroSacredWrites(PM) && sameBytes(pmOriginal,sacredBytes(PM)));
+let PV = bootRaw({cfg:RAW_V1_CFG, data:JSON.stringify({food:{},workouts:{},weights:[]}), program:RAW_PROGRAM});
+const pvOriginal = sacredBytes(PV);
+check("validation rejection makes zero writes", PV.window.eval("protectedMode") && zeroSacredWrites(PV) && sameBytes(pvOriginal,sacredBytes(PV)));
+let PN = bootRaw({cfg:JSON.stringify(Object.assign({},V1_CFG,{schemaVersion:99})), data:RAW_DATA, program:RAW_PROGRAM});
+const pnOriginal = sacredBytes(PN);
+check("newer schema enters protected mode with update guidance", PN.window.eval("protectedModeKind")==="newer" && /newer BlackPyre/i.test(PN.window.document.getElementById("protectedBannerText").textContent));
+check("newer schema makes zero sacred-key writes", zeroSacredWrites(PN) && sameBytes(pnOriginal,sacredBytes(PN)));
+
+const malformedVersions = ["1",null,-1,1.5,[],{}];
+check("every malformed schemaVersion variant fails safely", malformedVersions.every(v=>{
+  const Q=bootRaw({cfg:JSON.stringify(Object.assign({},V1_CFG,{schemaVersion:v})),data:RAW_DATA,program:RAW_PROGRAM});
+  return Q.window.eval("protectedMode")===true && zeroSacredWrites(Q);
+}));
+
+// The save choke points visibly undo representative mutations and never touch storage.
+PC.__storageCalls.length=0;
+PC.window.eval(`addEntry({name:"Blocked food",cal:100,pro:10,carb:10,fat:2,meal:"lunch"});`);
+await wait(15);
+check("protected food mutation is visibly undone", PC.window.eval("Object.keys(data.food).length")===0);
+PC.window.eval(`data.weights.push({date:todayStr(),lbs:210}); save();`);
+await wait(15);
+check("protected weight mutation is visibly undone", PC.window.eval("data.weights.length")===0);
+PC.window.eval(`data.workouts.push({date:todayStr(),day:"D1",title:"Blocked",sets:{},notes:""}); save();`);
+await wait(15);
+check("protected workout mutation is visibly undone", PC.window.eval("data.workouts.length")===0);
+const protectedGoal = PC.window.eval("cfg.goalWt");
+PC.window.eval(`cfg.goalWt=199; saveCfg();`);
+await wait(15);
+check("protected settings mutation is visibly undone", PC.window.eval("cfg.goalWt")===protectedGoal);
+PC.window.document.getElementById("sUsdaKey").value="blocked-key";
+PC.window.document.getElementById("saveUsdaBtn").dispatchEvent(new PC.window.Event("click",{bubbles:true}));
+check("blocked actions cannot show a false saved acknowledgement", !PC.window.document.getElementById("saveUsdaBtn").classList.contains("acked") && /Not saved/.test(PC.window.document.getElementById("saveState").textContent));
+const protectedProgram = PC.window.eval("program.name");
+PC.window.eval(`program={name:"Blocked",days:[{id:"X",title:"X",exercises:[{name:"Squat"}]}]}; saveProgram();`);
+await wait(15);
+check("protected program mutation is visibly undone", PC.window.eval("program.name")===protectedProgram);
+const blockedRestore = PC.window.eval(`restoreBackupEnvelope({cfg:${JSON.stringify(V1_CFG)}})`);
+check("restore is blocked in protected mode", blockedRestore.ok===false && blockedRestore.code==="protected");
+check("all protected mutation attempts still make zero writes", zeroSacredWrites(PC) && sameBytes(pcOriginal,sacredBytes(PC)));
+
+// Protected export is deliberately partial and inert.
+const protectedMetaBefore = PC.window.eval("JSON.stringify(data.meta)");
+PC.window.eval(`window.confirm=()=>true; window.__partial=null; download=(n,c)=>{window.__partial={n,c};}; doBackup("exportDataBtn");`);
+check("protected export uses a distinct PARTIAL filename", /blackpyre-PARTIAL-/.test(PC.window.eval("window.__partial.n")));
+check("protected export does not mutate backup metadata", PC.window.eval("JSON.stringify(data.meta)")===protectedMetaBefore && zeroSacredWrites(PC));
+
+// Healthy boot paths: one-time cfg stamp only, then no-op forever.
+let Fresh45 = bootRaw({});
+const freshCalls = sacredCalls(Fresh45);
+check("fresh install stamps schemaVersion 1", JSON.parse(Fresh45.window.localStorage.getItem("forge:cfg")).schemaVersion===1);
+check("fresh install writes only stamped settings", freshCalls.length===1 && freshCalls[0].method==="setItem" && freshCalls[0].key==="forge:cfg");
+const rawV44Cfg = JSON.stringify(Object.assign({},EXISTING_CFG,{futureField:"survives"}));
+let H45 = bootRaw({cfg:rawV44Cfg,data:RAW_DATA,program:RAW_PROGRAM});
+const h45Calls = sacredCalls(H45);
+check("v44-shaped install gains only the schema stamp", h45Calls.length===1 && h45Calls[0].key==="forge:cfg" && JSON.parse(h45Calls[0].value).schemaVersion===1);
+check("healthy migration leaves logs and program byte-identical", H45.window.localStorage.getItem("forge:data")===RAW_DATA && H45.window.localStorage.getItem("forge:program")===RAW_PROGRAM);
+check("unknown settings fields survive migration", H45.window.eval("cfg.futureField")==="survives");
+let H45b = bootRaw(sacredBytes(H45));
+check("second boot performs zero sacred-key writes", zeroSacredWrites(H45b));
+
+// Real restore path: shared preparation, AI presence semantics, partial envelopes.
+let R45 = boot(V1_CFG, EMPTY_DATA, null, TEST_PROGRAM);
+R45.window.eval(`cfg.anthropicKey="sk-device"; cfg.aiProvider="anthropic"; saveCfg();`);
+R45.__storageCalls.length=0;
+const beforeRangeData = R45.window.localStorage.getItem("forge:data");
+const beforeRangeProgram = R45.window.localStorage.getItem("forge:program");
+const rangeCfg = Object.assign({},EXISTING_CFG,{calLo:1500,calHi:1700,proLo:160,proHi:180});
+delete rangeCfg.calTarget; delete rangeCfg.proTarget;
+let restoreResult = R45.window.eval(`restoreBackupEnvelope({cfg:${JSON.stringify(rangeCfg)}})`);
+check("range-era backup restores through shared pipeline", restoreResult.ok && R45.window.eval("cfg.calTarget")===1600 && R45.window.eval("cfg.proTarget")===170);
+check("restore preserves absent device AI fields", R45.window.eval("cfg.anthropicKey")==="sk-device" && R45.window.eval("cfg.aiProvider")==="anthropic");
+check("cfg-only partial restore leaves data and program bytes untouched", R45.window.localStorage.getItem("forge:data")===beforeRangeData && R45.window.localStorage.getItem("forge:program")===beforeRangeProgram);
+const cfgBeforeDataOnly = R45.window.localStorage.getItem("forge:cfg");
+const progBeforeDataOnly = R45.window.localStorage.getItem("forge:program");
+const replacementData = {food:{"2026-07-14":[{name:"Restored",cal:10,pro:1,carb:1,fat:0,meal:"other"}]},workouts:[],weights:[],meta:{lastBackup:null,logsSince:0}};
+restoreResult = R45.window.eval(`restoreBackupEnvelope({data:${JSON.stringify(replacementData)}})`);
+check("data-only partial envelope replaces data", restoreResult.ok && R45.window.eval(`data.food["2026-07-14"][0].name`)==="Restored");
+check("data-only partial envelope leaves cfg and program untouched", R45.window.localStorage.getItem("forge:cfg")===cfgBeforeDataOnly && R45.window.localStorage.getItem("forge:program")===progBeforeDataOnly);
+
+// Bad/newer backups are refused without changing storage, runtime, or mode.
+R45.__storageCalls.length=0;
+const rejectBytes = sacredBytes(R45);
+const rejectRuntime = R45.window.eval("JSON.stringify({cfg:cfg,data:data,program:program})");
+let rejected = R45.window.eval(`restoreBackupEnvelope({cfg:${JSON.stringify(Object.assign({},V1_CFG,{schemaVersion:99}))}})`);
+check("newer backup is refused without protected mode", !rejected.ok && R45.window.eval("protectedMode")===false && R45.window.document.getElementById("protectedBanner").classList.contains("hidden"));
+check("newer backup refusal changes no storage or runtime", zeroSacredWrites(R45) && sameBytes(rejectBytes,sacredBytes(R45)) && R45.window.eval("JSON.stringify({cfg:cfg,data:data,program:program})")===rejectRuntime);
+R45.__storageCalls.length=0;
+rejected = R45.window.eval(`restoreBackupEnvelope({data:{food:{},workouts:{},weights:[]}})`);
+check("invalid backup validation is refused with zero writes", !rejected.ok && zeroSacredWrites(R45) && sameBytes(rejectBytes,sacredBytes(R45)));
+
+// A torn multi-key commit remains unstamped; the next boot reruns migration and heals it.
+let T45 = boot(V1_CFG, EMPTY_DATA, null, TEST_PROGRAM);
+const tStore = T45.window.localStorage;
+const tOrig = T45.window.__storageOriginalMethods;
+tOrig.clear.call(tStore);
+const tornCfg = JSON.stringify({setupDone:true,disclaimerAccepted:"2026-07-01",calLo:1500,calHi:1700,proLo:160,proHi:180});
+const tornData = JSON.stringify({food:{},workouts:[],weights:[]});
+const tornProgram = JSON.stringify({name:"Torn",days:[{exercises:[{name:"Squat"}]}]});
+tOrig.setItem.call(tStore,"forge:cfg",tornCfg);
+tOrig.setItem.call(tStore,"forge:data",tornData);
+tOrig.setItem.call(tStore,"forge:program",tornProgram);
+T45.__storageCalls.length=0;
+const tProto = Object.getPrototypeOf(tStore);
+const tSpySet = tProto.setItem;
+let tWriteCount = 0;
+tProto.setItem = function(k,v){
+  tWriteCount++;
+  if (tWriteCount>=3) throw new Error("simulated interruption");
+  return tSpySet.call(this,k,v);
+};
+const tornCommit = T45.window.eval(`(()=>{const p=prepareState(${JSON.stringify(tornCfg)},${JSON.stringify(tornData)},${JSON.stringify(tornProgram)},{originalStrings:{cfg:${JSON.stringify(tornCfg)},data:${JSON.stringify(tornData)},program:${JSON.stringify(tornProgram)}}});return commitState(p,{forceWrite:{cfg:true,data:true,program:true}});})()`);
+tProto.setItem = tSpySet;
+check("commit order writes data and program before settings stamp", sacredCalls(T45).slice(0,2).map(c=>c.key).join(",")==="forge:data,forge:program");
+check("simulated interrupted commit reports failed rollback", tornCommit.ok===false && tornCommit.rollbackFailed===true && JSON.parse(tStore.getItem("forge:cfg")).schemaVersion===undefined);
+let Healed45 = bootRaw({cfg:tStore.getItem("forge:cfg"),data:tStore.getItem("forge:data"),program:tStore.getItem("forge:program")});
+check("next boot heals an unstamped interrupted commit", Healed45.window.eval("protectedMode")===false && Healed45.window.eval("cfg.schemaVersion")===1 && Healed45.window.eval("cfg.calTarget")===1600);
 
 // ================= barcode chain =================
 function bootOFF(offResponder){

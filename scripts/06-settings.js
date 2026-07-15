@@ -232,21 +232,27 @@ function renderSetupStep(){
     body.innerHTML='<div class="card"><div class="label">Step 8 · Your data</div><div style="font-size:14px;line-height:1.9;margin-top:8px;">Everything you log stays <b>only on this device</b>. No account, server, or ads.<br><br>Use backup/restore to protect your data or move it to another device.<br><br>Your bodyweight goal, calculator information, macro split, schedule, and tracking choices are now saved in Settings and can be changed anytime.</div></div>';
   }
 }
-// disclaimer gates everything, once per install; wizard follows on fresh installs only
+// disclaimer gates everything, once per install; wizard follows on fresh installs only.
+// Protected mode is recovery-before-gates: neither overlay may write over unreadable data.
 function afterDisclaimer(){
+  if (protectedMode) return;
   if (!cfg.setupDone){
     if (hasAnyData()){ cfg.setupDone = true; saveCfg(); }
     else { openSetup(); }
   }
 }
 document.getElementById("disclaimerAgreeBtn").addEventListener("click", ()=>{
+  if (protectedMode){ flashSave("Not saved — protected mode", true); return; }
   cfg.disclaimerAccepted = todayStr();
   saveCfg();
   document.getElementById("disclaimerOverlay").classList.add("hidden");
   unlockScroll();
   afterDisclaimer();
 });
-if (!cfg.disclaimerAccepted){
+if (protectedMode){
+  document.getElementById("disclaimerOverlay").classList.add("hidden");
+  document.getElementById("setupOverlay").classList.add("hidden");
+} else if (!cfg.disclaimerAccepted){
   lockScroll();
   document.getElementById("disclaimerOverlay").classList.remove("hidden");
 } else {
@@ -521,12 +527,26 @@ document.getElementById("saveSettingsBtn").addEventListener("click", ()=>{
   ackBtn("saveSettingsBtn", "✓ Saved");
 });
 function doBackup(btnId){
+  if (protectedMode){
+    const ok = confirm("This export contains only what BlackPyre could read — it may be incomplete and is NOT a normal backup. Your original data remains preserved on this device. Export anyway?");
+    if (!ok) return false;
+    const snap = protectedSnapshotStrings ? {
+      cfg:JSON.parse(protectedSnapshotStrings.cfg),
+      data:JSON.parse(protectedSnapshotStrings.data),
+      program:JSON.parse(protectedSnapshotStrings.program)
+    } : {cfg:cfg, data:data, program:program};
+    const cfgPartial = Object.assign({}, snap.cfg); delete cfgPartial.anthropicKey; delete cfgPartial.openaiKey;
+    download("blackpyre-PARTIAL-"+todayStr()+".json", JSON.stringify({cfg:cfgPartial, program:snap.program, data:snap.data}, null, 2));
+    ackBtn(btnId, "✓ Partial export");
+    return true;
+  }
   data.meta.lastBackup = todayStr();
   data.meta.logsSince = 0;
   const cfgSafe = Object.assign({}, cfg); delete cfgSafe.anthropicKey; delete cfgSafe.openaiKey;
   download("blackpyre-backup-"+todayStr()+".json", JSON.stringify({cfg:cfgSafe, program:program, data:data}, null, 2));
   save(); renderBackup();
   ackBtn(btnId, "✓ Backup downloaded");
+  return true;
 }
 document.getElementById("exportDataBtn").addEventListener("click", ()=>doBackup("exportDataBtn"));
 document.getElementById("backupNowBtn").addEventListener("click", ()=>doBackup("backupNowBtn"));
@@ -548,31 +568,78 @@ function renderBackup(){
     ? "It's been a while since your last backup and you've logged <b>"+m.logsSince+"</b> entries since. Your data lives only on this device — one tap protects it."
     : "You've logged <b>"+m.logsSince+"</b> entries and never backed up. Your data lives only on this device — one tap protects it.";
 }
-document.getElementById("importDataBtn").addEventListener("click", ()=>document.getElementById("importDataFile").click());
+function restoreBackupEnvelope(b){
+  if (protectedMode){
+    flashSave("Restore blocked — protected mode", true);
+    return {ok:false, code:"protected"};
+  }
+  if (!isPlainObject(b)){
+    flashSave("Restore refused — not a BlackPyre backup", true);
+    return {ok:false, code:"envelope"};
+  }
+  const present = {cfg:hasOwn(b,"cfg"), data:hasOwn(b,"data"), program:hasOwn(b,"program")};
+  if (!present.cfg && !present.data && !present.program){
+    flashSave("Restore refused — backup contains no data", true);
+    return {ok:false, code:"empty"};
+  }
+  const current = readStorageStrings();
+  if (!current.ok){
+    flashSave("Restore refused — browser storage could not be read", true);
+    return {ok:false, code:"storage-read"};
+  }
+  try {
+    let incomingCfg;
+    if (present.cfg){
+      incomingCfg = cloneJSON(b.cfg);
+      if (isPlainObject(incomingCfg)){
+        AI_CFG_FIELDS.forEach(k=>{ if (!hasOwn(incomingCfg,k) && cfg[k]!==undefined) incomingCfg[k] = cfg[k]; });
+      }
+    } else incomingCfg = cloneJSON(cfg);
+
+    const rawCfg = JSON.stringify(incomingCfg);
+    const rawData = JSON.stringify(present.data ? b.data : data);
+    const rawProgram = JSON.stringify(present.program ? b.program : program);
+    const prepared = prepareState(rawCfg, rawData, rawProgram, {originalStrings:current.originals});
+    if (!prepared.ok){
+      flashSave(prepared.kind==="newer"
+        ? "Restore refused — backup is from a newer BlackPyre"
+        : "Restore refused — "+prepared.reason, true);
+      return {ok:false, code:prepared.kind, reason:prepared.reason};
+    }
+    const committed = commitState(prepared, {writeMask:present});
+    if (!committed.ok){
+      if (committed.rollbackFailed){
+        protectedMode = true;
+        protectedModeKind = "failure";
+        protectedModeReason = "A restore write failed and browser storage refused a complete rollback. Do not uninstall the app.";
+        protectedSnapshotStrings = {data:JSON.stringify(data), cfg:JSON.stringify(cfg), program:JSON.stringify(program)};
+        if (typeof showProtectedBanner==="function") showProtectedBanner();
+      }
+      flashSave("Restore failed — current app data was not replaced", true);
+      return {ok:false, code:"commit"};
+    }
+    applyPreparedState(prepared);
+    renderDayOptions(); renderSessionInputs(); renderAll();
+    flashSave("Backup restored ✓");
+    ackBtn("importDataBtn", "✓ Restored");
+    return {ok:true};
+  } catch(err){
+    flashSave("Restore refused — backup could not be prepared", true);
+    return {ok:false, code:"exception"};
+  }
+}
+document.getElementById("importDataBtn").addEventListener("click", ()=>{
+  if (protectedMode){ flashSave("Restore blocked — protected mode", true); return; }
+  document.getElementById("importDataFile").click();
+});
 document.getElementById("importDataFile").addEventListener("change", (e)=>{
   const file = e.target.files[0];
   if(!file) return;
+  if (protectedMode){ flashSave("Restore blocked — protected mode", true); e.target.value=""; return; }
   const reader = new FileReader();
   reader.onload = ()=>{
-    try {
-      const b = JSON.parse(reader.result);
-      if(b.data) data = b.data;
-      if(!data.recents) data.recents = []; if(!data.myFoods) data.myFoods = {}; if(!data.meals) data.meals = []; if(!data.finished) data.finished = {}; if(!data.foodCounts) data.foodCounts = {}; if(!data.mealCounts) data.mealCounts = {}; if(!data.meta) data.meta = {lastBackup:null, logsSince:0};
-      if(b.cfg){
-        const keepAI = {};
-        ["anthropicKey","openaiKey","aiProvider","aiModelAnth","aiModelOai"].forEach(k=>{
-          if (b.cfg[k]===undefined && cfg[k]!==undefined) keepAI[k] = cfg[k];
-        });
-        migrateTargets(b.cfg);
-        cfg = Object.assign({}, DEFAULT_CFG, b.cfg, keepAI);
-        migrateCfg();
-      }
-      if(b.program) program = validateProgram(b.program);
-      save(); saveCfg(); saveProgram();
-      renderDayOptions(); renderSessionInputs(); renderAll();
-      flashSave("Backup restored ✓");
-      ackBtn("importDataBtn", "✓ Restored");
-    } catch(err){ flashSave("Restore failed", true); }
+    try { restoreBackupEnvelope(JSON.parse(reader.result)); }
+    catch(err){ flashSave("Restore refused — file is not valid JSON", true); }
   };
   reader.readAsText(file);
   e.target.value = "";

@@ -67,6 +67,22 @@ check("old range cfg migrates to midpoint", (()=>{ E(`var o={calLo:1500,calHi:17
 check("proLo/proHi migrate too", (()=>{ E(`var o2={proLo:160,proHi:180}; migrateTargets(o2);`); return E("o2.proTarget")===170; })());
 check("existing exact targets never overwritten", (()=>{ E(`var o3={calTarget:1750,calLo:1000,calHi:1200}; migrateTargets(o3);`); return E("o3.calTarget")===1750; })());
 
+// ---------- schemaVersion prepareState pipeline ----------
+const schemaDataRaw = JSON.stringify({food:{},workouts:[],weights:[]});
+const schemaProgramRaw = JSON.stringify({name:"Test",days:[{id:"D1",title:"Day 1",exercises:[{name:"Squat"}]}]});
+let prep = E(`prepareState(${JSON.stringify(JSON.stringify({calLo:1500,calHi:1700,proLo:160,proHi:180}))}, ${JSON.stringify(schemaDataRaw)}, ${JSON.stringify(schemaProgramRaw)})`);
+check("prepareState migrates legacy whole-state to schema 1", prep.ok && prep.state.cfg.schemaVersion===1);
+check("prepareState preserves migrateTargets-before-defaults ordering", prep.state.cfg.calTarget===1600 && prep.state.cfg.proTarget===170);
+check("legacy migration marks settings only", prep.changed.cfg===true && prep.changed.data===false && prep.changed.program===false);
+prep = E(`prepareState(${JSON.stringify(JSON.stringify(Object.assign({}, EXISTING_CFG,{schemaVersion:1, futureField:"keep-me"})))}, ${JSON.stringify(schemaDataRaw)}, ${JSON.stringify(schemaProgramRaw)})`);
+check("current schema short-circuits without migration writes", prep.ok && !prep.changed.cfg && !prep.changed.data && !prep.changed.program);
+check("unknown settings fields survive preparation", prep.state.cfg.futureField==="keep-me");
+check("current custom rest arrays remain valid", E(`prepareState(${JSON.stringify(JSON.stringify(Object.assign({}, EXISTING_CFG,{schemaVersion:1,customRests:[75,120]})))}, ${JSON.stringify(schemaDataRaw)}, ${JSON.stringify(schemaProgramRaw)}).ok`)===true);
+check("newer schema is refused", E(`prepareState('${JSON.stringify({schemaVersion:99})}', ${JSON.stringify(schemaDataRaw)}, ${JSON.stringify(schemaProgramRaw)}).kind`)==="newer");
+check("malformed schema type is refused", E(`prepareState('${JSON.stringify({schemaVersion:"1"})}', ${JSON.stringify(schemaDataRaw)}, ${JSON.stringify(schemaProgramRaw)}).ok`)===false);
+check("unusable log structures fail validation", E(`prepareState('${JSON.stringify({schemaVersion:1})}', '${JSON.stringify({food:{},workouts:{},weights:[]})}', ${JSON.stringify(schemaProgramRaw)}).ok`)===false);
+check("legacy null optional log fields normalize instead of quarantining", (()=>{ const q=E(`prepareState('${JSON.stringify({schemaVersion:1})}', '${JSON.stringify({food:{},workouts:[],weights:[],recents:null,myFoods:null,meta:null})}', ${JSON.stringify(schemaProgramRaw)})`); return q.ok && Array.isArray(q.state.data.recents) && q.state.data.meta && typeof q.state.data.myFoods==="object"; })());
+
 // ---------- parseFoodsReply ----------
 const straight = '{"foods":[{"name":"Chicken","cal":610,"pro":42,"carb":22,"fat":38}]}';
 check("straight JSON parses", E(`parseFoodsReply(${JSON.stringify(straight)}).length`)===1);

@@ -27,16 +27,52 @@ function assembleHTML(){
   return html;
 }
 
-function boot(cfgObj, dataObj, hooks){
+function bootRaw(raws, hooks){
   const html = assembleHTML();
-  return new JSDOM(html, { runScripts:"dangerously", url:"https://example.com/", pretendToBeVisual:true,
+  const calls = [];
+  const dom = new JSDOM(html, { runScripts:"dangerously", url:"https://example.com/", pretendToBeVisual:true,
     beforeParse(w){
-      if (cfgObj) w.localStorage.setItem("forge:cfg", JSON.stringify(cfgObj));
-      if (dataObj) w.localStorage.setItem("forge:data", JSON.stringify(dataObj));
+      const storage = w.localStorage;
+      const proto = Object.getPrototypeOf(storage);
+      const originals = {
+        setItem:proto.setItem,
+        removeItem:proto.removeItem,
+        clear:proto.clear
+      };
+      const seed = raws || {};
+      if (seed.cfg!==null && seed.cfg!==undefined) originals.setItem.call(storage, "forge:cfg", seed.cfg);
+      if (seed.data!==null && seed.data!==undefined) originals.setItem.call(storage, "forge:data", seed.data);
+      if (seed.program!==null && seed.program!==undefined) originals.setItem.call(storage, "forge:program", seed.program);
+      if (seed.legacyData!==null && seed.legacyData!==undefined) originals.setItem.call(storage, "ryan-cut:data", seed.legacyData);
+
+      proto.setItem = function(key, value){
+        calls.push({method:"setItem", key:String(key), value:String(value)});
+        return originals.setItem.call(this, key, value);
+      };
+      proto.removeItem = function(key){
+        calls.push({method:"removeItem", key:String(key)});
+        return originals.removeItem.call(this, key);
+      };
+      proto.clear = function(){
+        calls.push({method:"clear", key:null});
+        return originals.clear.call(this);
+      };
+      w.__storageCalls = calls;
+      w.__storageOriginalMethods = originals;
       w.URL.createObjectURL = ()=>"blob:x"; w.URL.revokeObjectURL = ()=>{};
       w.scrollTo = ()=>{}; // jsdom doesn't implement it; the app's calls are cosmetic
       if (hooks) hooks(w);
     }});
+  dom.__storageCalls = calls;
+  return dom;
+}
+
+function boot(cfgObj, dataObj, hooks, programObj){
+  return bootRaw({
+    cfg:cfgObj===null || cfgObj===undefined ? null : JSON.stringify(cfgObj),
+    data:dataObj===null || dataObj===undefined ? null : JSON.stringify(dataObj),
+    program:programObj===null || programObj===undefined ? null : JSON.stringify(programObj)
+  }, hooks);
 }
 
 // standard fixtures
@@ -63,5 +99,6 @@ function nextDow(target){ // next date string falling on JS getDay()===target
   for (let i=0;i<7;i++){ const ds=dstr(i); if (new Date(ds+"T12:00:00").getDay()===target) return ds; }
 }
 const wait = ms=>new Promise(r=>setTimeout(r,ms));
+const sacredCalls = dom=>dom.__storageCalls.filter(c=>c.key===null || ["forge:cfg","forge:data","forge:program"].includes(c.key));
 
-module.exports = { boot, assembleHTML, check, summary, dstr, nextDow, wait, EXISTING_CFG, EMPTY_DATA };
+module.exports = { boot, bootRaw, assembleHTML, check, summary, dstr, nextDow, wait, sacredCalls, EXISTING_CFG, EMPTY_DATA };

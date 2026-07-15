@@ -1,5 +1,7 @@
 # BlackPyre Data Model
 
+**Current as of v45 (July 2026). Current schemaVersion: 1.**
+
 Everything BlackPyre stores lives in three localStorage keys on the user's device.
 **These key names are load-bearing and must never be renamed** (installed apps hold user data under them):
 
@@ -11,6 +13,22 @@ Everything BlackPyre stores lives in three localStorage keys on the user's devic
 
 The `forge:` prefix predates the BlackPyre rebrand and is intentionally preserved (invariant I-2).
 
+## Whole-state schemaVersion
+
+`schemaVersion` is physically stored in `forge:cfg`, but it versions the complete stored
+state — settings, logged data, program, and the backup envelope that carries them.
+
+| Raw value | Meaning / behavior in v45 |
+|---|---|
+| property absent or integer `0` | Pre-versioning legacy state; run numbered migrations from step 0 |
+| integer `1` | Current schema; no migration write |
+| integer greater than `1` | Newer BlackPyre data; protected mode on boot, refused on restore |
+| anything else | Invalid; protected mode on boot, refused on restore |
+
+The version is read from the raw parsed settings before `DEFAULT_CFG` is merged. A migration
+stamps its destination version only after that complete step succeeds. `DEFAULT_CFG` does
+not contain `schemaVersion`, so defaults can never disguise legacy data as current.
+
 ---
 
 ## forge:cfg
@@ -20,6 +38,7 @@ treat unset values as real numbers (see Migration History).
 
 | Field | Type | Meaning | Notes |
 |---|---|---|---|
+| `schemaVersion` | integer | Generation of the complete stored state | Current = `1`; strict interpretation above |
 | `setupDone` | bool | Onboarding wizard completed or skipped | |
 | `disclaimerAccepted` | string date | Date the disclaimer gate was accepted | Gate blocks app until set |
 | `startWt` | number | Starting bodyweight (lb) for the journey | 0 = unset. Set by wizard (current weight) or Settings. First contrary weigh-in may rebase it |
@@ -35,7 +54,7 @@ treat unset values as real numbers (see Migration History).
 | `lastTargetWt` | number | Bodyweight when targets were last (re)calculated | Drives the TDEE re-adjust prompt |
 | `adjustPromptedAt` | number/date | Last time the re-adjust prompt was shown | Prevents nagging |
 | `liftGoals` | object | `{ [exerciseName]: goal e1RM lb }` | |
-| `restSec` / `customRestSec` / `customRests` | number / number / object | Rest-timer defaults and per-exercise overrides | |
+| `restSec` / `customRestSec` / `customRests` | number / number / number[] | Rest-timer defaults and custom preset choices | |
 | `measureOn` / `waterOn` | bool | Optional feature toggles (measurements, water) | Set in wizard or Settings |
 | `usdaKey` | string | Personal USDA API key | Overrides the embedded shared key |
 | `anthropicKey` / `openaiKey` | string | BYOK AI keys | **Excluded from backups**; restore preserves the device's current values |
@@ -68,10 +87,20 @@ JSON file or pasted from any AI; the coach can propose one via a ```json block c
 
 ## Backup envelope
 
-`{cfg, data, program}` as JSON. **`anthropicKey`, `openaiKey` are stripped on export.**
-On restore: `migrateTargets(backup.cfg)` runs **before** the defaults merge; the device's current
-AI settings (`anthropicKey, openaiKey, aiProvider, aiModelAnth, aiModelOai`) survive unless the
-backup explicitly contains replacements.
+`{cfg, data, program}` as JSON. The envelope's generation is announced by
+`cfg.schemaVersion`. **`anthropicKey`, `openaiKey` are stripped on normal export.**
+
+Restore uses the same `prepareState()` pipeline as boot. Presence is tested before defaults
+merge: device AI settings (`anthropicKey`, `openaiKey`, `aiProvider`, `aiModelAnth`,
+`aiModelOai`) survive unless the backup explicitly contains that field. An envelope member
+that is absent leaves the device's corresponding area completely untouched; a present member
+replaces that area only after the whole supplied state prepares successfully. Bad, invalid,
+or newer-version backups are refused with zero writes and do not place a healthy app in
+protected mode.
+
+In protected mode, normal backup is replaced by an explicitly confirmed partial export named
+`blackpyre-PARTIAL-YYYY-MM-DD.json`. It contains only the readable in-memory snapshot, may be
+incomplete, and does not update backup bookkeeping.
 
 ## Migration history (order matters)
 
@@ -81,8 +110,21 @@ backup explicitly contains replacements.
 | v34 | Range targets → exact | `calLo/calHi → calTarget` (midpoint), `proLo/proHi → proTarget`, via `migrateTargets(raw)` — **must run on the raw object before the `DEFAULT_CFG` merge**, or defaults mask real values |
 | v35 | `calSchedMode:"weekend"` → `"frisat"` | In `migrateCfg()` |
 | v36+ | Fake defaults removed | Personal fields default to 0/unset; every consumer guards (`nutritionTargetsReady()`, goal-weight checks) |
+| v45 | Formal whole-state schema version 0 → 1 | Pure prepare pipeline wraps the existing target/config migrations, validates and serializes copies, then stamps `schemaVersion:1`; boot failures preserve storage in protected mode |
 
 Old backups from any era must restore correctly; the integration suite proves the range-era path.
+
+## v45 protected migration behavior
+
+Boot preserves the original three storage strings, prepares disposable copies, and commits
+only after parse, migration, validation, and serialization all succeed. Pre-commit failure
+performs zero writes. Protected mode suppresses disclaimer/onboarding, blocks restore, and
+guards `save()`, `saveCfg()`, and `saveProgram()`; a blocked mutation is restored from the
+frozen session snapshot and rerendered so it does not appear saved.
+
+localStorage cannot atomically transact three keys. Commit therefore skips byte-identical
+keys, writes data/program before the schema-stamped settings, and attempts rollback to the
+original strings if a write throws. This is best-effort, not a claim of true atomicity.
 
 ## AI response contracts
 
