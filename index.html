@@ -230,6 +230,16 @@
     box-shadow:0 10px 28px rgba(0,0,0,.28); font-size:13px; line-height:1.65; }
   #protectedBanner strong { display:block; color:var(--warn); font-family:'Oswald',sans-serif;
     font-size:16px; letter-spacing:.06em; text-transform:uppercase; margin-bottom:4px; }
+  #protectedRecoveryBtn { margin-top:10px; }
+  .recovery-overlay { position:fixed; inset:0; z-index:64; background:rgba(16,18,21,.98); overflow-y:auto;
+    -webkit-overflow-scrolling:touch; overscroll-behavior:contain; padding:calc(18px + env(safe-area-inset-top)) 14px 36px; }
+  .recovery-box { max-width:620px; margin:0 auto; }
+  .recovery-head { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; margin-bottom:14px; }
+  .recovery-title { font-family:'Oswald',sans-serif; font-size:26px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; }
+  .recovery-choice { border:1px solid var(--border); border-radius:14px; padding:14px; margin:10px 0; background:var(--panel); }
+  .recovery-choice .btn { margin-top:10px; }
+  .recovery-warning { border-color:var(--warn); background:rgba(251,146,60,.08); }
+  #quarantineCard { border:1px solid var(--warn); border-radius:12px; padding:12px; margin-top:12px; background:rgba(251,146,60,.08); }
 </style>
 </head>
 <body>
@@ -237,6 +247,7 @@
   <div id="protectedBanner" class="hidden" role="alert" aria-live="assertive">
     <strong>Protected mode</strong>
     <div id="protectedBannerText"></div>
+    <button class="btn ghost small hidden" id="protectedRecoveryBtn">Open recovery</button>
   </div>
   <div class="hdr">
     <h1 id="bpTitle" style="position:relative; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; cursor:default;"><span id="bpTitleText" style="transition:opacity .7s ease;">BlackPyre</span><span id="bellaEgg" aria-hidden="true"></span></h1>
@@ -806,9 +817,60 @@
       <div style="height:10px;"></div>
       <button class="btn ghost small" id="importDataBtn">Restore from backup</button>
       <div class="note" id="backupMetaLine" style="margin-top:8px;"></div>
+      <div class="note" id="recoveryStatusLine" style="margin-top:8px;"></div>
+      <div id="quarantineCard" class="hidden">
+        <div class="label" style="color:var(--warn);">Recovery copy stored</div>
+        <div class="note" id="quarantineStatusText" style="margin:6px 0 10px;"></div>
+        <div class="row">
+          <button class="btn ghost small" id="exportQuarantineBtn">Export original damaged data</button>
+          <button class="xbtn" id="deleteQuarantineBtn">Delete recovery copy</button>
+        </div>
+      </div>
       <input type="file" id="importDataFile" accept=".json,application/json" class="hidden">
       <div class="note">BlackPyre stores data on this device. Use backup/restore to move data between devices. True cross-device sync would require optional cloud/account support in a future version.</div>
     </div>
+  </div>
+</div>
+
+<div id="recoveryOverlay" class="recovery-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="recoveryTitle">
+  <div class="recovery-box">
+    <div class="recovery-head">
+      <div>
+        <div class="recovery-title" id="recoveryTitle">BlackPyre recovery</div>
+        <div class="note">Your original saved data remains untouched until you confirm a validated recovery.</div>
+      </div>
+      <button class="xbtn" id="recoveryCloseBtn">View app read-only</button>
+    </div>
+    <div class="card recovery-warning">
+      <div class="label" style="color:var(--warn);">What happened</div>
+      <div id="recoveryIssueText" style="font-size:13px; line-height:1.7; margin-top:6px;"></div>
+      <div class="note" id="recoveryAffectedText" style="margin-top:6px;"></div>
+    </div>
+    <div class="recovery-choice" id="recoveryLkgCard">
+      <div class="label">Restore last known good</div>
+      <div class="note" id="recoveryLkgText" style="margin-top:6px;"></div>
+      <button class="btn ghost small" id="recoverLkgBtn">Restore snapshot</button>
+    </div>
+    <div class="recovery-choice" id="recoveryReadableCard">
+      <div class="label">Keep everything readable</div>
+      <div class="note" id="recoveryReadableText" style="margin-top:6px;"></div>
+      <button class="btn ghost small" id="recoverReadableBtn">Review readable recovery</button>
+    </div>
+    <div class="recovery-choice">
+      <div class="label">Restore from a backup</div>
+      <div class="note" style="margin-top:6px;">A valid BlackPyre backup can replace damaged areas. You will see the keep/reset summary before anything changes.</div>
+      <button class="btn ghost small" id="recoveryBackupBtn">Choose backup file</button>
+      <input type="file" id="recoveryBackupFile" accept=".json,application/json" class="hidden">
+    </div>
+    <div class="recovery-choice">
+      <div class="label">Export before recovery</div>
+      <div class="note" style="margin-top:6px;">The readable export excludes API keys. The raw emergency export preserves exact original strings and may contain private API keys.</div>
+      <div class="row mt10">
+        <button class="btn ghost small" id="recoveryPartialExportBtn">Export readable data</button>
+        <button class="btn ghost small" id="recoveryRawExportBtn">Export raw originals</button>
+      </div>
+    </div>
+    <div class="note" id="recoveryActionStatus" style="margin-top:12px; color:var(--warn);"></div>
   </div>
 </div>
 

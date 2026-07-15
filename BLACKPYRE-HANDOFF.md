@@ -1,63 +1,57 @@
-# BLACKPYRE HANDOFF — current as of v45 (July 2026)
+# BLACKPYRE HANDOFF — current as of v46 (July 2026)
 
 You are a collaborator on BlackPyre, a fitness PWA at
-ryanlifts.github.io/Forge/ (repo: ryanlifts/Forge). Live version: v45
-(Phase 3 release 2 of 3 complete).
+`ryanlifts.github.io/Forge/` (repo: `ryanlifts/Forge`). This repository represents **v46**,
+the completed Phase 3 hardening release. Confirm the GitHub Pages deployment/cache before
+calling it live on a user's device.
 
-The two documents included below (ARCHITECTURE.md and DATA-MODEL.md) live in the
-repo root, are binding, and are current as of v45. Read them before proposing or
-writing code.
+The two documents reproduced below (`ARCHITECTURE.md` and `DATA-MODEL.md`) live in the repo
+root, are binding, and are current as of v46. Read them before proposing or writing code.
 
 ## Current state
 
-1. A permanent test suite lives in /tests: 170 automated checks (72 unit,
-   98 integration) that boot the real shipped app in jsdom. GitHub Actions
-   runs it on every push — a green check means "tests passed."
-   Tests are cumulative: new features add checks in the same release;
-   existing checks are never deleted or weakened.
-2. tests/bella-reference.b64 is the frozen byte truth of the memorial image.
-   The suite enforces byte-identity and an exact embed count of 1. Never
-   regenerate, re-render, or edit this file or the embedded image.
-3. App structure: index.html (markup+styles) loads three data payloads then
-   seven app slices (scripts/01-storage.js … scripts/07-boot.js) in strict
-   order. All are classic scripts sharing one global scope. No ES modules,
-   no build step — permanent.
-4. Stored state uses the permanent keys forge:cfg, forge:data, forge:program.
-   v45 establishes whole-state schemaVersion 1, a pure prepare pipeline,
-   protected read-only boot behavior, strict newer-version protection, and
-   one shared boot/restore migration path.
+1. The permanent `/tests` gauntlet has **253 checks: 87 unit + 166 integration**. It boots
+   the shipped app in jsdom; GitHub Actions runs it on every push. Tests are cumulative and
+   are never deleted or weakened to make a release pass.
+2. `tests/bella-reference.b64` is the frozen memorial byte truth. The suite enforces exact
+   byte identity and embed count 1. Never regenerate, re-render, edit, or replace it.
+3. App structure remains markup/styles in `index.html`, three static data scripts, then
+   `scripts/01-storage.js` through `scripts/07-boot.js` in strict load order. Classic scripts,
+   shared global scope, no ES modules, no build step — permanent.
+4. Primary state remains in `forge:cfg`, `forge:data`, `forge:program`, with whole-state
+   `schemaVersion:1`. v46 adds internal device-only `forge:lkg` and `forge:quarantine`, each
+   using strict `recoveryFormatVersion:1`; all five names are now invariants.
+5. v45's pure prepare pipeline/protected mode remains the authority. v46 adds structured
+   diagnosis, validated last-known-good refresh, exact quarantine-before-recovery, three
+   controlled recovery sources, and post-write read-back validation.
+6. The approved v44 update toast remains unchanged. v46 changes only recovery orchestration
+   around it. The service-worker cache for this release is `blackpyre-v46`.
 
-## Restructuring plan status
+## Five-phase plan status
 
-- Phase 0 (DONE): permanent test suite, CI gate, architecture/data documents.
-- Phase 1 (DONE, v42): Bella mask deduped byte-identically; QUOTES,
-  LOCAL_DB/ALT_MAP, and FAQ extracted to data files.
-- Phase 2 (DONE, v43): main JS sliced into scripts/01–07 in original order.
-  The migration was proven byte-identical; the historical proof is preserved
-  in tests/PHASE2-PROOF.md.
-- Phase 3 (IN PROGRESS, three independently approved releases):
-  - v44 (DONE): first-install-safe update toast, once-per-session display,
-    exactly-once reload, session-only dismissal.
-  - v45 (DONE): formal whole-state schemaVersion 1; parse/migrate/validate/
-    serialize rehearsal on copies; separate commit with unchanged-key skips,
-    settings-last ordering, and best-effort rollback; protected mode on boot
-    failure/newer data; save-path snapshot re-sync; restore through the same
-    pipeline; bad/newer backups refused without poisoning a healthy app;
-    partial-envelope and protected partial-export rules; 48 new permanent
-    checks (122 → 170).
-  - v46 (NEXT, NOT STARTED): quarantine + last-known-good recovery. A revised
-    plan must be presented and explicitly approved before any implementation.
-- Phase 4: usability review.
-
-Every release passes the full gauntlet, receives a plain-language report, and
-STOPS for Ryan's approval. Do not begin v46 without explicit approval.
+- **Phase 0 — DONE:** permanent tests, GitHub Actions gate, architecture/data documentation.
+- **Phase 1 — DONE (v42):** Bella mask deduplicated in-file, byte-identical; quotes, foods,
+  ALT_MAP, and FAQ extracted to classic data scripts.
+- **Phase 2 — DONE (v43):** JavaScript split into seven classic scripts in original order;
+  byte-identity proof preserved in `tests/PHASE2-PROOF.md`.
+- **Phase 3 — DONE:**
+  - **v44:** first-install-safe update toast, once-per-session display, exactly-once reload,
+    session-only dismissal.
+  - **v45:** formal whole-state schemaVersion 1; pure parse/migrate/validate/serialize
+    preparation; separate settings-last commit/rollback; protected read-only mode; shared
+    boot/restore migration; safe backup refusal/partial rules.
+  - **v46:** one rolling validated LKG; structured failure diagnosis; exact-original
+    quarantine; LKG/readable/backup recovery; raw/readable exports; explicit quarantine
+    retention/deletion; 83 new permanent checks (170 → 253).
+- **Phase 4 — NOT STARTED:** complete friction and usability review. It requires a new plan
+  and Ryan's explicit approval. Do not begin it automatically.
 
 ## Workflow constraints
 
-Ryan deploys from GitHub's web UI, sometimes from a phone. Prefer whole-file
-or repo-mirror deliverables over large pasted patches. One commit per release;
-wait for the green check; then use the v44 toast or close/reopen the installed
-app as directed. The service-worker cache name bumps every release.
+Ryan deploys from GitHub's web UI, sometimes from a phone. Prefer whole-file/repo-mirror and
+changed-files ZIP deliverables rather than pasted patches. One commit per release; wait for
+the green check; then use the existing update toast or close/reopen as directed. Every
+release gets a plain-language report and stops for approval.
 
 ---
 ---
@@ -66,7 +60,7 @@ app as directed. The service-worker cache name bumps every release.
 
 # BlackPyre Architecture
 
-**Current as of v45 (July 2026).**
+**Current as of v46 (July 2026).**
 
 A single-page PWA: vanilla HTML/CSS/JS, no framework, no build step, localStorage only.
 Deployed on GitHub Pages. Developed AI-assisted (Claude / ChatGPT) from a phone — every rule
@@ -75,120 +69,115 @@ below exists to keep that workflow safe.
 ## Invariants — do not violate, ever
 
 1. **Repo name and URL never change** — installed PWAs break.
-2. **localStorage keys `forge:data`, `forge:cfg`, `forge:program` never renamed** — see DATA-MODEL.md.
+2. **Primary localStorage keys `forge:data`, `forge:cfg`, `forge:program` never rename.** The v46 internal recovery keys `forge:lkg` and `forge:quarantine` are also permanent once shipped — see DATA-MODEL.md.
 3. **No build step.** Files are edited as plain text and deployed as-is. Classic scripts only — **no ES modules** (the codebase uses one shared global scope by design).
 4. **Service-worker cache name bumps every release** (`blackpyre-vNN` in sw.js). No bump = users never get the update.
-5. **Deploy ritual:** all changed files in **one commit** → wait for the green check (now: tests passed) → close and reopen the installed app twice.
+5. **Deploy ritual:** all changed files in **one commit** → wait for the green check → use the update notice or close/reopen the installed app as directed.
 6. **Every release passes the gauntlet first:** `bash tests/run-tests.sh`. No green, no ship.
 7. **Intentional brand language is whitelisted** ("Forge your body", "Session Forged", "Day Forged", "PR FORGED", forge-as-verb in quotes). Everything else says BlackPyre.
 8. **The Easter egg is a memorial.** The handwriting image is embedded byte-for-byte and is never re-rendered, traced, or substituted with a font. Treat that CSS block and its data as read-only.
-9. **Privacy rules:** API keys never leave the device except to their own provider and are excluded from backups; food photos live in memory only; raw AI responses are parsed then discarded; nothing logs without user confirmation.
+9. **Privacy rules:** normal backups exclude Anthropic/OpenAI keys; food photos live in memory only; raw AI responses are parsed then discarded; nothing logs without user confirmation. Device-only recovery records may contain API keys so they can restore the device exactly. Any user-triggered raw recovery export carries a separate privacy warning and must be stored securely.
 
 ## Files
 
 | File | Role |
 |---|---|
-| `index.html` | Markup + styles only (~147 KB after Phase 2); loads the data files then the 7 app slices |
-| `scripts/01-storage.js` | storage keys/defaults, pure prepare-state migration pipeline, commit/rollback, protected-mode guards, state, tabs |
+| `index.html` | Markup + styles only (~156 KB in v46); loads the data files then the 7 app slices; includes protected/recovery UI |
+| `scripts/01-storage.js` | primary/recovery keys, defaults, pure prepare-state migration pipeline, commit/rollback, LKG lifecycle, structured diagnosis, quarantine transaction, protected-mode guards, state, tabs |
 | `scripts/02-food.js` | bars, meals, food logging |
 | `scripts/03-train.js` | training sessions, programs |
 | `scripts/04-weight.js` | weight chart, motivation render, e1RM/PR engine, TDEE, streak, finish day, plate math, share |
 | `scripts/05-ai.js` | USDA/barcode lookups, usual-meal, schedule UI, kudos, AI engine, coach chat, check-in, handoff, AI report, analytics |
-| `scripts/06-settings.js` | setup wizard, FAQ, macro calculator, settings, backup/export and shared-pipeline restore |
-| `scripts/07-boot.js` | dash, Easter egg, protected-mode banner, update toast, boot |
-| `data-quotes.js` | QUOTES vault — classic script, loads before the main script, shares global scope |
+| `scripts/06-settings.js` | setup wizard, FAQ, macro calculator, settings, normal/partial/raw exports, restore, recovery status and quarantine cleanup |
+| `scripts/07-boot.js` | dash, Easter egg, protected/recovery panel orchestration, approved update toast, boot |
+| `data-quotes.js` | QUOTES vault — classic script, loads before the app slices, shares global scope |
 | `data-foods.js` | LOCAL_DB food database + ALT_MAP exercise swaps — classic script |
 | `data-faq.js` | FAQ content — classic script |
 | `sw.js` | Offline shell (cache-first), OFF API network-only, cache name = release version |
 | `manifest.json` | PWA identity — name/short_name **BlackPyre** |
 | `icon-*.png`, `apple-touch-icon.png` | Gold dumbbell icons |
 | `tests/PHASE2-PROOF.md` | Permanent historical record of the Phase 2 byte-identity proof |
-| `tests/` | Permanent gauntlet — 170 automated checks (72 unit + 98 integration) plus `package.json`/`package-lock.json` pinning jsdom for reproducible runs, and `bella-reference.b64` (frozen byte truth of the memorial image — never edited). Not precached |
+| `tests/` | Permanent gauntlet — 253 automated checks (87 unit + 166 integration), reproducible jsdom lockfile, and `bella-reference.b64` (frozen memorial byte truth; never edited). Not precached |
 | `.github/workflows/tests.yml` | Runs the gauntlet on every push |
-| `DATA-MODEL.md` | Storage schema + migration history |
+| `DATA-MODEL.md` | Primary storage schema, recovery-record contracts, and migration history |
 
 ## index.html section map (JS, in execution order)
 
-storage keys & defaults → migrations → pure helpers → state → tabs → bars →
+storage keys & defaults → migrations/recovery vault → pure helpers → state → tabs → bars →
 FOOD (meals, logging, USDA/OFF/barcode, usual-meal, kudos, schedule UI) →
-*(QUOTES / LOCAL_DB / ALT_MAP / FAQ now live in the data-*.js files, loaded first)* →
+*(QUOTES / LOCAL_DB / ALT_MAP / FAQ live in the data-*.js files, loaded first)* →
 TRAIN (sessions, e1RM/PR engine, plate math, rest timer, programs/share) →
 WEIGHT (chart, measurements, adaptive TDEE, projections) →
 streak → finish day → AI ENGINE (BYOK, multi-provider) →
 coach chat → weekly check-in → handoff mode → AI report → analytics →
-setup wizard → FAQ → macro calculator → settings → dash → easter egg → boot.
+setup wizard → FAQ → macro calculator → settings/backup/recovery → dash → Easter egg → protected/recovery boot → update toast.
 
 Section headers look like `// ================== NAME ==================` — keep them.
 The Phase-2 slicing cut the original inline JS at these markers into scripts/01–07
 **in the original order**. The migration was proven byte-identical to the v42 inline JS
 (sha256 63ea5e9b…, 190,324 UTF-8 bytes / 189,847 characters); the live hash check was
 retired in v44 — the first release to intentionally edit a slice — and the complete proof
-and method are preserved permanently in tests/PHASE2-PROOF.md. Lasting structural
+and method are preserved permanently in `tests/PHASE2-PROOF.md`. Lasting structural
 invariants (script order, strict mode, tag attributes, slice opening markers) remain
-enforced by the suite; they verify different, permanent properties, while the hash
-verified the historical migration. Slice names describe their *dominant* content; exact contents are in
-the file table above — 04 and 05 intentionally contain some food/progress sections that
-sat between markers in the original order, because Phase 2 never reorders code.
+enforced by the suite.
 
 Slice rules from here on:
 - The slices are the source of truth and are edited directly. Execution order is
   01 → 07 and is load-bearing; never reorder the `<script src>` tags in index.html.
-- Classic scripts, shared global scope — but each file is a SEPARATE parsing and
-  evaluation unit (strict-mode directives, hoisting, and directive prologues are
-  per-file). Declarations and slice boundaries must remain unchanged unless a future
-  approved plan specifically covers them. Every local classic script begins with
-  `"use strict";` — enforced by the suite.
-- New sections go into whichever slice their document position falls in; if a slice
-  grows unwieldy, splitting it further is a plan-level decision, not a drive-by.
+- Classic scripts share one global scope, but each file is a separate parsing/evaluation
+  unit. Every local classic script begins with `"use strict";` — test-enforced.
+- Declarations and slice boundaries remain unchanged unless an approved plan covers them.
+  New sections belong where their execution order requires; further splitting is a plan-level decision.
 
-## Storage safety conventions (v45)
+## Storage safety conventions (v45–v46)
 
-- `schemaVersion` versions the complete stored state (`forge:cfg`, `forge:data`, and
-  `forge:program`) and is physically stored in `forge:cfg`; current schema = 1.
-- Boot reads the original three strings, runs parse → numbered migration → tolerant
+- `schemaVersion` versions the complete primary state (`forge:cfg`, `forge:data`,
+  `forge:program`) and is physically stored in `forge:cfg`; current primary schema = 1.
+- Boot preserves the original primary strings and runs parse → numbered migration → tolerant
   validation → serialization on copies in pure `prepareState()`, then commits separately.
-- Present unparseable/invalid/newer data enters protected mode before disclaimer/setup.
-  All three save routines restore the protected in-memory snapshot and perform no write.
-- Restore uses the same preparation pipeline. Bad/newer backups are refused without
-  changing the healthy running app; absent envelope members leave that device area untouched.
-- localStorage is not transactional. Commit skips unchanged keys, writes settings last,
-  and attempts rollback on failure; the suite proves the documented interrupted-commit path.
+- Present unparseable/invalid/newer primary data enters protected mode before disclaimer/setup.
+  Save routines restore the protected in-memory snapshot and perform no normal write.
+- Normal restore uses the same preparation pipeline. Bad/newer backups are refused without
+  poisoning a healthy app; absent envelope members leave that device area untouched.
+- v46 maintains one validated device-only LKG at `forge:lkg`. It refreshes only from
+  successfully persisted, fully prepared primary state; it never snapshots unsaved memory.
+- Before any protected recovery overwrites primary storage, exact originals are written to
+  `forge:quarantine` and read back byte-for-byte. Recovery succeeds only after primary
+  read-back equality and a second `prepareState()` validation.
+- LKG/quarantine use strict `recoveryFormatVersion:1`, separate from primary schemaVersion.
+  Newer recovery records are never consumed, deleted, or overwritten by an older app.
+- localStorage is not transactional. Primary commit skips unchanged keys, writes settings
+  last, and attempts rollback. Quarantine-first ordering and post-write verification bound
+  risk but do not claim true atomicity.
 
 ## Testing conventions
 
-- Run with `bash tests/run-tests.sh` — it does `npm ci` against the committed lockfile
-  (reproducible, no floating versions), then runs both suites. This is test tooling only;
-  the app itself has zero dependencies and no build step.
-- Harness (`tests/harness.js`) boots the **shipped** app in jsdom and inlines any local
-  `<script src>` / stylesheet first, so the suite keeps working after the Phase-2 slicing.
-  Inlining tolerates extra attributes in any order; the shipped app uses the plain
-  canonical forms `<script src="NAME.js"></script>` and
-  `<link rel="stylesheet" href="NAME.css">` with double quotes and repo-relative paths.
-  External (http/https) URLs are never inlined.
-- Memorial integrity is enforced by test: the embedded handwriting must match
-  `tests/bella-reference.b64` byte-for-byte, with an exact embed count of 1 (a single CSS custom
-  property serves both mask prefixes). The reference file never changes.
-- Unit suite: pure math and parsers (Mifflin-St Jeor, Epley, schedule sums, macro scaling,
-  streak, prepare-state/schema migrations, AI-reply parsing, bar thresholds, dates).
-- Integration suite: fresh-user boot, ID resolution/duplication, no-fake-values sweep,
-  logging/kudos/finish-day, settings/schedule flows, barcode fallback matrix,
-  backup→restore→migration round-trip, protected-mode zero-write matrix and mutation re-sync,
-  interrupted-commit healing, handoff paste flow, Easter egg timing, update toast.
-- The permanent suite is **170 automated checks** and only grows. When adding a feature: add
-  its checks in the same release. Tests are cumulative, never recreated. (Historical note:
-  before Phase 0, roughly 700 ad-hoc checks were written and discarded across v29–v41 —
-  that figure describes the old throwaway process, not this suite.)
+- Run with `bash tests/run-tests.sh` — it does `npm ci` against the committed lockfile,
+  then runs both suites. Test tooling only; the app still has zero runtime dependencies.
+- Harness (`tests/harness.js`) boots the **shipped** app in jsdom and inlines local scripts/
+  styles. It records `setItem`, `removeItem`, and `clear` calls across all five BlackPyre keys.
+- Memorial integrity is enforced byte-for-byte against `tests/bella-reference.b64`, with
+  an exact embed count of 1. The reference file never changes.
+- Unit suite: pure math/parsers, schema preparation, strict recovery-record parsing,
+  structured diagnostics, candidate summaries, and version-separation rules.
+- Integration suite: all historic app flows plus protected zero-write behavior, mutation
+  re-sync, interrupted commits, LKG create/refresh/failure/quota rules, area diagnosis,
+  all three recovery sources, quarantine ordering/retention/export/deletion, legacy fallback,
+  API-key boundaries, read-back failure, update toast, and Easter egg timing.
+- The permanent suite is **253 automated checks** and only grows. New features add tests in
+  the same release; existing checks are never deleted or weakened. The roughly 700 checks
+  written before Phase 0 were old throwaway checks, not this permanent suite.
 - jsdom quirks: stub `URL.createObjectURL`, ignore `scrollTo` warnings, `select()` runs via
-  rAF (wait ≥50 ms), boot must pass the disclaimer + wizard for fresh-user tests.
+  rAF (wait ≥50 ms), and fresh-user tests must pass disclaimer + setup.
 
 ## Editing rules for AI assistants
 
 - Patch with exact-string anchors and **assert the anchor exists before writing**; if an
-  assertion fails, re-read the file — another assistant may have edited nearby.
-- Never splice by index ranges across section boundaries without diff-verifying what was removed.
-- `node --check` the extracted JS after every edit; run the full gauntlet before packaging.
-- Package = the changed files, one folder + zip; diff packaged against working copy before delivery.
-- Do not rename IDs, storage fields, or functions as "cleanup" — every rename is a feature-sized change.
+  assertion fails, re-read the file.
+- Never splice by index ranges across section boundaries without diff-verifying removals.
+- `node --check` every local JS file after edits; run the full gauntlet before packaging.
+- Package changed files in one folder + zip; diff the package against the working copy.
+- Do not rename IDs, storage fields, keys, or functions as “cleanup” — each rename is a feature-sized change.
 
 ---
 ---
@@ -197,136 +186,230 @@ Slice rules from here on:
 
 # BlackPyre Data Model
 
-**Current as of v45 (July 2026). Current schemaVersion: 1.**
+**Current as of v46 (July 2026). Primary schemaVersion: 1. Recovery format: 1.**
 
-Everything BlackPyre stores lives in three localStorage keys on the user's device.
-**These key names are load-bearing and must never be renamed** (installed apps hold user data under them):
+## Storage keys
+
+BlackPyre has three permanent **primary user-state keys**:
 
 | Key | Contents |
 |---|---|
-| `forge:cfg` | Configuration & targets (object) |
+| `forge:cfg` | Configuration and targets (object) |
 | `forge:data` | All logged data (object) |
-| `forge:program` | The loaded training program (object) |
+| `forge:program` | Loaded training program (object) |
 
-The `forge:` prefix predates the BlackPyre rebrand and is intentionally preserved (invariant I-2).
+v46 adds two permanent **internal, device-only recovery keys**:
+
+| Key | Contents |
+|---|---|
+| `forge:lkg` | One rolling, validated last-known-good whole-state snapshot |
+| `forge:quarantine` | One exact pre-recovery copy of unsafe primary strings plus diagnosis |
+
+All five names are load-bearing once shipped and must not be renamed casually. The `forge:`
+prefix predates the BlackPyre rebrand and is intentionally preserved. The legacy read-only
+fallback `ryan-cut:data` may supply logs when `forge:data` is missing; BlackPyre never renames,
+removes, or modifies that legacy key.
 
 ## Whole-state schemaVersion
 
-`schemaVersion` is physically stored in `forge:cfg`, but it versions the complete stored
-state — settings, logged data, program, and the backup envelope that carries them.
+`schemaVersion` is physically stored in `forge:cfg`, but versions the complete **primary**
+state and normal backup envelope: settings, logged data, and program.
 
-| Raw value | Meaning / behavior in v45 |
+| Raw value | Meaning / behavior in v46 |
 |---|---|
 | property absent or integer `0` | Pre-versioning legacy state; run numbered migrations from step 0 |
-| integer `1` | Current schema; no migration write |
-| integer greater than `1` | Newer BlackPyre data; protected mode on boot, refused on restore |
-| anything else | Invalid; protected mode on boot, refused on restore |
+| integer `1` | Current primary schema; no migration step |
+| integer greater than `1` | Newer primary data; protected boot / refused restore; no downgrade path |
+| anything else | Invalid; protected boot / refused restore |
 
-The version is read from the raw parsed settings before `DEFAULT_CFG` is merged. A migration
-stamps its destination version only after that complete step succeeds. `DEFAULT_CFG` does
-not contain `schemaVersion`, so defaults can never disguise legacy data as current.
+The version is read from raw parsed settings before `DEFAULT_CFG` merges. A migration stamps
+its destination only after that complete step succeeds. `DEFAULT_CFG` does not contain
+`schemaVersion`, so defaults cannot disguise legacy data as current.
+
+## Recovery-record version
+
+`forge:lkg` and `forge:quarantine` are not primary state and do not use `schemaVersion`.
+They carry strict `recoveryFormatVersion: 1`.
+
+| Raw recovery value | Behavior |
+|---|---|
+| missing | No record available; healthy operation continues |
+| malformed / invalid format | Record is not consumed; healthy live state is not poisoned |
+| integer `1` with a valid shape | Current record; validate/use under the rules below |
+| integer greater than `1` | Newer record; older BlackPyre may not use, delete, sacrifice, or overwrite it |
+| anything else | Invalid; never coerced or guessed |
+
+Recovery records are excluded from normal backups and rejected by both normal backup restore
+and the protected backup-import path.
 
 ---
 
 ## forge:cfg
 
-Merged over `DEFAULT_CFG` at boot. `0` means "unset" for personal fields — the app must never
-treat unset values as real numbers (see Migration History).
+Merged over `DEFAULT_CFG` at boot. `0` means “unset” for personal fields; consumers must not
+treat unset values as real measurements or targets.
 
 | Field | Type | Meaning | Notes |
 |---|---|---|---|
-| `schemaVersion` | integer | Generation of the complete stored state | Current = `1`; strict interpretation above |
-| `setupDone` | bool | Onboarding wizard completed or skipped | |
-| `disclaimerAccepted` | string date | Date the disclaimer gate was accepted | Gate blocks app until set |
-| `startWt` | number | Starting bodyweight (lb) for the journey | 0 = unset. Set by wizard (current weight) or Settings. First contrary weigh-in may rebase it |
-| `goalWt` | number | Goal bodyweight (lb) | 0 = unset. Journey/chart/goal-line hidden until both weights > 0 |
-| `calTarget` | number | **Exact** daily calorie target (max on a cut) | 0 = unset → bars replaced by guidance, schedule disabled |
-| `proTarget` | number | Exact daily protein goal (g) | Never shown red for exceeding |
-| `carbGoal` / `fatGoal` | number | Exact daily carb / fat targets (g) | |
-| `calSchedMode` | string | `same` \| `frisat` \| `satsun` \| `frisatsun` \| `custom` | Presets **derive live** from `calTarget` — never stored as arrays |
-| `calSchedDays` | number[7] \| null | Sun→Sat daily calories, **custom mode only** | Custom weekly total may be under, never over, `calTarget×7` |
-| `accent` | string | Theme accent key | Default `gold`; invalid values heal to gold |
-| `calcInputs` | object | Last calculator inputs `{sex,age,ft,inches,act,goal}` | Convenience prefill only |
-| `splitState` | object | Macro split `{mode:"rec"\|"preset"\|"custom", p,c,f}` | Percentages when not "rec" |
-| `lastTargetWt` | number | Bodyweight when targets were last (re)calculated | Drives the TDEE re-adjust prompt |
-| `adjustPromptedAt` | number/date | Last time the re-adjust prompt was shown | Prevents nagging |
-| `liftGoals` | object | `{ [exerciseName]: goal e1RM lb }` | |
-| `restSec` / `customRestSec` / `customRests` | number / number / number[] | Rest-timer defaults and custom preset choices | |
-| `measureOn` / `waterOn` | bool | Optional feature toggles (measurements, water) | Set in wizard or Settings |
-| `usdaKey` | string | Personal USDA API key | Overrides the embedded shared key |
-| `anthropicKey` / `openaiKey` | string | BYOK AI keys | **Excluded from backups**; restore preserves the device's current values |
-| `aiProvider` | string | `anthropic` \| `openai` \| `handoff` | `handoff` = no key, copy/paste with ChatGPT |
-| `aiModelAnth` / `aiModelOai` | string | Optional per-provider model overrides | |
-| `lastCoachDate` | string date | Last weekly coach check-in | Card reappears after 7 days |
+| `schemaVersion` | integer | Generation of complete primary state | Current = `1`; strict interpretation above |
+| `setupDone` | bool | Onboarding completed or skipped | |
+| `disclaimerAccepted` | string date | Date disclaimer gate was accepted | Gate blocks normal app until set |
+| `startWt` | number | Starting bodyweight (lb) | 0 = unset |
+| `goalWt` | number | Goal bodyweight (lb) | 0 = unset |
+| `calTarget` | number | Exact daily calorie target | 0 = unset; schedule disabled |
+| `proTarget` | number | Exact daily protein goal (g) | Never red for exceeding |
+| `carbGoal` / `fatGoal` | number | Exact daily carb/fat targets (g) | |
+| `calSchedMode` | string | `same` \| `frisat` \| `satsun` \| `frisatsun` \| `custom` | Presets derive live from `calTarget` |
+| `calSchedDays` | number[7] \| null | Sun→Sat calories, custom mode only | Weekly total may be under, never over, `calTarget×7` |
+| `accent` | string | Theme accent key | Invalid values heal to gold |
+| `calcInputs` | object | Last macro-calculator inputs | Convenience prefill |
+| `splitState` | object | Macro split `{mode,p,c,f}` | |
+| `lastTargetWt` | number | Weight at last target calculation | Drives readjust prompt |
+| `adjustPromptedAt` | number/date | Last readjust prompt | Prevents nagging |
+| `liftGoals` | object | `{exerciseName: goal e1RM}` | |
+| `restSec` / `customRestSec` / `customRests` | number / number / array-or-object | Rest defaults and custom choices | Legacy tolerated |
+| `measureOn` / `waterOn` | bool | Optional tracking toggles | |
+| `usdaKey` | string | Personal USDA API key | Overrides shared key |
+| `anthropicKey` / `openaiKey` | string | BYOK AI keys | Excluded from normal/readable exports; may exist in device-only recovery records |
+| `aiProvider` | string | `anthropic` \| `openai` \| `handoff` | |
+| `aiModelAnth` / `aiModelOai` | string | Optional model overrides | |
+| `lastCoachDate` | string date | Last weekly coach check-in | |
 
 ## forge:data
 
 | Field | Shape | Meaning |
 |---|---|---|
-| `food` | `{ "YYYY-MM-DD": [entry] }` | `entry = {name, cal, pro, carb, fat, meal}`; `meal ∈ breakfast/lunch/dinner/snacks/other` |
-| `workouts` | `[{date, day, title, sets:{ex:[{w,r}]}, notes}]` | Set rows are structured; legacy string sets (`"275x5"`) still parse |
-| `weights` | `[{date, lbs}]` | One per date; drives chart, TDEE, projections |
-| `measure` | `[{date, waist, chest, arm}]` | Optional; one per date |
+| `food` | `{ "YYYY-MM-DD": [entry] }` | `entry={name,cal,pro,carb,fat,meal}` |
+| `workouts` | `[{date,day,title,sets:{ex:[{w,r}]},notes}]` | Legacy string sets still parse |
+| `weights` | `[{date,lbs}]` | One per date; chart/TDEE/projections |
+| `measure` | `[{date,waist,chest,arm}]` | Optional; one per date |
 | `water` | `{ "YYYY-MM-DD": count }` | Optional |
-| `finished` | `{ "YYYY-MM-DD": true }` | Finish-day flags. **Never count toward the streak by themselves** |
-| `myFoods` | `{ [barcode]: {name, brand, cal100, pro100, carb100, fat100, servingG?, servingLabel?} }` | Personal barcode library — checked **before** any network lookup |
-| `recents` | `[item]` (max 20) | Recently logged foods for quick re-log |
-| `foodCounts` | `{ [foodKey]: n }` | Frequency counts feeding the "usual meal" detector |
-| `mealCounts` | `{ [meal]: { [foodKey]: n } }` | Per-meal frequency for the same detector |
-| `meals` | object | Saved meal combos |
-| `meta` | `{lastBackup, logsSince}` | Backup reminder bookkeeping |
+| `finished` | `{ "YYYY-MM-DD": true }` | Never counts toward streak alone |
+| `myFoods` | `{barcode:{name,brand,cal100,pro100,carb100,fat100,...}}` | Personal barcode library; checked before network |
+| `recents` | `[item]` (max 20) | Quick re-log list |
+| `foodCounts` | `{foodKey:n}` | Usual-meal detector |
+| `mealCounts` | `{meal:{foodKey:n}}` | Per-meal frequency |
+| `meals` | array/object legacy-tolerant | Saved meal combinations |
+| `meta` | `{lastBackup,logsSince}` | Backup reminder bookkeeping |
 
 ## forge:program
 
-`{name, author, days:[{id, label, exercises:[{name, sets, reps, ...}]}]}` — loadable from any
-JSON file or pasted from any AI; the coach can propose one via a ```json block containing
-`program`. Fallback filename on export: `blackpyre-program`.
+`{name, author, days:[{id, title, exercises:[{name, sets, reps, ...}]}]}`. It can be loaded
+from JSON, pasted from an AI, or proposed in a coach JSON block. Export fallback filename:
+`blackpyre-program`.
 
-## Backup envelope
+## forge:lkg
 
-`{cfg, data, program}` as JSON. The envelope's generation is announced by
-`cfg.schemaVersion`. **`anthropicKey`, `openaiKey` are stripped on normal export.**
+Current record shape:
 
-Restore uses the same `prepareState()` pipeline as boot. Presence is tested before defaults
-merge: device AI settings (`anthropicKey`, `openaiKey`, `aiProvider`, `aiModelAnth`,
-`aiModelOai`) survive unless the backup explicitly contains that field. An envelope member
-that is absent leaves the device's corresponding area completely untouched; a present member
-replaces that area only after the whole supplied state prepares successfully. Bad, invalid,
-or newer-version backups are refused with zero writes and do not place a healthy app in
-protected mode.
+```json
+{
+  "recoveryFormatVersion": 1,
+  "savedAt": "ISO timestamp",
+  "source": "boot or save/restore source",
+  "strings": {
+    "cfg": "serialized prepared settings",
+    "data": "serialized prepared logs",
+    "program": "serialized prepared program"
+  },
+  "legacyData": "exact active ryan-cut:data string or null"
+}
+```
 
-In protected mode, normal backup is replaced by an explicitly confirmed partial export named
-`blackpyre-PARTIAL-YYYY-MM-DD.json`. It contains only the readable in-memory snapshot, may be
-incomplete, and does not update backup bookkeeping.
+Rules:
+- Created/refreshed only after healthy boot, successful primary save, successful normal
+  restore, or successful protected recovery.
+- Built by rereading persisted storage and passing the complete state through pure
+  `prepareState()`; unsaved in-memory changes are never snapshotted.
+- Identical state retains the existing timestamp and causes no redundant write.
+- Protected mode, failed primary save, or invalid persisted state cannot refresh it.
+- LKG failure never turns a successful primary save into a failure. The old record is
+  restored best-effort if replacement/read-back fails, and Settings reports unavailable.
+- If a primary save fails specifically for quota, current-format LKG may be sacrificed and
+  that live save retried once. Quarantine and newer recovery records are never sacrificed.
+- It is device-only and may contain AI keys. Normal and readable exports still remove them.
+
+## forge:quarantine
+
+Current record shape:
+
+```json
+{
+  "recoveryFormatVersion": 1,
+  "quarantinedAt": "ISO timestamp",
+  "diagnostic": {"stage":"...","part":"...","code":"...","reason":"..."},
+  "originals": {
+    "cfg": "exact raw string or null",
+    "data": "exact raw string or null",
+    "program": "exact raw string or null",
+    "legacyData": "exact active fallback string or null"
+  }
+}
+```
+
+Rules:
+- Created only after a complete recovery candidate validates and immediately before any
+  primary recovery commit.
+- Exact record is read back and compared before primary writes are allowed.
+- A different existing quarantine is never silently overwritten. Explicit replacement is
+  required; a verified quarantine created during the current recovery incident is retained
+  across retries so failed recovery cannot replace the true originals.
+- Commit/rollback/read-back failure leaves protected mode active and retains quarantine.
+- Successful recovery also retains quarantine until the user explicitly exports/deletes it
+  in Settings. Deletion touches neither primary state nor LKG.
+- Quarantine may contain API keys. Export requires a privacy warning and uses a distinct
+  `blackpyre-RAW-RECOVERY-YYYY-MM-DD.json` filename.
+
+## Normal backup envelope
+
+Normal backup is `{cfg, data, program}` JSON; its generation is announced by
+`cfg.schemaVersion`. `forge:lkg` and `forge:quarantine` are never included.
+`anthropicKey` and `openaiKey` are stripped.
+
+Normal restore uses the shared `prepareState()` path. Device AI fields
+(`anthropicKey`, `openaiKey`, `aiProvider`, `aiModelAnth`, `aiModelOai`) survive unless the
+backup explicitly contains that field. An absent envelope member leaves the corresponding
+device area untouched. Bad/invalid/newer backups and recovery records are refused without
+placing a healthy app into protected mode.
+
+## Protected recovery and exports
+
+For corruption/validation failures, recovery appears before disclaimer/onboarding. Newer
+primary schema and storage-read failures offer no write-capable recovery.
+
+Recovery sources:
+1. validated LKG;
+2. conservative readable-state candidate (keep usable whole areas, reset unusable areas);
+3. normal backup file. In recovery mode, absent backup members come from readable live areas
+   or defaults. AI fields use readable current settings first, otherwise validated LKG;
+   explicitly present backup fields win.
+
+Every candidate passes `prepareState()` before quarantine. Primary recovery commits through
+the settings-last commit path and is successful only after exact primary read-back and a
+second full preparation.
+
+Protected readable export is `blackpyre-PARTIAL-YYYY-MM-DD.json`; it may be incomplete,
+strips Anthropic/OpenAI keys, and does not update backup metadata. If quarantine cannot be
+stored/verified, a separately warned and confirmed raw export may stand in as the preservation
+fallback. The app cannot verify a browser download and states that limit honestly.
 
 ## Migration history (order matters)
 
 | When | What | How |
 |---|---|---|
-| v25 | FORGE → BlackPyre rebrand | Storage keys intentionally unchanged |
-| v34 | Range targets → exact | `calLo/calHi → calTarget` (midpoint), `proLo/proHi → proTarget`, via `migrateTargets(raw)` — **must run on the raw object before the `DEFAULT_CFG` merge**, or defaults mask real values |
-| v35 | `calSchedMode:"weekend"` → `"frisat"` | In `migrateCfg()` |
-| v36+ | Fake defaults removed | Personal fields default to 0/unset; every consumer guards (`nutritionTargetsReady()`, goal-weight checks) |
-| v45 | Formal whole-state schema version 0 → 1 | Pure prepare pipeline wraps the existing target/config migrations, validates and serializes copies, then stamps `schemaVersion:1`; boot failures preserve storage in protected mode |
+| v25 | FORGE → BlackPyre rebrand | Primary storage keys intentionally unchanged |
+| v34 | Range targets → exact | `calLo/calHi → calTarget`, `proLo/proHi → proTarget`; must run on raw cfg before defaults |
+| v35 | `calSchedMode:"weekend"` → `"frisat"` | `migrateCfg()` |
+| v36+ | Fake defaults removed | Personal fields default to 0/unset; consumers guard |
+| v45 | Whole-state primary schema 0 → 1 | Pure prepare pipeline, strict versioning, protected boot, shared boot/restore path |
+| v46 | Recovery format 1 introduced; primary schema remains 1 | Device-only LKG, structured diagnosis, quarantine-before-write, validated recovery/read-back |
 
-Old backups from any era must restore correctly; the integration suite proves the range-era path.
-
-## v45 protected migration behavior
-
-Boot preserves the original three storage strings, prepares disposable copies, and commits
-only after parse, migration, validation, and serialization all succeed. Pre-commit failure
-performs zero writes. Protected mode suppresses disclaimer/onboarding, blocks restore, and
-guards `save()`, `saveCfg()`, and `saveProgram()`; a blocked mutation is restored from the
-frozen session snapshot and rerendered so it does not appear saved.
-
-localStorage cannot atomically transact three keys. Commit therefore skips byte-identical
-keys, writes data/program before the schema-stamped settings, and attempts rollback to the
-original strings if a write throws. This is best-effort, not a claim of true atomicity.
+Old backups from any era must continue restoring correctly; the permanent suite proves the
+range-era path.
 
 ## AI response contracts
 
-The coach may embed ```json blocks: `{"bpTargets":{calTarget, proTarget, carbGoal, fatGoal}}`
-(legacy `calLo/calHi/proLo/proHi` tolerated via averaging) renders an **Apply targets** button;
-a `program` object renders a **Load** button. Food estimates: `{"foods":[{name, cal, pro, carb, fat}]}` —
-all four macros required per entry; parsing normalizes smart quotes, fences, and zero-width junk.
-Raw AI responses are never persisted.
+The coach may embed JSON blocks: `{"bpTargets":{calTarget,proTarget,carbGoal,fatGoal}}`
+(legacy ranges tolerated via averaging) for an **Apply targets** action; a `program` object
+for **Load**; and food estimates `{"foods":[{name,cal,pro,carb,fat}]}` with all four macros.
+Parsing normalizes smart quotes, fences, and zero-width junk. Raw AI responses are never persisted.

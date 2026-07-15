@@ -258,6 +258,17 @@ if (protectedMode){
 } else {
   afterDisclaimer();
 }
+function resumeGatesAfterRecovery(){
+  document.getElementById("disclaimerOverlay").classList.add("hidden");
+  document.getElementById("setupOverlay").classList.add("hidden");
+  if (!cfg.disclaimerAccepted){
+    lockScroll();
+    document.getElementById("disclaimerOverlay").classList.remove("hidden");
+  } else {
+    unlockScroll();
+    afterDisclaimer();
+  }
+}
 
 // ================== HELP & FAQ ==================
 
@@ -550,6 +561,55 @@ function doBackup(btnId){
 }
 document.getElementById("exportDataBtn").addEventListener("click", ()=>doBackup("exportDataBtn"));
 document.getElementById("backupNowBtn").addEventListener("click", ()=>doBackup("backupNowBtn"));
+function exportRawRecoveryOriginals(){
+  const payload = makeRawRecoveryEnvelope();
+  if (!payload.ok){ flashSave("Raw recovery export unavailable", true); return false; }
+  const privacyOk = confirm("This emergency file preserves exact saved strings and may contain private API keys. Store it securely and do not share it. Export raw originals?");
+  if (!privacyOk) return false;
+  download("blackpyre-RAW-RECOVERY-"+todayStr()+".json", JSON.stringify(payload.envelope, null, 2));
+  rawRecoveryExportConfirmed = confirm("Confirm only after the raw recovery file has been saved somewhere safe. Did you save it?");
+  flashSave(rawRecoveryExportConfirmed ? "Raw recovery copy confirmed ✓" : "Raw export downloaded — confirmation still required", !rawRecoveryExportConfirmed);
+  return rawRecoveryExportConfirmed;
+}
+function exportStoredQuarantine(){
+  let raw;
+  try { raw = localStorage.getItem(QUARANTINE_KEY); }
+  catch(e){ flashSave("Recovery copy could not be read", true); return false; }
+  if (raw===null){ flashSave("No recovery copy is stored", true); return false; }
+  const ok = confirm("This recovery file may contain private API keys because it preserves the original saved strings exactly. Store it securely. Export it now?");
+  if (!ok) return false;
+  download("blackpyre-RAW-RECOVERY-"+todayStr()+".json", raw);
+  flashSave("Recovery copy exported ✓");
+  return true;
+}
+function renderRecoveryStatus(){
+  const line = document.getElementById("recoveryStatusLine");
+  const card = document.getElementById("quarantineCard");
+  if (line){
+    if (protectedMode) line.textContent = "Automatic recovery is paused while BlackPyre protects the original saved data.";
+    else if (lkgStatus.state==="ready") line.textContent = "Automatic recovery protection: ready"+(lkgStatus.savedAt ? " · snapshot "+new Date(lkgStatus.savedAt).toLocaleString() : "")+".";
+    else if (lkgStatus.state==="newer") line.textContent = "Automatic recovery protection: a newer-version snapshot is present and was left untouched.";
+    else line.textContent = "Automatic recovery protection: unavailable. "+(lkgStatus.message||"");
+  }
+  if (!card) return;
+  const q = getStoredQuarantineStatus();
+  if (q.missing){ card.classList.add("hidden"); return; }
+  card.classList.remove("hidden");
+  const text = document.getElementById("quarantineStatusText");
+  if (q.newer) text.textContent = "A recovery copy from a newer BlackPyre is stored. This version will not alter or delete it.";
+  else if (q.ok) text.textContent = "Original pre-recovery data is preserved from "+(q.record.quarantinedAt ? new Date(q.record.quarantinedAt).toLocaleString() : "an earlier recovery")+". Delete it only after you are certain the recovered app is correct.";
+  else text.textContent = "A recovery record exists but this version cannot fully inspect it. Export it before considering removal.";
+  document.getElementById("deleteQuarantineBtn").disabled = !!q.newer || q.code==="storage-read";
+}
+document.getElementById("exportQuarantineBtn").addEventListener("click", exportStoredQuarantine);
+document.getElementById("deleteQuarantineBtn").addEventListener("click", ()=>{
+  const q = getStoredQuarantineStatus();
+  if (q.newer){ flashSave("Newer recovery copy left untouched", true); return; }
+  if (!confirm("Delete the stored recovery copy? This does not affect your current BlackPyre data or last-known-good snapshot.")) return;
+  const result = deleteStoredQuarantine();
+  flashSave(result.ok ? "Recovery copy deleted ✓" : result.reason, !result.ok);
+  renderRecoveryStatus();
+});
 function renderBackup(){
   const m = data.meta || {lastBackup:null, logsSince:0};
   const line = document.getElementById("backupMetaLine");
@@ -559,6 +619,7 @@ function renderBackup(){
   } else {
     line.textContent = "Last backup: never. Your data lives only on this device — back it up occasionally.";
   }
+  renderRecoveryStatus();
   const card = document.getElementById("backupCard");
   const due = (!m.lastBackup && (m.logsSince||0)>=10)
     || (m.lastBackup && Math.floor((new Date(todayStr()) - new Date(m.lastBackup))/86400000)>=14 && (m.logsSince||0)>=10);
@@ -576,6 +637,10 @@ function restoreBackupEnvelope(b){
   if (!isPlainObject(b)){
     flashSave("Restore refused — not a BlackPyre backup", true);
     return {ok:false, code:"envelope"};
+  }
+  if (hasOwn(b,"recoveryFormatVersion")){
+    flashSave("Restore refused — recovery records are not normal backups", true);
+    return {ok:false, code:"recovery-record"};
   }
   const present = {cfg:hasOwn(b,"cfg"), data:hasOwn(b,"data"), program:hasOwn(b,"program")};
   if (!present.cfg && !present.data && !present.program){
@@ -612,6 +677,7 @@ function restoreBackupEnvelope(b){
         protectedMode = true;
         protectedModeKind = "failure";
         protectedModeReason = "A restore write failed and browser storage refused a complete rollback. Do not uninstall the app.";
+        protectedModeDiagnostic = makeDiagnostic("commit","state","restore-commit-failed",protectedModeReason);
         protectedSnapshotStrings = {data:JSON.stringify(data), cfg:JSON.stringify(cfg), program:JSON.stringify(program)};
         if (typeof showProtectedBanner==="function") showProtectedBanner();
       }
@@ -619,6 +685,7 @@ function restoreBackupEnvelope(b){
       return {ok:false, code:"commit"};
     }
     applyPreparedState(prepared);
+    refreshLastKnownGood("restore");
     renderDayOptions(); renderSessionInputs(); renderAll();
     flashSave("Backup restored ✓");
     ackBtn("importDataBtn", "✓ Restored");
@@ -629,7 +696,11 @@ function restoreBackupEnvelope(b){
   }
 }
 document.getElementById("importDataBtn").addEventListener("click", ()=>{
-  if (protectedMode){ flashSave("Restore blocked — protected mode", true); return; }
+  if (protectedMode){
+    if (typeof openRecoveryPanel==="function" && recoveryWritesAllowed()) openRecoveryPanel();
+    else flashSave("Restore blocked — protected mode", true);
+    return;
+  }
   document.getElementById("importDataFile").click();
 });
 document.getElementById("importDataFile").addEventListener("change", (e)=>{

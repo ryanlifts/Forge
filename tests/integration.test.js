@@ -1,5 +1,5 @@
 // BlackPyre permanent integration suite — boots the shipped app and exercises whole flows.
-const { boot, bootRaw, assembleHTML, sacredCalls, check, summary, dstr, wait, EXISTING_CFG, EMPTY_DATA } = require("./harness");
+const { boot, bootRaw, assembleHTML, sacredCalls, allBlackPyreCalls, check, summary, dstr, wait, EXISTING_CFG, EMPTY_DATA } = require("./harness");
 const fs = require("fs");
 const path = require("path");
 
@@ -182,6 +182,7 @@ const replacementData = {food:{"2026-07-14":[{name:"Restored",cal:10,pro:1,carb:
 restoreResult = R45.window.eval(`restoreBackupEnvelope({data:${JSON.stringify(replacementData)}})`);
 check("data-only partial envelope replaces data", restoreResult.ok && R45.window.eval(`data.food["2026-07-14"][0].name`)==="Restored");
 check("data-only partial envelope leaves cfg and program untouched", R45.window.localStorage.getItem("forge:cfg")===cfgBeforeDataOnly && R45.window.localStorage.getItem("forge:program")===progBeforeDataOnly);
+check("successful normal restore refreshes LKG with restored persisted state", JSON.parse(JSON.parse(R45.window.localStorage.getItem("forge:lkg")).strings.data).food["2026-07-14"][0].name==="Restored");
 
 // Bad/newer backups are refused without changing storage, runtime, or mode.
 R45.__storageCalls.length=0;
@@ -220,6 +221,300 @@ check("commit order writes data and program before settings stamp", sacredCalls(
 check("simulated interrupted commit reports failed rollback", tornCommit.ok===false && tornCommit.rollbackFailed===true && JSON.parse(tStore.getItem("forge:cfg")).schemaVersion===undefined);
 let Healed45 = bootRaw({cfg:tStore.getItem("forge:cfg"),data:tStore.getItem("forge:data"),program:tStore.getItem("forge:program")});
 check("next boot heals an unstamped interrupted commit", Healed45.window.eval("protectedMode")===false && Healed45.window.eval("cfg.schemaVersion")===1 && Healed45.window.eval("cfg.calTarget")===1600);
+
+// ================= v46: recovery vault, quarantine, and LKG =================
+const fiveBytes = dom=>({
+  cfg:dom.window.localStorage.getItem("forge:cfg"),
+  data:dom.window.localStorage.getItem("forge:data"),
+  program:dom.window.localStorage.getItem("forge:program"),
+  lkg:dom.window.localStorage.getItem("forge:lkg"),
+  quarantine:dom.window.localStorage.getItem("forge:quarantine")
+});
+const samePrimary = (a,b)=>a.cfg===b.cfg && a.data===b.data && a.program===b.program;
+const callsFor = (dom,key)=>allBlackPyreCalls(dom).filter(c=>c.key===key);
+const validQuarantineRaw = originals=>JSON.stringify({recoveryFormatVersion:1,quarantinedAt:"2026-07-14T12:00:00.000Z",diagnostic:{stage:"parse",part:"cfg",code:"json-parse",reason:"test"},originals:originals});
+
+// Healthy v46 boot creates one validated LKG without changing current primary schema or bytes.
+let H46 = bootRaw({cfg:RAW_V1_CFG,data:RAW_DATA,program:RAW_PROGRAM});
+let h46LkgRaw = H46.window.localStorage.getItem("forge:lkg");
+let h46Lkg = JSON.parse(h46LkgRaw);
+check("v46 healthy boot keeps primary schemaVersion 1", H46.window.eval("cfg.schemaVersion")===1 && JSON.parse(H46.window.localStorage.getItem("forge:cfg")).schemaVersion===1);
+check("v46 healthy boot creates a format-1 whole-state LKG", h46Lkg.recoveryFormatVersion===1 && ["cfg","data","program"].every(k=>typeof h46Lkg.strings[k]==="string"));
+check("creating LKG does not rewrite unchanged primary keys", sacredCalls(H46).length===0 && callsFor(H46,"forge:lkg").length===1);
+check("LKG final strings pass the shared prepare pipeline", H46.window.eval(`inspectLkgRaw(${JSON.stringify(h46LkgRaw)}).ok`)===true);
+let H46b = bootRaw({cfg:RAW_V1_CFG,data:RAW_DATA,program:RAW_PROGRAM,lkg:h46LkgRaw});
+check("identical second boot retains LKG timestamp and writes nothing", allBlackPyreCalls(H46b).length===0 && JSON.parse(H46b.window.localStorage.getItem("forge:lkg")).savedAt===h46Lkg.savedAt);
+check("Settings reports automatic recovery ready", /ready/i.test(H46b.window.document.getElementById("recoveryStatusLine").textContent));
+
+// Each successful primary save refreshes the persisted whole-state snapshot.
+H46.__storageCalls.length=0;
+H46.window.eval(`data.weights.push({date:"2026-07-14",lbs:218}); save();`);
+let snapAfterData = JSON.parse(H46.window.localStorage.getItem("forge:lkg"));
+check("successful data save refreshes LKG from persisted storage", JSON.parse(snapAfterData.strings.data).weights[0].lbs===218 && callsFor(H46,"forge:data").length===1 && callsFor(H46,"forge:lkg").length===1);
+H46.__storageCalls.length=0;
+H46.window.eval(`cfg.goalWt=170; saveCfg();`);
+let snapAfterCfg = JSON.parse(H46.window.localStorage.getItem("forge:lkg"));
+check("successful settings save refreshes LKG", JSON.parse(snapAfterCfg.strings.cfg).goalWt===170 && callsFor(H46,"forge:cfg").length===1 && callsFor(H46,"forge:lkg").length===1);
+H46.__storageCalls.length=0;
+H46.window.eval(`program={name:"Recovery Program",days:[{id:"R1",title:"R1",exercises:[{name:"Squat"}]}]}; saveProgram();`);
+let snapAfterProgram = JSON.parse(H46.window.localStorage.getItem("forge:lkg"));
+check("successful program save refreshes LKG", JSON.parse(snapAfterProgram.strings.program).name==="Recovery Program" && callsFor(H46,"forge:program").length===1 && callsFor(H46,"forge:lkg").length===1);
+
+// A failed primary save never replaces the prior LKG.
+const failSaveLkg = H46.window.localStorage.getItem("forge:lkg");
+const h46Proto = Object.getPrototypeOf(H46.window.localStorage);
+const h46SpySet = h46Proto.setItem;
+h46Proto.setItem = function(k,v){ if(k==="forge:data") throw new Error("primary denied"); return h46SpySet.call(this,k,v); };
+const failedPrimary = H46.window.eval(`data.weights.push({date:"2026-07-15",lbs:217}); save()`);
+h46Proto.setItem = h46SpySet;
+check("failed primary save does not replace LKG", failedPrimary===false && H46.window.localStorage.getItem("forge:lkg")===failSaveLkg);
+H46.window.eval(`data.workouts={bad:true};`);
+const invalidMemoryLkg=H46.window.localStorage.getItem("forge:lkg");
+const invalidMemoryRefresh=H46.window.eval(`refreshLastKnownGood("invalid-memory-test")`);
+check("invalid unsaved in-memory candidate cannot replace persisted LKG", invalidMemoryRefresh.ok && invalidMemoryRefresh.unchanged && H46.window.localStorage.getItem("forge:lkg")===invalidMemoryLkg);
+H46.window.eval(`data=JSON.parse(localStorage.getItem("forge:data")); normalizeDataState(data);`);
+
+// LKG failure is secondary: live save succeeds and previous snapshot remains.
+let LkgFail = bootRaw({cfg:RAW_V1_CFG,data:RAW_DATA,program:RAW_PROGRAM,lkg:h46LkgRaw});
+const lkgFailBefore = LkgFail.window.localStorage.getItem("forge:lkg");
+const lfProto = Object.getPrototypeOf(LkgFail.window.localStorage), lfSpySet=lfProto.setItem;
+lfProto.setItem=function(k,v){ if(k==="forge:lkg") throw new Error("snapshot denied"); return lfSpySet.call(this,k,v); };
+const lkgFailSave = LkgFail.window.eval(`data.weights.push({date:"2026-07-14",lbs:216}); save()`);
+lfProto.setItem=lfSpySet;
+check("LKG write failure leaves primary save successful", lkgFailSave===true && JSON.parse(LkgFail.window.localStorage.getItem("forge:data")).weights[0].lbs===216);
+check("LKG write failure leaves previous snapshot intact and reports unavailable", LkgFail.window.localStorage.getItem("forge:lkg")===lkgFailBefore && LkgFail.window.eval("lkgStatus.state")==="unavailable");
+let LkgVerifyFail=bootRaw({cfg:RAW_V1_CFG,data:RAW_DATA,program:RAW_PROGRAM,lkg:lkgFailBefore});
+const lvProto=Object.getPrototypeOf(LkgVerifyFail.window.localStorage), lvSet=lvProto.setItem, lvGet=lvProto.getItem;
+let lvWrote=false, lvMismatch=false;
+lvProto.setItem=function(k,v){ const out=lvSet.call(this,k,v); if(k==="forge:lkg") lvWrote=true; return out; };
+lvProto.getItem=function(k){ if(k==="forge:lkg" && lvWrote && !lvMismatch){ lvMismatch=true; return "{mismatch"; } return lvGet.call(this,k); };
+LkgVerifyFail.window.eval(`data.weights=[{date:"2026-07-14",lbs:214}]; save();`);
+lvProto.setItem=lvSet; lvProto.getItem=lvGet;
+check("LKG verification failure rolls back to the previous snapshot", LkgVerifyFail.window.localStorage.getItem("forge:lkg")===lkgFailBefore && JSON.parse(LkgVerifyFail.window.localStorage.getItem("forge:data")).weights[0].lbs===214);
+
+// A quota-caused primary failure may sacrifice LKG once, never quarantine.
+const quotaQuarantine = validQuarantineRaw({cfg:"old",data:"old",program:"old",legacyData:null});
+let Quota46 = bootRaw({cfg:RAW_V1_CFG,data:RAW_DATA,program:RAW_PROGRAM,lkg:h46LkgRaw,quarantine:quotaQuarantine});
+const qProto=Object.getPrototypeOf(Quota46.window.localStorage), qSpySet=qProto.setItem;
+let qFirst=true; const qOrder=[];
+qProto.setItem=function(k,v){
+  qOrder.push("set:"+k);
+  if(k==="forge:data" && qFirst){ qFirst=false; const e=new Error("full"); Object.defineProperty(e,"name",{value:"QuotaExceededError"}); throw e; }
+  if(k==="forge:lkg"){ const e=new Error("still full"); Object.defineProperty(e,"name",{value:"QuotaExceededError"}); throw e; }
+  return qSpySet.call(this,k,v);
+};
+const qProtoRemove=qProto.removeItem;
+qProto.removeItem=function(k){ qOrder.push("remove:"+k); return Quota46.window.__storageOriginalMethods.removeItem.call(this,k); };
+const quotaSaved=Quota46.window.eval(`data.weights.push({date:"2026-07-14",lbs:215}); save()`);
+qProto.setItem=qSpySet; qProto.removeItem=qProtoRemove;
+check("quota retry sacrifices LKG then saves live data once", quotaSaved===true && qOrder.indexOf("remove:forge:lkg")>qOrder.indexOf("set:forge:data") && JSON.parse(Quota46.window.localStorage.getItem("forge:data")).weights[0].lbs===215);
+check("quota retry never sacrifices quarantine", Quota46.window.localStorage.getItem("forge:quarantine")===quotaQuarantine && !qOrder.includes("remove:forge:quarantine"));
+
+// Bad LKG cannot poison healthy data; malformed is rebuilt, newer format is untouched.
+let BadLkg = bootRaw({cfg:RAW_V1_CFG,data:RAW_DATA,program:RAW_PROGRAM,lkg:"{broken"});
+check("malformed LKG never protects healthy live data", BadLkg.window.eval("protectedMode")===false);
+check("malformed LKG is rebuilt as a valid snapshot", BadLkg.window.eval(`inspectLkgRaw(localStorage.getItem("forge:lkg")).ok`)===true && callsFor(BadLkg,"forge:lkg").some(c=>c.method==="setItem"));
+const newerLkgRaw=JSON.stringify({recoveryFormatVersion:99,savedAt:"future",strings:{}});
+let NewLkg = bootRaw({cfg:RAW_V1_CFG,data:RAW_DATA,program:RAW_PROGRAM,lkg:newerLkgRaw});
+check("newer-format LKG is not used or overwritten", NewLkg.window.eval("protectedMode")===false && NewLkg.window.localStorage.getItem("forge:lkg")===newerLkgRaw && NewLkg.window.eval("lkgStatus.state")==="newer" && callsFor(NewLkg,"forge:lkg").length===0);
+const newerStateLkgRaw=JSON.stringify({recoveryFormatVersion:1,savedAt:"future",strings:{cfg:JSON.stringify({schemaVersion:99}),data:RAW_DATA,program:RAW_PROGRAM},legacyData:null});
+let NewStateLkg=bootRaw({cfg:RAW_V1_CFG,data:RAW_DATA,program:RAW_PROGRAM,lkg:newerStateLkgRaw});
+check("LKG carrying newer primary schema is not overwritten", NewStateLkg.window.localStorage.getItem("forge:lkg")===newerStateLkgRaw && NewStateLkg.window.eval("lkgStatus.state")==="newer" && callsFor(NewStateLkg,"forge:lkg").length===0);
+
+// Protected boot diagnoses exact area, shows recovery before gates, and never refreshes LKG.
+let DiagCfg = bootRaw({cfg:"{broken",data:RAW_DATA,program:RAW_PROGRAM,lkg:h46LkgRaw});
+check("v46 diagnosis identifies corrupt settings", DiagCfg.window.eval(`protectedModeDiagnostic.stage+":"+protectedModeDiagnostic.part`)==="parse:cfg");
+check("corruption recovery panel appears before gates", !DiagCfg.window.document.getElementById("recoveryOverlay").classList.contains("hidden") && DiagCfg.window.document.getElementById("disclaimerOverlay").classList.contains("hidden") && DiagCfg.window.document.getElementById("setupOverlay").classList.contains("hidden"));
+check("protected boot never refreshes or replaces LKG", DiagCfg.window.localStorage.getItem("forge:lkg")===h46LkgRaw && callsFor(DiagCfg,"forge:lkg").length===0);
+let DiagData=bootRaw({cfg:RAW_V1_CFG,data:"{broken",program:RAW_PROGRAM,lkg:h46LkgRaw});
+let DiagProgram=bootRaw({cfg:RAW_V1_CFG,data:RAW_DATA,program:"{broken",lkg:h46LkgRaw});
+check("v46 diagnosis distinguishes logs and program", DiagData.window.eval("protectedModeDiagnostic.part")==="data" && DiagProgram.window.eval("protectedModeDiagnostic.part")==="program");
+let MigrationDiag46=bootRaw({cfg:JSON.stringify(EXISTING_CFG),data:RAW_DATA,program:RAW_PROGRAM,lkg:h46LkgRaw},w=>{w.__BP_TEST_PREPARE_OPTIONS={forceMigrationFailure:true};});
+check("structured boot diagnosis identifies migration failure", MigrationDiag46.window.eval(`protectedModeDiagnostic.stage+":"+protectedModeDiagnostic.part`)==="migration:state" && MigrationDiag46.window.eval("recoveryWritesAllowed()")===true);
+let BootCommitDiag46=bootRaw({cfg:JSON.stringify(EXISTING_CFG),data:RAW_DATA,program:RAW_PROGRAM,lkg:h46LkgRaw},w=>{
+  const p=Object.getPrototypeOf(w.localStorage), set=p.setItem;
+  p.setItem=function(k,v){ if(k==="forge:cfg") throw new Error("boot commit denied"); return set.call(this,k,v); };
+});
+check("structured boot diagnosis identifies commit failure", BootCommitDiag46.window.eval(`protectedModeDiagnostic.stage+":"+protectedModeDiagnostic.code`)==="commit:boot-commit-failed" && BootCommitDiag46.window.eval("recoveryWritesAllowed()")===true);
+let Newer46=bootRaw({cfg:JSON.stringify(Object.assign({},V1_CFG,{schemaVersion:99})),data:RAW_DATA,program:RAW_PROGRAM,lkg:h46LkgRaw});
+check("newer primary data offers no downgrade recovery", Newer46.window.document.getElementById("protectedRecoveryBtn").classList.contains("hidden") && Newer46.window.document.getElementById("recoveryOverlay").classList.contains("hidden") && Newer46.window.eval("recoveryWritesAllowed()")===false);
+let StorageRead46=bootRaw({cfg:RAW_V1_CFG,data:RAW_DATA,program:RAW_PROGRAM},w=>{
+  const p=Object.getPrototypeOf(w.localStorage), g=p.getItem;
+  p.getItem=function(k){ if(k==="forge:cfg") throw new Error("read denied"); return g.call(this,k); };
+});
+check("storage-read failure offers no write-capable recovery", StorageRead46.window.eval("protectedModeDiagnostic.stage")==="storage-read" && StorageRead46.window.eval("recoveryWritesAllowed()")===false && StorageRead46.window.document.getElementById("protectedRecoveryBtn").classList.contains("hidden"));
+
+// Last-known-good recovery quarantines exact originals first, verifies, then exits protected mode.
+const lkgSourceData={food:{},workouts:[],weights:[{date:"2026-07-01",lbs:212}],meta:{lastBackup:null,logsSince:0}};
+const lkgSourceCfg=Object.assign({},V1_CFG,{goalWt:168,anthropicKey:"sk-lkg",aiProvider:"anthropic"});
+const lkgSourceProgram={name:"Known Good",days:[{id:"K1",title:"Known",exercises:[{name:"Deadlift"}]}]};
+let LkgSource=boot(lkgSourceCfg,lkgSourceData,null,lkgSourceProgram);
+const recoveryLkgRaw=LkgSource.window.localStorage.getItem("forge:lkg");
+const corruptCfgRaw="{definitely-broken";
+const liveDifferentData=JSON.stringify({food:{},workouts:[],weights:[{date:"2026-07-02",lbs:999}],meta:{lastBackup:null,logsSince:0}});
+let RecoverLkg=bootRaw({cfg:corruptCfgRaw,data:liveDifferentData,program:RAW_PROGRAM,lkg:recoveryLkgRaw});
+RecoverLkg.__storageCalls.length=0;
+const recoverLkgResult=RecoverLkg.window.eval(`performRecoveryCandidate(buildLkgRecoveryCandidate(),{})`);
+const recoverLkgQ=JSON.parse(RecoverLkg.window.localStorage.getItem("forge:quarantine"));
+const recoverOrder=allBlackPyreCalls(RecoverLkg).map(c=>c.method+":"+c.key);
+check("LKG recovery succeeds only after verified commit", recoverLkgResult.ok && RecoverLkg.window.eval("protectedMode")===false && RecoverLkg.window.eval("data.weights[0].lbs")===212 && RecoverLkg.window.eval("program.name")==="Known Good");
+check("LKG recovery quarantine preserves exact original primary strings", recoverLkgQ.originals.cfg===corruptCfgRaw && recoverLkgQ.originals.data===liveDifferentData && recoverLkgQ.originals.program===RAW_PROGRAM);
+check("quarantine write occurs before every primary recovery write", recoverOrder[0]==="setItem:forge:quarantine" && recoverOrder.findIndex(x=>/forge:(data|program|cfg)$/.test(x))>0);
+check("successful recovery retains quarantine and refreshes LKG", RecoverLkg.window.localStorage.getItem("forge:quarantine")!==null && RecoverLkg.window.eval(`inspectLkgRaw(localStorage.getItem("forge:lkg")).ok`)===true);
+check("successful recovery exposes quarantine card in Settings", !RecoverLkg.window.document.getElementById("quarantineCard").classList.contains("hidden"));
+
+// Readable recovery keeps valid whole areas and resets only the unusable area.
+let Readable46=bootRaw({cfg:RAW_V1_CFG,data:"{broken-logs",program:RAW_PROGRAM,lkg:recoveryLkgRaw});
+const readableCandidate=Readable46.window.eval("buildReadableRecoveryCandidate()");
+check("readable candidate states exact keep/reset outcome", readableCandidate.ok && /Keep settings/.test(readableCandidate.summary) && /Reset logs/.test(readableCandidate.summary) && /Keep training program/.test(readableCandidate.summary));
+const readableResult=Readable46.window.eval("performRecoveryCandidate(buildReadableRecoveryCandidate(),{})");
+check("readable recovery resets only damaged logs", readableResult.ok && Readable46.window.eval("cfg.goalWt")===175 && Readable46.window.eval("program.name")==="Test Program" && Readable46.window.eval("data.weights.length")===0);
+check("readable recovery quarantines the unusable logs verbatim", JSON.parse(Readable46.window.localStorage.getItem("forge:quarantine")).originals.data==="{broken-logs");
+
+// Recovery backup partial semantics + best validated AI source.
+const liveProgramForBackup={name:"Readable Live Program",days:[{id:"LP",title:"LP",exercises:[{name:"Row"}]}]};
+let BackupRecovery=bootRaw({cfg:"{broken-settings",data:RAW_DATA,program:JSON.stringify(liveProgramForBackup),lkg:recoveryLkgRaw});
+const recoveryBackupData={food:{"2026-07-14":[{name:"Backup food",cal:1,pro:1,carb:0,fat:0,meal:"other"}]},workouts:[],weights:[],meta:{lastBackup:null,logsSince:0}};
+const backupCandidate=BackupRecovery.window.eval(`prepareRecoveryBackupEnvelope({data:${JSON.stringify(recoveryBackupData)}})`);
+check("partial recovery backup uses backup/readable/default sources exactly", backupCandidate.ok && /Use backup logs/.test(backupCandidate.summary) && /Keep readable training program/.test(backupCandidate.summary) && /Reset settings/.test(backupCandidate.summary));
+const backupRecoveryResult=BackupRecovery.window.eval(`performRecoveryCandidate(prepareRecoveryBackupEnvelope({data:${JSON.stringify(recoveryBackupData)}}),{})`);
+check("partial recovery backup restores data and keeps readable program", backupRecoveryResult.ok && BackupRecovery.window.eval(`data.food["2026-07-14"][0].name`)==="Backup food" && BackupRecovery.window.eval("program.name")==="Readable Live Program");
+check("recovery backup preserves AI fields from validated LKG when live cfg is unreadable", BackupRecovery.window.eval("cfg.anthropicKey")==="sk-lkg" && BackupRecovery.window.eval("cfg.aiProvider")==="anthropic");
+let RangeRecovery=bootRaw({cfg:"{bad",data:liveDifferentData,program:RAW_PROGRAM,lkg:recoveryLkgRaw});
+const recoveryRangeCfg=Object.assign({},EXISTING_CFG,{calLo:1400,calHi:1600,proLo:150,proHi:170}); delete recoveryRangeCfg.calTarget; delete recoveryRangeCfg.proTarget;
+const rangeRecoveryCandidate=RangeRecovery.window.eval(`prepareRecoveryBackupEnvelope({cfg:${JSON.stringify(recoveryRangeCfg)}})`);
+check("historical range backup prepares through recovery pipeline", rangeRecoveryCandidate.ok && rangeRecoveryCandidate.prepared.state.cfg.calTarget===1500 && rangeRecoveryCandidate.prepared.state.cfg.proTarget===160 && rangeRecoveryCandidate.prepared.state.data.weights[0].lbs===999);
+RangeRecovery.__storageCalls.length=0;
+const newerRecoveryBackup=RangeRecovery.window.eval(`prepareRecoveryBackupEnvelope({cfg:${JSON.stringify(Object.assign({},V1_CFG,{schemaVersion:99}))}})`);
+check("newer backup is refused in recovery mode before any write", !newerRecoveryBackup.ok && newerRecoveryBackup.code==="newer" && sacredCalls(RangeRecovery).length===0 && callsFor(RangeRecovery,"forge:quarantine").length===0);
+const invalidRecoveryCandidateResult=RangeRecovery.window.eval(`performRecoveryCandidate({ok:true,raws:{cfg:"{bad",data:${JSON.stringify(RAW_DATA)},program:${JSON.stringify(RAW_PROGRAM)}}},{})`);
+check("invalid recovery candidate fails before quarantine or primary writes", invalidRecoveryCandidateResult.code==="prepare" && sacredCalls(RangeRecovery).length===0 && callsFor(RangeRecovery,"forge:quarantine").length===0);
+
+// Quarantine failure blocks all primary writes until raw export fallback is confirmed.
+let QFail46=bootRaw({cfg:"{broken",data:RAW_DATA,program:RAW_PROGRAM,lkg:recoveryLkgRaw});
+QFail46.__storageCalls.length=0;
+const qfBefore=sacredBytes(QFail46), qfProto=Object.getPrototypeOf(QFail46.window.localStorage), qfSpySet=qfProto.setItem;
+qfProto.setItem=function(k,v){ if(k==="forge:quarantine") throw new Error("quarantine denied"); return qfSpySet.call(this,k,v); };
+const qFailResult=QFail46.window.eval("performRecoveryCandidate(buildLkgRecoveryCandidate(),{})");
+qfProto.setItem=qfSpySet;
+check("quarantine write failure causes zero primary recovery writes", qFailResult.code==="quarantine-write" && sameBytes(qfBefore,sacredBytes(QFail46)) && sacredCalls(QFail46).length===0);
+let QVerify46=bootRaw({cfg:"{verify-bad",data:RAW_DATA,program:RAW_PROGRAM,lkg:recoveryLkgRaw});
+QVerify46.__storageCalls.length=0;
+const qvProto=Object.getPrototypeOf(QVerify46.window.localStorage), qvGet=qvProto.getItem;
+let qvWritten=false;
+const qvSet=qvProto.setItem;
+qvProto.setItem=function(k,v){ if(k==="forge:quarantine") qvWritten=true; return qvSet.call(this,k,v); };
+qvProto.getItem=function(k){ if(qvWritten && k==="forge:quarantine") return "{mismatch"; return qvGet.call(this,k); };
+const qVerifyResult=QVerify46.window.eval("performRecoveryCandidate(buildLkgRecoveryCandidate(),{})");
+qvProto.setItem=qvSet; qvProto.getItem=qvGet;
+check("quarantine read-back mismatch blocks all primary writes", qVerifyResult.code==="quarantine-write" && sacredCalls(QVerify46).length===0);
+const replaceVerifyOldQ=validQuarantineRaw({cfg:"older",data:"older",program:"older",legacyData:null});
+let QReplaceVerify46=bootRaw({cfg:"{replace-verify-bad",data:RAW_DATA,program:RAW_PROGRAM,lkg:recoveryLkgRaw,quarantine:replaceVerifyOldQ});
+const qrvProto=Object.getPrototypeOf(QReplaceVerify46.window.localStorage), qrvSet=qrvProto.setItem, qrvGet=qrvProto.getItem;
+let qrvWrote=false, qrvMismatch=false;
+qrvProto.setItem=function(k,v){ const out=qrvSet.call(this,k,v); if(k==="forge:quarantine") qrvWrote=true; return out; };
+qrvProto.getItem=function(k){ if(k==="forge:quarantine" && qrvWrote && !qrvMismatch){ qrvMismatch=true; return "{mismatch"; } return qrvGet.call(this,k); };
+const qReplaceVerifyResult=QReplaceVerify46.window.eval("performRecoveryCandidate(buildLkgRecoveryCandidate(),{replaceExistingQuarantine:true})");
+qrvProto.setItem=qrvSet; qrvProto.getItem=qrvGet;
+check("failed quarantine replacement restores the previous recovery copy", qReplaceVerifyResult.code==="quarantine-write" && QReplaceVerify46.window.localStorage.getItem("forge:quarantine")===replaceVerifyOldQ && sacredCalls(QReplaceVerify46).length===0);
+
+let RawFallback46=bootRaw({cfg:"{broken-raw",data:RAW_DATA,program:RAW_PROGRAM,lkg:recoveryLkgRaw});
+RawFallback46.window.eval(`window.__rawDownload=null; let confirms=[true,true]; window.confirm=()=>confirms.shift(); download=(n,c)=>{window.__rawDownload={n,c};}; exportRawRecoveryOriginals();`);
+const rawDownloaded=RawFallback46.window.eval("window.__rawDownload");
+const rawEnvelope=JSON.parse(rawDownloaded.c);
+check("raw emergency export is distinctly named and round-trips exact strings", /RAW-RECOVERY/.test(rawDownloaded.n) && rawEnvelope.originals.cfg==="{broken-raw" && rawEnvelope.originals.data===RAW_DATA && RawFallback46.window.eval("rawRecoveryExportConfirmed")===true);
+const rfProto=Object.getPrototypeOf(RawFallback46.window.localStorage), rfSpySet=rfProto.setItem;
+rfProto.setItem=function(k,v){ if(k==="forge:quarantine") throw new Error("quarantine denied"); return rfSpySet.call(this,k,v); };
+const rawFallbackResult=RawFallback46.window.eval("performRecoveryCandidate(buildLkgRecoveryCandidate(),{})");
+rfProto.setItem=rfSpySet;
+check("confirmed raw export permits explicit quarantine-storage fallback", rawFallbackResult.ok && rawFallbackResult.fallbackExport===true && RawFallback46.window.eval("protectedMode")===false);
+
+// Existing and newer quarantines are never silently replaced.
+const differentQ=validQuarantineRaw({cfg:"different",data:"different",program:"different",legacyData:null});
+let QConflict46=bootRaw({cfg:"{current-bad",data:RAW_DATA,program:RAW_PROGRAM,lkg:recoveryLkgRaw,quarantine:differentQ});
+QConflict46.__storageCalls.length=0;
+const conflictResult=QConflict46.window.eval("performRecoveryCandidate(buildLkgRecoveryCandidate(),{})");
+check("different existing quarantine requires explicit replacement", conflictResult.code==="quarantine-conflict" && QConflict46.window.localStorage.getItem("forge:quarantine")===differentQ && sacredCalls(QConflict46).length===0);
+const conflictApproved=QConflict46.window.eval("performRecoveryCandidate(buildLkgRecoveryCandidate(),{replaceExistingQuarantine:true})");
+check("explicit replacement quarantines current originals then recovers", conflictApproved.ok && JSON.parse(QConflict46.window.localStorage.getItem("forge:quarantine")).originals.cfg==="{current-bad");
+const newerQ=JSON.stringify({recoveryFormatVersion:99,originals:{}});
+let QNewer46=bootRaw({cfg:"{newer-q-bad",data:RAW_DATA,program:RAW_PROGRAM,lkg:recoveryLkgRaw,quarantine:newerQ});
+QNewer46.__storageCalls.length=0;
+const newerQResult=QNewer46.window.eval("performRecoveryCandidate(buildLkgRecoveryCandidate(),{replaceExistingQuarantine:true})");
+check("newer-format quarantine blocks recovery and remains byte-identical", newerQResult.code==="quarantine-newer" && QNewer46.window.localStorage.getItem("forge:quarantine")===newerQ && sacredCalls(QNewer46).length===0);
+check("newer-format quarantine cannot be deleted by older app", QNewer46.window.eval("deleteStoredQuarantine().code")==="newer" && QNewer46.window.localStorage.getItem("forge:quarantine")===newerQ);
+
+// Commit and read-back failures remain protected and retain quarantine.
+let CommitFail46=bootRaw({cfg:"{commit-bad",data:liveDifferentData,program:RAW_PROGRAM,lkg:recoveryLkgRaw});
+const cfProto=Object.getPrototypeOf(CommitFail46.window.localStorage), cfSpySet=cfProto.setItem;
+cfProto.setItem=function(k,v){ if(k==="forge:data") throw new Error("primary commit denied"); return cfSpySet.call(this,k,v); };
+const commitFailResult=CommitFail46.window.eval("performRecoveryCandidate(buildLkgRecoveryCandidate(),{})");
+cfProto.setItem=cfSpySet;
+check("recovery commit failure remains protected and retains quarantine", commitFailResult.code==="commit" && CommitFail46.window.eval("protectedMode")===true && CommitFail46.window.localStorage.getItem("forge:quarantine")!==null);
+
+let RollbackFail46=bootRaw({cfg:"{rollback-bad",data:liveDifferentData,program:RAW_PROGRAM,lkg:recoveryLkgRaw});
+const rbProto=Object.getPrototypeOf(RollbackFail46.window.localStorage), rbSpySet=rbProto.setItem;
+let rbCfgFailed=false;
+rbProto.setItem=function(k,v){
+  if(k==="forge:cfg" && !rbCfgFailed){ rbCfgFailed=true; throw new Error("cfg commit denied"); }
+  if(rbCfgFailed && (k==="forge:data" || k==="forge:program")) throw new Error("rollback denied");
+  return rbSpySet.call(this,k,v);
+};
+const rollbackFailResult=RollbackFail46.window.eval("performRecoveryCandidate(buildLkgRecoveryCandidate(),{})");
+rbProto.setItem=rbSpySet;
+check("recovery rollback failure stays protected with quarantine", rollbackFailResult.code==="commit" && rollbackFailResult.rollbackFailed===true && RollbackFail46.window.eval("protectedMode")===true && RollbackFail46.window.localStorage.getItem("forge:quarantine")!==null);
+
+let ReadbackFail46=bootRaw({cfg:"{readback-bad",data:liveDifferentData,program:RAW_PROGRAM,lkg:recoveryLkgRaw});
+const rbfProto=Object.getPrototypeOf(ReadbackFail46.window.localStorage), rbfSpySet=rbfProto.setItem, rbfGet=rbfProto.getItem;
+let primaryWasWritten=false, corruptedOnce=false;
+rbfProto.setItem=function(k,v){ if(["forge:data","forge:program","forge:cfg"].includes(k)) primaryWasWritten=true; return rbfSpySet.call(this,k,v); };
+rbfProto.getItem=function(k){ if(primaryWasWritten && !corruptedOnce && k==="forge:data"){ corruptedOnce=true; return "{readback-corrupt"; } return rbfGet.call(this,k); };
+const readbackFailResult=ReadbackFail46.window.eval("performRecoveryCandidate(buildLkgRecoveryCandidate(),{})");
+rbfProto.setItem=rbfSpySet; rbfProto.getItem=rbfGet;
+check("read-back validation failure never reports success", readbackFailResult.code==="readback-invalid" && ReadbackFail46.window.eval("protectedMode")===true && ReadbackFail46.window.localStorage.getItem("forge:quarantine")!==null);
+const firstIncidentQ=ReadbackFail46.window.localStorage.getItem("forge:quarantine");
+const retryAfterReadback=ReadbackFail46.window.eval("performRecoveryCandidate(buildLkgRecoveryCandidate(),{})");
+check("same-session retry reuses the first verified quarantine instead of replacing originals", retryAfterReadback.ok && ReadbackFail46.window.localStorage.getItem("forge:quarantine")===firstIncidentQ && JSON.parse(firstIncidentQ).originals.cfg==="{readback-bad");
+
+// Backup/export boundaries and quarantine cleanup.
+let Export46=boot(V1_CFG,EMPTY_DATA,null,TEST_PROGRAM);
+Export46.window.eval(`window.__normalBackup=null; download=(n,c)=>{window.__normalBackup={n,c};}; doBackup("exportDataBtn");`);
+const normalBackupText=Export46.window.eval("window.__normalBackup.c");
+check("normal backup contains only primary envelope and no recovery records", !normalBackupText.includes("forge:lkg") && !normalBackupText.includes("forge:quarantine") && !normalBackupText.includes("recoveryFormatVersion"));
+Export46.__storageCalls.length=0;
+const recoveryRecordRefusal=Export46.window.eval(`restoreBackupEnvelope(${h46LkgRaw})`);
+check("normal restore refuses LKG/quarantine record formats", recoveryRecordRefusal.code==="recovery-record" && sacredCalls(Export46).length===0);
+const disguisedRecoveryRefusal=Export46.window.eval(`restoreBackupEnvelope(${JSON.stringify({recoveryFormatVersion:1,cfg:V1_CFG,data:EMPTY_DATA,program:TEST_PROGRAM})})`);
+check("normal restore rejects a recovery marker even with primary-looking members", disguisedRecoveryRefusal.code==="recovery-record" && sacredCalls(Export46).length===0);
+RecoverLkg.__storageCalls.length=0;
+RecoverLkg.window.eval(`window.__qExport=null; window.confirm=()=>true; download=(n,c)=>{window.__qExport={n,c};}; exportStoredQuarantine();`);
+const qExport=RecoverLkg.window.eval("window.__qExport");
+check("quarantine export is distinctly named and preserves exact originals", /RAW-RECOVERY/.test(qExport.n) && JSON.parse(qExport.c).originals.cfg===corruptCfgRaw && sacredCalls(RecoverLkg).length===0 && callsFor(RecoverLkg,"forge:lkg").length===0);
+let PartialKeys46=bootRaw({cfg:JSON.stringify(Object.assign({},V1_CFG,{anthropicKey:"sk-secret-a",openaiKey:"sk-secret-o"})),data:"{bad",program:RAW_PROGRAM,lkg:recoveryLkgRaw});
+PartialKeys46.window.eval(`window.__partialKeys=null; window.confirm=()=>true; download=(n,c)=>{window.__partialKeys={n,c};}; doBackup("recoveryPartialExportBtn");`);
+const partialKeysText=PartialKeys46.window.eval("window.__partialKeys.c");
+check("readable partial export still strips both API keys", !partialKeysText.includes("sk-secret-a") && !partialKeysText.includes("sk-secret-o"));
+check("device-only LKG may retain API keys while normal exports do not", JSON.parse(recoveryLkgRaw).strings.cfg.includes("sk-lkg") && !normalBackupText.includes("sk-lkg"));
+const cleanBefore=fiveBytes(RecoverLkg);
+RecoverLkg.window.confirm=()=>false;
+RecoverLkg.window.document.getElementById("deleteQuarantineBtn").dispatchEvent(new RecoverLkg.window.Event("click",{bubbles:true}));
+check("quarantine delete UI requires explicit confirmation", RecoverLkg.window.localStorage.getItem("forge:quarantine")===cleanBefore.quarantine);
+RecoverLkg.window.confirm=()=>true;
+RecoverLkg.window.document.getElementById("deleteQuarantineBtn").dispatchEvent(new RecoverLkg.window.Event("click",{bubbles:true}));
+const cleanAfter=fiveBytes(RecoverLkg);
+check("confirmed quarantine deletion touches neither live state nor LKG", cleanAfter.quarantine===null && samePrimary(cleanBefore,cleanAfter) && cleanBefore.lkg===cleanAfter.lkg);
+
+// Legacy fallback is represented in recovery records and never renamed or modified.
+const legacyRaw=JSON.stringify({food:{},workouts:[],weights:[{date:"2026-06-01",lbs:230}],meta:{lastBackup:null,logsSince:0}});
+let Legacy46=bootRaw({cfg:RAW_V1_CFG,data:null,legacyData:legacyRaw,program:RAW_PROGRAM});
+const legacyLkg=JSON.parse(Legacy46.window.localStorage.getItem("forge:lkg"));
+check("LKG records active legacy fallback while keeping primary data missing", legacyLkg.legacyData===legacyRaw && JSON.parse(legacyLkg.strings.data).weights[0].lbs===230 && Legacy46.window.localStorage.getItem("forge:data")===null);
+check("healthy boot never modifies legacy fallback key", Legacy46.window.localStorage.getItem("ryan-cut:data")===legacyRaw && !Legacy46.__storageCalls.some(c=>c.key==="ryan-cut:data"));
+let LegacyRecover46=bootRaw({cfg:"{legacy-bad",data:null,legacyData:legacyRaw,program:RAW_PROGRAM,lkg:Legacy46.window.localStorage.getItem("forge:lkg")});
+const legacyRecoverResult=LegacyRecover46.window.eval("performRecoveryCandidate(buildReadableRecoveryCandidate(),{})");
+const legacyQ=JSON.parse(LegacyRecover46.window.localStorage.getItem("forge:quarantine"));
+check("recovery quarantine preserves active legacy fallback as evidence", legacyRecoverResult.ok && legacyQ.originals.data===null && legacyQ.originals.legacyData===legacyRaw);
+check("recovery writes forge:data but never alters legacy fallback", LegacyRecover46.window.localStorage.getItem("forge:data")!==null && LegacyRecover46.window.localStorage.getItem("ryan-cut:data")===legacyRaw && !LegacyRecover46.__storageCalls.some(c=>c.key==="ryan-cut:data"));
 
 // ================= barcode chain =================
 function bootOFF(offResponder){

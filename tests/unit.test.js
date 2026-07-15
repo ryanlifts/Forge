@@ -83,6 +83,26 @@ check("malformed schema type is refused", E(`prepareState('${JSON.stringify({sch
 check("unusable log structures fail validation", E(`prepareState('${JSON.stringify({schemaVersion:1})}', '${JSON.stringify({food:{},workouts:{},weights:[]})}', ${JSON.stringify(schemaProgramRaw)}).ok`)===false);
 check("legacy null optional log fields normalize instead of quarantining", (()=>{ const q=E(`prepareState('${JSON.stringify({schemaVersion:1})}', '${JSON.stringify({food:{},workouts:[],weights:[],recents:null,myFoods:null,meta:null})}', ${JSON.stringify(schemaProgramRaw)})`); return q.ok && Array.isArray(q.state.data.recents) && q.state.data.meta && typeof q.state.data.myFoods==="object"; })());
 
+// ---------- v46 recovery record parsers & diagnostics ----------
+const v46CfgRaw = JSON.stringify(Object.assign({}, EXISTING_CFG, {schemaVersion:1}));
+const v46LkgObj = {recoveryFormatVersion:1,savedAt:"2026-07-14T12:00:00.000Z",strings:{cfg:v46CfgRaw,data:schemaDataRaw,program:schemaProgramRaw},legacyData:null};
+check("structured diagnostics identify parse stage and area", (()=>{ const x=E(`prepareState("{bad",${JSON.stringify(schemaDataRaw)},${JSON.stringify(schemaProgramRaw)})`); return !x.ok && x.diagnostic.stage==="parse" && x.diagnostic.part==="cfg" && x.diagnostic.code==="json-parse"; })());
+check("structured diagnostics identify validation area", (()=>{ const x=E(`prepareState(${JSON.stringify(v46CfgRaw)},'${JSON.stringify({food:{},workouts:{},weights:[]})}',${JSON.stringify(schemaProgramRaw)})`); return !x.ok && x.diagnostic.stage==="validation" && x.diagnostic.part==="data"; })());
+check("valid format-1 LKG validates through shared pipeline", E(`inspectLkgRaw(${JSON.stringify(JSON.stringify(v46LkgObj))}).ok`)===true);
+check("malformed LKG record is rejected without touching primary state", E(`inspectLkgRaw("{bad").code`)==="parse");
+check("newer LKG format receives newer-version protection", E(`inspectLkgRaw('${JSON.stringify({recoveryFormatVersion:2,strings:{}})}').newer`)===true);
+check("current recovery format containing newer primary state is also protected", E(`inspectLkgRaw(${JSON.stringify(JSON.stringify({recoveryFormatVersion:1,savedAt:"future",strings:{cfg:JSON.stringify({schemaVersion:99}),data:schemaDataRaw,program:schemaProgramRaw},legacyData:null}))}).newer`)===true);
+check("string recovery format is invalid, never coerced", E(`inspectLkgRaw('${JSON.stringify({recoveryFormatVersion:"1",strings:{}})}').code`)==="format");
+const v46QObj={recoveryFormatVersion:1,quarantinedAt:"2026-07-14T12:00:00.000Z",originals:{cfg:null,data:"{bad",program:null,legacyData:"legacy"}};
+check("quarantine parser accepts exact string-or-null originals", E(`inspectQuarantineRaw('${JSON.stringify(v46QObj)}').ok`)===true);
+check("quarantine parser rejects non-string original payloads", E(`inspectQuarantineRaw('${JSON.stringify({recoveryFormatVersion:1,originals:{cfg:{},data:null,program:null,legacyData:null}})}').code`)==="shape");
+check("quarantine parser requires every exact-original field", E(`inspectQuarantineRaw('${JSON.stringify({recoveryFormatVersion:1,originals:{cfg:null,data:null,program:null}})}').code`)==="shape");
+check("recovery original equality treats omitted and null consistently", E(`sameRecoveryOriginals({cfg:null,data:"x",program:null},{cfg:undefined,data:"x",program:undefined,legacyData:null})`)===true);
+check("readable recovery summary names every keep/reset decision", E(`recoverySummary({cfg:{usable:true},data:{usable:false},program:{usable:true}})`)==="Keep settings · Reset logs · Keep training program");
+check("recovery records are not accepted as backup envelopes", E(`prepareRecoveryBackupEnvelope(${JSON.stringify(v46LkgObj)}).code`)==="recovery-record");
+check("recovery record marker is rejected even when primary-looking members are added", E(`prepareRecoveryBackupEnvelope(${JSON.stringify(Object.assign({},v46LkgObj,{cfg:JSON.parse(v46CfgRaw)}))}).code`)==="recovery-record");
+check("primary schema and recovery record format remain separate version 1 contracts", E(`SCHEMA_VERSION===1 && RECOVERY_FORMAT_VERSION===1 && !Object.prototype.hasOwnProperty.call(DEFAULT_CFG,"schemaVersion")`)===true);
+
 // ---------- parseFoodsReply ----------
 const straight = '{"foods":[{"name":"Chicken","cal":610,"pro":42,"carb":22,"fat":38}]}';
 check("straight JSON parses", E(`parseFoodsReply(${JSON.stringify(straight)}).length`)===1);

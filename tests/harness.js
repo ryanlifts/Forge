@@ -44,6 +44,8 @@ function bootRaw(raws, hooks){
       if (seed.data!==null && seed.data!==undefined) originals.setItem.call(storage, "forge:data", seed.data);
       if (seed.program!==null && seed.program!==undefined) originals.setItem.call(storage, "forge:program", seed.program);
       if (seed.legacyData!==null && seed.legacyData!==undefined) originals.setItem.call(storage, "ryan-cut:data", seed.legacyData);
+      if (seed.lkg!==null && seed.lkg!==undefined) originals.setItem.call(storage, "forge:lkg", seed.lkg);
+      if (seed.quarantine!==null && seed.quarantine!==undefined) originals.setItem.call(storage, "forge:quarantine", seed.quarantine);
 
       proto.setItem = function(key, value){
         calls.push({method:"setItem", key:String(key), value:String(value)});
@@ -100,5 +102,6 @@ function nextDow(target){ // next date string falling on JS getDay()===target
 }
 const wait = ms=>new Promise(r=>setTimeout(r,ms));
 const sacredCalls = dom=>dom.__storageCalls.filter(c=>c.key===null || ["forge:cfg","forge:data","forge:program"].includes(c.key));
+const allBlackPyreCalls = dom=>dom.__storageCalls.filter(c=>c.key===null || ["forge:cfg","forge:data","forge:program","forge:lkg","forge:quarantine"].includes(c.key));
 
-module.exports = { boot, bootRaw, assembleHTML, check, summary, dstr, nextDow, wait, sacredCalls, EXISTING_CFG, EMPTY_DATA };
+module.exports = { boot, bootRaw, assembleHTML, check, summary, dstr, nextDow, wait, sacredCalls, allBlackPyreCalls, EXISTING_CFG, EMPTY_DATA };

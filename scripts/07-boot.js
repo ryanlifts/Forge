@@ -131,20 +131,122 @@ function eggDisarm(){
   t.addEventListener("contextmenu", e=>e.preventDefault()); // iOS long-press callout
 })();
 
+function diagnosticAreaText(){
+  const d = protectedModeDiagnostic || {};
+  const names = {cfg:"settings",data:"logged data",program:"training program",state:"saved state"};
+  const area = names[d.part] || d.part || "saved state";
+  const stage = d.stage ? "Failure stage: "+d.stage+"." : "";
+  return "Affected area: "+area+". "+stage;
+}
 function showProtectedBanner(){
   const banner = document.getElementById("protectedBanner");
   const text = document.getElementById("protectedBannerText");
-  if (!protectedMode){ banner.classList.add("hidden"); text.textContent=""; return; }
+  const recoveryBtn = document.getElementById("protectedRecoveryBtn");
+  if (!protectedMode){ banner.classList.add("hidden"); text.textContent=""; recoveryBtn.classList.add("hidden"); return; }
   banner.classList.remove("hidden");
   if (protectedModeKind==="newer"){
     text.textContent = "This saved data came from a newer BlackPyre version. This older copy will not change it. Close and reopen the app — or use the update notice — to load the current version. Do not uninstall the app.";
+    recoveryBtn.classList.add("hidden");
+  } else if (protectedModeDiagnostic && protectedModeDiagnostic.stage==="storage-read"){
+    text.textContent = "BlackPyre could not safely read browser storage. No recovery write is allowed because the app cannot prove what it would preserve. Do not uninstall the app.";
+    recoveryBtn.classList.add("hidden");
   } else {
-    text.textContent = "BlackPyre couldn't safely read or update part of your saved data, so nothing will be saved or changed. Your original saved data has been left untouched wherever browser storage allowed it. "+protectedModeReason+" A future update will offer recovery; for now, do not uninstall the app.";
+    text.textContent = "BlackPyre couldn't safely use part of your saved data, so normal saving is paused. Your original data is still preserved. Open recovery to restore a validated snapshot, use a backup, or keep every readable area.";
+    recoveryBtn.classList.remove("hidden");
   }
 }
+function setRecoveryActionStatus(message, bad){
+  const el = document.getElementById("recoveryActionStatus");
+  if (!el) return;
+  el.textContent = message || "";
+  el.style.color = bad===false ? "var(--ok)" : "var(--warn)";
+}
+function openRecoveryPanel(){
+  if (!protectedMode || !recoveryWritesAllowed()) return false;
+  renderRecoveryPanel();
+  document.getElementById("recoveryOverlay").classList.remove("hidden");
+  lockScroll();
+  return true;
+}
+function closeRecoveryPanel(){
+  document.getElementById("recoveryOverlay").classList.add("hidden");
+  unlockScroll();
+}
+function renderRecoveryPanel(){
+  const overlay = document.getElementById("recoveryOverlay");
+  if (!protectedMode || !recoveryWritesAllowed()){
+    overlay.classList.add("hidden");
+    return;
+  }
+  document.getElementById("recoveryIssueText").textContent = protectedModeReason || "BlackPyre could not safely use part of the saved state.";
+  document.getElementById("recoveryAffectedText").textContent = diagnosticAreaText()+" Do not uninstall until recovery is complete.";
 
+  const lkg = buildLkgRecoveryCandidate();
+  const lkgBtn = document.getElementById("recoverLkgBtn");
+  lkgBtn.disabled = !lkg.ok;
+  document.getElementById("recoveryLkgText").textContent = lkg.ok
+    ? lkg.summary
+    : (lkg.code==="newer" ? "A newer-version snapshot exists and this copy will not use or overwrite it." : "No validated last-known-good snapshot is available on this device.");
+
+  const readable = buildReadableRecoveryCandidate();
+  const readableBtn = document.getElementById("recoverReadableBtn");
+  readableBtn.disabled = !readable.ok;
+  document.getElementById("recoveryReadableText").textContent = readable.ok
+    ? readable.summary+". No malformed JSON or damaged records will be guessed."
+    : "BlackPyre could not build a validated readable-state candidate.";
+}
+function confirmRecoveryCandidate(candidate){
+  return confirm("Review this recovery:\n\n"+candidate.summary+"\n\nBlackPyre will preserve the exact current originals before changing primary storage. Continue?");
+}
+function handleRecoveryResult(candidate, options){
+  const result = performRecoveryCandidate(candidate, options||{});
+  if (result.ok){
+    setRecoveryActionStatus("Recovery completed and verified ✓", false);
+    document.getElementById("recoveryOverlay").classList.add("hidden");
+    flashSave("Recovery completed ✓");
+    return result;
+  }
+  if (result.code==="quarantine-conflict"){
+    const replace = confirm("A different recovery copy is already stored. Export it first if needed. Replace that older quarantine with the current exact originals?");
+    if (replace) return handleRecoveryResult(candidate,{replaceExistingQuarantine:true});
+  } else if (result.code==="quarantine-write"){
+    setRecoveryActionStatus(result.reason+" Use ‘Export raw originals,’ confirm the file is safe, then try recovery again.", true);
+  } else if (result.code==="quarantine-newer"){
+    setRecoveryActionStatus(result.reason, true);
+  } else {
+    setRecoveryActionStatus(result.reason || "Recovery could not be completed safely.", true);
+  }
+  renderRecoveryPanel();
+  return result;
+}
+function runRecoveryCandidate(candidate){
+  if (!candidate.ok){ setRecoveryActionStatus(candidate.reason || "That recovery source is unavailable.", true); return; }
+  if (!confirmRecoveryCandidate(candidate)) return;
+  handleRecoveryResult(candidate,{});
+}
+
+document.getElementById("protectedRecoveryBtn").addEventListener("click", openRecoveryPanel);
+document.getElementById("recoveryCloseBtn").addEventListener("click", closeRecoveryPanel);
+document.getElementById("recoverLkgBtn").addEventListener("click", ()=>runRecoveryCandidate(buildLkgRecoveryCandidate()));
+document.getElementById("recoverReadableBtn").addEventListener("click", ()=>runRecoveryCandidate(buildReadableRecoveryCandidate()));
+document.getElementById("recoveryBackupBtn").addEventListener("click", ()=>document.getElementById("recoveryBackupFile").click());
+document.getElementById("recoveryBackupFile").addEventListener("change", e=>{
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try { runRecoveryCandidate(prepareRecoveryBackupEnvelope(JSON.parse(reader.result))); }
+    catch(err){ setRecoveryActionStatus("The selected file is not valid JSON.", true); }
+  };
+  reader.readAsText(file);
+  e.target.value="";
+});
+document.getElementById("recoveryPartialExportBtn").addEventListener("click", ()=>doBackup("recoveryPartialExportBtn"));
+document.getElementById("recoveryRawExportBtn").addEventListener("click", exportRawRecoveryOriginals);
 // ================== boot ==================
 showProtectedBanner();
+renderRecoveryPanel();
+if (protectedMode && recoveryWritesAllowed()) openRecoveryPanel();
 renderDayOptions();
 renderCardioOptions();
 renderLibraryOptions();
