@@ -328,29 +328,78 @@ function updatePlates(){
 document.getElementById("plateTarget").addEventListener("input", updatePlates);
 document.getElementById("plateBar").addEventListener("change", updatePlates);
 
-let restInterval = null, restRunning = false;
-function startRest(seconds){
+let restInterval = null, restRunning = false, restPaused = false, restFinished = false;
+let restRemaining = 0;
+function fmtRest(sec){ return Math.floor(sec/60)+":"+String(sec%60).padStart(2,"0"); }
+function selectedRestSeconds(){ return Math.max(10, Math.round(Number(cfg.restSec)||90)); }
+function paintRestDock(){
+  const disp = document.getElementById("restDisplay");
+  const start = document.getElementById("restStartBtn");
+  const pause = document.getElementById("restPauseBtn");
+  const add = document.getElementById("restAddBtn");
+  const end = document.getElementById("restEndBtn");
+  if (!disp || !start || !pause || !add || !end) return;
+  disp.textContent = restFinished ? "GO!" : fmtRest((restRunning||restPaused) ? restRemaining : selectedRestSeconds());
+  disp.style.color = restFinished || ((restRunning||restPaused) && restRemaining<=10) ? "var(--ok)" : "var(--text)";
+  start.classList.toggle("hidden", restRunning || restPaused);
+  pause.classList.toggle("hidden", !(restRunning || restPaused));
+  add.classList.toggle("hidden", !(restRunning || restPaused));
+  end.classList.toggle("hidden", !(restRunning || restPaused));
+  pause.textContent = restPaused ? "Resume" : "Pause";
+}
+function runRestCountdown(){
   clearInterval(restInterval);
   restRunning = true;
-  let sec = seconds;
-  const disp = document.getElementById("restDisplay");
-  const tick = ()=>{
-    disp.textContent = Math.floor(sec/60)+":"+String(sec%60).padStart(2,"0");
-    disp.style.color = sec<=10 ? "var(--ok)" : "var(--text)";
-    if (sec<=0){ clearInterval(restInterval); restRunning=false; disp.textContent="GO!"; disp.style.color="var(--ok)"; }
-    sec--;
-  };
-  tick();
-  restInterval = setInterval(tick, 1000);
+  restPaused = false;
+  restFinished = false;
+  paintRestDock();
+  restInterval = setInterval(()=>{
+    restRemaining -= 1;
+    if (restRemaining<=0){
+      restRemaining = 0;
+      clearInterval(restInterval);
+      restInterval = null;
+      restRunning = false;
+      restPaused = false;
+      restFinished = true;
+    }
+    paintRestDock();
+  }, 1000);
+}
+function startRest(seconds){
+  restRemaining = Math.max(1, Math.round(Number(seconds)||selectedRestSeconds()));
+  runRestCountdown();
+}
+function pauseRest(){
+  if (restRunning){
+    clearInterval(restInterval);
+    restInterval = null;
+    restRunning = false;
+    restPaused = true;
+    paintRestDock();
+    return;
+  }
+  if (restPaused) runRestCountdown();
+}
+function addRest(seconds){
+  if (!(restRunning || restPaused)) return;
+  restRemaining += Math.max(1, Math.round(Number(seconds)||30));
+  restFinished = false;
+  paintRestDock();
 }
 function cancelRest(){
   clearInterval(restInterval);
+  restInterval = null;
   restRunning = false;
-  const disp = document.getElementById("restDisplay");
-  disp.textContent = "";
+  restPaused = false;
+  restFinished = false;
+  restRemaining = 0;
+  paintRestDock();
 }
-document.getElementById("restDisplay").addEventListener("click", cancelRest);
-function fmtRest(sec){ return Math.floor(sec/60)+":"+String(sec%60).padStart(2,"0"); }
+document.getElementById("restStartBtn").addEventListener("click", ()=>startRest(selectedRestSeconds()));
+document.getElementById("restPauseBtn").addEventListener("click", pauseRest);
+document.getElementById("restAddBtn").addEventListener("click", ()=>addRest(30));
+document.getElementById("restEndBtn").addEventListener("click", cancelRest);
 function renderRestPresets(){
   // migrate old single custom to list
   if (cfg.customRestSec && !cfg.customRests){ cfg.customRests = [cfg.customRestSec]; delete cfg.customRestSec; saveCfg(); }
@@ -363,11 +412,11 @@ function renderRestPresets(){
     const b = document.createElement("button");
     b.className = "xbtn";
     b.textContent = fmtRest(p);
-    if (p===cfg.restSec) b.style.borderColor = "var(--ember)";
+    if (p===selectedRestSeconds()) b.style.borderColor = "var(--ember)";
     b.addEventListener("click", ()=>{
       cfg.restSec = p; saveCfg();
       renderRestPresets();
-      startRest(p);
+      if (!(restRunning||restPaused)) paintRestDock();
     });
     holder.appendChild(b);
     if (removable){
@@ -380,6 +429,7 @@ function renderRestPresets(){
         if (cfg.restSec===p) cfg.restSec = 90;
         saveCfg();
         renderRestPresets();
+        if (!(restRunning||restPaused)) paintRestDock();
       });
       holder.appendChild(x);
     }
@@ -387,6 +437,7 @@ function renderRestPresets(){
   };
   [90,120,180].forEach(p=>addChip(p, false));
   cfg.customRests.forEach(p=>{ if([90,120,180].indexOf(p)===-1) addChip(p, true); });
+  paintRestDock();
 }
 document.getElementById("restCustomBtn").addEventListener("click", ()=>{
   document.getElementById("restCustomRow").classList.toggle("hidden");
@@ -404,7 +455,7 @@ document.getElementById("restCustomSet").addEventListener("click", ()=>{
   document.getElementById("restCustomRow").classList.add("hidden");
   document.getElementById("restCustomInput").value = "";
   renderRestPresets();
-  startRest(v);
+  if (!(restRunning||restPaused)) paintRestDock();
 });
 
 // ================== SHARE PROGRAM ==================

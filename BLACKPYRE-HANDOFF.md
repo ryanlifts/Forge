@@ -1,16 +1,16 @@
-# BLACKPYRE HANDOFF — current as of v53 (July 2026)
+# BLACKPYRE HANDOFF — current as of v54 (July 2026)
 
 You are a collaborator on BlackPyre, a fitness PWA at
-`ryanlifts.github.io/Forge/` (repo: `ryanlifts/Forge`). This repository represents **v53**,
-a focused Phase 4 mobile set-row alignment patch built on the completed v46 hardening foundation.
+`ryanlifts.github.io/Forge/` (repo: `ryanlifts/Forge`). This repository represents **v54**,
+a focused Phase 4 Train-page usability release built on the completed v46 hardening foundation.
 Confirm the GitHub Pages deployment/cache before calling it live on a user's device.
 
 The two documents reproduced below (`ARCHITECTURE.md` and `DATA-MODEL.md`) live in the repo
-root, are binding, and are current as of v53. Read them before proposing or writing code.
+root, are binding, and are current as of v54. Read them before proposing or writing code.
 
 ## Current state
 
-1. The permanent `/tests` gauntlet has **321 checks: 101 unit + 220 integration**. It boots
+1. The permanent `/tests` gauntlet has **337 checks: 101 unit + 236 integration**. It boots
    the shipped app in jsdom; GitHub Actions runs it on every push. Tests are cumulative and
    are never deleted or weakened to make a release pass.
 2. `tests/bella-reference.b64` is the frozen memorial byte truth. The suite enforces exact
@@ -20,11 +20,12 @@ root, are binding, and are current as of v53. Read them before proposing or writ
    shared global scope, no ES modules, no build step — permanent.
 4. Primary state remains in `forge:cfg`, `forge:data`, `forge:program`, with whole-state
    `schemaVersion:1`. Internal device-only `forge:lkg` and `forge:quarantine` remain on
-   strict `recoveryFormatVersion:1`; v53 changes no storage shape or migration behavior.
+   strict `recoveryFormatVersion:1`; v54 changes no storage shape or migration behavior.
 5. v51 uses exercise-level Save/Completed/Edit states and adds food duplicate, Undo, and scroll protections.
-6. v52 refreshes the in-app FAQ for v44-v51 behavior, including protected recovery, the update toast,
-   exercise saving, auto-progression, current program controls, food Undo, and accurate privacy wording.
-7. v53 removes a stale mobile rule from the retired per-set checkmark layout so the −5 button stays with the other set controls. All approved behavior and storage/recovery systems remain unchanged. The cache is `blackpyre-v53`.
+6. v52 refreshed the FAQ; v53 corrected mobile set-row alignment.
+7. v54 moves the current-program identity to the top of Train, keeps plan administration in a
+   separate Manage panel, removes rest-timer auto-start from Save Exercise, and adds a compact
+   Train-only manual Start/Pause/Resume/+30/End rest control. Cache: `blackpyre-v54`.
 
 ## Five-phase plan status
 
@@ -43,46 +44,47 @@ root, are binding, and are current as of v53. Read them before proposing or writ
   - **v49:** training-session completion integrity, draft protection, and clear validation.
   - **v50:** daily-first Train layout, predictable navigation, mobile-safe inputs, and larger touch targets.
   - **v51:** exercise-level completion plus food-flow duplicate, Undo, and positioning safeguards.
-  - **v52:** FAQ accuracy refresh for the current app behavior.
+  - **v52:** FAQ accuracy refresh.
   - **v53:** mobile Train set-row alignment correction.
+  - **v54:** manual rest timer and top-of-Train current-program/Manage layout.
   - Remaining review items continue only through separately approved releases.
 
 ## v51 — exercise-level completion + food-flow usability
 
-Train: per-set checkmarks replaced by one Save Exercise button per exercise.
-Entering any value marks the exercise Unsaved (live chip); Save Exercise
-validates only entered rows (untouched prefills stay plans — v49 rule kept),
-allows partial saves, collapses to "Completed" with Edit. Only SAVED exercises
-reach history/auto-progression. Logging with ANY unsaved exercise warns by
-name with two paths: Save valid & log, or Review (nothing silently dropped).
-Leaving Train or switching session type with unsaved/saved-unlogged work warns.
-Food: exact rapid re-adds within 900ms are swallowed; deletion shows a 6s Undo
-toast (restores at original index, no dup-guard/kudos side effects); search
-results scroll into view; logging from search returns to the search box; meal
-selection preserved. Handoff flows untouched. Tests: 312 (101 unit + 211
-integration). Cache blackpyre-v51.
+Train: per-set checkmarks replaced by one Save Exercise button per exercise. Entering any
+value marks the exercise Unsaved; Save Exercise validates entered rows, allows partial saves,
+and collapses to Completed with Edit. Only saved exercises reach history/auto-progression.
+Any unsaved exercise triggers a named warning before logging or leaving Train. Food adds an
+exact rapid-duplicate guard, six-second deletion Undo, and improved search/log positioning.
+Tests: 312 (101 unit + 211 integration). Cache `blackpyre-v51`.
 
 ## v52 — FAQ accuracy refresh
 
-Updated `data-faq.js` to match the shipped v44-v51 app: exercise-level Save/Completed/Edit,
-full auto-progression requirements, Save Exercise rest-timer behavior, current Program tools,
-food deletion Undo, protected mode/recovery, the update toast, backup-vs-LKG distinction, and
-accurate local/network privacy wording. No application behavior or data shape changed.
-Tests: 320 (101 unit + 219 integration). Cache blackpyre-v52.
+Updated the in-app FAQ for v44-v51 behavior. Its then-current rest-timer wording is superseded
+by v54. No application behavior or data shape changed. Tests: 320 (101 unit + 219 integration).
+Cache `blackpyre-v52`.
 
-## v53 (current) — mobile set-row alignment
+## v53 — mobile set-row alignment
 
-Removed the obsolete mobile `.sdone` layout reservation left behind when v51 replaced
-per-set checkmarks with Save Exercise. The set label now owns its full row, keeping −5,
-weight, +5, ×, −1, reps, and +1 together on the next line. No behavior or data change.
-Tests: 321 (101 unit + 220 integration). Cache blackpyre-v53.
+Removed the obsolete mobile checkmark-era layout reservation so the set label owns its row and
+all weight/reps controls stay aligned. No behavior or data change. Tests: 321 (101 unit + 220
+integration). Cache `blackpyre-v53`.
+
+## v54 (current) — manual rest and program identity
+
+Save Exercise no longer starts or resets rest. The rest timer is a compact Train-only control
+above bottom navigation with Start, Pause/Resume, +30, and End; preset/custom duration choices
+remain in Train tools and select without starting. A compact Current program card now leads the
+Train page and identifies the selected session; Manage opens/closes a separate administration
+box. FAQ wording was updated. No storage/schema change. Tests: 337 (101 unit + 236 integration).
+Cache `blackpyre-v54`.
 
 ## Workflow constraints
 
 Ryan deploys from GitHub's web UI, sometimes from a phone. Prefer whole-file/repo-mirror and
 changed-files ZIP deliverables rather than pasted patches. One commit per release; wait for
-the green check; then use the existing update toast or close/reopen as directed. Every
-release gets a plain-language report and stops for approval.
+the green check; then use the existing update toast or close/reopen as directed. Every release
+gets a plain-language report and stops for approval.
 
 ---
 ---
@@ -91,7 +93,7 @@ release gets a plain-language report and stops for approval.
 
 # BlackPyre Architecture
 
-**Current as of v53 (July 2026).**
+**Current as of v54 (July 2026).**
 
 A single-page PWA: vanilla HTML/CSS/JS, no framework, no build step, localStorage only.
 Deployed on GitHub Pages. Developed AI-assisted (Claude / ChatGPT) from a phone — every rule
@@ -113,11 +115,11 @@ below exists to keep that workflow safe.
 
 | File | Role |
 |---|---|
-| `index.html` | Markup + styles only (~159 KB in v53); loads the data files then the 7 app slices; includes protected/recovery UI |
-| `scripts/01-storage.js` | primary/recovery keys, defaults, pure prepare-state migration pipeline, commit/rollback, LKG lifecycle, structured diagnosis, quarantine transaction, protected-mode guards, state, tabs |
+| `index.html` | Markup + styles only (~161 KB in v54); loads the data files then the 7 app slices; includes protected/recovery UI, the compact program identity, and the Train-only rest dock |
+| `scripts/01-storage.js` | primary/recovery keys, defaults, pure prepare-state migration pipeline, commit/rollback, LKG lifecycle, structured diagnosis, quarantine transaction, protected-mode guards, state, predictable view activation/tabs |
 | `scripts/02-food.js` | bars, meals, food logging |
-| `scripts/03-train.js` | training sessions, programs, exercise-level Save/Completed/Edit integrity, protected session-type changes, clear validation, conservative auto-progression, aligned mobile set controls |
-| `scripts/04-weight.js` | weight chart, motivation render, e1RM/PR engine, TDEE, streak, finish day, plate math, share |
+| `scripts/03-train.js` | training sessions, compact current-program identity and separate Manage panel, exercise-level Save/Completed/Edit integrity, protected session-type changes, clear validation, conservative auto-progression, aligned mobile set controls and touch targets |
+| `scripts/04-weight.js` | weight chart, motivation render, e1RM/PR engine, TDEE, streak, finish day, plate math, manual Start/Pause/+30/End rest timer, share |
 | `scripts/05-ai.js` | USDA/barcode lookups, usual-meal, schedule UI, kudos, AI engine, coach chat, check-in, handoff food flow with first-item review positioning, AI report, analytics |
 | `scripts/06-settings.js` | setup wizard, FAQ, macro calculator, settings, normal/partial/raw exports, restore, recovery status and quarantine cleanup |
 | `scripts/07-boot.js` | dash, Easter egg, protected/recovery panel orchestration, approved update toast, boot |
@@ -128,7 +130,7 @@ below exists to keep that workflow safe.
 | `manifest.json` | PWA identity — name/short_name **BlackPyre** |
 | `icon-*.png`, `apple-touch-icon.png` | Gold dumbbell icons |
 | `tests/PHASE2-PROOF.md` | Permanent historical record of the Phase 2 byte-identity proof |
-| `tests/` | Permanent gauntlet — 321 automated checks (101 unit + 220 integration), reproducible jsdom lockfile, and `bella-reference.b64` (frozen memorial byte truth; never edited). Not precached |
+| `tests/` | Permanent gauntlet — 337 automated checks (101 unit + 236 integration), reproducible jsdom lockfile, and `bella-reference.b64` (frozen memorial byte truth; never edited). Not precached |
 | `.github/workflows/tests.yml` | Runs the gauntlet on every push |
 | `DATA-MODEL.md` | Primary storage schema, recovery-record contracts, and migration history |
 
@@ -194,9 +196,8 @@ Slice rules from here on:
 - Integration suite: all historic app flows plus protected zero-write behavior, mutation
   re-sync, interrupted commits, LKG create/refresh/failure/quota rules, area diagnosis,
   all three recovery sources, quarantine ordering/retention/export/deletion, legacy fallback,
-  API-key boundaries, read-back failure, exercise-level workout saving, protected session-type changes, clear workout validation, conservative progression, mobile-safe training
-  inputs, handoff paste/log and first-item review positioning, update toast, and Easter egg timing.
-- The permanent suite is **321 automated checks** and only grows. New features add tests in
+  API-key boundaries, read-back failure, exercise-level workout saving, protected session-type changes, clear workout validation, conservative progression, compact program identity/separate management, manual Train-only rest controls, predictable tab/session positioning, 16px editable controls, 44px workout touch targets, handoff paste/log and first-item review positioning, update toast, and Easter egg timing.
+- The permanent suite is **337 automated checks** and only grows. New features add tests in
   the same release; existing checks are never deleted or weakened. The roughly 700 checks
   written before Phase 0 were old throwaway checks, not this permanent suite.
 - jsdom quirks: stub `URL.createObjectURL`, ignore `scrollTo` warnings, `select()` runs via
@@ -218,7 +219,7 @@ Slice rules from here on:
 
 # BlackPyre Data Model
 
-**Current as of v53 (July 2026). Primary schemaVersion: 1. Recovery format: 1.**
+**Current as of v54 (July 2026). Primary schemaVersion: 1. Recovery format: 1.**
 
 ## Storage keys
 
@@ -247,7 +248,7 @@ removes, or modifies that legacy key.
 `schemaVersion` is physically stored in `forge:cfg`, but versions the complete **primary**
 state and normal backup envelope: settings, logged data, and program.
 
-| Raw value | Meaning / behavior in v50 |
+| Raw value | Meaning / behavior in v54 |
 |---|---|
 | property absent or integer `0` | Pre-versioning legacy state; run numbered migrations from step 0 |
 | integer `1` | Current primary schema; no migration step |
@@ -312,7 +313,7 @@ treat unset values as real measurements or targets.
 | Field | Shape | Meaning |
 |---|---|---|
 | `food` | `{ "YYYY-MM-DD": [entry] }` | `entry={name,cal,pro,carb,fat,meal}` |
-| `workouts` | `[{date,day,title,sets:{ex:[{w,r}]},notes}]` | v49 saves only explicitly completed set rows; legacy string sets still parse |
+| `workouts` | `[{date,day,title,sets:{ex:[{w,r}]},notes}]` | v51 saves only sets from explicitly saved exercises; legacy string sets still parse |
 | `weights` | `[{date,lbs}]` | One per date; chart/TDEE/projections |
 | `measure` | `[{date,waist,chest,arm}]` | Optional; one per date |
 | `water` | `{ "YYYY-MM-DD": count }` | Optional |
@@ -439,6 +440,10 @@ fallback. The app cannot verify a browser download and states that limit honestl
 | v48 | No storage-schema change | Mobile train-input zoom prevention and corrected AI review scroll positioning |
 | v49 | No storage-schema change | Training-session integrity: only completed sets save, session-type changes protect drafts, invalid logs explain what is missing |
 | v50 | No storage-schema change | Daily-first Train layout, predictable navigation/scroll targets, 16px editable controls, and larger workout touch targets |
+| v51 | No storage-schema change | Exercise-level Save/Completed/Edit state and food-flow safeguards; stored workout/food shapes unchanged |
+| v52 | No storage-schema change | FAQ-only accuracy refresh |
+| v53 | No storage-schema change | Mobile set-row alignment patch |
+| v54 | No storage-schema change | Manual rest controls and compact current-program/Manage layout |
 
 Old backups from any era must continue restoring correctly; the permanent suite proves the
 range-era path.

@@ -224,10 +224,20 @@
   #hfPasteText:focus-visible { outline:2px solid var(--ember); outline-offset:2px; }
   .ai-confirm-log { position:sticky; bottom:calc(70px + env(safe-area-inset-bottom, 0px)); z-index:3; box-shadow:0 6px 20px rgba(0,0,0,.35); }
   /* train daily-use layout + builder */
-  .program-tools-summary { cursor:pointer; list-style:none; display:flex; align-items:center; justify-content:space-between; gap:12px; }
-  .program-tools-summary::-webkit-details-marker { display:none; }
-  .program-tools-action { color:var(--ember); font-family:'Oswald',sans-serif; font-size:12px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; flex-shrink:0; }
-  .program-tools-body { border-top:1px solid var(--border); margin-top:14px; padding-top:14px; }
+  .program-identity-card { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:14px 16px; }
+  .program-identity-copy { min-width:0; }
+  .program-identity-name { font-family:'Oswald',sans-serif; font-weight:600; font-size:18px; line-height:1.15; text-transform:uppercase; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .program-identity-day { color:var(--dim); font-size:11px; margin-top:4px; }
+  .program-tools-panel-head { align-items:center; justify-content:space-between; margin-bottom:14px; }
+  .program-tools-panel-head > * { flex:0 0 auto; }
+  #restDock { position:fixed; left:0; right:0; bottom:calc(61px + env(safe-area-inset-bottom, 0px)); z-index:205; pointer-events:none; }
+  .rest-dock-inner { width:calc(100% - 24px); max-width:696px; margin:0 auto; display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid rgba(var(--ember-rgb),.45); border-radius:12px; background:rgba(25,28,33,.97); box-shadow:0 6px 24px rgba(0,0,0,.45); backdrop-filter:blur(8px); pointer-events:auto; }
+  .rest-dock-readout { display:flex; align-items:baseline; gap:8px; min-width:92px; }
+  .rest-dock-readout .label { margin:0; }
+  #restDisplay { font-family:'Oswald',sans-serif; font-size:24px; font-weight:700; line-height:1; color:var(--text); }
+  .rest-dock-inner .xbtn { min-height:42px; padding:8px 11px; }
+  .rest-dock-inner #restStartBtn { margin-left:auto; }
+  body.rest-dock-visible { padding-bottom:164px; }
   .bday { border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:12px; }
   .bex { display:flex; align-items:center; gap:6px; margin-bottom:8px; }
   .bex input { padding:9px 8px; }
@@ -577,6 +587,50 @@
 
   <!-- ============ TRAIN ============ -->
   <div id="view-work" class="view">
+    <div class="card program-identity-card" id="programIdentityCard">
+      <div class="program-identity-copy">
+        <div class="label" style="margin-bottom:4px;">Current program</div>
+        <div id="programName" class="program-identity-name"></div>
+        <div id="programDayName" class="program-identity-day"></div>
+      </div>
+      <button class="btn ghost small" id="programManageBtn" aria-expanded="false" aria-controls="programToolsCard">Manage</button>
+    </div>
+
+    <div class="card hidden" id="programToolsCard">
+      <div class="row program-tools-panel-head">
+        <div>
+          <div class="label" style="margin:0;">Manage plan</div>
+        </div>
+        <button class="xbtn" id="programManageCloseBtn">Close</button>
+      </div>
+      <div class="row">
+        <button class="btn ghost small" id="importBtn">Load</button>
+        <button class="btn ghost small" id="exportBtn">Save file</button>
+        <button class="btn ghost small" id="shareBtn">Share</button>
+      </div>
+      <div class="row mt10">
+        <button class="btn ghost small" id="editProgBtn">✎ Edit this program</button>
+        <button class="btn ghost small" id="newProgBtn">＋ Build new program</button>
+      </div>
+      <button class="btn ghost small mt10" id="pasteProgBtn" style="width:100%;">Paste program from an AI</button>
+      <input type="file" id="importFile" accept=".json,application/json" class="hidden">
+      <div class="err hidden" id="programErr"></div>
+      <div class="note">Load any program file (.json) — from any AI, a coach, a friend — or build your own right here.</div>
+    </div>
+
+    <!-- program builder -->
+    <div class="card hidden" id="builderCard">
+      <div class="label">Program builder</div>
+      <input id="bName" placeholder="Program name" style="margin:8px 0 12px;">
+      <div id="bDays"></div>
+      <button class="btn ghost small" id="bAddDayBtn">＋ Add day</button>
+      <div class="row mt14">
+        <button class="btn" id="bSaveBtn">Save program</button>
+        <button class="btn ghost" id="bCancelBtn">Cancel</button>
+      </div>
+      <div class="err hidden" id="bErr"></div>
+    </div>
+
     <div class="card" id="trainingSessionCard">
       <div style="margin-bottom:14px;">
         <div class="label">Session type</div><select id="wDay" style="margin-bottom:12px;"></select>
@@ -603,7 +657,7 @@
 
       <div class="label">Notes (optional)</div>
       <input id="wNotes" placeholder="How it went, PRs, joint status…" style="margin-bottom:10px;">
-      <div class="note" style="margin:0 0 12px;">Only sets marked ✓ are logged. Prefilled values are your plan until you complete them.</div>
+      <div class="note" style="margin:0 0 12px;">Only saved exercises are logged. Prefilled values are your plan until you tap Save Exercise.</div>
       <div class="err hidden" id="workoutErr" style="margin-bottom:12px;"></div>
       <button class="btn" id="logWorkoutBtn">Log session</button>
       <button class="xbtn mt10 hidden" id="cancelEditWorkBtn" style="width:100%;">Cancel edit</button>
@@ -622,54 +676,15 @@
       </div>
       <div id="plateOut" style="font-size:13px; margin-top:10px; color:var(--ember); font-weight:600;"></div>
       <div class="row mt10" id="restRow" style="align-items:center;">
-        <div class="label" style="align-self:center; margin:0; flex:0 0 auto;">Rest:</div>
+        <div class="label" style="align-self:center; margin:0; flex:0 0 auto;">Rest duration:</div>
         <div id="restPresets" style="display:flex; gap:6px; flex-wrap:wrap; flex:1;"></div>
         <button class="xbtn" id="restCustomBtn" style="flex:0 0 auto;">＋</button>
-        <button id="restDisplay" aria-label="Tap to cancel timer" style="font-family:'Oswald',sans-serif; font-weight:700; font-size:24px;
-          background:none; border:none; color:var(--text); cursor:pointer; min-width:70px; text-align:center; padding:0;"></button>
       </div>
       <div class="row hidden mt10" id="restCustomRow" style="align-items:flex-end;">
         <div style="flex:1;"><div class="label">Custom rest (seconds)</div><input type="number" id="restCustomInput" inputmode="numeric" placeholder="e.g. 240"></div>
         <button class="xbtn" id="restCustomSet" style="flex:0 0 auto;">Set</button>
       </div>
-    </div>
-
-    <details class="card" id="programToolsCard">
-      <summary class="program-tools-summary">
-        <div>
-          <div class="label" style="margin-bottom:4px;">Program tools</div>
-          <div id="programName" style="font-family:'Oswald',sans-serif; font-weight:600; font-size:18px; text-transform:uppercase;"></div>
-        </div>
-        <span class="program-tools-action">Manage</span>
-      </summary>
-      <div class="program-tools-body">
-      <div class="row">
-        <button class="btn ghost small" id="importBtn">Load</button>
-        <button class="btn ghost small" id="exportBtn">Save file</button>
-        <button class="btn ghost small" id="shareBtn">Share</button>
-      </div>
-      <div class="row mt10">
-        <button class="btn ghost small" id="editProgBtn">✎ Edit this program</button>
-        <button class="btn ghost small" id="newProgBtn">＋ Build new program</button>
-      </div>
-      <button class="btn ghost small mt10" id="pasteProgBtn" style="width:100%;">Paste program from an AI</button>
-      <input type="file" id="importFile" accept=".json,application/json" class="hidden">
-      <div class="err hidden" id="programErr"></div>
-      <div class="note">Load any program file (.json) — from any AI, a coach, a friend — or build your own right here.</div>
-      </div>
-    </details>
-
-    <!-- program builder -->
-    <div class="card hidden" id="builderCard">
-      <div class="label">Program builder</div>
-      <input id="bName" placeholder="Program name" style="margin:8px 0 12px;">
-      <div id="bDays"></div>
-      <button class="btn ghost small" id="bAddDayBtn">＋ Add day</button>
-      <div class="row mt14">
-        <button class="btn" id="bSaveBtn">Save program</button>
-        <button class="btn ghost" id="bCancelBtn">Cancel</button>
-      </div>
-      <div class="err hidden" id="bErr"></div>
+      <div class="note">Choose the duration here. Start, pause, add 30 seconds, or end the timer from the compact control above the Train navigation.</div>
     </div>
 
     <div class="card flush hidden" id="prCard">
@@ -1017,6 +1032,16 @@
     <div class="cel-attr" id="celAttr"></div>
     <div class="cel-tip" id="celTip"></div>
     <button class="btn" id="celCloseBtn">Keep forging</button>
+  </div>
+</div>
+
+<div id="restDock" class="hidden" aria-label="Rest timer">
+  <div class="rest-dock-inner">
+    <div class="rest-dock-readout"><span class="label">Rest</span><span id="restDisplay" aria-live="polite">1:30</span></div>
+    <button class="xbtn" id="restStartBtn">Start</button>
+    <button class="xbtn hidden" id="restPauseBtn">Pause</button>
+    <button class="xbtn hidden" id="restAddBtn">+30</button>
+    <button class="xbtn hidden" id="restEndBtn">End</button>
   </div>
 </div>
 

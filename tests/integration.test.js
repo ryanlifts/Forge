@@ -599,11 +599,12 @@ check("confirming session-type change discards the in-progress draft only", dT49
 const T50 = boot(V1_CFG, EMPTY_DATA, null, TEST_PROGRAM);
 const dT50 = T50.window.document;
 const workChildren = [...dT50.getElementById("view-work").children];
+const identityPos = workChildren.indexOf(dT50.getElementById("programIdentityCard"));
+const programPos = workChildren.indexOf(dT50.getElementById("programToolsCard"));
 const sessionPos = workChildren.indexOf(dT50.getElementById("trainingSessionCard"));
 const toolsPos = workChildren.indexOf(dT50.getElementById("trainingToolsCard"));
-const programPos = workChildren.indexOf(dT50.getElementById("programToolsCard"));
-check("Train opens with the daily session ahead of plate and program administration", sessionPos===0 && sessionPos<toolsPos && toolsPos<programPos);
-check("program administration is collapsed behind Program tools by default", dT50.getElementById("programToolsCard").tagName==="DETAILS" && dT50.getElementById("programToolsCard").open===false);
+check("Train opens with compact program identity first and the daily session ahead of utility tools", identityPos===0 && identityPos<programPos && programPos<sessionPos && sessionPos<toolsPos);
+check("program administration is a separate hidden panel by default", dT50.getElementById("programToolsCard").tagName==="DIV" && dT50.getElementById("programToolsCard").classList.contains("hidden") && dT50.getElementById("programManageBtn").getAttribute("aria-expanded")==="false");
 
 let topScroll=null;
 T50.window.scrollTo=(x,y)=>{ topScroll={x,y}; };
@@ -742,6 +743,45 @@ const bellaCount = html.split(bellaRef).length - 1;
 check("her handwriting embedded byte-identically to the frozen reference", bellaCount >= 1);
 check("embed count is exactly 1 (Phase 1 dedup landed; was 2 in v41)", bellaCount === 1);
 
+// ================= v54: manual rest + program identity =================
+const T54 = boot(V1_CFG, EMPTY_DATA, null, TEST_PROGRAM);
+const dT54 = T54.window.document;
+check("v54 current-program card identifies the loaded program and selected session", dT54.getElementById("programName").textContent===TEST_PROGRAM.name && /Selected session:/.test(dT54.getElementById("programDayName").textContent));
+dT54.getElementById("wDay").value="__CARDIO__";
+dT54.getElementById("wDay").dispatchEvent(new T54.window.Event("change",{bubbles:true}));
+check("v54 program identity follows the selected session", /Cardio \/ Conditioning/.test(dT54.getElementById("programDayName").textContent));
+dT54.getElementById("wDay").value="D1";
+dT54.getElementById("wDay").dispatchEvent(new T54.window.Event("change",{bubbles:true}));
+dT54.getElementById("programManageBtn").dispatchEvent(new T54.window.Event("click",{bubbles:true}));
+check("v54 Manage opens a separate plan-management box", !dT54.getElementById("programToolsCard").classList.contains("hidden") && dT54.getElementById("programManageBtn").getAttribute("aria-expanded")==="true" && dT54.getElementById("programIdentityCard").isConnected);
+dT54.getElementById("programManageCloseBtn").dispatchEvent(new T54.window.Event("click",{bubbles:true}));
+check("v54 Close collapses plan management without hiding program identity", dT54.getElementById("programToolsCard").classList.contains("hidden") && dT54.getElementById("programManageBtn").textContent==="Manage" && !dT54.getElementById("programIdentityCard").classList.contains("hidden"));
+check("v54 rest control is hidden outside Train", dT54.getElementById("restDock").classList.contains("hidden"));
+T54.window.eval(`activateView("work",null,false)`);
+check("v54 rest control appears only on Train and reserves bottom space", !dT54.getElementById("restDock").classList.contains("hidden") && dT54.body.classList.contains("rest-dock-visible"));
+const w54=dT54.querySelector('#exerciseInputs input[data-field="weight"]');
+const r54=dT54.querySelector('#exerciseInputs input[data-field="reps"]');
+w54.value="100"; w54.dispatchEvent(new T54.window.Event("input",{bubbles:true}));
+r54.value="5"; r54.dispatchEvent(new T54.window.Event("input",{bubbles:true}));
+dT54.querySelector("#exerciseInputs .saveExBtn").dispatchEvent(new T54.window.Event("click",{bubbles:true}));
+check("v54 Save Exercise never starts or resets the rest timer", T54.window.eval("restRunning===false && restPaused===false && restRemaining===0") && dT54.getElementById("restDisplay").textContent==="1:30");
+dT54.getElementById("restStartBtn").dispatchEvent(new T54.window.Event("click",{bubbles:true}));
+check("v54 rest timer starts only from the manual Start control", T54.window.eval("restRunning===true && restRemaining===90") && dT54.getElementById("restStartBtn").classList.contains("hidden"));
+T54.window.eval(`restRemaining=47; saveExercise("Bench Press")`);
+check("v54 saving an exercise while rest is running does not restart or reset it", T54.window.eval("restRunning===true && restRemaining===47"));
+dT54.getElementById("restPauseBtn").dispatchEvent(new T54.window.Event("click",{bubbles:true}));
+check("v54 timer supports Pause and Resume", T54.window.eval("restRunning===false && restPaused===true") && dT54.getElementById("restPauseBtn").textContent==="Resume");
+const paused54=T54.window.eval("restRemaining");
+dT54.getElementById("restAddBtn").dispatchEvent(new T54.window.Event("click",{bubbles:true}));
+check("v54 +30 adds thirty seconds without restarting a paused timer", T54.window.eval("restPaused===true && restRemaining")===(paused54+30));
+dT54.getElementById("restEndBtn").dispatchEvent(new T54.window.Event("click",{bubbles:true}));
+check("v54 End clears the timer back to the selected duration", T54.window.eval("restRunning===false && restPaused===false && restRemaining===0") && dT54.getElementById("restDisplay").textContent==="1:30");
+const preset120=[...dT54.querySelectorAll("#restPresets .xbtn")].find(b=>b.textContent==="2:00");
+preset120.dispatchEvent(new T54.window.Event("click",{bubbles:true}));
+check("v54 choosing a rest preset changes the duration without auto-starting", T54.window.eval("cfg.restSec===120 && restRunning===false") && dT54.getElementById("restDisplay").textContent==="2:00");
+T54.window.eval(`activateView("food",null,false)`);
+check("v54 leaving Train hides the rest control", dT54.getElementById("restDock").classList.contains("hidden") && !dT54.body.classList.contains("rest-dock-visible"));
+
 // ================= Phase 1: extracted data payloads =================
 const P = boot(EXISTING_CFG, EMPTY_DATA);
 check("QUOTES loads from data-quotes.js", P.window.eval("Array.isArray(QUOTES) && QUOTES.length > 100"));
@@ -754,7 +794,9 @@ check("FAQ states full auto-progression requirements", P.window.eval(`FAQ.some(x
 check("FAQ documents food deletion Undo", P.window.eval(`FAQ.some(x=>x.a&&x.a.includes("six-second <b>Undo</b>"))`));
 check("FAQ documents protected mode and recovery", P.window.eval(`FAQ.some(x=>x.q==="What are Protected mode and recovery?"&&/last-known-good snapshot/.test(x.a)&&/do not uninstall/.test(x.a))`));
 check("FAQ documents the update toast", P.window.eval(`FAQ.some(x=>x.q&&/updates work/.test(x.q)&&/Use it now/.test(x.a)&&/Later/.test(x.a))`));
-check("FAQ uses current Program tools labels", P.window.eval(`FAQ.some(x=>x.q==="How do programs work?"&&x.a.includes("Program tools")&&x.a.includes("Save file")&&x.a.includes("Share"))`));
+check("FAQ states the rest timer is manual and Save Exercise never starts it", P.window.eval(`FAQ.some(x=>x.q==="What's plate math and the rest timer?"&&/never starts automatically/.test(x.a)&&/Saving an exercise does not start/.test(x.a)&&x.a.includes("Pause/Resume"))`));
+check("FAQ uses current program identity and Manage labels", P.window.eval(`FAQ.some(x=>x.q==="How do programs work?"&&x.a.includes("Current program")&&x.a.includes("Manage")&&x.a.includes("Save file")&&x.a.includes("Share"))`));
+check("FAQ no longer sends users to the retired Program tools label", P.window.eval(`!FAQ.some(x=>x.a&&x.a.includes("Program tools"))`));
 check("FAQ privacy copy distinguishes local data from optional network requests", P.window.eval(`FAQ.some(x=>x.q==="Where is my data stored? Is it private?"&&/on this device/.test(x.a)&&/Online food searches/.test(x.a)&&/Optional AI features/.test(x.a))`));
 check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.some(f=>/chicken breast/i.test(f.n))`));
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");

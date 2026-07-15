@@ -28,8 +28,7 @@ function closeSetup(runAction){
   unlockScroll();
   renderAll();
   if (runAction && setupChoice.trainAction){
-    const tools = document.getElementById("programToolsCard");
-    if (tools) tools.open = true;
+    if (typeof setProgramManagerOpen==="function") setProgramManagerOpen(true);
     activateView("work", "programToolsCard", false);
     if (setupChoice.trainAction==="build") openBuilder(false);
     if (setupChoice.trainAction==="import") document.getElementById("importFile").click();

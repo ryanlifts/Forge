@@ -72,6 +72,33 @@ function currentDayExercises(){
   return day ? day.exercises : [];
 }
 
+function renderProgramIdentity(){
+  const name = document.getElementById("programName");
+  const dayLine = document.getElementById("programDayName");
+  if (name) name.textContent = program.name || "Unnamed program";
+  if (!dayLine) return;
+  const v = wDaySel.value;
+  if (v==="__CARDIO__") dayLine.textContent = "Selected session: Cardio / Conditioning";
+  else if (v==="__FREE__") dayLine.textContent = "Selected session: Freestyle";
+  else {
+    const day = program.days.find(p=>p.id===v);
+    dayLine.textContent = day ? "Selected session: "+day.title : "Select a session below";
+  }
+}
+function setProgramManagerOpen(open){
+  const panel = document.getElementById("programToolsCard");
+  const button = document.getElementById("programManageBtn");
+  if (!panel || !button) return;
+  panel.classList.toggle("hidden", !open);
+  button.setAttribute("aria-expanded", open ? "true" : "false");
+  button.textContent = open ? "Close" : "Manage";
+}
+document.getElementById("programManageBtn").addEventListener("click", ()=>{
+  const panel = document.getElementById("programToolsCard");
+  setProgramManagerOpen(panel.classList.contains("hidden"));
+});
+document.getElementById("programManageCloseBtn").addEventListener("click", ()=>setProgramManagerOpen(false));
+
 // ---------- set-row engine ----------
 let sessionState = {}; // exName -> rows track planned/completed/touched state; text tracks explicit entry
 
@@ -182,7 +209,6 @@ function saveExercise(exName){
   st.saved = v.value;
   st.status = "saved";
   clearWorkoutError();
-  if (st.mode==="rows") startRest(cfg.restSec||90);
   renderSessionInputs();
   return {ok:true};
 }
@@ -233,6 +259,7 @@ function markUnsavedChip(exDiv){
   if (c) c.style.display = "";
 }
 function renderSessionInputs(){
+  renderProgramIdentity();
   const v = wDaySel.value;
   const strengthBlock = document.getElementById("strengthBlock");
   const cardioBlock = document.getElementById("cardioBlock");
@@ -524,7 +551,7 @@ document.getElementById("logWorkoutBtn").addEventListener("click", ()=>{
 
 function renderWork(){
   renderPRs();
-  document.getElementById("programName").textContent = program.name || "Unnamed program";
+  renderProgramIdentity();
   const el = document.getElementById("workHistory");
   if(data.workouts.length===0){
     el.innerHTML = '<div style="padding:18px; font-size:13px; color:var(--dim);">No sessions yet.</div>';

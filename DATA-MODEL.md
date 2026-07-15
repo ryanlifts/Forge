@@ -1,6 +1,6 @@
 # BlackPyre Data Model
 
-**Current as of v50 (July 2026). Primary schemaVersion: 1. Recovery format: 1.**
+**Current as of v54 (July 2026). Primary schemaVersion: 1. Recovery format: 1.**
 
 ## Storage keys
 
@@ -29,7 +29,7 @@ removes, or modifies that legacy key.
 `schemaVersion` is physically stored in `forge:cfg`, but versions the complete **primary**
 state and normal backup envelope: settings, logged data, and program.
 
-| Raw value | Meaning / behavior in v50 |
+| Raw value | Meaning / behavior in v54 |
 |---|---|
 | property absent or integer `0` | Pre-versioning legacy state; run numbered migrations from step 0 |
 | integer `1` | Current primary schema; no migration step |
@@ -94,7 +94,7 @@ treat unset values as real measurements or targets.
 | Field | Shape | Meaning |
 |---|---|---|
 | `food` | `{ "YYYY-MM-DD": [entry] }` | `entry={name,cal,pro,carb,fat,meal}` |
-| `workouts` | `[{date,day,title,sets:{ex:[{w,r}]},notes}]` | v49 saves only explicitly completed set rows; legacy string sets still parse |
+| `workouts` | `[{date,day,title,sets:{ex:[{w,r}]},notes}]` | v51 saves only sets from explicitly saved exercises; legacy string sets still parse |
 | `weights` | `[{date,lbs}]` | One per date; chart/TDEE/projections |
 | `measure` | `[{date,waist,chest,arm}]` | Optional; one per date |
 | `water` | `{ "YYYY-MM-DD": count }` | Optional |
@@ -221,6 +221,10 @@ fallback. The app cannot verify a browser download and states that limit honestl
 | v48 | No storage-schema change | Mobile train-input zoom prevention and corrected AI review scroll positioning |
 | v49 | No storage-schema change | Training-session integrity: only completed sets save, session-type changes protect drafts, invalid logs explain what is missing |
 | v50 | No storage-schema change | Daily-first Train layout, predictable navigation/scroll targets, 16px editable controls, and larger workout touch targets |
+| v51 | No storage-schema change | Exercise-level Save/Completed/Edit state and food-flow safeguards; stored workout/food shapes unchanged |
+| v52 | No storage-schema change | FAQ-only accuracy refresh |
+| v53 | No storage-schema change | Mobile set-row alignment patch |
+| v54 | No storage-schema change | Manual rest controls and compact current-program/Manage layout |
 
 Old backups from any era must continue restoring correctly; the permanent suite proves the
 range-era path.

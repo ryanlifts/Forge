@@ -873,6 +873,9 @@ function activateView(viewName, targetId, shouldRender){
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
   tab.classList.add("active");
   view.classList.add("active");
+  const restDock = document.getElementById("restDock");
+  if (restDock) restDock.classList.toggle("hidden", viewName!=="work");
+  document.body.classList.toggle("rest-dock-visible", viewName==="work");
   if (shouldRender!==false && typeof renderAll==="function") renderAll();
   positionView(targetId);
   return true;
