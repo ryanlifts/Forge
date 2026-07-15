@@ -123,8 +123,8 @@ await wait(4300);
 check("title dissolves back on its own", dG.getElementById("bellaEgg").style.opacity==="0" && dG.getElementById("bpTitleText").style.opacity==="1");
 // Memorial integrity: tests/bella-reference.b64 is the frozen byte truth of her handwriting
 // (extracted from v41, whose embed was verified byte-identical to the processed original).
-// v41 embeds it twice (once per mask prefix). Phase 1 dedup flips the expected count to 1 —
-// that count change is the ONLY permitted edit to these checks. The reference file never changes.
+// The app embeds it EXACTLY ONCE, via a CSS custom property shared by both mask prefixes.
+// The reference file never changes; the image is never regenerated or re-rendered.
 const bellaRef = fs.readFileSync(path.join(__dirname, "bella-reference.b64"), "utf8").trim();
 const bellaCount = html.split(bellaRef).length - 1;
 check("her handwriting embedded byte-identically to the frozen reference", bellaCount >= 1);
@@ -141,10 +141,46 @@ const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the three data files", ["data-quotes.js","data-foods.js","data-faq.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+"/.test(sw));
 const rawIndex = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
-check("data scripts load before the main app script (raw file order)",
+check("data scripts load before the app scripts (raw file order)",
   ["data-quotes.js","data-foods.js","data-faq.js"].every(f=>
     rawIndex.indexOf('src="'+f+'"') > -1 &&
-    rawIndex.indexOf('src="'+f+'"') < rawIndex.indexOf("const DEFAULT_CFG")));
+    rawIndex.indexOf('src="'+f+'"') < rawIndex.indexOf('src="scripts/01-storage.js"')));
+
+// ================= Phase 2: sliced app scripts =================
+const SLICES = ["01-storage.js","02-food.js","03-train.js","04-weight.js","05-ai.js","06-settings.js","07-boot.js"];
+check("all 7 slices exist on disk", SLICES.every(f=>fs.existsSync(path.join(__dirname, "..", "scripts", f))));
+check("index.html loads the 7 slices in ascending order", (()=>{
+  const pos = SLICES.map(f=>rawIndex.indexOf('src="scripts/'+f+'"'));
+  return pos.every(p=>p>-1) && pos.every((p,i)=>i===0 || p>pos[i-1]);
+})());
+check("no inline app script remains in index.html", !/<script>(?!\s*<)/.test(rawIndex.replace(/<script src="[^"]*"><\/script>/g,"")));
+check("SW precaches all 7 slices", SLICES.every(f=>sw.includes('"./scripts/'+f+'"')));
+
+// ================= Phase 2 corrections: strict mode, exact order, migration identity =================
+const LOCAL_SCRIPTS = ["data-quotes.js","data-foods.js","data-faq.js"].concat(SLICES.map(f=>"scripts/"+f));
+check("every local classic script begins with the strict-mode directive",
+  LOCAL_SCRIPTS.every(f=>fs.readFileSync(path.join(__dirname, "..", f), "utf8").startsWith('"use strict";')));
+
+const APPROVED_ORDER = LOCAL_SCRIPTS; // data files, then slices 01..07 — this order is load-bearing
+const scriptTags = [...rawIndex.matchAll(/<script\b[^>]*\bsrc="([^"]+)"[^>]*><\/script>/g)];
+check("exactly the 10 approved scripts, each exactly once, in the approved order",
+  scriptTags.length===10 && scriptTags.every((t,i)=>t[1]===APPROVED_ORDER[i]));
+check("no local script tag uses async, defer, or type=module",
+  scriptTags.every(t=>!/\basync\b|\bdefer\b|type="module"/.test(t[0])));
+
+// Phase 2 migration identity: strip the strict directives ADDED to slices 02-07 (01's is
+// original), concatenate in order, and the result must hash to the v42 inline JS exactly.
+// This hash freezes the migration. The first APPROVED post-v43 change to any slice must
+// retire this check in the same commit, with the plan/report saying so — never silently.
+const crypto = require("crypto");
+const V42_SHA256 = "63ea5e9bd80a069bdfaeb59c954bdcf521a8593da3cf200569d6719e47d53bba";
+const STRICT = '"use strict";\n';
+const normalized = SLICES.map((f,i)=>{
+  const t = fs.readFileSync(path.join(__dirname, "..", "scripts", f), "utf8");
+  return i===0 ? t : t.slice(STRICT.length);
+}).join("");
+check("Phase 2 migration identity: normalized slice concatenation === v42 original (sha256)",
+  crypto.createHash("sha256").update(normalized, "utf8").digest("hex") === V42_SHA256);
 
 summary("INTEGRATION");
 })().catch(e=>{ console.error(e); process.exit(1); });
