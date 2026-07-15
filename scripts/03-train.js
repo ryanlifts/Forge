@@ -495,10 +495,6 @@ function startEditWorkout(i){
   const sess = data.workouts[i];
   if (!sess) return;
   editingWorkoutIdx = i;
-  document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
-  document.querySelectorAll(".view").forEach(vv=>vv.classList.remove("active"));
-  document.querySelector('.tab[data-view="work"]').classList.add("active");
-  document.getElementById("view-work").classList.add("active");
   document.getElementById("wDate").value = sess.date;
   document.getElementById("wNotes").value = sess.notes||"";
   if (sess.day === "CARDIO"){
@@ -540,8 +536,7 @@ function startEditWorkout(i){
   clearWorkoutError();
   document.getElementById("logWorkoutBtn").textContent = "Update session";
   document.getElementById("cancelEditWorkBtn").classList.remove("hidden");
-  const lb = document.getElementById("logWorkoutBtn");
-  if (lb.scrollIntoView) lb.scrollIntoView({behavior:"smooth", block:"center"});
+  activateView("work", "trainingSessionCard", false);
 }
 document.getElementById("cancelEditWorkBtn").addEventListener("click", ()=>{
   document.getElementById("wNotes").value = "";
@@ -823,14 +818,11 @@ function nextProgramDay(){
 document.getElementById("nextWorkoutBtn").addEventListener("click", ()=>{
   const nd = nextProgramDay();
   if (!nd) return;
-  document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
-  document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
-  document.querySelector('.tab[data-view="work"]').classList.add("active");
-  document.getElementById("view-work").classList.add("active");
   wDaySel.value = nd.id;
   extraExercises = [];
   initSessionState();
   renderSessionInputs();
+  activateView("work", "trainingSessionCard", false);
 });
 
 // ---- program import/export ----

@@ -585,6 +585,35 @@ dT49Switch.getElementById("wDay").value="__CARDIO__";
 dT49Switch.getElementById("wDay").dispatchEvent(new T49Switch.window.Event("change",{bubbles:true}));
 check("confirming session-type change discards the in-progress draft only", dT49Switch.getElementById("wDay").value==="__CARDIO__" && T49Switch.window.eval("Object.keys(sessionState).length")===0 && T49Switch.window.eval("data.workouts.length")===0);
 
+// ================= v50: daily navigation + mobile consistency =================
+const T50 = boot(V1_CFG, EMPTY_DATA, null, TEST_PROGRAM);
+const dT50 = T50.window.document;
+const workChildren = [...dT50.getElementById("view-work").children];
+const sessionPos = workChildren.indexOf(dT50.getElementById("trainingSessionCard"));
+const toolsPos = workChildren.indexOf(dT50.getElementById("trainingToolsCard"));
+const programPos = workChildren.indexOf(dT50.getElementById("programToolsCard"));
+check("Train opens with the daily session ahead of plate and program administration", sessionPos===0 && sessionPos<toolsPos && toolsPos<programPos);
+check("program administration is collapsed behind Program tools by default", dT50.getElementById("programToolsCard").tagName==="DETAILS" && dT50.getElementById("programToolsCard").open===false);
+
+let topScroll=null;
+T50.window.scrollTo=(x,y)=>{ topScroll={x,y}; };
+dT50.querySelector('.tab[data-view="food"]').dispatchEvent(new T50.window.Event("click",{bubbles:true}));
+await wait(30);
+check("ordinary tab changes open the selected page at the top", dT50.getElementById("view-food").classList.contains("active") && topScroll && topScroll.x===0 && topScroll.y===0);
+
+T50.window.HTMLElement.prototype.scrollIntoView=function(opts){ T50.window.__v50Target={id:this.id, block:opts&&opts.block}; };
+dT50.getElementById("nextWorkoutBtn").dispatchEvent(new T50.window.Event("click",{bubbles:true}));
+await wait(30);
+check("Start next selects the next program day and lands at the session", dT50.getElementById("view-work").classList.contains("active") && dT50.getElementById("wDay").value==="D1" && T50.window.eval("window.__v50Target && window.__v50Target.id")==="trainingSessionCard" && T50.window.eval("window.__v50Target && window.__v50Target.block")==="start");
+
+T50.window.eval("openBuilder(false)");
+const editableControls=[...dT50.querySelectorAll('input:not([type="hidden"]), select, textarea')];
+check("all static and dynamically rendered editable controls use at least 16px text", editableControls.length>80 && editableControls.every(el=>parseFloat(T50.window.getComputedStyle(el).fontSize)>=16));
+const stepTarget=dT50.querySelector("#exerciseInputs .step");
+const doneTarget=dT50.querySelector("#exerciseInputs .sdone");
+check("workout step controls have 44px touch targets", !!stepTarget && T50.window.getComputedStyle(stepTarget).width==="44px" && T50.window.getComputedStyle(stepTarget).height==="44px");
+check("workout completion controls have 44px touch targets", !!doneTarget && T50.window.getComputedStyle(doneTarget).width==="44px" && T50.window.getComputedStyle(doneTarget).height==="44px");
+
 // ================= ChatGPT handoff paste flow =================
 const H = boot(Object.assign({}, EXISTING_CFG, {aiProvider:"handoff"}), EMPTY_DATA);
 const dH = H.window.document;

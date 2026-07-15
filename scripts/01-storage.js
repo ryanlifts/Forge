@@ -855,13 +855,29 @@ function flashSave(msg, bad){
 }
 
 // ================== tabs ==================
-document.querySelectorAll(".tab").forEach(btn=>{
-  btn.addEventListener("click", ()=>{
-    document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
-    document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
-    btn.classList.add("active");
-    document.getElementById("view-"+btn.dataset.view).classList.add("active");
-    renderAll();
+function positionView(targetId){
+  requestAnimationFrame(()=>{
+    const target = targetId ? document.getElementById(targetId) : null;
+    if (target && typeof target.scrollIntoView==="function"){
+      try { target.scrollIntoView({behavior:"smooth", block:"start"}); } catch(e){}
+      return;
+    }
+    try { window.scrollTo(0,0); } catch(e){}
   });
+}
+function activateView(viewName, targetId, shouldRender){
+  const tab = document.querySelector('.tab[data-view="'+viewName+'"]');
+  const view = document.getElementById("view-"+viewName);
+  if (!tab || !view) return false;
+  document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
+  document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+  tab.classList.add("active");
+  view.classList.add("active");
+  if (shouldRender!==false && typeof renderAll==="function") renderAll();
+  positionView(targetId);
+  return true;
+}
+document.querySelectorAll(".tab").forEach(btn=>{
+  btn.addEventListener("click", ()=>activateView(btn.dataset.view, null, true));
 });
 

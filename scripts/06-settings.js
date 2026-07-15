@@ -28,10 +28,9 @@ function closeSetup(runAction){
   unlockScroll();
   renderAll();
   if (runAction && setupChoice.trainAction){
-    document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
-    document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
-    document.querySelector('.tab[data-view="work"]').classList.add("active");
-    document.getElementById("view-work").classList.add("active");
+    const tools = document.getElementById("programToolsCard");
+    if (tools) tools.open = true;
+    activateView("work", "programToolsCard", false);
     if (setupChoice.trainAction==="build") openBuilder(false);
     if (setupChoice.trainAction==="import") document.getElementById("importFile").click();
   }
@@ -458,10 +457,7 @@ document.getElementById("adjustYesBtn").addEventListener("click", ()=>{
   const wt = Number(document.getElementById("adjustOverlay").dataset.wt);
   document.getElementById("adjustOverlay").classList.add("hidden");
   // jump to Settings with the calculator prefilled at the new weight
-  document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
-  document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
-  document.querySelector('.tab[data-view="settings"]').classList.add("active");
-  document.getElementById("view-settings").classList.add("active");
+  activateView("settings", null, false);
   const ci = cfg.calcInputs;
   if (ci){
     document.getElementById("cSex").value = ci.sex;
