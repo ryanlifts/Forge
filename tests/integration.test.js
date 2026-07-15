@@ -808,6 +808,11 @@ check("every slice opens with strict mode then its expected section marker",
 check("SW update mechanics unchanged (skipWaiting, clients.claim, cache-first shell)",
   sw.includes("skipWaiting()") && sw.includes("clients.claim()") && sw.includes("caches.open(CACHE)"));
 
+// ================= v53: mobile set-row alignment =================
+check("mobile set controls stay together after checkmark removal",
+  /@media \(max-width:520px\)[\s\S]*?\.srow \.slabel \{ flex:1 1 100%;/.test(rawIndex) &&
+  !/@media \(max-width:520px\)[\s\S]*?\.srow > \.sdone/.test(rawIndex));
+
 // ================= v44: update toast =================
 function bootSW(hasController){
   const fired = { listeners:{}, events:[] };

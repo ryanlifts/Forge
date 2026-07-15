@@ -1,5 +1,5 @@
 // BlackPyre service worker — offline app shell, network-first for food APIs
-const CACHE = "blackpyre-v52";
+const CACHE = "blackpyre-v53";
 const SHELL = [
   "./",
   "./index.html",
