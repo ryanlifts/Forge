@@ -850,6 +850,43 @@ check("every slice opens with strict mode then its expected section marker",
 check("SW update mechanics unchanged (skipWaiting, clients.claim, cache-first shell)",
   sw.includes("skipWaiting()") && sw.includes("clients.claim()") && sw.includes("caches.open(CACHE)"));
 
+// ================= v55: interface simplification, timer consolidation, offline clarity =================
+const T55 = boot(Object.assign({}, EXISTING_CFG, {schemaVersion:1}), EMPTY_DATA);
+const dT55 = T55.window.document;
+const clickT55 = id=>dT55.getElementById(id).dispatchEvent(new T55.window.Event("click",{bubbles:true}));
+check("v55 Home keeps secondary content collapsed by default",
+  dT55.getElementById("homeProgressDetails").open===false && dT55.getElementById("homeCoachDetails").open===false);
+check("v55 Settings opens daily targets but collapses optional service and data sections",
+  dT55.getElementById("settingsGoalsDetails").open===true && dT55.getElementById("settingsServicesDetails").open===false && dT55.getElementById("settingsDataDetails").open===false);
+check("v55 removes the duplicate Train rest-duration row",
+  !dT55.getElementById("trainingToolsCard").querySelector("#restPresets") && dT55.getElementById("restDockOptions").contains(dT55.getElementById("restPresets")));
+T55.window.eval('activateView("work",null,false)');
+clickT55("restDurationBtn");
+check("v55 tapping the floating duration opens quick rest choices",
+  !dT55.getElementById("restDockOptions").classList.contains("hidden") && dT55.getElementById("restDurationBtn").getAttribute("aria-expanded")==="true" && dT55.body.classList.contains("rest-options-open"));
+check("v55 floating timer offers the approved 30, 60, 90, and 120 second quick durations",
+  ["0:30","1:00","1:30","2:00"].every(t=>[...dT55.querySelectorAll("#restPresets .xbtn")].some(b=>b.textContent===t)));
+const v55Preset120=[...dT55.querySelectorAll("#restPresets .xbtn")].find(b=>b.textContent==="2:00");
+v55Preset120.dispatchEvent(new T55.window.Event("click",{bubbles:true}));
+check("v55 choosing a duration updates the timer and recloses the compact chooser",
+  T55.window.eval("cfg.restSec===120") && dT55.getElementById("restDisplay").textContent==="2:00" && dT55.getElementById("restDockOptions").classList.contains("hidden") && !dT55.body.classList.contains("rest-options-open"));
+Object.defineProperty(T55.window.navigator,"onLine",{configurable:true,value:false});
+T55.window.dispatchEvent(new T55.window.Event("offline"));
+check("v55 offline notice explains what remains available",
+  !dT55.getElementById("offlineBanner").classList.contains("hidden") && /Logging, workouts, weights/.test(dT55.getElementById("offlineBanner").textContent) && /need a connection/.test(dT55.getElementById("offlineBanner").textContent));
+Object.defineProperty(T55.window.navigator,"onLine",{configurable:true,value:true});
+T55.window.dispatchEvent(new T55.window.Event("online"));
+check("v55 offline notice clears automatically when connection returns", dT55.getElementById("offlineBanner").classList.contains("hidden"));
+const v55Originals={cfg:T55.window.localStorage.getItem("forge:cfg"),data:T55.window.localStorage.getItem("forge:data"),program:T55.window.localStorage.getItem("forge:program"),legacyData:null};
+T55.window.localStorage.setItem("forge:quarantine",JSON.stringify({recoveryFormatVersion:1,quarantinedAt:"2026-07-15T12:00:00.000Z",diagnostic:{stage:"test",part:"state",code:"test",reason:"test"},originals:v55Originals}));
+dT55.getElementById("settingsDataDetails").open=false;
+T55.window.eval("renderRecoveryStatus()");
+check("v55 Data & recovery opens automatically when a recovery copy needs attention", dT55.getElementById("settingsDataDetails").open===true && !dT55.getElementById("quarantineCard").classList.contains("hidden"));
+check("v55 common compact controls retain practical touch targets",
+  /\.xbtn \{[^}]*min-height:44px/.test(rawIndex) && /\.btn\.small, \.chip, \.faq-q, \.seg button \{ min-height:44px; \}/.test(rawIndex));
+check("v55 FAQ documents consolidated timer, collapsed sections, and offline behavior",
+  T55.window.eval(`FAQ.some(x=>x.q==="What's plate math and the rest timer?"&&/floating timer/.test(x.a)&&/tap the displayed duration/.test(x.a)) && FAQ.some(x=>x.q==="Why are parts of Home and Settings collapsed?") && FAQ.some(x=>x.q==="What works when BlackPyre says Offline?")`));
+
 // ================= v53: mobile set-row alignment =================
 check("mobile set controls stay together after checkmark removal",
   /@media \(max-width:520px\)[\s\S]*?\.srow \.slabel \{ flex:1 1 100%;/.test(rawIndex) &&

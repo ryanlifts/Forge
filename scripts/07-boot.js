@@ -244,6 +244,7 @@ document.getElementById("recoveryBackupFile").addEventListener("change", e=>{
 document.getElementById("recoveryPartialExportBtn").addEventListener("click", ()=>doBackup("recoveryPartialExportBtn"));
 document.getElementById("recoveryRawExportBtn").addEventListener("click", exportRawRecoveryOriginals);
 // ================== boot ==================
+renderNetworkStatus();
 showProtectedBanner();
 renderRecoveryPanel();
 if (protectedMode && recoveryWritesAllowed()) openRecoveryPanel();

@@ -332,6 +332,22 @@ let restInterval = null, restRunning = false, restPaused = false, restFinished =
 let restRemaining = 0;
 function fmtRest(sec){ return Math.floor(sec/60)+":"+String(sec%60).padStart(2,"0"); }
 function selectedRestSeconds(){ return Math.max(10, Math.round(Number(cfg.restSec)||90)); }
+function setRestOptionsOpen(open){
+  const box = document.getElementById("restDockOptions");
+  const btn = document.getElementById("restDurationBtn");
+  if (!box || !btn) return;
+  box.classList.toggle("hidden", !open);
+  btn.setAttribute("aria-expanded", open ? "true" : "false");
+  const caret = btn.querySelector(".rest-dock-caret");
+  if (caret) caret.textContent = open ? "⌃" : "⌄";
+  document.body.classList.toggle("rest-options-open", !!open && !document.getElementById("restDock").classList.contains("hidden"));
+  if (!open){
+    const custom = document.getElementById("restCustomRow");
+    const customBtn = document.getElementById("restCustomBtn");
+    if (custom) custom.classList.add("hidden");
+    if (customBtn) customBtn.setAttribute("aria-expanded","false");
+  }
+}
 function paintRestDock(){
   const disp = document.getElementById("restDisplay");
   const start = document.getElementById("restStartBtn");
@@ -396,7 +412,11 @@ function cancelRest(){
   restRemaining = 0;
   paintRestDock();
 }
-document.getElementById("restStartBtn").addEventListener("click", ()=>startRest(selectedRestSeconds()));
+document.getElementById("restDurationBtn").addEventListener("click", ()=>{
+  const box = document.getElementById("restDockOptions");
+  setRestOptionsOpen(box.classList.contains("hidden"));
+});
+document.getElementById("restStartBtn").addEventListener("click", ()=>{ setRestOptionsOpen(false); startRest(selectedRestSeconds()); });
 document.getElementById("restPauseBtn").addEventListener("click", pauseRest);
 document.getElementById("restAddBtn").addEventListener("click", ()=>addRest(30));
 document.getElementById("restEndBtn").addEventListener("click", cancelRest);
@@ -417,6 +437,7 @@ function renderRestPresets(){
       cfg.restSec = p; saveCfg();
       renderRestPresets();
       if (!(restRunning||restPaused)) paintRestDock();
+      setRestOptionsOpen(false);
     });
     holder.appendChild(b);
     if (removable){
@@ -435,18 +456,25 @@ function renderRestPresets(){
     }
     wrap.appendChild(holder);
   };
-  [90,120,180].forEach(p=>addChip(p, false));
-  cfg.customRests.forEach(p=>{ if([90,120,180].indexOf(p)===-1) addChip(p, true); });
+  const fixed = [30,60,90,120];
+  fixed.forEach(p=>addChip(p, false));
+  const extras = cfg.customRests.slice();
+  const selected = selectedRestSeconds();
+  if (fixed.indexOf(selected)===-1 && extras.indexOf(selected)===-1) extras.push(selected);
+  extras.forEach(p=>{ if(fixed.indexOf(p)===-1) addChip(p, true); });
   paintRestDock();
 }
 document.getElementById("restCustomBtn").addEventListener("click", ()=>{
-  document.getElementById("restCustomRow").classList.toggle("hidden");
+  const row = document.getElementById("restCustomRow");
+  const opening = row.classList.contains("hidden");
+  row.classList.toggle("hidden", !opening);
+  document.getElementById("restCustomBtn").setAttribute("aria-expanded", opening ? "true" : "false");
 });
 document.getElementById("restCustomSet").addEventListener("click", ()=>{
   const v = Math.round(Number(document.getElementById("restCustomInput").value));
   if (!v || v<10 || v>1800){ flashSave("10–1800 seconds", true); return; }
   if (!cfg.customRests) cfg.customRests = [];
-  if (cfg.customRests.indexOf(v)===-1 && [90,120,180].indexOf(v)===-1){
+  if (cfg.customRests.indexOf(v)===-1 && [30,60,90,120].indexOf(v)===-1){
     cfg.customRests.push(v);
     cfg.customRests = cfg.customRests.slice(-4); // keep it tidy
   }
@@ -456,6 +484,7 @@ document.getElementById("restCustomSet").addEventListener("click", ()=>{
   document.getElementById("restCustomInput").value = "";
   renderRestPresets();
   if (!(restRunning||restPaused)) paintRestDock();
+  setRestOptionsOpen(false);
 });
 
 // ================== SHARE PROGRAM ==================

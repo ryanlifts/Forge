@@ -854,6 +854,17 @@ function flashSave(msg, bad){
   clearTimeout(saveTimer); saveTimer = setTimeout(()=>{ el.textContent=""; }, 1500);
 }
 
+// ================== NETWORK STATUS ==================
+function renderNetworkStatus(){
+  const banner = document.getElementById("offlineBanner");
+  if (!banner) return;
+  const offline = navigator.onLine===false;
+  banner.classList.toggle("hidden", !offline);
+  document.body.classList.toggle("is-offline", offline);
+}
+window.addEventListener("online", renderNetworkStatus);
+window.addEventListener("offline", renderNetworkStatus);
+
 // ================== tabs ==================
 function positionView(targetId){
   requestAnimationFrame(()=>{
@@ -876,6 +887,7 @@ function activateView(viewName, targetId, shouldRender){
   const restDock = document.getElementById("restDock");
   if (restDock) restDock.classList.toggle("hidden", viewName!=="work");
   document.body.classList.toggle("rest-dock-visible", viewName==="work");
+  if (viewName!=="work" && typeof setRestOptionsOpen==="function") setRestOptionsOpen(false);
   if (shouldRender!==false && typeof renderAll==="function") renderAll();
   positionView(targetId);
   return true;

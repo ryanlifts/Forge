@@ -588,8 +588,10 @@ function renderRecoveryStatus(){
   }
   if (!card) return;
   const q = getStoredQuarantineStatus();
-  if (q.missing){ card.classList.add("hidden"); return; }
+  const dataDetails = document.getElementById("settingsDataDetails");
+  if (q.missing){ card.classList.add("hidden"); if (dataDetails && protectedMode) dataDetails.open = true; return; }
   card.classList.remove("hidden");
+  if (dataDetails) dataDetails.open = true;
   const text = document.getElementById("quarantineStatusText");
   if (q.newer) text.textContent = "A recovery copy from a newer BlackPyre is stored. This version will not alter or delete it.";
   else if (q.ok) text.textContent = "Original pre-recovery data is preserved from "+(q.record.quarantinedAt ? new Date(q.record.quarantinedAt).toLocaleString() : "an earlier recovery")+". Delete it only after you are certain the recovered app is correct.";

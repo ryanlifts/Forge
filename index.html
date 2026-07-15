@@ -215,8 +215,10 @@
     color:var(--dim); font-size:16px; cursor:pointer; flex-shrink:0; margin-left:auto; }
   .sdone.on { border-color:var(--ok); color:var(--ok); background:rgba(74,222,128,.08); }
   .xbtn { border:1px solid var(--border); background:transparent; color:var(--text); border-radius:8px;
-    padding:8px 10px; font-family:inherit; font-size:11px; cursor:pointer; }
+    padding:8px 10px; min-height:44px; font-family:inherit; font-size:11px; cursor:pointer; }
   .xbtn:active { border-color:var(--ember); }
+  .btn.small, .chip, .faq-q, .seg button { min-height:44px; }
+  .del { min-width:44px; min-height:44px; }
   .x-tools { display:flex; gap:6px; }
   .autoUp { color:var(--ok); font-size:10px; }
   #hfPasteText { font-family:inherit; font-size:16px; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--panel-up); color:var(--text); outline:none; color-scheme:dark; }
@@ -231,13 +233,37 @@
   .program-tools-panel-head { align-items:center; justify-content:space-between; margin-bottom:14px; }
   .program-tools-panel-head > * { flex:0 0 auto; }
   #restDock { position:fixed; left:0; right:0; bottom:calc(61px + env(safe-area-inset-bottom, 0px)); z-index:205; pointer-events:none; }
-  .rest-dock-inner { width:calc(100% - 24px); max-width:696px; margin:0 auto; display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid rgba(var(--ember-rgb),.45); border-radius:12px; background:rgba(25,28,33,.97); box-shadow:0 6px 24px rgba(0,0,0,.45); backdrop-filter:blur(8px); pointer-events:auto; }
-  .rest-dock-readout { display:flex; align-items:baseline; gap:8px; min-width:92px; }
+  .rest-dock-inner { width:calc(100% - 24px); max-width:696px; margin:0 auto; display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:8px 10px; border:1px solid rgba(var(--ember-rgb),.45); border-radius:12px; background:rgba(25,28,33,.97); box-shadow:0 6px 24px rgba(0,0,0,.45); backdrop-filter:blur(8px); pointer-events:auto; }
+  .rest-dock-readout { display:flex; align-items:baseline; gap:8px; min-width:104px; min-height:44px; padding:6px 8px; border:0; border-radius:8px; background:transparent; color:var(--text); font-family:inherit; cursor:pointer; }
   .rest-dock-readout .label { margin:0; }
+  .rest-dock-caret { color:var(--dim); font-size:12px; }
   #restDisplay { font-family:'Oswald',sans-serif; font-size:24px; font-weight:700; line-height:1; color:var(--text); }
-  .rest-dock-inner .xbtn { min-height:42px; padding:8px 11px; }
-  .rest-dock-inner #restStartBtn { margin-left:auto; }
+  .rest-dock-actions { margin-left:auto; display:flex; align-items:center; gap:6px; }
+  .rest-dock-inner .xbtn { min-height:44px; padding:8px 11px; }
+  .rest-dock-options { flex:1 0 100%; border-top:1px solid var(--border); padding-top:9px; }
+  .rest-dock-preset-line { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  #restPresets { display:flex; gap:6px; flex-wrap:wrap; flex:1; }
+  #restPresets .xbtn { min-height:40px; }
+  #restCustomRow { margin-top:8px; }
   body.rest-dock-visible { padding-bottom:164px; }
+  body.rest-dock-visible.rest-options-open { padding-bottom:258px; }
+  #offlineBanner { margin:10px 0 12px; padding:10px 12px; border:1px solid var(--amber); border-radius:12px; background:rgba(232,176,75,.10); color:var(--text); font-size:11px; line-height:1.55; }
+  .disclosure { margin-bottom:12px; }
+  .disclosure > summary { list-style:none; cursor:pointer; min-height:52px; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 15px; border:1px solid var(--border); border-radius:14px; background:var(--panel); }
+  .disclosure > summary::-webkit-details-marker { display:none; }
+  .disclosure > summary::after { content:'＋'; color:var(--ember); font-size:18px; flex:0 0 auto; }
+  .disclosure[open] > summary { border-radius:14px 14px 0 0; border-bottom-color:transparent; }
+  .disclosure[open] > summary::after { content:'−'; }
+  .disclosure-title { font-family:'Oswald',sans-serif; font-size:15px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; }
+  .disclosure-sub { color:var(--dim); font-size:10px; margin-top:3px; }
+  .disclosure-body { border:1px solid var(--border); border-top:0; border-radius:0 0 14px 14px; padding:12px; background:rgba(31,35,42,.38); }
+  .disclosure-body > .card:last-child { margin-bottom:0; }
+  @media (max-width:520px) {
+    .rest-dock-inner { gap:6px; }
+    .rest-dock-readout { min-width:96px; padding-left:4px; padding-right:4px; }
+    .rest-dock-actions { gap:4px; }
+    .rest-dock-inner .xbtn { padding:8px 9px; }
+  }
   .bday { border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:12px; }
   .bex { display:flex; align-items:center; gap:6px; margin-bottom:8px; }
   .bex input { padding:9px 8px; }
@@ -290,6 +316,7 @@
     <div class="motto">Burn the guesswork. Forge your body.</div>
     <div id="saveState" class="note hdr-save"></div>
   </div>
+  <div id="offlineBanner" class="hidden" role="status" aria-live="polite"><b>Offline.</b> Logging, workouts, weights, saved foods, backups, and recovery still work. Online food/barcode lookups and connected AI features need a connection.</div>
   <div id="journey" class="hidden">
     <div class="jy-top">
       <span class="label" style="margin:0;">Your Journey</span>
@@ -351,32 +378,41 @@
       <div id="dashBars"></div>
       <div class="note" id="dashRemaining" style="margin-top:2px;"></div>
     </div>
-    <div class="card hidden" id="tdeeCard">
-      <div class="label">Your measured metabolism</div>
-      <div id="tdeeText" style="font-size:13px; line-height:1.8;"></div>
-      <button class="btn ghost small mt10" id="tdeeApplyBtn">Recalibrate my targets</button>
-      <div class="note">Computed from YOUR logged food vs YOUR actual weight change — more accurate than any formula. Updates as you log.</div>
-    </div>
-    <div class="card">
-      <div class="label">Last session</div>
-      <div id="dashLast" style="font-size:13px; color:var(--dim);">No sessions yet.</div>
-    </div>
     <button class="btn" id="finishDayBtn" style="margin-bottom:12px;">Finish today's log</button>
-    <div class="card" id="aiCoachCard">
-      <div class="label">AI Coach</div>
-      <div style="font-size:13px; line-height:1.7; margin:6px 0 12px;">
-        Turn any AI into your personal trainer. One tap builds a progress report from your real data —
-        weight trend, nutrition adherence, lift progression, and your current program — ready to paste into
-        Claude, ChatGPT, or any AI. It can assess your progress and hand back an adjusted program that loads
-        straight into BlackPyre. <span style="color:var(--dim);">Totally optional — BlackPyre works fully without it.</span>
+    <details class="disclosure" id="homeProgressDetails">
+      <summary><div><div class="disclosure-title">Progress details</div><div class="disclosure-sub">Measured metabolism and last training session</div></div></summary>
+      <div class="disclosure-body">
+        <div class="card hidden" id="tdeeCard">
+          <div class="label">Your measured metabolism</div>
+          <div id="tdeeText" style="font-size:13px; line-height:1.8;"></div>
+          <button class="btn ghost small mt10" id="tdeeApplyBtn">Recalibrate my targets</button>
+          <div class="note">Computed from YOUR logged food vs YOUR actual weight change — more accurate than any formula. Updates as you log.</div>
+        </div>
+        <div class="card">
+          <div class="label">Last session</div>
+          <div id="dashLast" style="font-size:13px; color:var(--dim);">No sessions yet.</div>
+        </div>
       </div>
-      <button class="btn" id="coachOpenBtn" style="width:100%; margin-bottom:10px;">Chat with your Coach</button>
-      <div class="row">
-        <button class="btn ghost small" id="aiCopyBtn">Copy report</button>
-        <button class="btn ghost small" id="aiDownloadBtn">Download</button>
+    </details>
+    <details class="disclosure" id="homeCoachDetails">
+      <summary><div><div class="disclosure-title">AI Coach</div><div class="disclosure-sub">Chat, copy, or download your progress report</div></div></summary>
+      <div class="disclosure-body">
+        <div class="card" id="aiCoachCard">
+          <div style="font-size:13px; line-height:1.7; margin:0 0 12px;">
+            Turn any AI into your personal trainer. One tap builds a progress report from your real data —
+            weight trend, nutrition adherence, lift progression, and your current program — ready to paste into
+            Claude, ChatGPT, or any AI. It can assess your progress and hand back an adjusted program that loads
+            straight into BlackPyre. <span style="color:var(--dim);">Totally optional — BlackPyre works fully without it.</span>
+          </div>
+          <button class="btn" id="coachOpenBtn" style="width:100%; margin-bottom:10px;">Chat with your Coach</button>
+          <div class="row">
+            <button class="btn ghost small" id="aiCopyBtn">Copy report</button>
+            <button class="btn ghost small" id="aiDownloadBtn">Download</button>
+          </div>
+          <div class="note hidden" id="coachKeyNote"></div>
+        </div>
       </div>
-      <div class="note hidden" id="coachKeyNote"></div>
-    </div>
+    </details>
   </div>
 
   <!-- ============ FOOD ============ -->
@@ -675,16 +711,7 @@
         </div>
       </div>
       <div id="plateOut" style="font-size:13px; margin-top:10px; color:var(--ember); font-weight:600;"></div>
-      <div class="row mt10" id="restRow" style="align-items:center;">
-        <div class="label" style="align-self:center; margin:0; flex:0 0 auto;">Rest duration:</div>
-        <div id="restPresets" style="display:flex; gap:6px; flex-wrap:wrap; flex:1;"></div>
-        <button class="xbtn" id="restCustomBtn" style="flex:0 0 auto;">＋</button>
-      </div>
-      <div class="row hidden mt10" id="restCustomRow" style="align-items:flex-end;">
-        <div style="flex:1;"><div class="label">Custom rest (seconds)</div><input type="number" id="restCustomInput" inputmode="numeric" placeholder="e.g. 240"></div>
-        <button class="xbtn" id="restCustomSet" style="flex:0 0 auto;">Set</button>
-      </div>
-      <div class="note">Choose the duration here. Start, pause, add 30 seconds, or end the timer from the compact control above the Train navigation.</div>
+      <div class="note">Plate math stays here; rest duration and controls now live together in the floating timer above the Train navigation.</div>
     </div>
 
     <div class="card flush hidden" id="prCard">
@@ -730,6 +757,9 @@
   <!-- ============ SETTINGS ============ -->
   <div id="view-settings" class="view">
     <button class="btn ghost small" id="faqOpenBtn" style="width:100%; margin-bottom:12px;">Help & FAQ — how everything works</button>
+    <details class="disclosure" id="settingsGoalsDetails" open>
+      <summary><div><div class="disclosure-title">Goals, targets & tracking</div><div class="disclosure-sub">Calculator, calorie schedule, measurements, water, and accent</div></div></summary>
+      <div class="disclosure-body">
     <div class="card">
       <div class="label" style="margin-bottom:12px;">Calorie & macro calculator</div>
       <div class="row" style="margin-bottom:12px;">
@@ -828,6 +858,11 @@
       <div class="label">Accent color</div>
       <div id="accentRow" style="display:flex; gap:10px; margin-top:8px;"></div>
     </div>
+      </div>
+    </details>
+    <details class="disclosure" id="settingsServicesDetails">
+      <summary><div><div class="disclosure-title">Food database & AI</div><div class="disclosure-sub">Optional online services and provider settings</div></div></summary>
+      <div class="disclosure-body">
     <div class="card">
       <div class="label" style="margin-bottom:10px;">USDA food database (optional, free)</div>
       <input id="sUsdaKey" placeholder="Paste your free USDA API key" style="margin-bottom:10px;">
@@ -861,6 +896,11 @@
       <div class="note hidden" id="aiHandoffNote" style="margin:0 0 10px;">No key needed. BlackPyre writes the prompts; you paste them into the ChatGPT app (or claude.ai) and paste the reply back. Works with the subscription you already have.</div>
       <button class="xbtn" id="saveAiBtn">Save AI settings</button>
     </div>
+      </div>
+    </details>
+    <details class="disclosure" id="settingsDataDetails">
+      <summary><div><div class="disclosure-title">Data & recovery</div><div class="disclosure-sub">Backups, restore, last-known-good, and recovery copies</div></div></summary>
+      <div class="disclosure-body">
     <div class="card">
       <div class="label" style="margin-bottom:10px;">Data</div>
       <button class="btn ghost small" id="exportDataBtn">Back up all data (.json)</button>
@@ -879,6 +919,8 @@
       <input type="file" id="importDataFile" accept=".json,application/json" class="hidden">
       <div class="note">BlackPyre stores data on this device. Use backup/restore to move data between devices. True cross-device sync would require optional cloud/account support in a future version.</div>
     </div>
+      </div>
+    </details>
   </div>
 </div>
 
@@ -1037,11 +1079,26 @@
 
 <div id="restDock" class="hidden" aria-label="Rest timer">
   <div class="rest-dock-inner">
-    <div class="rest-dock-readout"><span class="label">Rest</span><span id="restDisplay" aria-live="polite">1:30</span></div>
-    <button class="xbtn" id="restStartBtn">Start</button>
-    <button class="xbtn hidden" id="restPauseBtn">Pause</button>
-    <button class="xbtn hidden" id="restAddBtn">+30</button>
-    <button class="xbtn hidden" id="restEndBtn">End</button>
+    <button class="rest-dock-readout" id="restDurationBtn" aria-expanded="false" aria-controls="restDockOptions" aria-label="Choose rest duration">
+      <span class="label">Rest</span><span id="restDisplay" aria-live="polite">1:30</span><span class="rest-dock-caret" aria-hidden="true">⌄</span>
+    </button>
+    <div class="rest-dock-actions">
+      <button class="xbtn" id="restStartBtn">Start</button>
+      <button class="xbtn hidden" id="restPauseBtn">Pause</button>
+      <button class="xbtn hidden" id="restAddBtn">+30</button>
+      <button class="xbtn hidden" id="restEndBtn">End</button>
+    </div>
+    <div class="rest-dock-options hidden" id="restDockOptions">
+      <div class="label">Quick duration</div>
+      <div class="rest-dock-preset-line">
+        <div id="restPresets"></div>
+        <button class="xbtn" id="restCustomBtn" aria-expanded="false" aria-controls="restCustomRow">Custom</button>
+      </div>
+      <div class="row hidden" id="restCustomRow" style="align-items:flex-end;">
+        <div style="flex:1;"><div class="label">Custom rest (seconds)</div><input type="number" id="restCustomInput" inputmode="numeric" aria-label="Custom rest duration in seconds" placeholder="e.g. 240"></div>
+        <button class="xbtn" id="restCustomSet" style="flex:0 0 auto;">Set</button>
+      </div>
+    </div>
   </div>
 </div>
 

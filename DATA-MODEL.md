@@ -1,6 +1,6 @@
 # BlackPyre Data Model
 
-**Current as of v54 (July 2026). Primary schemaVersion: 1. Recovery format: 1.**
+**Current as of v55 (July 2026). Primary schemaVersion: 1. Recovery format: 1.**
 
 ## Storage keys
 
@@ -29,7 +29,7 @@ removes, or modifies that legacy key.
 `schemaVersion` is physically stored in `forge:cfg`, but versions the complete **primary**
 state and normal backup envelope: settings, logged data, and program.
 
-| Raw value | Meaning / behavior in v54 |
+| Raw value | Meaning / behavior in v55 |
 |---|---|
 | property absent or integer `0` | Pre-versioning legacy state; run numbered migrations from step 0 |
 | integer `1` | Current primary schema; no migration step |
@@ -225,6 +225,7 @@ fallback. The app cannot verify a browser download and states that limit honestl
 | v52 | No storage-schema change | FAQ-only accuracy refresh |
 | v53 | No storage-schema change | Mobile set-row alignment patch |
 | v54 | No storage-schema change | Manual rest controls and compact current-program/Manage layout |
+| v55 | No storage-schema change | Consolidated floating rest timer, Home/Settings disclosure hierarchy, accessibility touch targets, and offline status clarity |
 
 Old backups from any era must continue restoring correctly; the permanent suite proves the
 range-era path.
