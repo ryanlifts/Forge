@@ -543,6 +543,48 @@ C = bootOFF(()=>Promise.resolve({ok:true,status:200,json:()=>Promise.resolve({st
 await scan(C,"555");
 check("malformed nutrition rejected → USDA", C.window.document.getElementById("selName").textContent.includes("USDA Fallback Bar"));
 
+// ================= v49: training-session integrity =================
+const priorWorkout = {date:"2026-07-01",day:"D1",title:"Day 1",sets:{"Bench Press":[{w:100,r:5},{w:100,r:5},{w:100,r:5}]},notes:""};
+const T49 = boot(V1_CFG, {food:{},workouts:[priorWorkout],weights:[],meta:{lastBackup:null,logsSince:0}}, null, TEST_PROGRAM);
+const dT49 = T49.window.document;
+const clickT49 = el=>(typeof el==="string"?dT49.getElementById(el):el).dispatchEvent(new T49.window.Event("click",{bubbles:true}));
+const plannedRows = [...dT49.querySelectorAll("#exerciseInputs .srow")];
+check("previous workout values prefill as an unchecked plan", plannedRows.length===3 && plannedRows.every(r=>!r.querySelector(".sdone").classList.contains("on")) && plannedRows[0].querySelector('input[data-field="weight"]').value==="105");
+clickT49("logWorkoutBtn");
+check("untouched prefilled workout cannot create history", T49.window.eval("data.workouts.length")===1);
+check("empty workout attempt explains the completion requirement", !dT49.getElementById("workoutErr").classList.contains("hidden") && /Mark at least one set complete/.test(dT49.getElementById("workoutErr").textContent));
+clickT49(plannedRows[0].querySelector(".sdone"));
+clickT49("logWorkoutBtn");
+check("logging saves only the genuinely completed set", T49.window.eval(`data.workouts.length===2 && data.workouts[1].sets["Bench Press"].length===1 && data.workouts[1].sets["Bench Press"][0].w===105`));
+check("partial completed history cannot trigger false progression next time", T49.window.eval(`sessionState["Bench Press"].auto===false && sessionState["Bench Press"].rows.length===1 && sessionState["Bench Press"].rows[0].w===105`));
+
+const T49Invalid = boot(V1_CFG, EMPTY_DATA, null, TEST_PROGRAM);
+const dT49Invalid = T49Invalid.window.document;
+dT49Invalid.querySelector("#exerciseInputs .sdone").dispatchEvent(new T49Invalid.window.Event("click",{bubbles:true}));
+dT49Invalid.getElementById("logWorkoutBtn").dispatchEvent(new T49Invalid.window.Event("click",{bubbles:true}));
+check("checked set missing weight is refused", T49Invalid.window.eval("data.workouts.length")===0);
+check("invalid completed set identifies the missing weight/reps row", /Bench Press.*weight and reps.*Set 1/.test(dT49Invalid.getElementById("workoutErr").textContent));
+T49Invalid.window.confirm=()=>true;
+dT49Invalid.getElementById("wDay").value="__CARDIO__";
+dT49Invalid.getElementById("wDay").dispatchEvent(new T49Invalid.window.Event("change",{bubbles:true}));
+dT49Invalid.getElementById("logWorkoutBtn").dispatchEvent(new T49Invalid.window.Event("click",{bubbles:true}));
+check("cardio without minutes is refused with an explanation", T49Invalid.window.eval("data.workouts.length")===0 && /Enter cardio minutes/.test(dT49Invalid.getElementById("workoutErr").textContent));
+
+const T49Switch = boot(V1_CFG, EMPTY_DATA, null, TEST_PROGRAM);
+const dT49Switch = T49Switch.window.document;
+const touchedWeight = dT49Switch.querySelector('#exerciseInputs input[data-field="weight"]');
+touchedWeight.value="135";
+touchedWeight.dispatchEvent(new T49Switch.window.Event("input",{bubbles:true}));
+let switchPrompts=0;
+T49Switch.window.confirm=()=>{ switchPrompts++; return false; };
+dT49Switch.getElementById("wDay").value="__CARDIO__";
+dT49Switch.getElementById("wDay").dispatchEvent(new T49Switch.window.Event("change",{bubbles:true}));
+check("canceling session-type change keeps the current workout and entered value", switchPrompts===1 && dT49Switch.getElementById("wDay").value==="D1" && T49Switch.window.eval(`sessionState["Bench Press"].rows[0].w`)===135);
+T49Switch.window.confirm=()=>true;
+dT49Switch.getElementById("wDay").value="__CARDIO__";
+dT49Switch.getElementById("wDay").dispatchEvent(new T49Switch.window.Event("change",{bubbles:true}));
+check("confirming session-type change discards the in-progress draft only", dT49Switch.getElementById("wDay").value==="__CARDIO__" && T49Switch.window.eval("Object.keys(sessionState).length")===0 && T49Switch.window.eval("data.workouts.length")===0);
+
 // ================= ChatGPT handoff paste flow =================
 const H = boot(Object.assign({}, EXISTING_CFG, {aiProvider:"handoff"}), EMPTY_DATA);
 const dH = H.window.document;

@@ -1,6 +1,6 @@
 # BlackPyre Data Model
 
-**Current as of v48 (July 2026). Primary schemaVersion: 1. Recovery format: 1.**
+**Current as of v49 (July 2026). Primary schemaVersion: 1. Recovery format: 1.**
 
 ## Storage keys
 
@@ -29,7 +29,7 @@ removes, or modifies that legacy key.
 `schemaVersion` is physically stored in `forge:cfg`, but versions the complete **primary**
 state and normal backup envelope: settings, logged data, and program.
 
-| Raw value | Meaning / behavior in v48 |
+| Raw value | Meaning / behavior in v49 |
 |---|---|
 | property absent or integer `0` | Pre-versioning legacy state; run numbered migrations from step 0 |
 | integer `1` | Current primary schema; no migration step |
@@ -94,7 +94,7 @@ treat unset values as real measurements or targets.
 | Field | Shape | Meaning |
 |---|---|---|
 | `food` | `{ "YYYY-MM-DD": [entry] }` | `entry={name,cal,pro,carb,fat,meal}` |
-| `workouts` | `[{date,day,title,sets:{ex:[{w,r}]},notes}]` | Legacy string sets still parse |
+| `workouts` | `[{date,day,title,sets:{ex:[{w,r}]},notes}]` | v49 saves only explicitly completed set rows; legacy string sets still parse |
 | `weights` | `[{date,lbs}]` | One per date; chart/TDEE/projections |
 | `measure` | `[{date,waist,chest,arm}]` | Optional; one per date |
 | `water` | `{ "YYYY-MM-DD": count }` | Optional |
@@ -219,6 +219,7 @@ fallback. The app cannot verify a browser download and states that limit honestl
 | v46 | Recovery format 1 introduced; primary schema remains 1 | Device-only LKG, structured diagnosis, quarantine-before-write, validated recovery/read-back |
 | v47 | No storage-schema change | Focused Phase 4 progression and AI handoff usability fixes only |
 | v48 | No storage-schema change | Mobile train-input zoom prevention and corrected AI review scroll positioning |
+| v49 | No storage-schema change | Training-session integrity: only completed sets save, session-type changes protect drafts, invalid logs explain what is missing |
 
 Old backups from any era must continue restoring correctly; the permanent suite proves the
 range-era path.

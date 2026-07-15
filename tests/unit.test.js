@@ -50,6 +50,18 @@ check("mixed weights never auto-progress", r.auto===false);
 r = E(`prefillRows({scheme:"4×5"}, [{w:0,r:5},{w:0,r:5},{w:0,r:5},{w:0,r:5}])`);
 check("zero weight never auto-progresses", r.auto===false);
 
+// ---------- workout completion integrity ----------
+r = E(`collectCompletedSessionSets({"Bench Press":{mode:"rows",rows:[{w:105,r:5,done:false},{w:105,r:5,done:false}],text:"",textTouched:false}})`);
+check("untouched prefilled rows are never collected as completed", r.ok && Object.keys(r.sets).length===0 && r.completedRows===0);
+r = E(`collectCompletedSessionSets({"Bench Press":{mode:"rows",rows:[{w:105,r:5,done:true},{w:105,r:5,done:false}],text:"",textTouched:false}})`);
+check("only checked workout rows are collected", r.ok && r.sets["Bench Press"].length===1 && r.sets["Bench Press"][0].w===105);
+r = E(`collectCompletedSessionSets({"Bench Press":{mode:"rows",rows:[{w:"",r:5,done:true}],text:"",textTouched:false}})`);
+check("checked rows missing weight are rejected with a precise error", !r.ok && r.error.exercise==="Bench Press" && r.error.rowIndex===0 && /weight and reps/.test(r.error.message));
+r = E(`collectCompletedSessionSets({"Bike":{mode:"text",rows:[],text:"20 min",textTouched:false}})`);
+check("untouched text-mode plans are not collected", r.ok && Object.keys(r.sets).length===0);
+r = E(`collectCompletedSessionSets({"Bike":{mode:"text",rows:[],text:"20 min",textTouched:true}})`);
+check("explicit text-mode entries remain loggable", r.ok && r.sets.Bike==="20 min");
+
 // ---------- calorie schedule presets ----------
 for (const mode of ["frisat","satsun","frisatsun"]){
   for (const target of [1500, 1800, 2000, 2350]){

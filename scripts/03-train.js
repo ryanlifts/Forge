@@ -31,7 +31,38 @@ function renderLibraryOptions(){
   sel.appendChild(og1); sel.appendChild(og2); sel.appendChild(og3);
 }
 
-wDaySel.addEventListener("change", ()=>{ if (typeof editingWorkoutIdx!=="undefined" && editingWorkoutIdx!=null) endWorkoutEdit(true); extraExercises=[]; initSessionState(); renderSessionInputs(); });
+let activeSessionType = null;
+function sessionDraftHasMeaningfulWork(){
+  if (typeof editingWorkoutIdx!=="undefined" && editingWorkoutIdx!=null) return true;
+  if (document.getElementById("wNotes").value.trim()) return true;
+  if (document.getElementById("cardioMin").value || document.getElementById("cardioDetail").value.trim()) return true;
+  if (extraExercises.length || Object.keys(sessionSwaps).length) return true;
+  return Object.keys(sessionState).some(name=>{
+    const st = sessionState[name];
+    if (st.mode==="text") return !!st.textTouched && !!st.text.trim();
+    return st.rows.some(r=>r.done || r.touched);
+  });
+}
+function clearSessionDraftFields(){
+  document.getElementById("wNotes").value = "";
+  document.getElementById("cardioMin").value = "";
+  document.getElementById("cardioDetail").value = "";
+}
+wDaySel.addEventListener("change", ()=>{
+  const nextType = wDaySel.value;
+  if (activeSessionType!==null && nextType!==activeSessionType && sessionDraftHasMeaningfulWork()){
+    if (!confirm("Discard this in-progress session and switch session type?")){
+      wDaySel.value = activeSessionType;
+      return;
+    }
+    clearSessionDraftFields();
+  }
+  if (typeof editingWorkoutIdx!=="undefined" && editingWorkoutIdx!=null) endWorkoutEdit(true);
+  extraExercises=[];
+  initSessionState();
+  clearWorkoutError();
+  renderSessionInputs();
+});
 
 function currentDayExercises(){
   const v = wDaySel.value;
@@ -41,17 +72,17 @@ function currentDayExercises(){
 }
 
 // ---------- set-row engine ----------
-let sessionState = {}; // exName -> {mode:"rows"|"text", rows:[{w,r,done}], text:""}
+let sessionState = {}; // exName -> rows track planned/completed/touched state; text tracks explicit entry
 
 function toRows(val){
   // converts a stored sets value (array or legacy string) into editable rows
-  if (Array.isArray(val)) return val.map(s=>({w:s.w, r:s.r, done:false}));
+  if (Array.isArray(val)) return val.map(s=>({w:s.w, r:s.r, done:false, touched:false}));
   if (typeof val === "string"){
     const rows = [];
     const re = /(\d+(?:\.\d+)?)\s*[x\u00d7]\s*(\d+)/g;
     let m;
     while((m = re.exec(val)) !== null){
-      rows.push({w:parseFloat(m[1]), r:parseInt(m[2],10), done:false});
+      rows.push({w:parseFloat(m[1]), r:parseInt(m[2],10), done:false, touched:false});
     }
     return rows;
   }
@@ -91,24 +122,73 @@ function prefillRows(ex, lastVal){
   // no history: build empty rows from scheme
   const n = sch ? sch.sets : 3;
   const rows = [];
-  for(let i=0;i<n;i++) rows.push({w:"", r: sch?sch.reps:"", done:false});
+  for(let i=0;i<n;i++) rows.push({w:"", r: sch?sch.reps:"", done:false, touched:false});
   return {rows:rows, auto:false};
 }
 function initSessionState(){
   sessionState = {};
   sessionSwaps = {};
   const v = wDaySel.value;
+  activeSessionType = v;
   if (v==="__CARDIO__") return;
   const last = (v!=="__FREE__") ? lastSessionFor(v) : null;
   sessionList().forEach(ex=>{
     const isCardio = ex.name.indexOf("[Cardio] ")===0;
     if (isCardio){
-      sessionState[ex.name] = {mode:"text", rows:[], text:"", auto:false};
+      sessionState[ex.name] = {mode:"text", rows:[], text:"", textTouched:false, auto:false};
     } else {
       const pf = prefillRows(ex, last && last.sets ? last.sets[ex.name.replace("[Cardio] ","")] : null);
-      sessionState[ex.name] = {mode:"rows", rows:pf.rows, text:"", auto:pf.auto};
+      sessionState[ex.name] = {mode:"rows", rows:pf.rows, text:"", textTouched:false, auto:pf.auto};
     }
   });
+}
+
+function collectCompletedSessionSets(state){
+  const sets = {};
+  let completedRows = 0;
+  let skippedRows = 0;
+  for (const exName of Object.keys(state)){
+    const st = state[exName];
+    const key = exName.replace("[Cardio] ","");
+    if (st.mode==="text"){
+      if (st.textTouched && st.text.trim()) sets[key] = st.text.trim();
+      continue;
+    }
+    const rows = [];
+    for (let i=0;i<st.rows.length;i++){
+      const row = st.rows[i];
+      if (!row.done){ skippedRows++; continue; }
+      if (!(Number(row.w)>0) || !(Number(row.r)>0)){
+        return {ok:false, sets:{}, completedRows:0, skippedRows:skippedRows,
+          error:{exercise:exName, rowIndex:i, message:key+" — enter weight and reps for completed Set "+(i+1)+"."}};
+      }
+      rows.push({w:Number(row.w), r:Number(row.r)});
+      completedRows++;
+    }
+    if (rows.length) sets[key] = rows;
+  }
+  return {ok:true, sets:sets, completedRows:completedRows, skippedRows:skippedRows, error:null};
+}
+function clearWorkoutError(){
+  const el = document.getElementById("workoutErr");
+  if (!el) return;
+  el.textContent = "";
+  el.classList.add("hidden");
+}
+function showWorkoutError(message, target){
+  const el = document.getElementById("workoutErr");
+  el.textContent = message;
+  el.classList.remove("hidden");
+  if (target){
+    if (target.focus) target.focus();
+    if (target.scrollIntoView) target.scrollIntoView({behavior:"smooth", block:"center"});
+  } else if (el.scrollIntoView){
+    el.scrollIntoView({behavior:"smooth", block:"center"});
+  }
+}
+function findSessionSetInput(exercise, rowIndex, field){
+  return [...document.querySelectorAll("#exerciseInputs .snum")].find(el=>
+    el.dataset.exercise===exercise && Number(el.dataset.row)===rowIndex && el.dataset.field===field) || null;
 }
 
 function renderSessionInputs(){
@@ -132,8 +212,8 @@ function renderSessionInputs(){
     if (!sessionState[ex.name]) {
       const pf = prefillRows(ex, last && last.sets ? last.sets[ex.name.replace("[Cardio] ","")] : null);
       sessionState[ex.name] = ex.name.indexOf("[Cardio] ")===0
-        ? {mode:"text", rows:[], text:"", auto:false}
-        : {mode:"rows", rows:pf.rows, text:"", auto:pf.auto};
+        ? {mode:"text", rows:[], text:"", textTouched:false, auto:false}
+        : {mode:"rows", rows:pf.rows, text:"", textTouched:false, auto:pf.auto};
     }
     const st = sessionState[ex.name];
     const prevVal = last && last.sets ? last.sets[ex.name.replace("[Cardio] ","")] : null;
@@ -152,8 +232,9 @@ function renderSessionInputs(){
       sameBtn.title = "Log same as last time";
       sameBtn.addEventListener("click", ()=>{
         st.mode = "rows";
-        st.rows = toRows(prevVal).map(r=>({w:r.w, r:r.r, done:true}));
+        st.rows = toRows(prevVal).map(r=>({w:r.w, r:r.r, done:true, touched:true}));
         st.auto = false;
+        clearWorkoutError();
         renderSessionInputs();
       });
       tools.appendChild(sameBtn);
@@ -183,13 +264,17 @@ function renderSessionInputs(){
     tBtn.title = "Toggle text entry";
     tBtn.addEventListener("click", ()=>{
       if (st.mode==="rows"){
-        st.text = st.rows.filter(r=>r.w&&r.r).map(r=>r.w+"x"+r.r).join(", ");
+        const completed = st.rows.filter(r=>r.done && Number(r.w)>0 && Number(r.r)>0);
+        st.text = completed.map(r=>r.w+"x"+r.r).join(", ");
+        st.textTouched = completed.length>0;
         st.mode = "text";
       } else {
-        st.rows = toRows(st.text);
-        if(!st.rows.length) st.rows = [{w:"",r:"",done:false}];
+        const completed = !!st.textTouched && !!st.text.trim();
+        st.rows = toRows(st.text).map(r=>({w:r.w,r:r.r,done:completed,touched:completed}));
+        if(!st.rows.length) st.rows = [{w:"",r:"",done:false,touched:false}];
         st.mode = "rows";
       }
+      clearWorkoutError();
       renderSessionInputs();
     });
     tools.appendChild(tBtn);
@@ -206,7 +291,7 @@ function renderSessionInputs(){
       const inp = document.createElement("input");
       inp.placeholder = ex.name.indexOf("[Cardio] ")===0 ? "e.g. 20 min, 2 mi" : "e.g. 275x5, 275x5, 275x4";
       inp.value = st.text;
-      inp.addEventListener("input", ()=>{ st.text = inp.value; });
+      inp.addEventListener("input", ()=>{ st.text = inp.value; st.textTouched = true; clearWorkoutError(); });
       div.appendChild(inp);
     } else {
       st.rows.forEach((row, ri)=>{
@@ -216,23 +301,27 @@ function renderSessionInputs(){
         const mkStep = (txt, fn)=>{ const b=document.createElement("button"); b.className="step"; b.textContent=txt; b.addEventListener("click", fn); return b; };
         const wIn = document.createElement("input");
         wIn.type="number"; wIn.className="snum"; wIn.inputMode="decimal"; wIn.placeholder="lb"; wIn.value=row.w;
-        wIn.addEventListener("input", ()=>{ row.w = wIn.value===""?"":Number(wIn.value); });
+        wIn.dataset.exercise=ex.name; wIn.dataset.row=String(ri); wIn.dataset.field="weight";
+        wIn.addEventListener("input", ()=>{ row.w = wIn.value===""?"":Number(wIn.value); row.touched=true; clearWorkoutError(); });
         const rIn = document.createElement("input");
         rIn.type="number"; rIn.className="snum"; rIn.inputMode="numeric"; rIn.placeholder="reps"; rIn.value=row.r;
-        rIn.addEventListener("input", ()=>{ row.r = rIn.value===""?"":Number(rIn.value); });
-        rdiv.appendChild(mkStep("\u22125", ()=>{ row.w = Math.max(0,(Number(row.w)||0)-5); wIn.value=row.w; }));
+        rIn.dataset.exercise=ex.name; rIn.dataset.row=String(ri); rIn.dataset.field="reps";
+        rIn.addEventListener("input", ()=>{ row.r = rIn.value===""?"":Number(rIn.value); row.touched=true; clearWorkoutError(); });
+        rdiv.appendChild(mkStep("\u22125", ()=>{ row.w = Math.max(0,(Number(row.w)||0)-5); row.touched=true; wIn.value=row.w; clearWorkoutError(); }));
         rdiv.appendChild(wIn);
-        rdiv.appendChild(mkStep("+5", ()=>{ row.w = (Number(row.w)||0)+5; wIn.value=row.w; }));
+        rdiv.appendChild(mkStep("+5", ()=>{ row.w = (Number(row.w)||0)+5; row.touched=true; wIn.value=row.w; clearWorkoutError(); }));
         const x = document.createElement("span"); x.className="sx"; x.textContent="\u00d7"; rdiv.appendChild(x);
-        rdiv.appendChild(mkStep("\u22121", ()=>{ row.r = Math.max(0,(Number(row.r)||0)-1); rIn.value=row.r; }));
+        rdiv.appendChild(mkStep("\u22121", ()=>{ row.r = Math.max(0,(Number(row.r)||0)-1); row.touched=true; rIn.value=row.r; clearWorkoutError(); }));
         rdiv.appendChild(rIn);
-        rdiv.appendChild(mkStep("+1", ()=>{ row.r = (Number(row.r)||0)+1; rIn.value=row.r; }));
+        rdiv.appendChild(mkStep("+1", ()=>{ row.r = (Number(row.r)||0)+1; row.touched=true; rIn.value=row.r; clearWorkoutError(); }));
         const done = document.createElement("button");
         done.className = "sdone"+(row.done?" on":""); done.textContent = "\u2713";
         done.setAttribute("aria-label","Mark set done");
         done.addEventListener("click", ()=>{
           row.done = !row.done;
+          row.touched = true;
           done.className = "sdone"+(row.done?" on":"");
+          clearWorkoutError();
           if (row.done) startRest(cfg.restSec||90);
         });
         rdiv.appendChild(done);
@@ -244,7 +333,8 @@ function renderSessionInputs(){
       addRow.addEventListener("click", ()=>{
         const filled = st.rows.slice().reverse().find(r=>Number(r.w)>0);
         const prev = filled || st.rows[st.rows.length-1];
-        st.rows.push(prev ? {w:prev.w, r:prev.r, done:false} : {w:"", r:"", done:false});
+        st.rows.push(prev ? {w:prev.w, r:prev.r, done:false, touched:true} : {w:"", r:"", done:false, touched:true});
+        clearWorkoutError();
         renderSessionInputs();
       });
       div.appendChild(addRow);
@@ -273,12 +363,17 @@ document.getElementById("logWorkoutBtn").addEventListener("click", ()=>{
   const v = wDaySel.value;
   const date = document.getElementById("wDate").value;
   const notes = document.getElementById("wNotes").value.trim();
+  clearWorkoutError();
+  if (!date){ showWorkoutError("Choose a date before logging this session.", document.getElementById("wDate")); return; }
 
   if (v==="__CARDIO__"){
     const type = document.getElementById("cardioType").value;
     const min = document.getElementById("cardioMin").value;
     const detail = document.getElementById("cardioDetail").value.trim();
-    if(!min) return;
+    if(!(Number(min)>0)){
+      showWorkoutError("Enter cardio minutes before logging this session.", document.getElementById("cardioMin"));
+      return;
+    }
     const sets = {}; sets[type] = min+" min"+(detail?" \u00b7 "+detail:"");
     const cObj = {date:date, day:"CARDIO", title:"Cardio", sets:sets, notes:notes};
     const wasCardioEdit = editingWorkoutIdx!=null;
@@ -295,18 +390,18 @@ document.getElementById("logWorkoutBtn").addEventListener("click", ()=>{
     }
     return;
   }
-  const sets = {};
-  Object.keys(sessionState).forEach(exName=>{
-    const st = sessionState[exName];
-    const key = exName.replace("[Cardio] ","");
-    if (st.mode==="text"){
-      if (st.text.trim()) sets[key] = st.text.trim();
-    } else {
-      const rows = st.rows.filter(r=>Number(r.w)>0 && Number(r.r)>0).map(r=>({w:Number(r.w), r:Number(r.r)}));
-      if (rows.length) sets[key] = rows;
-    }
-  });
-  if(Object.keys(sets).length===0) return;
+  const collected = collectCompletedSessionSets(sessionState);
+  if (!collected.ok){
+    const badRow = sessionState[collected.error.exercise].rows[collected.error.rowIndex];
+    const field = !(Number(badRow.w)>0) ? "weight" : "reps";
+    showWorkoutError(collected.error.message, findSessionSetInput(collected.error.exercise, collected.error.rowIndex, field));
+    return;
+  }
+  const sets = collected.sets;
+  if(Object.keys(sets).length===0){
+    showWorkoutError("Mark at least one set complete with ✓ before logging this session.", document.getElementById("exerciseInputs"));
+    return;
+  }
   // PR detection BEFORE pushing the new session
   const prLines = [];
   Object.keys(sets).forEach(ex=>{
@@ -428,19 +523,21 @@ function startEditWorkout(i){
       const val = sess.sets[key];
       if (val==null){
         sessionState[exName] = exName.indexOf("[Cardio] ")===0
-          ? {mode:"text", rows:[], text:"", auto:false}
-          : {mode:"rows", rows:[{w:"",r:"",done:false}], text:"", auto:false};
+          ? {mode:"text", rows:[], text:"", textTouched:false, auto:false}
+          : {mode:"rows", rows:[{w:"",r:"",done:false,touched:false}], text:"", textTouched:false, auto:false};
       } else if (Array.isArray(val)){
-        sessionState[exName] = {mode:"rows", rows:val.map(r=>({w:r.w, r:r.r, done:true})), text:"", auto:false};
+        sessionState[exName] = {mode:"rows", rows:val.map(r=>({w:r.w, r:r.r, done:true, touched:false})), text:"", textTouched:false, auto:false};
       } else {
         const rows = toRows(val);
         sessionState[exName] = rows.length
-          ? {mode:"rows", rows:rows.map(r=>({w:r.w, r:r.r, done:true})), text:"", auto:false}
-          : {mode:"text", rows:[], text:String(val), auto:false};
+          ? {mode:"rows", rows:rows.map(r=>({w:r.w, r:r.r, done:true, touched:false})), text:"", textTouched:false, auto:false}
+          : {mode:"text", rows:[], text:String(val), textTouched:true, auto:false};
       }
     });
     renderSessionInputs();
   }
+  activeSessionType = wDaySel.value;
+  clearWorkoutError();
   document.getElementById("logWorkoutBtn").textContent = "Update session";
   document.getElementById("cancelEditWorkBtn").classList.remove("hidden");
   const lb = document.getElementById("logWorkoutBtn");
