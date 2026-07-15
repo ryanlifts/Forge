@@ -143,7 +143,37 @@ renderRestPresets();
 renderAll();
 
 // PWA service worker
+// ================== UPDATE TOAST ==================
+// Shows once per page session when the service worker hands control to a NEW version
+// while the page already had one (i.e., a real update — never the first install).
+let updateToastShown = false;   // at most one toast per page session
+let updateReloaded  = false;    // tapping reload acts exactly once
+function requestAppReload(){ location.reload(); } // seam: tests replace this to count reloads
+function showUpdateToast(){
+  if (updateToastShown) return;
+  updateToastShown = true;
+  document.getElementById("updateToast").classList.remove("hidden");
+}
+function dismissUpdateToast(){
+  // session-only dismissal by design: no storage, next launch updates naturally
+  document.getElementById("updateToast").classList.add("hidden");
+}
+function applyUpdateReload(){
+  if (updateReloaded) return;
+  updateReloaded = true;
+  document.getElementById("updateToast").classList.add("hidden");
+  requestAppReload();
+}
+document.getElementById("updateReloadBtn").addEventListener("click", applyUpdateReload);
+document.getElementById("updateDismissBtn").addEventListener("click", dismissUpdateToast);
+
 if ("serviceWorker" in navigator) {
+  // capture BEFORE register: no controller means first install, and first install must not toast
+  const hadController = !!navigator.serviceWorker.controller;
+  // listener attached BEFORE register(), per spec
+  navigator.serviceWorker.addEventListener("controllerchange", ()=>{
+    if (hadController && !updateReloaded) showUpdateToast();
+  });
   window.addEventListener("load", ()=>{
     navigator.serviceWorker.register("sw.js").catch(()=>{});
   });

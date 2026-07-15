@@ -88,6 +88,13 @@
   .bar .fill { position:absolute; left:0; top:0; bottom:0; border-radius:8px; transition:width .3s ease; background:linear-gradient(90deg,var(--ember-deep),var(--ember)); }
   .bar .fill.ok { background:var(--ok); }
   .fill.mid { background:var(--progress); }
+  #updateToast{
+    position:fixed; left:12px; right:12px; bottom:calc(64px + env(safe-area-inset-bottom, 0px));
+    z-index:220; display:flex; align-items:center; gap:10px;
+    background:var(--panel); border:1px solid rgba(var(--ember-rgb), .45); border-radius:12px;
+    padding:10px 12px; box-shadow:0 6px 24px rgba(0,0,0,.45);
+  }
+  #updateToast .ut-msg{ flex:1; font-size:13px; color:var(--text); }
   #bellaEgg{
     /* Bella's handwriting — embedded once, byte-for-byte, painted by the live accent.
        The image data below is a memorial and is read-only. Never regenerate or re-render it. */
@@ -885,6 +892,11 @@
   </div>
 </div>
 
+<div id="updateToast" class="hidden">
+  <span class="ut-msg">BlackPyre updated — a new version is ready.</span>
+  <button id="updateReloadBtn" class="btn small">Use it now</button>
+  <button id="updateDismissBtn" class="btn ghost small">Later</button>
+</div>
 <div id="celebrate" class="hidden">
   <div class="cel-box">
     <div class="cel-title" id="celTitle">Session Forged</div>

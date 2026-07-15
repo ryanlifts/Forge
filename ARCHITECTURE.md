@@ -27,14 +27,15 @@ below exists to keep that workflow safe.
 | `scripts/04-weight.js` | weight chart, motivation render, e1RM/PR engine, TDEE, streak, finish day, plate math, share |
 | `scripts/05-ai.js` | USDA/barcode lookups, usual-meal, schedule UI, kudos, AI engine, coach chat, check-in, handoff, AI report, analytics |
 | `scripts/06-settings.js` | setup wizard, FAQ render, macro calculator, settings |
-| `scripts/07-boot.js` | dash, Easter egg, boot |
+| `scripts/07-boot.js` | dash, Easter egg, update toast, boot |
 | `data-quotes.js` | QUOTES vault — classic script, loads before the main script, shares global scope |
 | `data-foods.js` | LOCAL_DB food database + ALT_MAP exercise swaps — classic script |
 | `data-faq.js` | FAQ content — classic script |
 | `sw.js` | Offline shell (cache-first), OFF API network-only, cache name = release version |
 | `manifest.json` | PWA identity — name/short_name **BlackPyre** |
 | `icon-*.png`, `apple-touch-icon.png` | Gold dumbbell icons |
-| `tests/` | Permanent gauntlet — 112 automated checks (62 unit + 50 integration) plus `package.json`/`package-lock.json` pinning jsdom for reproducible runs, and `bella-reference.b64` (frozen byte truth of the memorial image — never edited). Not precached |
+| `tests/PHASE2-PROOF.md` | Permanent historical record of the Phase 2 byte-identity proof |
+| `tests/` | Permanent gauntlet — 122 automated checks (62 unit + 60 integration) plus `package.json`/`package-lock.json` pinning jsdom for reproducible runs, and `bella-reference.b64` (frozen byte truth of the memorial image — never edited). Not precached |
 | `.github/workflows/tests.yml` | Runs the gauntlet on every push |
 | `DATA-MODEL.md` | Storage schema + migration history |
 
@@ -51,11 +52,13 @@ setup wizard → FAQ → macro calculator → settings → dash → easter egg �
 
 Section headers look like `// ================== NAME ==================` — keep them.
 The Phase-2 slicing cut the original inline JS at these markers into scripts/01–07
-**in the original order**. Migration proof: strip the strict-mode directives added to
-slices 02–07 (01's is original), concatenate in order, and the result equals the v42
-inline JS exactly — 189,847 characters, 190,324 UTF-8 bytes, sha256 63ea5e9b… . This is
-enforced as a permanent suite check that must be consciously retired in the first
-approved post-v43 commit that legitimately changes a slice. Slice names describe their *dominant* content; exact contents are in
+**in the original order**. The migration was proven byte-identical to the v42 inline JS
+(sha256 63ea5e9b…, 190,324 UTF-8 bytes / 189,847 characters); the live hash check was
+retired in v44 — the first release to intentionally edit a slice — and the complete proof
+and method are preserved permanently in tests/PHASE2-PROOF.md. Lasting structural
+invariants (script order, strict mode, tag attributes, slice opening markers) remain
+enforced by the suite; they verify different, permanent properties, while the hash
+verified the historical migration. Slice names describe their *dominant* content; exact contents are in
 the file table above — 04 and 05 intentionally contain some food/progress sections that
 sat between markers in the original order, because Phase 2 never reorders code.
 
@@ -89,7 +92,7 @@ Slice rules from here on:
 - Integration suite: fresh-user boot, ID resolution/duplication, no-fake-values sweep,
   logging/kudos/finish-day, settings/schedule flows, barcode fallback matrix,
   backup→restore→migration round-trip, handoff paste flow, Easter egg timing.
-- The permanent suite is **112 automated checks** and only grows. When adding a feature: add
+- The permanent suite is **122 automated checks** and only grows. When adding a feature: add
   its checks in the same release. Tests are cumulative, never recreated. (Historical note:
   before Phase 0, roughly 700 ad-hoc checks were written and discarded across v29–v41 —
   that figure describes the old throwaway process, not this suite.)

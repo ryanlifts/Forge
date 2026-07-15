@@ -168,19 +168,72 @@ check("exactly the 10 approved scripts, each exactly once, in the approved order
 check("no local script tag uses async, defer, or type=module",
   scriptTags.every(t=>!/\basync\b|\bdefer\b|type="module"/.test(t[0])));
 
-// Phase 2 migration identity: strip the strict directives ADDED to slices 02-07 (01's is
-// original), concatenate in order, and the result must hash to the v42 inline JS exactly.
-// This hash freezes the migration. The first APPROVED post-v43 change to any slice must
-// retire this check in the same commit, with the plan/report saying so — never silently.
-const crypto = require("crypto");
-const V42_SHA256 = "63ea5e9bd80a069bdfaeb59c954bdcf521a8593da3cf200569d6719e47d53bba";
-const STRICT = '"use strict";\n';
-const normalized = SLICES.map((f,i)=>{
-  const t = fs.readFileSync(path.join(__dirname, "..", "scripts", f), "utf8");
-  return i===0 ? t : t.slice(STRICT.length);
-}).join("");
-check("Phase 2 migration identity: normalized slice concatenation === v42 original (sha256)",
-  crypto.createHash("sha256").update(normalized, "utf8").digest("hex") === V42_SHA256);
+// TOMBSTONE — "Phase 2 migration identity" (retired v44, per approved plan).
+// From v43 until v44 this suite verified that the normalized concatenation of the seven
+// slices hashed to the v42 inline JS: sha256
+//   63ea5e9bd80a069bdfaeb59c954bdcf521a8593da3cf200569d6719e47d53bba
+// (190,324 UTF-8 bytes / 189,847 characters). It passed on every run. v44 is the first
+// release that intentionally edits a slice, so the frozen hash can no longer hold; the
+// full proof and method are preserved permanently in tests/PHASE2-PROOF.md. The checks
+// below verify different, lasting invariants (order, strict mode, attributes, openers).
+const SLICE_OPENERS = {
+  "01-storage.js":"storage keys & defaults", "02-food.js":"bars", "03-train.js":"TRAIN",
+  "04-weight.js":"WEIGHT", "05-ai.js":"USDA SEARCH",
+  "06-settings.js":"FIRST-RUN SETUP WIZARD", "07-boot.js":"DASH" };
+check("every slice opens with strict mode then its expected section marker",
+  SLICES.every(f=>{
+    const lines = fs.readFileSync(path.join(__dirname, "..", "scripts", f), "utf8").split("\n");
+    return lines[0]==='"use strict";' && lines[1].startsWith("// ==") && lines[1].includes(SLICE_OPENERS[f]);
+  }));
+check("SW update mechanics unchanged (skipWaiting, clients.claim, cache-first shell)",
+  sw.includes("skipWaiting()") && sw.includes("clients.claim()") && sw.includes("caches.open(CACHE)"));
+
+// ================= v44: update toast =================
+function bootSW(hasController){
+  const fired = { listeners:{}, events:[] };
+  const dom = boot(EXISTING_CFG, EMPTY_DATA, (w)=>{
+    Object.defineProperty(w.navigator, "serviceWorker", { configurable:true, value:{
+      controller: hasController ? {} : null,
+      addEventListener: (ev,fn)=>{ (fired.listeners[ev]=fired.listeners[ev]||[]).push(fn); fired.events.push("listen:"+ev); },
+      register: (u)=>{ fired.events.push("register:"+u); return Promise.resolve({}); },
+      ready: Promise.resolve({})
+    }});
+  });
+  dom.__fire = ev=>(fired.listeners[ev]||[]).forEach(f=>f());
+  dom.__events = fired.events;
+  return dom;
+}
+// listener order + registration untouched
+let U = bootSW(true);
+await wait(30); // registration happens on window load
+check("controllerchange listener attached before register()", (()=>{
+  const li = U.__events.indexOf("listen:controllerchange");
+  const ri = U.__events.indexOf("register:sw.js");
+  return li > -1 && ri > -1 && li < ri;
+})());
+const toastEl = d=>d.window.document.getElementById("updateToast");
+check("no toast without an update signal", toastEl(U).classList.contains("hidden"));
+// real update: controller existed, then changes
+U.__fire("controllerchange");
+check("controller change with a prior controller shows the toast", !toastEl(U).classList.contains("hidden"));
+U.__fire("controllerchange"); U.__fire("controllerchange");
+check("multiple SW events cannot duplicate or re-arm the toast", !toastEl(U).classList.contains("hidden") && U.window.eval("updateToastShown")===true);
+// reload acts exactly once
+U.window.eval("requestAppReload = function(){ window.__reloads = (window.__reloads||0)+1; };");
+const clickU = id=>U.window.document.getElementById(id).dispatchEvent(new U.window.Event("click",{bubbles:true}));
+clickU("updateReloadBtn"); clickU("updateReloadBtn");
+check("tapping reload reloads exactly once", U.window.eval("window.__reloads")===1);
+check("post-tap controller change cannot reload again or re-toast", (()=>{ U.__fire("controllerchange"); return U.window.eval("window.__reloads")===1 && toastEl(U).classList.contains("hidden"); })());
+// dismissal: session-only, no reload
+let V = bootSW(true); await wait(30);
+V.__fire("controllerchange");
+V.window.document.getElementById("updateDismissBtn").dispatchEvent(new V.window.Event("click",{bubbles:true}));
+check("dismiss hides the toast without reloading", toastEl(V).classList.contains("hidden") && !V.window.eval("window.__reloads"));
+check("dismissal is session-only (no persistent storage written)", V.window.eval(`Object.keys(localStorage).every(k=>!/toast|dismiss|update/i.test(k))`));
+// first install: controller was null
+let W2 = bootSW(false); await wait(30);
+W2.__fire("controllerchange");
+check("first service-worker installation never shows the toast", toastEl(W2).classList.contains("hidden"));
 
 summary("INTEGRATION");
 })().catch(e=>{ console.error(e); process.exit(1); });
