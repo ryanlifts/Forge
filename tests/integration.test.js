@@ -549,21 +549,31 @@ const T49 = boot(V1_CFG, {food:{},workouts:[priorWorkout],weights:[],meta:{lastB
 const dT49 = T49.window.document;
 const clickT49 = el=>(typeof el==="string"?dT49.getElementById(el):el).dispatchEvent(new T49.window.Event("click",{bubbles:true}));
 const plannedRows = [...dT49.querySelectorAll("#exerciseInputs .srow")];
-check("previous workout values prefill as an unchecked plan", plannedRows.length===3 && plannedRows.every(r=>!r.querySelector(".sdone").classList.contains("on")) && plannedRows[0].querySelector('input[data-field="weight"]').value==="105");
+check("previous workout values prefill as a plan awaiting Save Exercise", plannedRows.length===3 && dT49.querySelectorAll("#exerciseInputs .sdone").length===0 && !!dT49.querySelector("#exerciseInputs .saveExBtn") && plannedRows[0].querySelector('input[data-field="weight"]').value==="105");
 clickT49("logWorkoutBtn");
 check("untouched prefilled workout cannot create history", T49.window.eval("data.workouts.length")===1);
-check("empty workout attempt explains the completion requirement", !dT49.getElementById("workoutErr").classList.contains("hidden") && /Mark at least one set complete/.test(dT49.getElementById("workoutErr").textContent));
-clickT49(plannedRows[0].querySelector(".sdone"));
+check("empty workout attempt explains the Save Exercise requirement", !dT49.getElementById("workoutErr").classList.contains("hidden") && /Nothing saved yet.*Save Exercise/.test(dT49.getElementById("workoutErr").textContent));
+const w49 = plannedRows[0].querySelector('input[data-field="weight"]');
+w49.value="105"; w49.dispatchEvent(new T49.window.Event("input",{bubbles:true}));
+const chip49 = dT49.querySelector("#exerciseInputs .unsavedChip");
+check("editing a value marks the exercise Unsaved", T49.window.eval(`sessionState["Bench Press"].status`)==="unsaved" && !!chip49 && chip49.style.display!=="none" && /unsaved/i.test(chip49.textContent));
+clickT49(dT49.querySelector("#exerciseInputs .saveExBtn"));
+check("Save Exercise validates and saves only the entered set", T49.window.eval(`sessionState["Bench Press"].status==="saved" && sessionState["Bench Press"].saved.length===1 && sessionState["Bench Press"].saved[0].w===105`));
+check("saved exercise shows Completed with an Edit option", /Completed/.test(dT49.querySelector("#exerciseInputs .savedChip").textContent) && [...dT49.querySelectorAll("#exerciseInputs .xbtn")].some(b=>b.textContent==="Edit"));
 clickT49("logWorkoutBtn");
-check("logging saves only the genuinely completed set", T49.window.eval(`data.workouts.length===2 && data.workouts[1].sets["Bench Press"].length===1 && data.workouts[1].sets["Bench Press"][0].w===105`));
-check("partial completed history cannot trigger false progression next time", T49.window.eval(`sessionState["Bench Press"].auto===false && sessionState["Bench Press"].rows.length===1 && sessionState["Bench Press"].rows[0].w===105`));
+check("logging saves only the genuinely saved set", T49.window.eval(`data.workouts.length===2 && data.workouts[1].sets["Bench Press"].length===1 && data.workouts[1].sets["Bench Press"][0].w===105`));
+check("partial saved history cannot trigger false progression next time", T49.window.eval(`sessionState["Bench Press"].auto===false && sessionState["Bench Press"].rows.length===1 && sessionState["Bench Press"].rows[0].w===105`));
 
 const T49Invalid = boot(V1_CFG, EMPTY_DATA, null, TEST_PROGRAM);
 const dT49Invalid = T49Invalid.window.document;
-dT49Invalid.querySelector("#exerciseInputs .sdone").dispatchEvent(new T49Invalid.window.Event("click",{bubbles:true}));
+const rIn49 = dT49Invalid.querySelector('#exerciseInputs input[data-field="reps"]');
+rIn49.value="5"; rIn49.dispatchEvent(new T49Invalid.window.Event("input",{bubbles:true}));
+dT49Invalid.querySelector("#exerciseInputs .saveExBtn").dispatchEvent(new T49Invalid.window.Event("click",{bubbles:true}));
+check("entered set missing weight is refused by Save Exercise", T49Invalid.window.eval(`sessionState["Bench Press"].status`)!=="saved");
+check("invalid entered set identifies the missing weight/reps row", /Bench Press.*weight and reps.*Set 1/.test(dT49Invalid.getElementById("workoutErr").textContent));
+T49Invalid.window.confirm=()=>true; // choose "Save valid & log" — the invalid row must still block the log
 dT49Invalid.getElementById("logWorkoutBtn").dispatchEvent(new T49Invalid.window.Event("click",{bubbles:true}));
-check("checked set missing weight is refused", T49Invalid.window.eval("data.workouts.length")===0);
-check("invalid completed set identifies the missing weight/reps row", /Bench Press.*weight and reps.*Set 1/.test(dT49Invalid.getElementById("workoutErr").textContent));
+check("log with only invalid unsaved work saves nothing", T49Invalid.window.eval("data.workouts.length")===0);
 T49Invalid.window.confirm=()=>true;
 dT49Invalid.getElementById("wDay").value="__CARDIO__";
 dT49Invalid.getElementById("wDay").dispatchEvent(new T49Invalid.window.Event("change",{bubbles:true}));
@@ -610,9 +620,84 @@ T50.window.eval("openBuilder(false)");
 const editableControls=[...dT50.querySelectorAll('input:not([type="hidden"]), select, textarea')];
 check("all static and dynamically rendered editable controls use at least 16px text", editableControls.length>80 && editableControls.every(el=>parseFloat(T50.window.getComputedStyle(el).fontSize)>=16));
 const stepTarget=dT50.querySelector("#exerciseInputs .step");
-const doneTarget=dT50.querySelector("#exerciseInputs .sdone");
+const saveTarget=dT50.querySelector("#exerciseInputs .saveExBtn");
 check("workout step controls have 44px touch targets", !!stepTarget && T50.window.getComputedStyle(stepTarget).width==="44px" && T50.window.getComputedStyle(stepTarget).height==="44px");
-check("workout completion controls have 44px touch targets", !!doneTarget && T50.window.getComputedStyle(doneTarget).width==="44px" && T50.window.getComputedStyle(doneTarget).height==="44px");
+check("workout completion controls have 44px touch targets", !!saveTarget && T50.window.getComputedStyle(saveTarget).minHeight==="44px");
+
+// ================= v51: exercise-level completion =================
+const T51 = boot(V1_CFG, EMPTY_DATA, null, TEST_PROGRAM);
+const dT51 = T51.window.document;
+const clickT51 = el=>(typeof el==="string"?dT51.getElementById(el):el).dispatchEvent(new T51.window.Event("click",{bubbles:true}));
+function enterSet51(dom, dd, w, r){
+  const wIn = dd.querySelector('#exerciseInputs input[data-field="weight"]');
+  const rIn = dd.querySelector('#exerciseInputs input[data-field="reps"]');
+  wIn.value=String(w); wIn.dispatchEvent(new dom.window.Event("input",{bubbles:true}));
+  rIn.value=String(r); rIn.dispatchEvent(new dom.window.Event("input",{bubbles:true}));
+}
+enterSet51(T51, dT51, 135, 5);
+clickT51(dT51.querySelector("#exerciseInputs .saveExBtn"));
+check("v51 save: exercise saves and collapses to Completed", T51.window.eval(`sessionState["Bench Press"].status`)==="saved" && /Completed/.test(dT51.querySelector("#exerciseInputs .savedChip").textContent));
+const editBtn51 = [...dT51.querySelectorAll("#exerciseInputs .xbtn")].find(b=>b.textContent==="Edit");
+clickT51(editBtn51);
+check("v51 edit: Edit reopens the rows and marks the exercise Unsaved", T51.window.eval(`sessionState["Bench Press"].status`)==="unsaved" && dT51.querySelector('#exerciseInputs input[data-field="weight"]').value==="135");
+// logging with exactly ONE unsaved exercise must warn, listing it by name
+let confirm51Msgs = [];
+T51.window.confirm = (m)=>{ confirm51Msgs.push(m); return false; }; // Review exercises
+clickT51("logWorkoutBtn");
+check("v51 warning: even one unsaved exercise triggers the warning, by name", confirm51Msgs.length===1 && /Bench Press/.test(confirm51Msgs[0]) && /Save valid exercises & log session/.test(confirm51Msgs[0]) && /Review exercises/.test(confirm51Msgs[0]));
+check("v51 review path: choosing Review logs nothing and explains next steps", T51.window.eval("data.workouts.length")===0 && /Review the unsaved exercise/.test(dT51.getElementById("workoutErr").textContent));
+T51.window.confirm = (m)=>{ confirm51Msgs.push(m); return true; }; // Save valid & log
+clickT51("logWorkoutBtn");
+check("v51 save-and-log path: valid unsaved work is saved then logged, never silently dropped", T51.window.eval(`data.workouts.length===1 && data.workouts[0].sets["Bench Press"].length===1 && data.workouts[0].sets["Bench Press"][0].w===135`));
+
+// leaving Train with unsaved work warns; canceling stays
+const T51b = boot(V1_CFG, EMPTY_DATA, null, TEST_PROGRAM);
+const dT51b = T51b.window.document;
+dT51b.querySelector('.tab[data-view="work"]').dispatchEvent(new T51b.window.Event("click",{bubbles:true}));
+enterSet51(T51b, dT51b, 95, 8);
+let leavePrompts = 0;
+T51b.window.confirm = ()=>{ leavePrompts++; return false; };
+dT51b.querySelector('.tab[data-view="food"]').dispatchEvent(new T51b.window.Event("click",{bubbles:true}));
+check("v51 leave-Train warning: canceling keeps you on Train with the work intact", leavePrompts===1 && dT51b.getElementById("view-work").classList.contains("active") && T51b.window.eval(`sessionState["Bench Press"].rows[0].w`)===95);
+T51b.window.confirm = ()=>true;
+dT51b.querySelector('.tab[data-view="food"]').dispatchEvent(new T51b.window.Event("click",{bubbles:true}));
+check("v51 leave-Train warning: confirming leaves (entries remain in memory)", dT51b.getElementById("view-food").classList.contains("active") && T51b.window.eval(`sessionState["Bench Press"].rows[0].w`)===95);
+// saved-but-unlogged work also counts as meaningful for session-type switching
+const T51c = boot(V1_CFG, EMPTY_DATA, null, TEST_PROGRAM);
+const dT51c = T51c.window.document;
+enterSet51(T51c, dT51c, 115, 5);
+dT51c.querySelector("#exerciseInputs .saveExBtn").dispatchEvent(new T51c.window.Event("click",{bubbles:true}));
+let switch51 = 0;
+T51c.window.confirm = ()=>{ switch51++; return false; };
+dT51c.getElementById("wDay").value="__CARDIO__";
+dT51c.getElementById("wDay").dispatchEvent(new T51c.window.Event("change",{bubbles:true}));
+check("v51 saved-but-unlogged work still guards session-type switching", switch51===1 && dT51c.getElementById("wDay").value==="D1");
+
+// ================= v51: food-flow improvements =================
+const F51 = boot(V1_CFG, EMPTY_DATA);
+const dF51 = F51.window.document;
+F51.window.eval(`currentMeal="lunch"; renderMealSeg();`);
+F51.window.eval(`addEntry({name:"Chicken", cal:165, pro:31, carb:0, fat:3.6, meal:"lunch"});`);
+F51.window.eval(`addEntry({name:"Chicken", cal:165, pro:31, carb:0, fat:3.6, meal:"lunch"});`);
+check("v51 duplicate guard: an identical rapid re-add is swallowed", F51.window.eval("data.food[todayStr()].length")===1);
+F51.window.eval(`addEntry({name:"Rice", cal:260, pro:5, carb:57, fat:1, meal:"lunch"});`);
+check("v51 duplicate guard: different foods add normally", F51.window.eval("data.food[todayStr()].length")===2);
+F51.window.eval(`_lastAddT = 0; addEntry({name:"Chicken", cal:165, pro:31, carb:0, fat:3.6, meal:"lunch"});`);
+check("v51 duplicate guard: the same food later is honest logging, not a duplicate", F51.window.eval("data.food[todayStr()].length")===3);
+check("v51 meal selection preserved through adds", F51.window.eval("currentMeal")==="lunch");
+// deletion with Undo
+F51.window.eval(`removeEntry(0)`);
+check("v51 undo: deletion removes the entry and offers Undo", F51.window.eval("data.food[todayStr()].length")===2 && !dF51.getElementById("undoToast").classList.contains("hidden") && /Deleted "Chicken"/.test(dF51.getElementById("undoMsg").textContent));
+dF51.getElementById("undoBtn").dispatchEvent(new F51.window.Event("click",{bubbles:true}));
+check("v51 undo: tapping Undo restores the entry at its original position", F51.window.eval(`data.food[todayStr()].length===3 && data.food[todayStr()][0].name==="Chicken"`) && dF51.getElementById("undoToast").classList.contains("hidden"));
+// search results into view + post-log return
+F51.window.HTMLElement.prototype.scrollIntoView = function(opts){ F51.window.__f51 = {id:this.id, block:opts&&opts.block}; };
+F51.window.eval(`renderResults([{name:"Test Food", brand:"B", cal100:100, pro100:10, carb100:5, fat100:2}]);`);
+check("v51 search results scroll into view beside the field", F51.window.eval("window.__f51 && window.__f51.id")==="resultsCard");
+dF51.querySelector("#results .result").dispatchEvent(new F51.window.Event("click",{bubbles:true}));
+dF51.getElementById("addSelBtn").dispatchEvent(new F51.window.Event("click",{bubbles:true}));
+check("v51 logging from search returns to the search box for the next entry", F51.window.eval("window.__f51 && window.__f51.id")==="foodQuery" && F51.window.eval("data.food[todayStr()].length")===4);
+check("v51 handoff behavior untouched by food changes", !!dF51.getElementById("hfPasteBtn"));
 
 // ================= ChatGPT handoff paste flow =================
 const H = boot(Object.assign({}, EXISTING_CFG, {aiProvider:"handoff"}), EMPTY_DATA);

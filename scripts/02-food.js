@@ -297,6 +297,8 @@ function renderResults(hits){
     });
   }
   card.classList.remove("hidden");
+  // v51: bring results into view next to the search field instead of leaving them below the fold
+  try { card.scrollIntoView({behavior:"smooth", block:"nearest"}); } catch(e){}
 }
 function r1(x){ return Math.round(Number(x||0)*10)/10; }
 
@@ -376,6 +378,8 @@ document.getElementById("addSelBtn").addEventListener("click", ()=>{
   document.getElementById("foodQuery").value = "";
   document.getElementById("barcodeInput").value = "";
   selected = null;
+  // v51: return to the search box ready for the next entry (meal selection is preserved)
+  try { document.getElementById("foodQuery").scrollIntoView({behavior:"smooth", block:"center"}); } catch(e){}
 });
 
 // --- recents ---
@@ -477,21 +481,47 @@ function bumpLog(){
   if(!data.meta) data.meta = {lastBackup:null, logsSince:0};
   data.meta.logsSince = (data.meta.logsSince||0)+1;
 }
+let _lastAddSig = "", _lastAddT = 0;
 function addEntry(entry){
   const d = foodDateEl.value;
-  if(!data.food[d]) data.food[d]=[];
   if(!entry.meal) entry.meal = currentMeal;
+  // v51: repeated taps / delayed responses can fire the same add twice — swallow exact repeats within 900ms
+  const sig = d+"|"+(entry.name||"")+"|"+entry.cal+"|"+entry.meal;
+  const now = Date.now();
+  if (sig===_lastAddSig && (now-_lastAddT)<900){ flashSave("Already added \u2014 not logging it twice", true); return; }
+  _lastAddSig = sig; _lastAddT = now;
+  if(!data.food[d]) data.food[d]=[];
   data.food[d].push(entry);
   bumpLog();
   save(); renderFood(); renderDash(); renderBackup();
   foodKudos(entry);
 }
+let _undoDel = null, _undoTimer = null;
 function removeEntry(i){
   const d = foodDateEl.value;
+  const entry = data.food[d] && data.food[d][i];
+  if (!entry) return;
   data.food[d].splice(i,1);
   cancelEditFood();
   save(); renderFood(); renderDash();
+  // v51: deletion is undoable for a few seconds instead of instantly irreversible
+  _undoDel = {d:d, i:i, entry:entry};
+  const t = document.getElementById("undoToast");
+  document.getElementById("undoMsg").textContent = 'Deleted "'+entry.name+'"';
+  t.classList.remove("hidden");
+  if (_undoTimer) clearTimeout(_undoTimer);
+  _undoTimer = setTimeout(()=>{ t.classList.add("hidden"); _undoDel = null; _undoTimer = null; }, 6000);
 }
+document.getElementById("undoBtn").addEventListener("click", ()=>{
+  if (!_undoDel) return;
+  const u = _undoDel; _undoDel = null;
+  if (_undoTimer){ clearTimeout(_undoTimer); _undoTimer = null; }
+  document.getElementById("undoToast").classList.add("hidden");
+  if(!data.food[u.d]) data.food[u.d] = [];
+  data.food[u.d].splice(Math.min(u.i, data.food[u.d].length), 0, u.entry); // back where it was, no dup-guard, no kudos
+  save(); renderFood(); renderDash();
+  flashSave("Restored \u2713");
+});
 
 function renderFood(){
   const d = foodDateEl.value;

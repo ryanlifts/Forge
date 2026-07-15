@@ -1,6 +1,6 @@
 # BlackPyre Architecture
 
-**Current as of v50 (July 2026).**
+**Current as of v51 (July 2026).**
 
 A single-page PWA: vanilla HTML/CSS/JS, no framework, no build step, localStorage only.
 Deployed on GitHub Pages. Developed AI-assisted (Claude / ChatGPT) from a phone — every rule
@@ -22,7 +22,7 @@ below exists to keep that workflow safe.
 
 | File | Role |
 |---|---|
-| `index.html` | Markup + styles only (~158 KB in v50); loads the data files then the 7 app slices; includes protected/recovery UI |
+| `index.html` | Markup + styles only (~159 KB in v51); loads the data files then the 7 app slices; includes protected/recovery UI |
 | `scripts/01-storage.js` | primary/recovery keys, defaults, pure prepare-state migration pipeline, commit/rollback, LKG lifecycle, structured diagnosis, quarantine transaction, protected-mode guards, state, predictable view activation/tabs |
 | `scripts/02-food.js` | bars, meals, food logging |
 | `scripts/03-train.js` | daily-first training session, programs, checked-set logging integrity, protected session-type changes, clear validation, conservative auto-progression, mobile-safe inputs/touch targets |
@@ -37,7 +37,7 @@ below exists to keep that workflow safe.
 | `manifest.json` | PWA identity — name/short_name **BlackPyre** |
 | `icon-*.png`, `apple-touch-icon.png` | Gold dumbbell icons |
 | `tests/PHASE2-PROOF.md` | Permanent historical record of the Phase 2 byte-identity proof |
-| `tests/` | Permanent gauntlet — 290 automated checks (100 unit + 190 integration), reproducible jsdom lockfile, and `bella-reference.b64` (frozen memorial byte truth; never edited). Not precached |
+| `tests/` | Permanent gauntlet — 312 automated checks (101 unit + 211 integration), reproducible jsdom lockfile, and `bella-reference.b64` (frozen memorial byte truth; never edited). Not precached |
 | `.github/workflows/tests.yml` | Runs the gauntlet on every push |
 | `DATA-MODEL.md` | Primary storage schema, recovery-record contracts, and migration history |
 
@@ -104,7 +104,7 @@ Slice rules from here on:
   re-sync, interrupted commits, LKG create/refresh/failure/quota rules, area diagnosis,
   all three recovery sources, quarantine ordering/retention/export/deletion, legacy fallback,
   API-key boundaries, read-back failure, checked-set workout logging, protected session-type changes, clear workout validation, conservative progression, daily-first Train layout, predictable tab/session positioning, 16px editable controls, 44px workout touch targets, handoff paste/log and first-item review positioning, update toast, and Easter egg timing.
-- The permanent suite is **290 automated checks** and only grows. New features add tests in
+- The permanent suite is **312 automated checks** and only grows. New features add tests in
   the same release; existing checks are never deleted or weakened. The roughly 700 checks
   written before Phase 0 were old throwaway checks, not this permanent suite.
 - jsdom quirks: stub `URL.createObjectURL`, ignore `scrollTo` warnings, `select()` runs via

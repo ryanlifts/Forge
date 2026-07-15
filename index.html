@@ -95,6 +95,18 @@
     padding:10px 12px; box-shadow:0 6px 24px rgba(0,0,0,.45);
   }
   #updateToast .ut-msg{ flex:1; font-size:13px; color:var(--text); }
+  #undoToast{
+    position:fixed; left:12px; right:12px; bottom:calc(64px + env(safe-area-inset-bottom, 0px));
+    z-index:221; display:flex; align-items:center; gap:10px;
+    background:var(--panel); border:1px solid rgba(var(--ember-rgb), .45); border-radius:12px;
+    padding:10px 12px; box-shadow:0 6px 24px rgba(0,0,0,.45);
+  }
+  #undoToast .ut-msg{ flex:1; font-size:13px; color:var(--text); }
+  .exFoot{ display:flex; align-items:center; gap:10px; margin:6px 0 4px; }
+  .saveExBtn{ min-height:44px; padding:0 16px; font-weight:600; border-color:rgba(var(--ember-rgb), .55); }
+  .unsavedChip{ font-size:11px; letter-spacing:.04em; color:var(--progress); text-transform:uppercase; }
+  .savedLine{ display:flex; align-items:center; gap:10px; font-size:13px; margin:4px 0 8px; }
+  .savedChip{ color:var(--ok); font-weight:600; font-size:12px; }
   #bellaEgg{
     /* Bella's handwriting — embedded once, byte-for-byte, painted by the live accent.
        The image data below is a memorial and is read-only. Never regenerate or re-render it. */
@@ -988,6 +1000,10 @@
   </div>
 </div>
 
+<div id="undoToast" class="hidden">
+  <span class="ut-msg" id="undoMsg"></span>
+  <button id="undoBtn" class="btn ghost small">Undo</button>
+</div>
 <div id="updateToast" class="hidden">
   <span class="ut-msg">BlackPyre updated — a new version is ready.</span>
   <button id="updateReloadBtn" class="btn small">Use it now</button>

@@ -39,8 +39,9 @@ function sessionDraftHasMeaningfulWork(){
   if (extraExercises.length || Object.keys(sessionSwaps).length) return true;
   return Object.keys(sessionState).some(name=>{
     const st = sessionState[name];
+    if (st.saved!=null) return true;
     if (st.mode==="text") return !!st.textTouched && !!st.text.trim();
-    return st.rows.some(r=>r.done || r.touched);
+    return st.rows.some(r=>r.touched && (r.w!=="" || r.r!==""));
   });
 }
 function clearSessionDraftFields(){
@@ -135,39 +136,75 @@ function initSessionState(){
   sessionList().forEach(ex=>{
     const isCardio = ex.name.indexOf("[Cardio] ")===0;
     if (isCardio){
-      sessionState[ex.name] = {mode:"text", rows:[], text:"", textTouched:false, auto:false};
+      sessionState[ex.name] = {mode:"text", rows:[], text:"", textTouched:false, auto:false, saved:null, status:"plan"};
     } else {
       const pf = prefillRows(ex, last && last.sets ? last.sets[ex.name.replace("[Cardio] ","")] : null);
-      sessionState[ex.name] = {mode:"rows", rows:pf.rows, text:"", textTouched:false, auto:pf.auto};
+      sessionState[ex.name] = {mode:"rows", rows:pf.rows, text:"", textTouched:false, auto:pf.auto, saved:null, status:"plan"};
     }
   });
 }
 
-function collectCompletedSessionSets(state){
+// ---------- v51 exercise-level completion engine ----------
+// A row is "entered" once the lifter touched it and gave it any value; untouched
+// prefilled rows remain plans and can never be saved or logged (v49 rule, kept).
+function enteredRows(st){
+  return st.rows.map((r,i)=>({r:r, i:i})).filter(x=>x.r.touched && (x.r.w!=="" || x.r.r!==""));
+}
+function validateExerciseEntry(st){
+  if (st.mode==="text"){
+    const t = (st.textTouched && st.text.trim()) ? st.text.trim() : null;
+    return {ok:true, value:t};
+  }
+  const entered = enteredRows(st);
+  if (!entered.length) return {ok:true, value:null};
+  const sets = [];
+  for (const x of entered){
+    if (!(Number(x.r.w)>0) || !(Number(x.r.r)>0)){
+      return {ok:false, rowIndex:x.i, message:"enter weight and reps for Set "+(x.i+1)+", or clear it, before saving."};
+    }
+    sets.push({w:Number(x.r.w), r:Number(x.r.r)});
+  }
+  return {ok:true, value:sets};
+}
+function saveExercise(exName){
+  const st = sessionState[exName];
+  if (!st) return {ok:false};
+  const key = exName.replace("[Cardio] ","");
+  const v = validateExerciseEntry(st);
+  if (!v.ok){
+    showWorkoutError(key+" — "+v.message, findSessionSetInput(exName, v.rowIndex, !(Number(st.rows[v.rowIndex].w)>0)?"weight":"reps"));
+    return {ok:false};
+  }
+  if (v.value===null){
+    showWorkoutError(key+" — enter at least one set before saving this exercise.", null);
+    return {ok:false};
+  }
+  st.saved = v.value;
+  st.status = "saved";
+  clearWorkoutError();
+  if (st.mode==="rows") startRest(cfg.restSec||90);
+  renderSessionInputs();
+  return {ok:true};
+}
+function hasUnsavedEntry(st){
+  if (st.status!=="unsaved") return false;
+  if (st.mode==="text") return !!st.textTouched && !!st.text.trim();
+  return enteredRows(st).length>0;
+}
+function unsavedExerciseNames(){
+  return Object.keys(sessionState).filter(n=>hasUnsavedEntry(sessionState[n]));
+}
+function collectSavedSessionSets(state){
   const sets = {};
   let completedRows = 0;
-  let skippedRows = 0;
   for (const exName of Object.keys(state)){
     const st = state[exName];
+    if (st.status!=="saved" || st.saved==null) continue;
     const key = exName.replace("[Cardio] ","");
-    if (st.mode==="text"){
-      if (st.textTouched && st.text.trim()) sets[key] = st.text.trim();
-      continue;
-    }
-    const rows = [];
-    for (let i=0;i<st.rows.length;i++){
-      const row = st.rows[i];
-      if (!row.done){ skippedRows++; continue; }
-      if (!(Number(row.w)>0) || !(Number(row.r)>0)){
-        return {ok:false, sets:{}, completedRows:0, skippedRows:skippedRows,
-          error:{exercise:exName, rowIndex:i, message:key+" — enter weight and reps for completed Set "+(i+1)+"."}};
-      }
-      rows.push({w:Number(row.w), r:Number(row.r)});
-      completedRows++;
-    }
-    if (rows.length) sets[key] = rows;
+    sets[key] = st.saved;
+    if (Array.isArray(st.saved)) completedRows += st.saved.length;
   }
-  return {ok:true, sets:sets, completedRows:completedRows, skippedRows:skippedRows, error:null};
+  return {ok:true, sets:sets, completedRows:completedRows, error:null};
 }
 function clearWorkoutError(){
   const el = document.getElementById("workoutErr");
@@ -191,6 +228,10 @@ function findSessionSetInput(exercise, rowIndex, field){
     el.dataset.exercise===exercise && Number(el.dataset.row)===rowIndex && el.dataset.field===field) || null;
 }
 
+function markUnsavedChip(exDiv){
+  const c = exDiv.querySelector(".unsavedChip");
+  if (c) c.style.display = "";
+}
 function renderSessionInputs(){
   const v = wDaySel.value;
   const strengthBlock = document.getElementById("strengthBlock");
@@ -212,13 +253,42 @@ function renderSessionInputs(){
     if (!sessionState[ex.name]) {
       const pf = prefillRows(ex, last && last.sets ? last.sets[ex.name.replace("[Cardio] ","")] : null);
       sessionState[ex.name] = ex.name.indexOf("[Cardio] ")===0
-        ? {mode:"text", rows:[], text:"", textTouched:false, auto:false}
-        : {mode:"rows", rows:pf.rows, text:"", textTouched:false, auto:pf.auto};
+        ? {mode:"text", rows:[], text:"", textTouched:false, auto:false, saved:null, status:"plan"}
+        : {mode:"rows", rows:pf.rows, text:"", textTouched:false, auto:pf.auto, saved:null, status:"plan"};
     }
     const st = sessionState[ex.name];
     const prevVal = last && last.sets ? last.sets[ex.name.replace("[Cardio] ","")] : null;
     const div = document.createElement("div");
     div.className = "exercise";
+    if (st.status==="saved" && st.saved!=null){
+      const head0 = document.createElement("div");
+      head0.className = "x-head";
+      head0.innerHTML = '<span><b>'+esc(ex.name.replace("[Cardio] ",""))+'</b>'
+        +(ex.scheme?' <span class="scheme">\u00b7 '+esc(ex.scheme)+'</span>':'')+'</span>';
+      div.appendChild(head0);
+      const line = document.createElement("div");
+      line.className = "savedLine";
+      line.innerHTML = '<span class="savedChip">\u2713 Completed</span> <span>'+esc(formatSets(st.saved))+'</span>';
+      const editBtn = document.createElement("button");
+      editBtn.className = "xbtn"; editBtn.textContent = "Edit";
+      editBtn.addEventListener("click", ()=>{
+        st.status = "unsaved";
+        if (Array.isArray(st.saved)){
+          st.mode = "rows";
+          st.rows = st.saved.map(r=>({w:r.w, r:r.r, done:false, touched:true}));
+        } else {
+          st.mode = "text";
+          st.text = String(st.saved);
+          st.textTouched = true;
+        }
+        clearWorkoutError();
+        renderSessionInputs();
+      });
+      line.appendChild(editBtn);
+      div.appendChild(line);
+      container.appendChild(div);
+      return;
+    }
     const head = document.createElement("div");
     head.className = "x-head";
     head.innerHTML = '<span><b>'+esc(ex.name.replace("[Cardio] ",""))+'</b>'
@@ -232,8 +302,9 @@ function renderSessionInputs(){
       sameBtn.title = "Log same as last time";
       sameBtn.addEventListener("click", ()=>{
         st.mode = "rows";
-        st.rows = toRows(prevVal).map(r=>({w:r.w, r:r.r, done:true, touched:true}));
+        st.rows = toRows(prevVal).map(r=>({w:r.w, r:r.r, done:false, touched:true}));
         st.auto = false;
+        st.status = "unsaved";
         clearWorkoutError();
         renderSessionInputs();
       });
@@ -264,14 +335,16 @@ function renderSessionInputs(){
     tBtn.title = "Toggle text entry";
     tBtn.addEventListener("click", ()=>{
       if (st.mode==="rows"){
-        const completed = st.rows.filter(r=>r.done && Number(r.w)>0 && Number(r.r)>0);
-        st.text = completed.map(r=>r.w+"x"+r.r).join(", ");
-        st.textTouched = completed.length>0;
+        const entered = enteredRows(st).map(x=>x.r).filter(r=>Number(r.w)>0 && Number(r.r)>0);
+        st.text = entered.map(r=>r.w+"x"+r.r).join(", ");
+        st.textTouched = entered.length>0;
+        if (st.textTouched) st.status = "unsaved";
         st.mode = "text";
       } else {
-        const completed = !!st.textTouched && !!st.text.trim();
-        st.rows = toRows(st.text).map(r=>({w:r.w,r:r.r,done:completed,touched:completed}));
+        const hadText = !!st.textTouched && !!st.text.trim();
+        st.rows = toRows(st.text).map(r=>({w:r.w,r:r.r,done:false,touched:hadText}));
         if(!st.rows.length) st.rows = [{w:"",r:"",done:false,touched:false}];
+        if (hadText) st.status = "unsaved";
         st.mode = "rows";
       }
       clearWorkoutError();
@@ -291,7 +364,7 @@ function renderSessionInputs(){
       const inp = document.createElement("input");
       inp.placeholder = ex.name.indexOf("[Cardio] ")===0 ? "e.g. 20 min, 2 mi" : "e.g. 275x5, 275x5, 275x4";
       inp.value = st.text;
-      inp.addEventListener("input", ()=>{ st.text = inp.value; st.textTouched = true; clearWorkoutError(); });
+      inp.addEventListener("input", ()=>{ st.text = inp.value; st.textTouched = true; st.status="unsaved"; markUnsavedChip(div); clearWorkoutError(); });
       div.appendChild(inp);
     } else {
       st.rows.forEach((row, ri)=>{
@@ -302,29 +375,18 @@ function renderSessionInputs(){
         const wIn = document.createElement("input");
         wIn.type="number"; wIn.className="snum"; wIn.inputMode="decimal"; wIn.placeholder="lb"; wIn.value=row.w;
         wIn.dataset.exercise=ex.name; wIn.dataset.row=String(ri); wIn.dataset.field="weight";
-        wIn.addEventListener("input", ()=>{ row.w = wIn.value===""?"":Number(wIn.value); row.touched=true; clearWorkoutError(); });
+        wIn.addEventListener("input", ()=>{ row.w = wIn.value===""?"":Number(wIn.value); row.touched=true; st.status="unsaved"; markUnsavedChip(div); clearWorkoutError(); });
         const rIn = document.createElement("input");
         rIn.type="number"; rIn.className="snum"; rIn.inputMode="numeric"; rIn.placeholder="reps"; rIn.value=row.r;
         rIn.dataset.exercise=ex.name; rIn.dataset.row=String(ri); rIn.dataset.field="reps";
-        rIn.addEventListener("input", ()=>{ row.r = rIn.value===""?"":Number(rIn.value); row.touched=true; clearWorkoutError(); });
-        rdiv.appendChild(mkStep("\u22125", ()=>{ row.w = Math.max(0,(Number(row.w)||0)-5); row.touched=true; wIn.value=row.w; clearWorkoutError(); }));
+        rIn.addEventListener("input", ()=>{ row.r = rIn.value===""?"":Number(rIn.value); row.touched=true; st.status="unsaved"; markUnsavedChip(div); clearWorkoutError(); });
+        rdiv.appendChild(mkStep("\u22125", ()=>{ row.w = Math.max(0,(Number(row.w)||0)-5); row.touched=true; st.status="unsaved"; markUnsavedChip(div); wIn.value=row.w; clearWorkoutError(); }));
         rdiv.appendChild(wIn);
-        rdiv.appendChild(mkStep("+5", ()=>{ row.w = (Number(row.w)||0)+5; row.touched=true; wIn.value=row.w; clearWorkoutError(); }));
+        rdiv.appendChild(mkStep("+5", ()=>{ row.w = (Number(row.w)||0)+5; row.touched=true; st.status="unsaved"; markUnsavedChip(div); wIn.value=row.w; clearWorkoutError(); }));
         const x = document.createElement("span"); x.className="sx"; x.textContent="\u00d7"; rdiv.appendChild(x);
-        rdiv.appendChild(mkStep("\u22121", ()=>{ row.r = Math.max(0,(Number(row.r)||0)-1); row.touched=true; rIn.value=row.r; clearWorkoutError(); }));
+        rdiv.appendChild(mkStep("\u22121", ()=>{ row.r = Math.max(0,(Number(row.r)||0)-1); row.touched=true; st.status="unsaved"; markUnsavedChip(div); rIn.value=row.r; clearWorkoutError(); }));
         rdiv.appendChild(rIn);
-        rdiv.appendChild(mkStep("+1", ()=>{ row.r = (Number(row.r)||0)+1; row.touched=true; rIn.value=row.r; clearWorkoutError(); }));
-        const done = document.createElement("button");
-        done.className = "sdone"+(row.done?" on":""); done.textContent = "\u2713";
-        done.setAttribute("aria-label","Mark set done");
-        done.addEventListener("click", ()=>{
-          row.done = !row.done;
-          row.touched = true;
-          done.className = "sdone"+(row.done?" on":"");
-          clearWorkoutError();
-          if (row.done) startRest(cfg.restSec||90);
-        });
-        rdiv.appendChild(done);
+        rdiv.appendChild(mkStep("+1", ()=>{ row.r = (Number(row.r)||0)+1; row.touched=true; st.status="unsaved"; markUnsavedChip(div); rIn.value=row.r; clearWorkoutError(); }));
         div.appendChild(rdiv);
       });
       const addRow = document.createElement("button");
@@ -334,11 +396,26 @@ function renderSessionInputs(){
         const filled = st.rows.slice().reverse().find(r=>Number(r.w)>0);
         const prev = filled || st.rows[st.rows.length-1];
         st.rows.push(prev ? {w:prev.w, r:prev.r, done:false, touched:true} : {w:"", r:"", done:false, touched:true});
+        st.status = "unsaved";
         clearWorkoutError();
         renderSessionInputs();
       });
       div.appendChild(addRow);
     }
+    const foot = document.createElement("div");
+    foot.className = "exFoot";
+    const saveBtn = document.createElement("button");
+    saveBtn.className = "xbtn saveExBtn";
+    saveBtn.textContent = "Save Exercise";
+    saveBtn.dataset.exercise = ex.name;
+    saveBtn.addEventListener("click", ()=>saveExercise(ex.name));
+    foot.appendChild(saveBtn);
+    const chip = document.createElement("span");
+    chip.className = "unsavedChip";
+    chip.textContent = "Unsaved";
+    if (!hasUnsavedEntry(st)) chip.style.display = "none";
+    foot.appendChild(chip);
+    div.appendChild(foot);
     container.appendChild(div);
   });
 }
@@ -390,16 +467,24 @@ document.getElementById("logWorkoutBtn").addEventListener("click", ()=>{
     }
     return;
   }
-  const collected = collectCompletedSessionSets(sessionState);
-  if (!collected.ok){
-    const badRow = sessionState[collected.error.exercise].rows[collected.error.rowIndex];
-    const field = !(Number(badRow.w)>0) ? "weight" : "reps";
-    showWorkoutError(collected.error.message, findSessionSetInput(collected.error.exercise, collected.error.rowIndex, field));
-    return;
+  // v51: never silently ignore or log unsaved entered work — warn even for ONE unsaved exercise
+  const unsaved = unsavedExerciseNames();
+  if (unsaved.length){
+    const pretty = unsaved.map(n=>n.replace("[Cardio] ","")).join(", ");
+    const ok = confirm("Unsaved exercise"+(unsaved.length>1?"s":"")+": "+pretty
+      +"\n\nOK — Save valid exercises & log session\nCancel — Review exercises");
+    if (!ok){
+      showWorkoutError("Review the unsaved exercise"+(unsaved.length>1?"s":"")+" ("+pretty+"), tap Save Exercise on each, then log the session.", document.getElementById("exerciseInputs"));
+      return;
+    }
+    for (const n of unsaved){
+      if (!saveExercise(n).ok) return; // precise row error already shown; nothing logged
+    }
   }
+  const collected = collectSavedSessionSets(sessionState);
   const sets = collected.sets;
   if(Object.keys(sets).length===0){
-    showWorkoutError("Mark at least one set complete with ✓ before logging this session.", document.getElementById("exerciseInputs"));
+    showWorkoutError("Nothing saved yet — tap Save Exercise on at least one exercise before logging this session.", document.getElementById("exerciseInputs"));
     return;
   }
   // PR detection BEFORE pushing the new session
@@ -519,15 +604,15 @@ function startEditWorkout(i){
       const val = sess.sets[key];
       if (val==null){
         sessionState[exName] = exName.indexOf("[Cardio] ")===0
-          ? {mode:"text", rows:[], text:"", textTouched:false, auto:false}
-          : {mode:"rows", rows:[{w:"",r:"",done:false,touched:false}], text:"", textTouched:false, auto:false};
+          ? {mode:"text", rows:[], text:"", textTouched:false, auto:false, saved:null, status:"plan"}
+          : {mode:"rows", rows:[{w:"",r:"",done:false,touched:false}], text:"", textTouched:false, auto:false, saved:null, status:"plan"};
       } else if (Array.isArray(val)){
-        sessionState[exName] = {mode:"rows", rows:val.map(r=>({w:r.w, r:r.r, done:true, touched:false})), text:"", textTouched:false, auto:false};
+        sessionState[exName] = {mode:"rows", rows:[], text:"", textTouched:false, auto:false, saved:val.map(r=>({w:r.w, r:r.r})), status:"saved"};
       } else {
         const rows = toRows(val);
         sessionState[exName] = rows.length
-          ? {mode:"rows", rows:rows.map(r=>({w:r.w, r:r.r, done:true, touched:false})), text:"", textTouched:false, auto:false}
-          : {mode:"text", rows:[], text:String(val), textTouched:true, auto:false};
+          ? {mode:"rows", rows:[], text:"", textTouched:false, auto:false, saved:rows.map(r=>({w:r.w, r:r.r})), status:"saved"}
+          : {mode:"text", rows:[], text:"", textTouched:false, auto:false, saved:String(val), status:"saved"};
       }
     });
     renderSessionInputs();

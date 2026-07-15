@@ -878,6 +878,15 @@ function activateView(viewName, targetId, shouldRender){
   return true;
 }
 document.querySelectorAll(".tab").forEach(btn=>{
-  btn.addEventListener("click", ()=>activateView(btn.dataset.view, null, true));
+  btn.addEventListener("click", ()=>{
+    // v51: leaving Train with unsaved exercise work warns before moving on
+    const current = document.querySelector(".tab.active");
+    if (current && current.dataset.view==="work" && btn.dataset.view!=="work"
+        && typeof unsavedExerciseNames==="function" && unsavedExerciseNames().length){
+      const pretty = unsavedExerciseNames().map(n=>n.replace("[Cardio] ","")).join(", ");
+      if (!confirm("Unsaved exercise work: "+pretty+".\n\nLeave Train anyway? (Your entries stay until the app closes \u2014 tap Save Exercise to keep them in today's session.)")) return;
+    }
+    activateView(btn.dataset.view, null, true);
+  });
 });
 
