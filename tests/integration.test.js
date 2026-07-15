@@ -748,6 +748,14 @@ check("QUOTES loads from data-quotes.js", P.window.eval("Array.isArray(QUOTES) &
 check("LOCAL_DB loads from data-foods.js", P.window.eval("Array.isArray(LOCAL_DB) && LOCAL_DB.length > 100"));
 check("ALT_MAP loads from data-foods.js", P.window.eval("typeof ALT_MAP==='object' && Object.keys(ALT_MAP).length > 10"));
 check("FAQ loads from data-faq.js", P.window.eval("Array.isArray(FAQ) && FAQ.length > 10"));
+check("FAQ explains exercise-level Save/Completed/Edit flow", P.window.eval(`FAQ.some(x=>x.q&&/Unsaved, Completed/.test(x.q)&&/Save Exercise/.test(x.a)&&/Log session/.test(x.a))`));
+check("FAQ no longer instructs per-set checkmarks", P.window.eval(`!FAQ.some(x=>x.a&&(x.a.includes("tap <b>✓</b>")||x.a.includes("Checking ✓")))`));
+check("FAQ states full auto-progression requirements", P.window.eval(`FAQ.some(x=>x.q==="What does '+5 auto' mean?"&&x.a.includes("programmed number of sets")&&x.a.includes("top</b> of a range"))`));
+check("FAQ documents food deletion Undo", P.window.eval(`FAQ.some(x=>x.a&&x.a.includes("six-second <b>Undo</b>"))`));
+check("FAQ documents protected mode and recovery", P.window.eval(`FAQ.some(x=>x.q==="What are Protected mode and recovery?"&&/last-known-good snapshot/.test(x.a)&&/do not uninstall/.test(x.a))`));
+check("FAQ documents the update toast", P.window.eval(`FAQ.some(x=>x.q&&/updates work/.test(x.q)&&/Use it now/.test(x.a)&&/Later/.test(x.a))`));
+check("FAQ uses current Program tools labels", P.window.eval(`FAQ.some(x=>x.q==="How do programs work?"&&x.a.includes("Program tools")&&x.a.includes("Save file")&&x.a.includes("Share"))`));
+check("FAQ privacy copy distinguishes local data from optional network requests", P.window.eval(`FAQ.some(x=>x.q==="Where is my data stored? Is it private?"&&/on this device/.test(x.a)&&/Online food searches/.test(x.a)&&/Optional AI features/.test(x.a))`));
 check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.some(f=>/chicken breast/i.test(f.n))`));
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the three data files", ["data-quotes.js","data-foods.js","data-faq.js"].every(f=>sw.includes('"./'+f+'"')));
