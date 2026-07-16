@@ -607,7 +607,21 @@ document.getElementById("deleteQuarantineBtn").addEventListener("click", ()=>{
   flashSave(result.ok ? "Recovery copy deleted ✓" : result.reason, !result.ok);
   renderRecoveryStatus();
 });
+function renderStorageUse(){
+  const el = document.getElementById("storageUseNote");
+  if (!el) return;
+  try {
+    let chars = 0;
+    for (let i=0; i<localStorage.length; i++){
+      const k = localStorage.key(i);
+      chars += k.length + (localStorage.getItem(k)||"").length;
+    }
+    const kb = (chars*2)/1024; // UTF-16 storage units, approximate by design
+    el.textContent = "Browser storage used: ~"+(kb<1024 ? Math.round(kb)+" KB" : (kb/1024).toFixed(1)+" MB")+" (approximate; browsers typically allow 5\u201310 MB)";
+  } catch(e){ el.textContent = ""; }
+}
 function renderBackup(){
+  renderStorageUse();
   const m = data.meta || {lastBackup:null, logsSince:0};
   const line = document.getElementById("backupMetaLine");
   if (m.lastBackup){

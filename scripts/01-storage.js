@@ -57,10 +57,6 @@ function isPlainObject(v){
   return p===Object.prototype || p===null;
 }
 function cloneJSON(v){ return JSON.parse(JSON.stringify(v)); }
-function loadJSON(key, fallback){
-  try { const raw = localStorage.getItem(key); if (raw) return JSON.parse(raw); } catch(e){}
-  return fallback;
-}
 function todayStr(){
   const d = new Date();
   return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
@@ -131,6 +127,8 @@ function migrateCfgObject(obj){
   if (!ACCENT_KEYS.includes(obj.accent)) obj.accent = "gold";
   return obj;
 }
+// Retained (not dead): the permanent suite's range-era restore simulation exercises this
+// wrapper directly. The live app path uses migrateCfgObject via the prepare/commit pipeline.
 function migrateCfg(){ migrateCfgObject(cfg); }
 function makeDiagnostic(stage, part, code, reason){
   return {stage:stage||"unknown", part:part||"state", code:code||"failure", reason:reason||"Saved data could not be prepared safely."};

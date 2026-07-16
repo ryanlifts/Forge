@@ -1,13 +1,26 @@
-# BLACKPYRE HANDOFF — current as of v58 (July 2026)
+# BLACKPYRE HANDOFF — current as of v59 (July 2026)
 
 You are a collaborator on BlackPyre, a fitness PWA at
-`ryanlifts.github.io/Forge/` (repo: `ryanlifts/Forge`). This repository represents **v57**,
-the Phase 4 accessibility-completion and closeout release built on the completed v46
-hardening foundation and v47–v56 usability work. Confirm the GitHub Pages deployment/cache
+`ryanlifts.github.io/Forge/` (repo: `ryanlifts/Forge`). This repository represents **v59**, built on the completed v57 Phase 4 foundation and the v58 scanner-security release. Confirm the GitHub Pages deployment/cache
 before calling it live.
 
 The two documents reproduced below (`ARCHITECTURE.md` and `DATA-MODEL.md`) live in the repo
-root, are binding, and are current as of v58. Read them before proposing or writing code.
+root, are binding, and are current as of v59. Read them before proposing or writing code.
+
+## v59 — housekeeping (audit follow-through)
+
+Removed the confirmed-dead loadJSON (zero references anywhere). migrateCfg was
+NOT removed: verification found the permanent suite exercises it directly, so it
+stays with a rationale comment — the audit's own "verify no dynamic references
+first" rule working as intended. sw.js now documents why it never precaches
+itself. Three structural protections joined the suite: single-writer discipline
+(only 01-storage may write localStorage — enforced against the source of every
+other slice), historical-edit-vs-draft isolation, and the LKG quota-sacrifice
+path end to end (which testing proved is fully self-healing: sacrifice, save,
+immediate snapshot rebuild). The wording-pin test convention is documented in
+ARCHITECTURE.md. Settings' Data card gains one quiet approximate storage-use
+line. Cache: blackpyre-v59. No storage, schema, or behavior changes beyond the
+new Settings line.
 
 ## v58 — self-hosted barcode scanner (security)
 
@@ -21,7 +34,7 @@ Cache: blackpyre-v58. No storage, schema, or behavior changes.
 
 ## Current state
 
-1. The permanent `/tests` gauntlet has **398 checks: 105 unit + 293 integration**. GitHub
+1. The permanent `/tests` gauntlet has **413 checks: 105 unit + 308 integration**. GitHub
    Actions runs it on every push. Tests are cumulative and are never deleted or weakened.
 2. `tests/bella-reference.b64` is the frozen memorial byte truth. Exact identity and embed
    count 1 are test-enforced; never regenerate, re-render, edit, or replace it.
@@ -75,7 +88,7 @@ notice or close/reopen as directed. Every release gets a plain-language report a
 
 # BlackPyre Architecture
 
-**Current as of v57 (July 2026).**
+**Current as of v59 (July 2026).**
 
 A single-page PWA: vanilla HTML/CSS/JS, no framework, no build step, localStorage only.
 Deployed on GitHub Pages. Developed AI-assisted (Claude / ChatGPT) from a phone — every rule
@@ -112,7 +125,7 @@ below exists to keep that workflow safe.
 | `manifest.json` | PWA identity — name/short_name **BlackPyre** |
 | `icon-*.png`, `apple-touch-icon.png` | Gold dumbbell icons |
 | `tests/PHASE2-PROOF.md` | Permanent historical record of the Phase 2 byte-identity proof |
-| `tests/` | Permanent gauntlet — 398 automated checks (105 unit + 293 integration), reproducible jsdom lockfile, and `bella-reference.b64` (frozen memorial byte truth; never edited). Not precached |
+| `tests/` | Permanent gauntlet — 413 automated checks (105 unit + 308 integration), reproducible jsdom lockfile, and `bella-reference.b64` (frozen memorial byte truth; never edited). Not precached |
 | `.github/workflows/tests.yml` | Runs the gauntlet on every push |
 | `DATA-MODEL.md` | Primary storage schema, recovery-record contracts, and migration history |
 
@@ -179,7 +192,7 @@ Slice rules from here on:
   re-sync, interrupted commits, LKG create/refresh/failure/quota rules, area diagnosis,
   all three recovery sources, quarantine ordering/retention/export/deletion, legacy fallback,
   API-key boundaries, read-back failure, durable workout-draft save/resume/discard/failure behavior, exercise-level workout saving, protected session-type changes, routine-deletion Undo, manual-food validation, confirmed program replacement, offline network fast-fail, conservative progression, compact program identity/separate management, consolidated Train-only rest duration/control dock, Home/Settings disclosure hierarchy, offline status transitions, practical compact-control touch targets, predictable tab/session positioning, 16px editable controls, complete control naming, semantic/keyboard bottom tabs, keyboard food results, dialog focus entry/return, dynamic onboarding/workout/builder accessibility, handoff paste/log and first-item review positioning, update toast, and Easter egg timing.
-- The permanent suite is **398 automated checks** and only grows. New features add tests in
+- The permanent suite is **413 automated checks** and only grows. New features add tests in
   the same release; existing checks are never deleted or weakened. The roughly 700 checks
   written before Phase 0 were old throwaway checks, not this permanent suite.
 - jsdom quirks: stub `URL.createObjectURL`, ignore `scrollTo` warnings, `select()` runs via

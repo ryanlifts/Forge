@@ -789,6 +789,62 @@ check("v54 choosing a rest preset changes the duration without auto-starting", T
 T54.window.eval(`activateView("food",null,false)`);
 check("v54 leaving Train hides the rest control", dT54.getElementById("restDock").classList.contains("hidden") && !dT54.body.classList.contains("rest-dock-visible"));
 
+// ================= v59: audit-recommended structural protections =================
+check("v59 storage-use line renders an honest approximation", (()=>{ const B = boot(EXISTING_CFG, EMPTY_DATA); const t = B.window.document.getElementById("storageUseNote").textContent; return /~\d+ (KB|MB)/.test(t) && /approximate/.test(t); })());
+// (1) only 01-storage.js may write sacred storage — enforced structurally, forever
+const SACRED_WRITERS = ["02-food","03-train","04-weight","05-ai","06-settings","07-boot"];
+check("v59 single-writer discipline: no slice outside 01-storage touches localStorage writes",
+  SACRED_WRITERS.every(f=>!/localStorage\.(setItem|removeItem|clear)\s*\(/.test(fs.readFileSync(path.join(__dirname, "..", "scripts", f+".js"), "utf8"))));
+
+// (2) editing a historical workout never disturbs the active draft
+const V59 = boot(V1_CFG, Object.assign({}, EMPTY_DATA, {
+  workouts:[{date:dstr(-3), day:"D1", title:"Day 1", sets:{"Bench Press":[{w:200,r:5}]}, notes:""}],
+  activeWorkoutDraft:{date:dstr(0), day:"D1", sets:{"Bench Press":[{w:225,r:3}]}, savedAt:new Date().toISOString()}
+}), null, TEST_PROGRAM);
+const draftBefore = V59.window.eval("JSON.stringify(data.activeWorkoutDraft)");
+check("v59 draft survives boot with history present", !!V59.window.eval("data.activeWorkoutDraft"));
+// enter the REAL historical edit path and change the set through the shipped flow
+V59.window.eval(`startEditWorkout(0)`);
+const dV59 = V59.window.document;
+check("v59 edit mode loads the historical session as saved exercises", V59.window.eval(`editingWorkoutIdx===0 && sessionState["Bench Press"].status==="saved"`) && dV59.getElementById("logWorkoutBtn").textContent==="Update session");
+const editBtn59 = [...dV59.querySelectorAll("#exerciseInputs .xbtn")].find(b=>b.textContent==="Edit");
+editBtn59.dispatchEvent(new V59.window.Event("click",{bubbles:true}));
+const w59 = dV59.querySelector('#exerciseInputs input[data-field="weight"]');
+w59.value="205"; w59.dispatchEvent(new V59.window.Event("input",{bubbles:true}));
+dV59.querySelector("#exerciseInputs .saveExBtn").dispatchEvent(new V59.window.Event("click",{bubbles:true}));
+dV59.getElementById("logWorkoutBtn").dispatchEvent(new V59.window.Event("click",{bubbles:true}));
+check("v59 the historical edit landed exactly", V59.window.eval(`data.workouts[0].sets["Bench Press"][0].w`)===205 && V59.window.eval(`editingWorkoutIdx===null`));
+check("v59 editing a historical workout leaves the active draft byte-identical",
+  V59.window.eval("JSON.stringify(data.activeWorkoutDraft)")===draftBefore);
+
+// (3) LKG-sacrifice quota path, end to end
+const Q59 = boot(EXISTING_CFG, EMPTY_DATA);
+check("v59 healthy boot arms the recovery snapshot", Q59.window.eval(`localStorage.getItem("forge:lkg")!==null`));
+const lkgBefore59 = Q59.window.eval(`JSON.parse(localStorage.getItem("forge:lkg")).savedAt`);
+await wait(1100); // ensure a distinguishable rebuild timestamp
+Q59.window.eval(`
+  (function(){
+    const proto = Object.getPrototypeOf(localStorage);
+    const orig = proto.setItem;
+    let thrown = false;
+    proto.setItem = function(k, v){
+      if (!thrown && k==="forge:data"){ thrown = true; const e = new Error("quota"); e.name = "QuotaExceededError"; throw e; }
+      return orig.call(this, k, v);
+    };
+    window.__restoreSet = ()=>{ proto.setItem = orig; };
+  })();
+  currentMeal="lunch"; renderMealSeg();
+  addEntry({name:"Quota meal", cal:500, pro:40, carb:40, fat:15, meal:"lunch"});
+  window.__restoreSet();
+`);
+check("v59 quota crunch: live save survives by sacrificing the snapshot",
+  Q59.window.eval(`(data.food[todayStr()]||[]).length===1 && JSON.parse(localStorage.getItem("forge:data")).food[todayStr()].length===1`));
+// the retry only succeeds if the sacrifice actually freed the slot — and the system
+// then self-heals by rebuilding a fresh snapshot from the post-save healthy state
+check("v59 quota crunch: snapshot is rebuilt fresh after the sacrifice (self-healing)",
+  Q59.window.eval(`localStorage.getItem("forge:lkg")!==null && lkgStatus.state==="ready"`) &&
+  Q59.window.eval(`JSON.parse(localStorage.getItem("forge:lkg")).savedAt`) !== lkgBefore59);
+
 // ================= v58: self-hosted barcode scanner =================
 check("v58 vendored scanner library exists in the repo", fs.existsSync(path.join(__dirname, "..", "vendor", "html5-qrcode.min.js")));
 check("v58 scanner license notice preserved alongside the library", (()=>{ const p=path.join(__dirname, "..", "vendor", "html5-qrcode.LICENSE.txt"); return fs.existsSync(p) && /Apache License/.test(fs.readFileSync(p,"utf8")); })());
@@ -824,7 +880,7 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the three data files", ["data-quotes.js","data-foods.js","data-faq.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+"/.test(sw));
-check("v58 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v58"'));
+check("v59 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v59"'));
 const rawIndex = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 check("data scripts load before the app scripts (raw file order)",
   ["data-quotes.js","data-foods.js","data-faq.js"].every(f=>

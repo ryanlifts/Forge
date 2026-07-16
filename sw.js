@@ -1,5 +1,8 @@
 // BlackPyre service worker — offline app shell, network-first for food APIs
-const CACHE = "blackpyre-v58";
+// NOTE: sw.js deliberately does NOT appear in SHELL. The browser fetches the service
+// worker itself through its own update mechanism (byte-compare on navigation); precaching
+// it would freeze updates and break the cache-bump release ritual. Do not "fix" this.
+const CACHE = "blackpyre-v59";
 const SHELL = [
   "./",
   "./index.html",
