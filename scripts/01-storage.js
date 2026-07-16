@@ -908,6 +908,142 @@ document.getElementById("undoBtn").addEventListener("click", ()=>{
 });
 function isOffline(){ return navigator.onLine===false; }
 
+// ================== ACCESSIBILITY ==================
+const ACCESSIBLE_DYNAMIC_NAMES = {
+  suWt:"Current body weight in pounds", suGoalWt:"Goal body weight in pounds",
+  suSex:"Sex used for calorie calculation", suAge:"Age in years", suFt:"Height feet", suIn:"Height inches",
+  suAct:"Activity level", suGoal:"Weight goal rate", suSpP:"Protein percentage",
+  suSpC:"Carbohydrate percentage", suSpF:"Fat percentage", suSched:"Calorie schedule mode",
+  suSched0:"Sunday calorie target", suSched1:"Monday calorie target", suSched2:"Tuesday calorie target",
+  suSched3:"Wednesday calorie target", suSched4:"Thursday calorie target", suSched5:"Friday calorie target",
+  suSched6:"Saturday calorie target", suUsda:"USDA API key"
+};
+function associatedLabelText(el){
+  if (!el || !el.id) return "";
+  const label = document.querySelector('label[for="'+el.id.replace(/"/g,"\\\"")+'"]');
+  return label ? label.textContent.trim() : "";
+}
+function accessibleNamePresent(el){
+  if (!el) return false;
+  if ((el.getAttribute("aria-label")||"").trim()) return true;
+  const by = (el.getAttribute("aria-labelledby")||"").trim();
+  if (by && by.split(/\s+/).some(id=>{ const n=document.getElementById(id); return n && n.textContent.trim(); })) return true;
+  if (associatedLabelText(el)) return true;
+  if (el.tagName==="BUTTON") return !!el.textContent.trim();
+  return false;
+}
+function humanizeControlId(id){
+  return String(id||"")
+    .replace(/([a-z0-9])([A-Z])/g,"$1 $2")
+    .replace(/[_-]+/g," ")
+    .replace(/^s /,"Settings ")
+    .trim()
+    .replace(/^./,c=>c.toUpperCase());
+}
+function exerciseNameFor(el){
+  const direct = el && el.dataset ? el.dataset.exercise : "";
+  if (direct) return direct.replace("[Cardio] ","");
+  const card = el && el.closest ? el.closest(".exercise") : null;
+  const head = card ? card.querySelector(".x-head b") : null;
+  return head ? head.textContent.trim() : "Exercise";
+}
+function setNumberFor(el){
+  if (el && el.dataset && el.dataset.row!==undefined) return Number(el.dataset.row)+1;
+  const row = el && el.closest ? el.closest(".srow") : null;
+  const label = row ? row.querySelector(".slabel") : null;
+  const m = label && label.textContent.match(/\d+/);
+  return m ? Number(m[0]) : null;
+}
+function inferredControlName(el){
+  if (!el) return "";
+  if (el.id && ACCESSIBLE_DYNAMIC_NAMES[el.id]) return ACCESSIBLE_DYNAMIC_NAMES[el.id];
+  if (el.dataset && el.dataset.exercise && el.dataset.field){
+    const setNo = setNumberFor(el);
+    return exerciseNameFor(el)+(setNo ? " set "+setNo : "")+" "+(el.dataset.field==="weight" ? "weight in pounds" : "repetitions");
+  }
+  if (el.classList && el.classList.contains("bname")){
+    return el.closest(".bday") && el.closest(".row") ? "Program day name" : "Exercise name";
+  }
+  if (el.classList && el.classList.contains("bscheme")) return "Exercise sets and repetitions scheme";
+  if (el.tagName==="SELECT" && el.closest && el.closest(".bex")) return "Exercise library";
+  if (el.tagName==="BUTTON"){
+    const title=(el.getAttribute("title")||"").trim();
+    if (title) return title;
+    const text=el.textContent.trim();
+    const ex=exerciseNameFor(el), setNo=setNumberFor(el), where=setNo ? " for "+ex+" set "+setNo : "";
+    if (text==="−5" || text==="-5") return "Decrease weight by 5 pounds"+where;
+    if (text==="+5") return "Increase weight by 5 pounds"+where;
+    if (text==="−1" || text==="-1") return "Decrease repetitions by 1"+where;
+    if (text==="+1") return "Increase repetitions by 1"+where;
+    if (text==="↑") return "Move exercise up";
+    if (text==="↓") return "Move exercise down";
+    if (text==="✕" || text==="×") return "Remove item";
+    if (text==="⧉") return "Duplicate item";
+    if (text==="✎") return "Edit item";
+  }
+  const ph=(el.getAttribute && el.getAttribute("placeholder")||"").trim();
+  if (ph && !/^(g|lb|in|min|kcal|years|ft|reps)$/i.test(ph) && !/^e\.g\./i.test(ph)) return ph;
+  if (el.id) return humanizeControlId(el.id);
+  if (el.tagName==="SELECT") return "Choose an option";
+  if (el.tagName==="TEXTAREA") return "Text entry";
+  if (el.tagName==="INPUT") return "Input field";
+  return "Control";
+}
+function enhanceAccessibleControls(root){
+  const scope = root && root.querySelectorAll ? root : document;
+  const controls=[];
+  if (root && root.matches && root.matches("input,select,textarea,button")) controls.push(root);
+  scope.querySelectorAll("input,select,textarea,button").forEach(el=>controls.push(el));
+  controls.forEach(el=>{
+    if (el.tagName==="BUTTON" && !el.getAttribute("type")) el.setAttribute("type","button");
+    if (!accessibleNamePresent(el)) el.setAttribute("aria-label", inferredControlName(el));
+  });
+}
+function initAccessibleDialogs(){
+  const dialogs=[...document.querySelectorAll('[role="dialog"]')];
+  const returnFocus=new WeakMap();
+  function isOpen(d){ return d && !d.classList.contains("hidden"); }
+  function focusDialog(d){
+    if (!isOpen(d)) return;
+    const active=document.activeElement;
+    if (active && active!==document.body && !d.contains(active)) returnFocus.set(d,active);
+    const preferred=d.dataset.initialFocus;
+    let target=preferred==="self" ? d : (preferred ? document.getElementById(preferred) : null);
+    if (!target || target.disabled || target.classList.contains("hidden")){
+      target=d.querySelector('button:not(.hidden):not([disabled]), input:not(.hidden):not([type="hidden"]):not([disabled]), select:not(.hidden):not([disabled]), textarea:not(.hidden):not([disabled])') || d;
+    }
+    requestAnimationFrame(()=>{ try { target.focus(); } catch(e){} });
+  }
+  function restoreDialogFocus(d){
+    const target=returnFocus.get(d); returnFocus.delete(d);
+    requestAnimationFrame(()=>{
+      if (dialogs.some(isOpen)) return;
+      if (target && document.contains(target) && !target.closest(".hidden")){
+        try { target.focus(); } catch(e){}
+      }
+    });
+  }
+  dialogs.forEach(d=>{
+    let wasOpen=isOpen(d);
+    const observer=new MutationObserver(()=>{
+      const open=isOpen(d);
+      if (open && !wasOpen) focusDialog(d);
+      else if (!open && wasOpen) restoreDialogFocus(d);
+      wasOpen=open;
+    });
+    observer.observe(d,{attributes:true,attributeFilter:["class"]});
+    if (wasOpen) focusDialog(d);
+  });
+}
+enhanceAccessibleControls(document);
+const accessibleControlObserver=new MutationObserver(records=>{
+  records.forEach(record=>record.addedNodes.forEach(node=>{
+    if (node.nodeType===1) enhanceAccessibleControls(node);
+  }));
+});
+accessibleControlObserver.observe(document.body,{childList:true,subtree:true});
+initAccessibleDialogs();
+
 // ================== NETWORK STATUS ==================
 function renderNetworkStatus(){
   const banner = document.getElementById("offlineBanner");
@@ -934,10 +1070,17 @@ function activateView(viewName, targetId, shouldRender){
   const tab = document.querySelector('.tab[data-view="'+viewName+'"]');
   const view = document.getElementById("view-"+viewName);
   if (!tab || !view) return false;
-  document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
-  document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
-  tab.classList.add("active");
-  view.classList.add("active");
+  document.querySelectorAll(".tab").forEach(b=>{
+    const active=b===tab;
+    b.classList.toggle("active",active);
+    b.setAttribute("aria-selected",String(active));
+    b.tabIndex=active ? 0 : -1;
+  });
+  document.querySelectorAll(".view").forEach(v=>{
+    const active=v===view;
+    v.classList.toggle("active",active);
+    v.setAttribute("aria-hidden",String(!active));
+  });
   const restDock = document.getElementById("restDock");
   if (restDock) restDock.classList.toggle("hidden", viewName!=="work");
   document.body.classList.toggle("rest-dock-visible", viewName==="work");
@@ -956,6 +1099,20 @@ document.querySelectorAll(".tab").forEach(btn=>{
       if (!confirm("Unsaved exercise work: "+pretty+".\n\nLeave Train anyway? (Only exercises already saved are protected as a workout draft.)")) return;
     }
     activateView(btn.dataset.view, null, true);
+  });
+});
+const primaryTabs=[...document.querySelectorAll('.tab[role="tab"]')];
+primaryTabs.forEach((btn,index)=>{
+  btn.addEventListener("keydown",e=>{
+    let next=index;
+    if (e.key==="ArrowRight" || e.key==="ArrowDown") next=(index+1)%primaryTabs.length;
+    else if (e.key==="ArrowLeft" || e.key==="ArrowUp") next=(index-1+primaryTabs.length)%primaryTabs.length;
+    else if (e.key==="Home") next=0;
+    else if (e.key==="End") next=primaryTabs.length-1;
+    else return;
+    e.preventDefault();
+    primaryTabs[next].focus();
+    primaryTabs[next].click();
   });
 });
 

@@ -1,6 +1,6 @@
 # BlackPyre Data Model
 
-**Current as of v56 (July 2026). Primary schemaVersion: 2. Recovery format: 1.**
+**Current as of v57 (July 2026). Primary schemaVersion: 2. Recovery format: 1.**
 
 ## Storage keys
 
@@ -29,7 +29,7 @@ removes, or modifies that legacy key.
 `schemaVersion` is physically stored in `forge:cfg`, but versions the complete **primary**
 state and normal backup envelope: settings, logged data, and program.
 
-| Raw value | Meaning / behavior in v56 |
+| Raw value | Meaning / behavior in v57 |
 |---|---|
 | property absent or integer `0` | Pre-versioning legacy state; run numbered migrations from step 0 |
 | integer `1` | v45–v55 state; migrate 1 → 2 by adding an empty active-workout draft field |
@@ -229,6 +229,7 @@ fallback. The app cannot verify a browser download and states that limit honestl
 | v54 | No storage-schema change | Manual rest controls and compact current-program/Manage layout |
 | v55 | No storage-schema change | Consolidated floating rest timer, Home/Settings disclosure hierarchy, accessibility touch targets, and offline status clarity |
 | v56 | Whole-state primary schema 1 → 2 | Adds `forge:data.activeWorkoutDraft` for durable saved-exercise work; migration adds `null`, stamps settings last, and never promotes the read-only `ryan-cut:data` fallback into `forge:data` implicitly |
+| v57 | No storage-schema change | Accessibility completion: named controls, semantic/keyboard tabs, keyboard food results, and dialog focus behavior; stored data remains unchanged |
 
 Old backups from any era must continue restoring correctly; the permanent suite proves the
 range-era path.

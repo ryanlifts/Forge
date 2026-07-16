@@ -532,6 +532,7 @@ function renderSessionInputs(){
 
     if (st.mode==="text"){
       const inp = document.createElement("input");
+      inp.setAttribute("aria-label", ex.name.replace("[Cardio] ","")+" completed sets or cardio details");
       inp.placeholder = ex.name.indexOf("[Cardio] ")===0 ? "e.g. 20 min, 2 mi" : "e.g. 275x5, 275x5, 275x4";
       inp.value = st.text;
       inp.addEventListener("input", ()=>{ st.text = inp.value; st.textTouched = true; st.status="unsaved"; markUnsavedChip(div); clearWorkoutError(); });
@@ -541,22 +542,24 @@ function renderSessionInputs(){
         const rdiv = document.createElement("div");
         rdiv.className = "srow";
         rdiv.innerHTML = '<span class="slabel">Set '+(ri+1)+'</span>';
-        const mkStep = (txt, fn)=>{ const b=document.createElement("button"); b.className="step"; b.textContent=txt; b.addEventListener("click", fn); return b; };
+        const mkStep = (txt, label, fn)=>{ const b=document.createElement("button"); b.className="step"; b.textContent=txt; b.setAttribute("aria-label",label); b.addEventListener("click", fn); return b; };
         const wIn = document.createElement("input");
         wIn.type="number"; wIn.className="snum"; wIn.inputMode="decimal"; wIn.placeholder="lb"; wIn.value=row.w;
         wIn.dataset.exercise=ex.name; wIn.dataset.row=String(ri); wIn.dataset.field="weight";
+        wIn.setAttribute("aria-label",ex.name.replace("[Cardio] ","")+" set "+(ri+1)+" weight in pounds");
         wIn.addEventListener("input", ()=>{ row.w = wIn.value===""?"":Number(wIn.value); row.touched=true; st.status="unsaved"; markUnsavedChip(div); clearWorkoutError(); });
         const rIn = document.createElement("input");
         rIn.type="number"; rIn.className="snum"; rIn.inputMode="numeric"; rIn.placeholder="reps"; rIn.value=row.r;
         rIn.dataset.exercise=ex.name; rIn.dataset.row=String(ri); rIn.dataset.field="reps";
+        rIn.setAttribute("aria-label",ex.name.replace("[Cardio] ","")+" set "+(ri+1)+" repetitions");
         rIn.addEventListener("input", ()=>{ row.r = rIn.value===""?"":Number(rIn.value); row.touched=true; st.status="unsaved"; markUnsavedChip(div); clearWorkoutError(); });
-        rdiv.appendChild(mkStep("\u22125", ()=>{ row.w = Math.max(0,(Number(row.w)||0)-5); row.touched=true; st.status="unsaved"; markUnsavedChip(div); wIn.value=row.w; clearWorkoutError(); }));
+        rdiv.appendChild(mkStep("\u22125", "Decrease "+ex.name.replace("[Cardio] ","")+" set "+(ri+1)+" weight by 5 pounds", ()=>{ row.w = Math.max(0,(Number(row.w)||0)-5); row.touched=true; st.status="unsaved"; markUnsavedChip(div); wIn.value=row.w; clearWorkoutError(); }));
         rdiv.appendChild(wIn);
-        rdiv.appendChild(mkStep("+5", ()=>{ row.w = (Number(row.w)||0)+5; row.touched=true; st.status="unsaved"; markUnsavedChip(div); wIn.value=row.w; clearWorkoutError(); }));
+        rdiv.appendChild(mkStep("+5", "Increase "+ex.name.replace("[Cardio] ","")+" set "+(ri+1)+" weight by 5 pounds", ()=>{ row.w = (Number(row.w)||0)+5; row.touched=true; st.status="unsaved"; markUnsavedChip(div); wIn.value=row.w; clearWorkoutError(); }));
         const x = document.createElement("span"); x.className="sx"; x.textContent="\u00d7"; rdiv.appendChild(x);
-        rdiv.appendChild(mkStep("\u22121", ()=>{ row.r = Math.max(0,(Number(row.r)||0)-1); row.touched=true; st.status="unsaved"; markUnsavedChip(div); rIn.value=row.r; clearWorkoutError(); }));
+        rdiv.appendChild(mkStep("\u22121", "Decrease "+ex.name.replace("[Cardio] ","")+" set "+(ri+1)+" repetitions by 1", ()=>{ row.r = Math.max(0,(Number(row.r)||0)-1); row.touched=true; st.status="unsaved"; markUnsavedChip(div); rIn.value=row.r; clearWorkoutError(); }));
         rdiv.appendChild(rIn);
-        rdiv.appendChild(mkStep("+1", ()=>{ row.r = (Number(row.r)||0)+1; row.touched=true; st.status="unsaved"; markUnsavedChip(div); rIn.value=row.r; clearWorkoutError(); }));
+        rdiv.appendChild(mkStep("+1", "Increase "+ex.name.replace("[Cardio] ","")+" set "+(ri+1)+" repetitions by 1", ()=>{ row.r = (Number(row.r)||0)+1; row.touched=true; st.status="unsaved"; markUnsavedChip(div); rIn.value=row.r; clearWorkoutError(); }));
         div.appendChild(rdiv);
       });
       const addRow = document.createElement("button");
@@ -876,8 +879,10 @@ function renderMyFoods(){
     const perServ = Math.round((f.cal100||0)*g/100);
     const row = document.createElement("div");
     row.className = "list-item";
-    const body = document.createElement("div");
-    body.style.cssText = "flex:1; min-width:0; cursor:pointer;";
+    const body = document.createElement("button");
+    body.type = "button";
+    body.setAttribute("aria-label","Log "+f.name);
+    body.style.cssText = "flex:1; min-width:0; cursor:pointer; background:none; border:0; color:inherit; text-align:left; font:inherit; padding:0;";
     body.innerHTML = '<div style="font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">'+esc(f.name)+'</div>'
       +'<div style="color:var(--dim); font-size:11px;">'+perServ+' kcal / '+g+'g'+(/^\d{6,}$/.test(key)?' · UPC '+key:'')+'</div>';
     body.addEventListener("click", ()=>{ mfResetForm(); closeMyFoods(); selectFood(f); });
@@ -1025,6 +1030,7 @@ function renderBuilder(){
     head.style.marginBottom = "10px";
     const tIn = document.createElement("input");
     tIn.value = day.title || "";
+    tIn.setAttribute("aria-label","Program day "+(di+1)+" name");
     tIn.placeholder = "Day name (e.g. Push, Lower A)";
     tIn.addEventListener("input", ()=>{ day.title = tIn.value; });
     head.appendChild(tIn);
@@ -1051,22 +1057,24 @@ function renderBuilder(){
       row.className = "bex";
       const nIn = document.createElement("input");
       nIn.className = "bname"; nIn.value = ex.name; nIn.placeholder = "Exercise";
+      nIn.setAttribute("aria-label",(day.title||("Day "+(di+1)))+" exercise "+(xi+1)+" name");
       nIn.addEventListener("input", ()=>{ ex.name = nIn.value; });
       const sIn = document.createElement("input");
       sIn.className = "bscheme"; sIn.value = ex.scheme||""; sIn.placeholder = "e.g. 4×5";
+      sIn.setAttribute("aria-label",(day.title||("Day "+(di+1)))+" exercise "+(xi+1)+" set and rep scheme");
       sIn.addEventListener("input", ()=>{ ex.scheme = sIn.value; });
       const up = document.createElement("button");
-      up.className = "xbtn"; up.textContent = "↑";
+      up.className = "xbtn"; up.textContent = "↑"; up.setAttribute("aria-label","Move "+ex.name+" up");
       up.addEventListener("click", ()=>{
         if (xi>0){ day.exercises.splice(xi-1,0,day.exercises.splice(xi,1)[0]); renderBuilder(); }
       });
       const dn = document.createElement("button");
-      dn.className = "xbtn"; dn.textContent = "↓";
+      dn.className = "xbtn"; dn.textContent = "↓"; dn.setAttribute("aria-label","Move "+ex.name+" down");
       dn.addEventListener("click", ()=>{
         if (xi<day.exercises.length-1){ day.exercises.splice(xi+1,0,day.exercises.splice(xi,1)[0]); renderBuilder(); }
       });
       const rm = document.createElement("button");
-      rm.className = "xbtn"; rm.textContent = "✕"; rm.style.color = "var(--warn)";
+      rm.className = "xbtn"; rm.textContent = "✕"; rm.setAttribute("aria-label","Remove "+ex.name); rm.style.color = "var(--warn)";
       rm.addEventListener("click", ()=>{ day.exercises.splice(xi,1); renderBuilder(); });
       row.appendChild(nIn); row.appendChild(sIn); row.appendChild(up); row.appendChild(dn); row.appendChild(rm);
       dd.appendChild(row);
@@ -1082,12 +1090,13 @@ function renderBuilder(){
     const ogC = document.createElement("optgroup"); ogC.label = "Custom";
     const oc = document.createElement("option"); oc.value="__CUSTOM__"; oc.textContent="Type my own…"; ogC.appendChild(oc);
     sel.appendChild(og1); sel.appendChild(og2); sel.appendChild(ogC);
+    sel.setAttribute("aria-label","Exercise to add to "+(day.title||("Day "+(di+1))));
     sel.style.flex = "2";
     const custom = document.createElement("input");
-    custom.placeholder = "Custom exercise name"; custom.className = "bname hidden";
+    custom.placeholder = "Custom exercise name"; custom.className = "bname hidden"; custom.setAttribute("aria-label","Custom exercise name for "+(day.title||("Day "+(di+1))));
     sel.addEventListener("change", ()=>{ custom.classList.toggle("hidden", sel.value!=="__CUSTOM__"); });
     const schIn = document.createElement("input");
-    schIn.className = "bscheme"; schIn.placeholder = "e.g. 3×8";
+    schIn.className = "bscheme"; schIn.placeholder = "e.g. 3×8"; schIn.setAttribute("aria-label","Set and rep scheme for new exercise");
     const addBtn = document.createElement("button");
     addBtn.className = "xbtn"; addBtn.textContent = "＋ Add";
     addBtn.addEventListener("click", ()=>{

@@ -814,7 +814,7 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the three data files", ["data-quotes.js","data-foods.js","data-faq.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+"/.test(sw));
-check("v56 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v56"'));
+check("v57 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v57"'));
 const rawIndex = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 check("data scripts load before the app scripts (raw file order)",
   ["data-quotes.js","data-foods.js","data-faq.js"].every(f=>
@@ -996,6 +996,79 @@ check("v56 direct-provider AI fast-fails offline and points to handoff", O56.win
 check("mobile set controls stay together after checkmark removal",
   /@media \(max-width:520px\)[\s\S]*?\.srow \.slabel \{ flex:1 1 100%;/.test(rawIndex) &&
   !/@media \(max-width:520px\)[\s\S]*?\.srow > \.sdone/.test(rawIndex));
+
+// ================= v57: accessibility completion =================
+const hasAccessibleName57 = el=>{
+  if (!el) return false;
+  if ((el.getAttribute("aria-label")||"").trim()) return true;
+  const by=(el.getAttribute("aria-labelledby")||"").trim();
+  if (by && by.split(/\s+/).some(id=>{ const n=el.ownerDocument.getElementById(id); return n && n.textContent.trim(); })) return true;
+  if (el.id){
+    const label=el.ownerDocument.querySelector('label[for="'+el.id.replace(/"/g,'\\"')+'"]');
+    if (label && label.textContent.trim()) return true;
+  }
+  return el.tagName==="BUTTON" && !!el.textContent.trim();
+};
+const A57=boot(Object.assign({},V2_CFG,{anthropicKey:"sk-test",aiProvider:"anthropic"}),V2_DATA,null,TEST_PROGRAM);
+const dA57=A57.window.document;
+A57.window.eval(`renderSessionInputs(); renderRecents(); renderMyFoods(); openBuilder(false); renderResults([{name:"Accessible chicken",brand:"Suite",cal100:165,pro100:31,carb100:0,fat100:3.6}]);`);
+await wait(40);
+let controls57=[...dA57.querySelectorAll("input,select,textarea,button")];
+check("v57 every shipped and rendered form control has an accessible name", controls57.length>150 && controls57.every(hasAccessibleName57));
+
+const tabs57=[...dA57.querySelectorAll('[role="tablist"] [role="tab"]')];
+check("v57 bottom navigation exposes one named tablist with five controlled tabs", tabs57.length===5 && tabs57.every(t=>t.id && dA57.getElementById(t.getAttribute("aria-controls"))));
+const homeTab57=dA57.getElementById("tab-dash"), foodTab57=dA57.getElementById("tab-food");
+homeTab57.focus();
+homeTab57.dispatchEvent(new A57.window.KeyboardEvent("keydown",{key:"ArrowRight",bubbles:true}));
+await wait(10);
+check("v57 arrow-key tab navigation activates and focuses the next view", dA57.activeElement===foodTab57 && foodTab57.getAttribute("aria-selected")==="true" && dA57.getElementById("view-food").getAttribute("aria-hidden")==="false");
+foodTab57.dispatchEvent(new A57.window.KeyboardEvent("keydown",{key:"End",bubbles:true}));
+await wait(10);
+check("v57 Home and End keys move to the first and last navigation tabs", dA57.activeElement===dA57.getElementById("tab-settings") && dA57.getElementById("tab-settings").getAttribute("aria-selected")==="true");
+
+const dialogs57=[...dA57.querySelectorAll('[role="dialog"]')];
+check("v57 every full-screen panel has modal dialog semantics and a valid title", dialogs57.length>=10 && dialogs57.every(d=>d.getAttribute("aria-modal")==="true" && d.getAttribute("tabindex")==="-1" && dA57.getElementById(d.getAttribute("aria-labelledby"))));
+const faqOpen57=dA57.getElementById("faqOpenBtn");
+faqOpen57.focus(); faqOpen57.click(); await wait(40);
+check("v57 opening Help moves focus into its dialog", dA57.activeElement===dA57.getElementById("faqCloseBtn"));
+dA57.getElementById("faqCloseBtn").click(); await wait(40);
+check("v57 closing Help returns focus to its opener", dA57.activeElement===faqOpen57);
+const coachOpen57=dA57.getElementById("coachOpenBtn");
+coachOpen57.classList.remove("hidden"); coachOpen57.focus(); coachOpen57.click(); await wait(40);
+check("v57 opening Coach focuses its message field", dA57.activeElement===dA57.getElementById("coachInput"));
+dA57.getElementById("coachCloseBtn").click(); await wait(40);
+check("v57 closing Coach returns focus to its opener", dA57.activeElement===coachOpen57);
+
+const result57=dA57.querySelector("#results .result");
+check("v57 food search results are named native buttons", result57 && result57.tagName==="BUTTON" && hasAccessibleName57(result57));
+result57.click();
+check("v57 keyboard-compatible food result selection still opens the amount card", !dA57.getElementById("calcCard").classList.contains("hidden"));
+A57.window.eval(`data.recents=[{name:"Recent oats",brand:"Suite",cal100:380,pro100:13,carb100:68,fat100:7}]; renderRecents();`);
+await wait(20);
+const recent57=dA57.querySelector("#recentsList .result");
+check("v57 recent-food rows are named native buttons", recent57 && recent57.tagName==="BUTTON" && hasAccessibleName57(recent57));
+
+A57.window.eval(`activateView("work",null,true); renderSessionInputs();`); await wait(20);
+const sessionControls57=[...dA57.querySelectorAll("#exerciseInputs input, #exerciseInputs button")];
+check("v57 dynamic workout fields and step controls name exercise, set, and action", sessionControls57.length>5 && sessionControls57.every(hasAccessibleName57) && sessionControls57.some(e=>/Bench Press set 1 weight/i.test(e.getAttribute("aria-label")||"")));
+A57.window.eval(`openBuilder(false);`); await wait(20);
+const builderSymbols57=[...dA57.querySelectorAll("#builderCard button")].filter(b=>/[↑↓✕×]/.test(b.textContent));
+check("v57 program-builder symbol controls have explicit names", builderSymbols57.length>0 && builderSymbols57.every(hasAccessibleName57));
+
+const fresh57=boot(null,null);
+const dFresh57=fresh57.window.document;
+fresh57.window.eval(`cfg.startWt=220; cfg.calTarget=1800; setupChoice.calc={cal:1800,pro:198,carb:153,fat:50,tdee:2300}; setupChoice.split={mode:"rec",p:40,c:30,f:30}; setupChoice.schedMode="same";`);
+let setupNamed57=true;
+for (let step57=0; step57<8; step57++){
+  fresh57.window.eval(`setupStep=${step57}; renderSetupStep();`);
+  await wait(20);
+  setupNamed57 = setupNamed57 && [...dFresh57.querySelectorAll("#setupBody input,#setupBody select,#setupBody textarea,#setupBody button")].every(hasAccessibleName57);
+}
+check("v57 every dynamically rendered onboarding control has an accessible name", setupNamed57);
+check("v57 errors and save/network messages expose live status semantics", dA57.getElementById("searchErr").getAttribute("role")==="alert" && dA57.getElementById("saveState").getAttribute("role")==="status" && dA57.getElementById("offlineBanner").getAttribute("role")==="status");
+A57.window.eval("renderFAQ()");
+check("v57 FAQ documents keyboard and screen-reader support", /keyboard or screen reader/i.test(dA57.getElementById("faqBody").textContent));
 
 // ================= v44: update toast =================
 function bootSW(hasController){

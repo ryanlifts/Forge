@@ -305,8 +305,10 @@ function renderResults(hits){
   } else {
     resultsEl.innerHTML = "";
     hits.forEach(h=>{
-      const div = document.createElement("div");
+      const div = document.createElement("button");
+      div.type = "button";
       div.className = "result";
+      div.setAttribute("aria-label", "Select "+h.name+(h.brand ? " by "+h.brand : ""));
       div.innerHTML = '<div class="r-name">'+esc(h.name)+'</div>'
         +'<div class="r-brand">'+esc(h.brand)+'</div>'
         +'<div class="r-macros">per 100g: '+Math.round(h.cal100)+' kcal · '+r1(h.pro100)+'P / '+r1(h.carb100)+'C / '+r1(h.fat100)+'F'
@@ -431,8 +433,10 @@ function renderRecents(){
   el.innerHTML = "";
   list.forEach(r=>{
     const n = counts[r.name+"|"+(r.brand||"")]||1;
-    const row = document.createElement("div");
+    const row = document.createElement("button");
+    row.type = "button";
     row.className = "result";
+    row.setAttribute("aria-label", "Select recent food "+r.name);
     row.innerHTML = '<div class="r-name">'+esc(r.name)+'</div>'
       +'<div class="r-macros">'+Math.round(r.cal100)+' kcal · '+r1(r.pro100)+'g P per 100g'
       +(r.lastAmt?' · last: '+esc(r.lastAmt)+' '+esc(r.lastUnit||''):'')
