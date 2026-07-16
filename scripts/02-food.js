@@ -170,7 +170,9 @@ function loadScannerLib(){
   if (scannerLibLoading) return scannerLibLoading;
   scannerLibLoading = new Promise((resolve, reject)=>{
     const s = document.createElement("script");
-    s.src = "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js";
+    // v58: vendored locally (verified against the npm registry shasum for 2.3.8) —
+    // no third-party code at runtime, and the scanner library works offline via the SW shell.
+    s.src = "vendor/html5-qrcode.min.js";
     s.onload = resolve;
     s.onerror = ()=>reject(new Error("Scanner library failed to load"));
     document.head.appendChild(s);

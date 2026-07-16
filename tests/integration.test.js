@@ -789,6 +789,16 @@ check("v54 choosing a rest preset changes the duration without auto-starting", T
 T54.window.eval(`activateView("food",null,false)`);
 check("v54 leaving Train hides the rest control", dT54.getElementById("restDock").classList.contains("hidden") && !dT54.body.classList.contains("rest-dock-visible"));
 
+// ================= v58: self-hosted barcode scanner =================
+check("v58 vendored scanner library exists in the repo", fs.existsSync(path.join(__dirname, "..", "vendor", "html5-qrcode.min.js")));
+check("v58 scanner license notice preserved alongside the library", (()=>{ const p=path.join(__dirname, "..", "vendor", "html5-qrcode.LICENSE.txt"); return fs.existsSync(p) && /Apache License/.test(fs.readFileSync(p,"utf8")); })());
+const sw58 = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
+check("v58 SW SHELL precaches the vendored scanner", sw58.includes('"./vendor/html5-qrcode.min.js"'));
+const foodSrc = fs.readFileSync(path.join(__dirname, "..", "scripts", "02-food.js"), "utf8");
+check("v58 scanner loader uses the local repository path", foodSrc.includes('s.src = "vendor/html5-qrcode.min.js"'));
+check("v58 no scanner code is requested from unpkg or any external origin", !/unpkg|jsdelivr|cdnjs/i.test(foodSrc) && !/s\.src\s*=\s*"https?:/.test(foodSrc));
+check("v58 scanner load-failure fallback message intact", /Scanner library failed to load/.test(foodSrc));
+
 // ================= Phase 1: extracted data payloads =================
 const P = boot(EXISTING_CFG, EMPTY_DATA);
 check("QUOTES loads from data-quotes.js", P.window.eval("Array.isArray(QUOTES) && QUOTES.length > 100"));
@@ -814,7 +824,7 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the three data files", ["data-quotes.js","data-foods.js","data-faq.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+"/.test(sw));
-check("v57 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v57"'));
+check("v58 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v58"'));
 const rawIndex = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 check("data scripts load before the app scripts (raw file order)",
   ["data-quotes.js","data-foods.js","data-faq.js"].every(f=>

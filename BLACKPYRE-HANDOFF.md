@@ -1,4 +1,4 @@
-# BLACKPYRE HANDOFF — current as of v57 (July 2026)
+# BLACKPYRE HANDOFF — current as of v58 (July 2026)
 
 You are a collaborator on BlackPyre, a fitness PWA at
 `ryanlifts.github.io/Forge/` (repo: `ryanlifts/Forge`). This repository represents **v57**,
@@ -7,7 +7,17 @@ hardening foundation and v47–v56 usability work. Confirm the GitHub Pages depl
 before calling it live.
 
 The two documents reproduced below (`ARCHITECTURE.md` and `DATA-MODEL.md`) live in the repo
-root, are binding, and are current as of v57. Read them before proposing or writing code.
+root, are binding, and are current as of v58. Read them before proposing or writing code.
+
+## v58 — self-hosted barcode scanner (security)
+
+The html5-qrcode 2.3.8 library is now vendored at vendor/html5-qrcode.min.js
+(verified byte-for-byte against the npm registry authoritative shasum
+0b0cdf7a9926cfd4be530e13a51db47592adfa0d; Apache-2.0 notice preserved at
+vendor/html5-qrcode.LICENSE.txt). The scanner loader requests only the local
+file; no third-party code loads at runtime anywhere in the app. The SW shell
+precaches it, so the camera scanner library is also available offline.
+Cache: blackpyre-v58. No storage, schema, or behavior changes.
 
 ## Current state
 

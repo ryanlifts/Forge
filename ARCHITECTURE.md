@@ -29,6 +29,7 @@ below exists to keep that workflow safe.
 | `scripts/04-weight.js` | weight chart, weigh-in/saved-meal Undo, motivation render, e1RM/PR engine, TDEE, streak, finish day, plate math, consolidated manual rest timer with duration chooser, share |
 | `scripts/05-ai.js` | USDA/barcode lookups, usual-meal, schedule UI, kudos, offline direct-AI fast-fail, confirmed AI/pasted program replacement, measurement Undo, coach chat, check-in, handoff food flow with first-item review positioning, AI report, analytics |
 | `scripts/06-settings.js` | setup wizard, FAQ, macro calculator, grouped settings, normal/partial/raw exports, restore, recovery status and quarantine cleanup with automatic disclosure when attention is needed |
+| `vendor/html5-qrcode.min.js` | Vendored barcode scanner (npm-verified 2.3.8, Apache-2.0 notice adjacent). Precached; never fetched from a CDN |
 | `scripts/07-boot.js` | dash, Easter egg, protected/recovery panel orchestration, network-status initialization, approved update toast, boot |
 | `data-quotes.js` | QUOTES vault — classic script, loads before the app slices, shares global scope |
 | `data-foods.js` | LOCAL_DB food database + ALT_MAP exercise swaps — classic script |
