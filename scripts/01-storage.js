@@ -5,7 +5,7 @@ const LKG_KEY = "forge:lkg", QUARANTINE_KEY = "forge:quarantine";
 const SCHEMA_VERSION = 2, RECOVERY_FORMAT_VERSION = 1;
 const AI_CFG_FIELDS = ["anthropicKey","openaiKey","aiProvider","aiModelAnth","aiModelOai","foodHandoffOn"];
 
-const DEFAULT_CFG = { startWt:0, goalWt:0, calTarget:0, proTarget:0, carbGoal:0, fatGoal:0, accent:"gold" };
+const DEFAULT_CFG = { startWt:0, goalWt:0, calTarget:0, proTarget:0, carbGoal:0, fatGoal:0, accent:"gold", foodSuggestionsOn:false, foodSuggestionsWeightLoss:true, foodSuggestionsAvoid:"" };
 const ACCENT_KEYS = ["ember","steel","emerald","crimson","violet","gold","pink"];
 
 const DEFAULT_PROGRAM = {

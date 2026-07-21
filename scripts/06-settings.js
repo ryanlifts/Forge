@@ -497,6 +497,7 @@ function renderSettings(){
   document.getElementById("cWt").value = sorted.length ? sorted[sorted.length-1].lbs : shown(cfg.startWt);
   if (cfg.splitState) splitState = Object.assign({}, cfg.splitState);
   renderSched();
+  renderFoodSuggestionSettings();
 }
 document.getElementById("saveSettingsBtn").addEventListener("click", ()=>{
   const g = id=>Number(document.getElementById(id).value);

@@ -37,6 +37,7 @@ function renderMealSeg(){
 }
 document.querySelectorAll("#mealSeg button").forEach(b=>b.addEventListener("click", ()=>{
   currentMeal = b.dataset.meal;
+  foodSuggestionPage = 0;
   renderMealSeg(); renderFood();
 }));
 document.getElementById("recentsOpenBtn").addEventListener("click", ()=>{
@@ -52,7 +53,7 @@ document.getElementById("recentsCloseBtn").addEventListener("click", ()=>{
 
 const foodDateEl = document.getElementById("foodDate");
 foodDateEl.value = todayStr();
-foodDateEl.addEventListener("change", ()=>{ cancelEditFood(); renderFood(); });
+foodDateEl.addEventListener("change", ()=>{ cancelEditFood(); foodSuggestionPage=0; renderFood(); });
 
 function daySums(dateStr){
   const list = data.food[dateStr]||[];
@@ -71,6 +72,237 @@ function allBarsHTML(s, ds){
     + exactBarHTML("Carbs", s.carb, t.carb, "g", "carb")
     + exactBarHTML("Fat", s.fat, t.fat, "g", "fat");
 }
+
+
+// ================== v61: LOCAL FOOD SUGGESTIONS ==================
+// Deterministic and private: suggestions use only remaining targets plus foods already
+// stored in BlackPyre. Nothing is sent online and nothing is logged until the user
+// reviews the normal amount card and taps Add.
+const FOOD_SUGGESTION_STARTERS = [
+  {name:"Chicken breast, cooked", grams:150, portion:"150g", category:"protein"},
+  {name:"Turkey breast, cooked", grams:150, portion:"150g", category:"protein"},
+  {name:"Tuna, canned in water", grams:120, portion:"120g", category:"protein"},
+  {name:"Shrimp, cooked", grams:150, portion:"150g", category:"protein"},
+  {name:"Greek yogurt, nonfat plain", grams:170, portion:"170g", category:"protein"},
+  {name:"Cottage cheese, 2%", grams:200, portion:"200g", category:"protein"},
+  {name:"Egg, whole", grams:100, portion:"about 2 eggs (100g)", category:"protein"},
+  {name:"Egg white", grams:150, portion:"150g", category:"protein"},
+  {name:"Whey protein powder", grams:30, portion:"30g", category:"protein"},
+  {name:"Protein shake (premade)", grams:325, portion:"one 325g shake", category:"protein"},
+  {name:"White rice, cooked", grams:150, portion:"150g", category:"carb"},
+  {name:"Brown rice, cooked", grams:150, portion:"150g", category:"carb"},
+  {name:"Oats, dry", grams:40, portion:"40g", category:"carb"},
+  {name:"Oatmeal, cooked with water", grams:235, portion:"about 1 cup (235g)", category:"carb"},
+  {name:"Potato, baked with skin", grams:250, portion:"one medium-large potato (250g)", category:"carb"},
+  {name:"Sweet potato, baked", grams:200, portion:"one medium sweet potato (200g)", category:"carb"},
+  {name:"Whole wheat bread", grams:80, portion:"about 2 slices (80g)", category:"carb"},
+  {name:"Apple", grams:180, portion:"one medium apple (180g)", category:"produce"},
+  {name:"Banana", grams:120, portion:"one medium banana (120g)", category:"produce"},
+  {name:"Strawberries", grams:200, portion:"200g", category:"produce"},
+  {name:"Blueberries", grams:150, portion:"150g", category:"produce"},
+  {name:"Broccoli, cooked", grams:200, portion:"200g", category:"produce"},
+  {name:"Mixed salad greens", grams:150, portion:"a large bowl (150g)", category:"produce"},
+  {name:"Popcorn, air-popped", grams:25, portion:"about 3 cups (25g)", category:"snack"},
+  {name:"Avocado", grams:75, portion:"about half an avocado (75g)", category:"fat"},
+  {name:"Peanut butter", grams:32, portion:"2 tbsp (32g)", category:"fat"},
+  {name:"Almonds", grams:28, portion:"1 oz (28g)", category:"fat"},
+];
+let foodSuggestionPage = 0;
+
+function foodSuggestionsEnabled(){ return cfg.foodSuggestionsOn===true; }
+function foodSuggestionWeightLossEnabled(){ return cfg.foodSuggestionsWeightLoss!==false; }
+function foodSuggestionAvoidTerms(){
+  return String(cfg.foodSuggestionsAvoid||"").toLowerCase().split(/[,\n]/)
+    .map(x=>x.trim()).filter(x=>x.length>1);
+}
+function foodSuggestionCategory(cal, pro, carb, fat, fallback){
+  if (fallback) return fallback;
+  const c = Math.max(1, Number(cal)||0);
+  if ((Number(pro)||0)*4/c >= 0.34) return "protein";
+  if ((Number(carb)||0)*4/c >= 0.58) return "carb";
+  if ((Number(fat)||0)*9/c >= 0.58) return "fat";
+  return "balanced";
+}
+function makeFoodSuggestionCandidate(food, amount, unit, grams, portion, source, category){
+  const g = Number(grams);
+  if (!food || !Number.isFinite(g) || g<=0) return null;
+  const cal = scaleMacro(Number(food.cal100)||0,g);
+  const pro = scaleMacro(Number(food.pro100)||0,g);
+  const carb = scaleMacro(Number(food.carb100)||0,g);
+  const fat = scaleMacro(Number(food.fat100)||0,g);
+  if (!Number.isFinite(cal) || cal<=0) return null;
+  const key = food.name+"|"+(food.brand||"");
+  return {
+    food:food, amount:amount, unit:unit, grams:g, portion:portion,
+    source:source, category:foodSuggestionCategory(cal,pro,carb,fat,category),
+    cal:cal, pro:pro, carb:carb, fat:fat,
+    familiar:Number((data.foodCounts||{})[key]||0),
+    mealFamiliar:Number(((data.mealCounts||{})[currentMeal]||{})[key]||0),
+  };
+}
+function foodSuggestionCandidates(){
+  const out = [];
+  (data.recents||[]).forEach(r=>{
+    let amount = Number(r.lastAmt), unit = r.lastUnit || "";
+    let grams = 0, portion = "";
+    if (amount>0 && ["g","oz","lb","ml","floz","serving"].includes(unit) && (unit!=="serving" || Number(r.servingG)>0)){
+      grams = toGrams(amount, unit, r.servingG);
+      portion = amount+" "+(unit==="serving" ? "serving"+(amount===1?"":"s") : unit);
+    } else if (Number(r.servingG)>0){
+      amount=1; unit="serving"; grams=Number(r.servingG);
+      portion = r.servingLabel ? "1 serving ("+r.servingLabel+")" : "1 serving";
+    }
+    const c = makeFoodSuggestionCandidate(r,amount,unit,grams,portion,"recent",null);
+    if (c) out.push(c);
+  });
+  Object.keys(data.myFoods||{}).forEach(k=>{
+    const f=data.myFoods[k];
+    if (!f || !(Number(f.servingG)>0)) return;
+    const portion=f.servingLabel ? "1 serving ("+f.servingLabel+")" : "1 serving";
+    const c=makeFoodSuggestionCandidate(f,1,"serving",Number(f.servingG),portion,"saved",null);
+    if (c) out.push(c);
+  });
+  FOOD_SUGGESTION_STARTERS.forEach(st=>{
+    const f0=LOCAL_DB.find(x=>String(x.n).toLowerCase()===st.name.toLowerCase());
+    if (!f0) return;
+    const food={name:f0.n,brand:"Built-in · whole food",cal100:f0.cal,pro100:f0.pro,carb100:f0.carb,fat100:f0.fat,servingG:null,servingLabel:null};
+    const c=makeFoodSuggestionCandidate(food,st.grams,"g",st.grams,st.portion,"starter",st.category);
+    if (c) out.push(c);
+  });
+  const avoids=foodSuggestionAvoidTerms();
+  const best=new Map();
+  out.forEach(c=>{
+    const hay=(c.food.name+" "+(c.food.brand||"")).toLowerCase();
+    if (avoids.some(t=>hay.includes(t))) return;
+    const key=String(c.food.name).toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+    const old=best.get(key);
+    if (!old || c.familiar+c.mealFamiliar > old.familiar+old.mealFamiliar || (c.source!=="starter" && old.source==="starter")) best.set(key,c);
+  });
+  return [...best.values()];
+}
+function scoreFoodSuggestion(c, rem){
+  const calRoom=Math.max(1,rem.cal);
+  const desired=Math.min(450,Math.max(120,calRoom*0.45));
+  const calFit=Math.max(0,1-Math.abs(c.cal-desired)/Math.max(desired,1));
+  let score=calFit*24;
+  if (c.cal<=rem.cal) score+=18;
+  else score-=Math.min(70,(c.cal-rem.cal)*0.38);
+  if (rem.pro>0) score+=Math.min(1,c.pro/rem.pro)*38;
+  else if (c.pro>=15) score+=6;
+  if (rem.carb>0) score+=Math.min(1,c.carb/rem.carb)*9;
+  if (rem.fat>0) score+=Math.min(1,c.fat/rem.fat)*7;
+  score-=Math.max(0,c.carb-rem.carb)*0.45;
+  score-=Math.max(0,c.fat-rem.fat)*1.15;
+  score+=Math.min(15,Math.log2(c.familiar+1)*5);
+  score+=Math.min(12,c.mealFamiliar*2.5);
+  if (foodSuggestionWeightLossEnabled()){
+    const proteinShare=(c.pro*4)/Math.max(c.cal,1);
+    score+=Math.min(22,proteinShare*48);
+    if (c.category==="produce") score+=12;
+    if (c.cal<=250) score+=5;
+    if (c.cal>rem.cal) score-=18;
+  }
+  return score;
+}
+function rankedFoodSuggestions(rem){
+  return foodSuggestionCandidates()
+    .filter(c=>c.cal<=Math.max(rem.cal+100,rem.cal*1.2))
+    .map(c=>Object.assign(c,{score:scoreFoodSuggestion(c,rem)}))
+    .sort((a,b)=>b.score-a.score || b.mealFamiliar-a.mealFamiliar || b.familiar-a.familiar || a.cal-b.cal);
+}
+function chooseFoodSuggestions(ranked){
+  if (!ranked.length) return [];
+  const pool=ranked.slice(0,Math.min(24,ranked.length));
+  const start=(foodSuggestionPage*3)%pool.length;
+  const rotated=pool.slice(start).concat(pool.slice(0,start));
+  const picked=[], cats=new Set();
+  rotated.forEach(c=>{
+    if (picked.length>=3 || cats.has(c.category)) return;
+    picked.push(c); cats.add(c.category);
+  });
+  rotated.forEach(c=>{ if (picked.length<3 && !picked.includes(c)) picked.push(c); });
+  return picked.slice(0,3);
+}
+function foodSuggestionReason(c, rem){
+  if (c.mealFamiliar>0) return "Familiar "+currentMeal+" choice";
+  if (c.familiar>1) return "A food you log often";
+  if (rem.pro>0 && c.pro>=Math.min(20,rem.pro*0.35)) return "Helps close your protein gap";
+  if (foodSuggestionWeightLossEnabled() && c.category==="produce") return "More food volume for fewer calories";
+  if (foodSuggestionWeightLossEnabled() && c.cal<=250 && c.pro>=10) return "Protein-forward, calorie-conscious option";
+  if (rem.carb>0 && c.carb>=Math.min(25,rem.carb*0.35)) return "Helps fill your remaining carbs";
+  return "Fits today's remaining targets";
+}
+function reviewFoodSuggestion(c){
+  selectFood(c.food);
+  const opt=[...qtyUnitEl.options].some(o=>o.value===c.unit) ? c.unit : "g";
+  qtyUnitEl.value=opt;
+  qtyAmountEl.value=opt===c.unit ? c.amount : Math.round(c.grams);
+  syncSliderToUnit(); updateCalc();
+}
+function renderFoodSuggestions(){
+  const card=document.getElementById("foodSuggestionsCard");
+  const summary=document.getElementById("foodSuggestionsSummary");
+  const list=document.getElementById("foodSuggestionsList");
+  if (!foodSuggestionsEnabled() || foodDateEl.value!==todayStr()){
+    card.classList.add("hidden"); list.innerHTML=""; return;
+  }
+  card.classList.remove("hidden");
+  if (!nutritionTargetsReady()){
+    summary.textContent="Set calorie and macro targets in Settings first.";
+    list.innerHTML='<div class="note">Suggestions need your daily targets so they can fit the rest of your day.</div>';
+    return;
+  }
+  const used=daySums(foodDateEl.value), t=dayTargets(foodDateEl.value);
+  const rem={cal:Math.max(0,t.cal-used.cal),pro:Math.max(0,t.pro-used.pro),carb:Math.max(0,t.carb-used.carb),fat:Math.max(0,t.fat-used.fat)};
+  summary.textContent=Math.round(rem.cal)+" kcal · "+Math.round(rem.pro)+"g protein · "+Math.round(rem.carb)+"g carbs · "+Math.round(rem.fat)+"g fat remaining";
+  if (rem.cal<60){
+    list.innerHTML='<div class="note">Your calorie target is reached or nearly reached'+(rem.pro>0?' while '+Math.round(rem.pro)+'g protein remains. No normal food can close that gap without adding calories.':'. No need to force another food.')+'</div>';
+    return;
+  }
+  const picked=chooseFoodSuggestions(rankedFoodSuggestions(rem));
+  if (!picked.length){
+    list.innerHTML='<div class="note">No stored food fits the remaining targets and your exclusion list. Adjust the exclusions or log normally.</div>';
+    return;
+  }
+  list.innerHTML="";
+  picked.forEach(c=>{
+    const b=document.createElement("button");
+    b.type="button"; b.className="result";
+    b.setAttribute("aria-label","Review suggestion: "+c.food.name+", "+c.portion);
+    b.innerHTML='<div class="r-name">'+esc(c.food.name)+' <span style="color:var(--dim); font-weight:400;">· '+esc(c.portion)+'</span></div>'
+      +'<div class="r-brand">'+esc(foodSuggestionReason(c,rem))+'</div>'
+      +'<div class="r-macros">'+Math.round(c.cal)+' kcal · '+Math.round(c.pro)+'P / '+Math.round(c.carb)+'C / '+Math.round(c.fat)+'F · tap to review</div>';
+    b.addEventListener("click",()=>reviewFoodSuggestion(c));
+    list.appendChild(b);
+  });
+}
+function renderFoodSuggestionSettings(){
+  const on=foodSuggestionsEnabled(), wl=foodSuggestionWeightLossEnabled();
+  const toggle=document.getElementById("foodSuggestionsToggleBtn");
+  toggle.textContent=on ? "Disable food suggestions" : "Enable food suggestions";
+  toggle.setAttribute("aria-pressed",String(on));
+  document.getElementById("foodSuggestionsSettings").classList.toggle("hidden",!on);
+  const wlBtn=document.getElementById("foodSuggestionsWeightLossBtn");
+  wlBtn.textContent="Weight-loss focus: "+(wl?"On":"Off");
+  wlBtn.setAttribute("aria-pressed",String(wl));
+  document.getElementById("foodSuggestionsAvoid").value=cfg.foodSuggestionsAvoid||"";
+}
+document.getElementById("foodSuggestionsRefreshBtn").addEventListener("click",()=>{ foodSuggestionPage++; renderFoodSuggestions(); });
+document.getElementById("foodSuggestionsToggleBtn").addEventListener("click",()=>{
+  cfg.foodSuggestionsOn=!foodSuggestionsEnabled();
+  saveCfg(); foodSuggestionPage=0; renderFoodSuggestionSettings(); renderFoodSuggestions();
+  flashSave(cfg.foodSuggestionsOn ? "Food suggestions enabled ✓" : "Food suggestions hidden");
+});
+document.getElementById("foodSuggestionsWeightLossBtn").addEventListener("click",()=>{
+  cfg.foodSuggestionsWeightLoss=!foodSuggestionWeightLossEnabled();
+  saveCfg(); foodSuggestionPage=0; renderFoodSuggestionSettings(); renderFoodSuggestions();
+  flashSave("Weight-loss focus "+(cfg.foodSuggestionsWeightLoss?"on ✓":"off"));
+});
+document.getElementById("saveFoodSuggestionsBtn").addEventListener("click",()=>{
+  cfg.foodSuggestionsAvoid=document.getElementById("foodSuggestionsAvoid").value.trim();
+  saveCfg(); foodSuggestionPage=0; renderFoodSuggestions();
+  ackBtn("saveFoodSuggestionsBtn","✓ Saved"); flashSave("Suggestion preferences saved ✓");
+});
 
 // --- OFF product mapping ---
 function mapOFFProduct(p){
@@ -594,5 +826,6 @@ function renderFood(){
   }
   renderRecents();
   renderUsual();
+  renderFoodSuggestions();
 }
 

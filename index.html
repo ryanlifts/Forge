@@ -476,6 +476,18 @@
       <div id="mealChips" style="margin-top:10px;"></div>
     </div>
 
+    <div class="card hidden" id="foodSuggestionsCard" style="border-color:var(--ember);">
+      <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
+        <div>
+          <div class="label">What could I eat next?</div>
+          <div id="foodSuggestionsSummary" class="note" style="margin:4px 0 0;"></div>
+        </div>
+        <button class="xbtn" id="foodSuggestionsRefreshBtn" aria-label="Refresh food suggestions" style="flex:0 0 auto;">Refresh</button>
+      </div>
+      <div id="foodSuggestionsList" style="margin-top:10px;"></div>
+      <div class="note" style="margin-top:8px;">Suggestions use your remaining targets and foods stored in BlackPyre. Tap one to review the amount and macros before anything is logged.</div>
+    </div>
+
     <div class="row" style="margin-bottom:12px;">
       <button class="btn ghost small hidden" id="recentsOpenBtn">Recent foods</button>
       <button class="btn ghost small" id="myFoodsOpenBtn">My foods</button>
@@ -880,6 +892,18 @@
       <input id="sUsdaKey" aria-label="USDA API key" placeholder="Paste your free USDA API key" style="margin-bottom:10px;">
       <button class="btn ghost small" id="saveUsdaBtn">Save key</button>
       <div class="note">A shared community key is <b>built in</b> — branded search works out of the box. Add your own free key for guaranteed speed if the shared one ever gets busy: <a href="https://fdc.nal.usda.gov/api-key-signup.html" target="_blank" rel="noopener" style="color:var(--ember);">fdc.nal.usda.gov</a> — they email it instantly.</div>
+    </div>
+
+    <div class="card">
+      <div class="label">Food suggestions (optional)</div>
+      <button class="btn ghost small" id="foodSuggestionsToggleBtn" aria-pressed="false" style="width:100%; margin:8px 0 6px;">Enable food suggestions</button>
+      <div id="foodSuggestionsSettings" class="hidden">
+        <button class="btn ghost small" id="foodSuggestionsWeightLossBtn" aria-pressed="true" style="width:100%; margin:6px 0 10px;">Weight-loss focus: On</button>
+        <div class="label">Foods to avoid</div>
+        <input id="foodSuggestionsAvoid" aria-label="Foods to exclude from suggestions" placeholder="e.g. tuna, peanut, cottage cheese" style="margin:8px 0 10px;">
+        <button class="btn ghost small" id="saveFoodSuggestionsBtn" style="width:100%;">Save suggestion preferences</button>
+      </div>
+      <div class="note" style="margin-top:8px;">Off by default. When enabled, BlackPyre suggests familiar or built-in foods that fit what remains today. Weight-loss focus favors protein and lower-calorie options. Exclusions are name filters, not an allergy guarantee — always verify labels and ingredients.</div>
     </div>
 
     <div class="card">

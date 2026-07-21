@@ -725,6 +725,52 @@ check("v60 disabling food handoff also hides it in handoff provider mode", H60Of
 check("v60 FAQ explains the default-on toggle", H60.window.eval(`FAQ.some(x=>x.q==="What is ChatGPT handoff mode?"&&/on by default/i.test(x.a)&&/Settings/.test(x.a))`));
 check("v60 keeps primary schemaVersion 2", H60.window.eval("SCHEMA_VERSION")===2);
 
+// ================= v61: local food suggestions =================
+const S61 = boot(V2_CFG, EMPTY_DATA);
+const dS61 = S61.window.document;
+const clickS61 = id=>dS61.getElementById(id).dispatchEvent(new S61.window.Event("click",{bubbles:true}));
+check("v61 food suggestions are opt-in and hidden by default", dS61.getElementById("foodSuggestionsCard").classList.contains("hidden") && dS61.getElementById("foodSuggestionsToggleBtn").getAttribute("aria-pressed")==="false");
+clickS61("foodSuggestionsToggleBtn");
+check("v61 enabling suggestions persists the preference", S61.window.eval("cfg.foodSuggestionsOn")===true && JSON.parse(S61.window.localStorage.getItem("forge:cfg")).foodSuggestionsOn===true);
+check("v61 enabled suggestions show three local review choices", !dS61.getElementById("foodSuggestionsCard").classList.contains("hidden") && dS61.querySelectorAll("#foodSuggestionsList button.result").length===3);
+const S61Offline=boot(Object.assign({},V2_CFG,{foodSuggestionsOn:true}),EMPTY_DATA,(w)=>{
+  Object.defineProperty(w.navigator,"onLine",{configurable:true,value:false});
+  w.__suggestionFetches=0; w.fetch=()=>{ w.__suggestionFetches++; return Promise.reject(new Error("network should not run")); };
+});
+check("v61 suggestions work offline without any network request", S61Offline.window.document.querySelectorAll("#foodSuggestionsList button.result").length===3 && S61Offline.window.__suggestionFetches===0);
+check("v61 suggestion summary uses today's exact remaining targets", /1800 kcal/.test(dS61.getElementById("foodSuggestionsSummary").textContent) && /170g protein/.test(dS61.getElementById("foodSuggestionsSummary").textContent));
+const initialSuggestionNames61=[...dS61.querySelectorAll("#foodSuggestionsList .r-name")].map(x=>x.textContent).join("|");
+clickS61("foodSuggestionsRefreshBtn");
+const refreshedSuggestionNames61=[...dS61.querySelectorAll("#foodSuggestionsList .r-name")].map(x=>x.textContent).join("|");
+check("v61 Refresh rotates through other high-scoring choices", initialSuggestionNames61!==refreshedSuggestionNames61 && dS61.querySelectorAll("#foodSuggestionsList button.result").length===3);
+const foodCountBeforeSuggestion61=S61.window.eval("(data.food[todayStr()]||[]).length");
+dS61.querySelector("#foodSuggestionsList button.result").dispatchEvent(new S61.window.Event("click",{bubbles:true}));
+check("v61 tapping a suggestion opens the normal amount review without logging", !dS61.getElementById("calcCard").classList.contains("hidden") && S61.window.eval("(data.food[todayStr()]||[]).length")===foodCountBeforeSuggestion61);
+check("v61 suggestion review preloads a realistic positive amount", Number(dS61.getElementById("qtyAmount").value)>0 && Number(dS61.getElementById("calcCal").textContent)>0);
+clickS61("addSelBtn");
+check("v61 a suggestion logs only after the existing Add action", S61.window.eval("(data.food[todayStr()]||[]).length")===foodCountBeforeSuggestion61+1);
+const afterSuggestionSummary61=dS61.getElementById("foodSuggestionsSummary").textContent;
+check("v61 remaining-target summary updates after the reviewed food is logged", afterSuggestionSummary61!=="1800 kcal · 170g protein · 180g carbs · 55g fat remaining");
+const avoid61=dS61.getElementById("foodSuggestionsAvoid");
+avoid61.value="chicken, tuna"; clickS61("saveFoodSuggestionsBtn");
+check("v61 exclusion terms remove matching names from the candidate pool", S61.window.eval(`foodSuggestionCandidates().every(c=>!/chicken|tuna/i.test(c.food.name))`));
+clickS61("foodSuggestionsWeightLossBtn");
+check("v61 weight-loss focus is optional, accessible, and persisted", S61.window.eval("cfg.foodSuggestionsWeightLoss")===false && dS61.getElementById("foodSuggestionsWeightLossBtn").getAttribute("aria-pressed")==="false" && JSON.parse(S61.window.localStorage.getItem("forge:cfg")).foodSuggestionsWeightLoss===false);
+const past61=dstr(-1); dS61.getElementById("foodDate").value=past61; dS61.getElementById("foodDate").dispatchEvent(new S61.window.Event("change",{bubbles:true}));
+check("v61 next-food suggestions stay hidden while editing a historical date", dS61.getElementById("foodSuggestionsCard").classList.contains("hidden"));
+const S61NoTargets=boot(Object.assign({},V2_CFG,{calTarget:0,proTarget:0,carbGoal:0,fatGoal:0,foodSuggestionsOn:true}),EMPTY_DATA);
+check("v61 enabled suggestions explain that targets are required", /Set calorie and macro targets/.test(S61NoTargets.window.document.getElementById("foodSuggestionsSummary").textContent) && S61NoTargets.window.document.querySelectorAll("#foodSuggestionsList button").length===0);
+const fullFood61={}; fullFood61[dstr(0)]=[{name:"Full day",cal:1800,pro:170,carb:180,fat:55,meal:"dinner"}];
+const S61Full=boot(Object.assign({},V2_CFG,{foodSuggestionsOn:true}),Object.assign({},EMPTY_DATA,{food:fullFood61}));
+check("v61 reached calorie target gives an honest no-force message", S61Full.window.document.querySelectorAll("#foodSuggestionsList button").length===0 && /No need to force another food|No normal food/.test(S61Full.window.document.getElementById("foodSuggestionsList").textContent));
+const familiarData61=Object.assign({},EMPTY_DATA,{recents:[{name:"Ryan's lunch yogurt",brand:"Saved",cal100:60,pro100:10,carb100:4,fat100:0.5,lastAmt:200,lastUnit:"g"}],foodCounts:{"Ryan's lunch yogurt|Saved":9},mealCounts:{lunch:{"Ryan's lunch yogurt|Saved":7}}});
+const S61Familiar=boot(Object.assign({},V2_CFG,{foodSuggestionsOn:true}),familiarData61);
+S61Familiar.window.eval(`currentMeal="lunch"; foodSuggestionPage=0; renderMealSeg(); renderFood();`);
+check("v61 familiar meal history is represented in suggestions", /Ryan's lunch yogurt/.test(S61Familiar.window.document.getElementById("foodSuggestionsList").textContent) && /Familiar lunch choice/.test(S61Familiar.window.document.getElementById("foodSuggestionsList").textContent));
+check("v61 suggestion buttons remain keyboard-accessible native controls", [...S61Familiar.window.document.querySelectorAll("#foodSuggestionsList button")].every(b=>b.tagName==="BUTTON" && /Review suggestion:/.test(b.getAttribute("aria-label")||"")));
+check("v61 FAQ explains local, review-before-log suggestions and allergy limits", S61.window.eval(`FAQ.some(x=>x.q==="How do food suggestions work?"&&/stored in BlackPyre/.test(x.a)&&/review/.test(x.a)&&/allergy/i.test(x.a))`));
+check("v61 keeps primary schemaVersion 2", S61.window.eval("SCHEMA_VERSION")===2);
+
 // ================= ChatGPT handoff paste flow =================
 const H = boot(Object.assign({}, EXISTING_CFG, {aiProvider:"handoff"}), EMPTY_DATA);
 const dH = H.window.document;
@@ -898,7 +944,7 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the three data files", ["data-quotes.js","data-foods.js","data-faq.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+"/.test(sw));
-check("v60 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v60"'));
+check("v61 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v61"'));
 const rawIndex = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 check("data scripts load before the app scripts (raw file order)",
   ["data-quotes.js","data-foods.js","data-faq.js"].every(f=>
