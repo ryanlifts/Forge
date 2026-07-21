@@ -337,6 +337,15 @@ function hasAIKey(){
   return false; // handoff mode: no live API
 }
 function isHandoff(){ return aiProvider()==="handoff"; }
+function foodHandoffEnabled(){ return cfg.foodHandoffOn !== false; }
+function useFoodHandoff(){ return foodHandoffEnabled() && (isHandoff() || !hasAIKey()); }
+
+document.getElementById("foodHandoffToggleBtn").addEventListener("click", ()=>{
+  cfg.foodHandoffOn = !foodHandoffEnabled();
+  saveCfg();
+  renderAIGates();
+  flashSave(cfg.foodHandoffOn ? "ChatGPT food handoff enabled ✓" : "ChatGPT food handoff hidden");
+});
 
 document.getElementById("sAiProvider").addEventListener("change", ()=>{
   cfg.aiProvider = document.getElementById("sAiProvider").value;
@@ -370,11 +379,17 @@ function renderAIGates(){
     mEl.placeholder = "default: " + AI_DEFAULT_MODELS[p];
     mEl.value = (p==="openai" ? cfg.aiModelOai : cfg.aiModelAnth) || "";
   }
-  // food card: live for API modes, handoff variant otherwise
-  document.getElementById("aiFoodCard").classList.toggle("hidden", !hasAIKey() && !isHandoff());
-  document.getElementById("aiHandoffControls").classList.toggle("hidden", !isHandoff());
-  document.getElementById("aiFoodGoBtn").classList.toggle("hidden", isHandoff());
-  document.getElementById("aiPhotoBtn").classList.toggle("hidden", isHandoff());
+  // Food handoff is on by default and independent from the live coach provider.
+  // A configured live API key still gets the faster in-app food flow; handoff is the key-free fallback.
+  const foodHandoff = useFoodHandoff();
+  const foodHandoffOn = foodHandoffEnabled();
+  const foodToggle = document.getElementById("foodHandoffToggleBtn");
+  foodToggle.textContent = foodHandoffOn ? "Disable ChatGPT food handoff" : "Enable ChatGPT food handoff";
+  foodToggle.setAttribute("aria-pressed", String(foodHandoffOn));
+  document.getElementById("aiFoodCard").classList.toggle("hidden", !hasAIKey() && !foodHandoff);
+  document.getElementById("aiHandoffControls").classList.toggle("hidden", !foodHandoff);
+  document.getElementById("aiFoodGoBtn").classList.toggle("hidden", foodHandoff);
+  document.getElementById("aiPhotoBtn").classList.toggle("hidden", foodHandoff);
   // coach chat: live API only; handoff points at Copy report
   document.getElementById("coachOpenBtn").classList.toggle("hidden", isHandoff());
   const note = document.getElementById("coachKeyNote");

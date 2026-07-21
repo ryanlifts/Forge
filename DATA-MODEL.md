@@ -1,6 +1,6 @@
 # BlackPyre Data Model
 
-**Current as of v57 (July 2026). Primary schemaVersion: 2. Recovery format: 1.**
+**Current as of v60 (July 2026). Primary schemaVersion: 2. Recovery format: 1.**
 
 ## Storage keys
 
@@ -29,7 +29,7 @@ removes, or modifies that legacy key.
 `schemaVersion` is physically stored in `forge:cfg`, but versions the complete **primary**
 state and normal backup envelope: settings, logged data, and program.
 
-| Raw value | Meaning / behavior in v57 |
+| Raw value | Meaning / behavior in v60 |
 |---|---|
 | property absent or integer `0` | Pre-versioning legacy state; run numbered migrations from step 0 |
 | integer `1` | v45–v55 state; migrate 1 → 2 by adding an empty active-workout draft field |
@@ -86,7 +86,8 @@ treat unset values as real measurements or targets.
 | `measureOn` / `waterOn` | bool | Optional tracking toggles | |
 | `usdaKey` | string | Personal USDA API key | Overrides shared key |
 | `anthropicKey` / `openaiKey` | string | BYOK AI keys | Excluded from normal/readable exports; may exist in device-only recovery records |
-| `aiProvider` | string | `anthropic` \| `openai` \| `handoff` | |
+| `aiProvider` | string | `anthropic` \| `openai` \| `handoff` | Controls live AI/coaching provider |
+| `foodHandoffOn` | bool | Show key-free ChatGPT food handoff when no live API key is active | Absent or `true` = enabled; `false` = hidden |
 | `aiModelAnth` / `aiModelOai` | string | Optional model overrides | |
 | `lastCoachDate` | string date | Last weekly coach check-in | |
 
@@ -183,7 +184,7 @@ Normal backup is `{cfg, data, program}` JSON; its generation is announced by
 `anthropicKey` and `openaiKey` are stripped.
 
 Normal restore uses the shared `prepareState()` path. Device AI fields
-(`anthropicKey`, `openaiKey`, `aiProvider`, `aiModelAnth`, `aiModelOai`) survive unless the
+(`anthropicKey`, `openaiKey`, `aiProvider`, `aiModelAnth`, `aiModelOai`, `foodHandoffOn`) survive unless the
 backup explicitly contains that field. An absent envelope member leaves the corresponding
 device area untouched. Bad/invalid/newer backups and recovery records are refused without
 placing a healthy app into protected mode.
@@ -230,6 +231,9 @@ fallback. The app cannot verify a browser download and states that limit honestl
 | v55 | No storage-schema change | Consolidated floating rest timer, Home/Settings disclosure hierarchy, accessibility touch targets, and offline status clarity |
 | v56 | Whole-state primary schema 1 → 2 | Adds `forge:data.activeWorkoutDraft` for durable saved-exercise work; migration adds `null`, stamps settings last, and never promotes the read-only `ryan-cut:data` fallback into `forge:data` implicitly |
 | v57 | No storage-schema change | Accessibility completion: named controls, semantic/keyboard tabs, keyboard food results, and dialog focus behavior; stored data remains unchanged |
+| v58 | No storage-schema change | Barcode scanner library self-hosted; stored data unchanged |
+| v59 | No storage-schema change | Housekeeping and approximate browser-storage visibility; stored data unchanged |
+| v60 | No primary schema migration | Optional `foodHandoffOn` preference added; absent or `true` means enabled, so existing/fresh users receive the key-free food handoff without rewriting stored cfg |
 
 Old backups from any era must continue restoring correctly; the permanent suite proves the
 range-era path.

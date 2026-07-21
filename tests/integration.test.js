@@ -173,7 +173,7 @@ check("second boot performs zero sacred-key writes", zeroSacredWrites(H45b));
 
 // Real restore path: shared preparation, AI presence semantics, partial envelopes.
 let R45 = boot(V1_CFG, EMPTY_DATA, null, TEST_PROGRAM);
-R45.window.eval(`cfg.anthropicKey="sk-device"; cfg.aiProvider="anthropic"; saveCfg();`);
+R45.window.eval(`cfg.anthropicKey="sk-device"; cfg.aiProvider="anthropic"; cfg.foodHandoffOn=false; saveCfg();`);
 R45.__storageCalls.length=0;
 const beforeRangeData = R45.window.localStorage.getItem("forge:data");
 const beforeRangeProgram = R45.window.localStorage.getItem("forge:program");
@@ -182,6 +182,7 @@ delete rangeCfg.calTarget; delete rangeCfg.proTarget;
 let restoreResult = R45.window.eval(`restoreBackupEnvelope({cfg:${JSON.stringify(rangeCfg)}})`);
 check("range-era backup restores through shared pipeline", restoreResult.ok && R45.window.eval("cfg.calTarget")===1600 && R45.window.eval("cfg.proTarget")===170);
 check("restore preserves absent device AI fields", R45.window.eval("cfg.anthropicKey")==="sk-device" && R45.window.eval("cfg.aiProvider")==="anthropic");
+check("v60 restore preserves an absent food-handoff preference", R45.window.eval("cfg.foodHandoffOn")===false);
 check("cfg-only partial restore leaves data and program bytes untouched", R45.window.localStorage.getItem("forge:data")===beforeRangeData && R45.window.localStorage.getItem("forge:program")===beforeRangeProgram);
 const cfgBeforeDataOnly = R45.window.localStorage.getItem("forge:cfg");
 const progBeforeDataOnly = R45.window.localStorage.getItem("forge:program");
@@ -707,6 +708,23 @@ dF51.getElementById("addSelBtn").dispatchEvent(new F51.window.Event("click",{bub
 check("v51 logging from search returns to the search box for the next entry", F51.window.eval("window.__f51 && window.__f51.id")==="foodQuery" && F51.window.eval("data.food[todayStr()].length")===4);
 check("v51 handoff behavior untouched by food changes", !!dF51.getElementById("hfPasteBtn"));
 
+// ================= v60: default-on ChatGPT food handoff =================
+const H60 = boot(V2_CFG, EMPTY_DATA);
+const dH60 = H60.window.document;
+const clickH60 = id=>dH60.getElementById(id).dispatchEvent(new H60.window.Event("click",{bubbles:true}));
+check("v60 food handoff is visible by default without a key", !dH60.getElementById("aiFoodCard").classList.contains("hidden") && !dH60.getElementById("aiHandoffControls").classList.contains("hidden"));
+check("v60 Settings toggle reports the default-on state accessibly", dH60.getElementById("foodHandoffToggleBtn").getAttribute("aria-pressed")==="true" && /Disable ChatGPT food handoff/.test(dH60.getElementById("foodHandoffToggleBtn").textContent));
+clickH60("foodHandoffToggleBtn");
+check("v60 disabling food handoff persists false and hides the no-key card", H60.window.eval("cfg.foodHandoffOn")===false && JSON.parse(H60.window.localStorage.getItem("forge:cfg")).foodHandoffOn===false && dH60.getElementById("aiFoodCard").classList.contains("hidden"));
+clickH60("foodHandoffToggleBtn");
+check("v60 food handoff can be restored from Settings", H60.window.eval("cfg.foodHandoffOn")===true && !dH60.getElementById("aiFoodCard").classList.contains("hidden") && dH60.getElementById("foodHandoffToggleBtn").getAttribute("aria-pressed")==="true");
+const H60Api = boot(Object.assign({},V2_CFG,{aiProvider:"anthropic",anthropicKey:"sk-test",foodHandoffOn:true}),EMPTY_DATA);
+check("v60 a configured live API key keeps the live food flow", H60Api.window.document.getElementById("aiHandoffControls").classList.contains("hidden") && !H60Api.window.document.getElementById("aiFoodGoBtn").classList.contains("hidden"));
+const H60Off = boot(Object.assign({},V2_CFG,{aiProvider:"handoff",foodHandoffOn:false}),EMPTY_DATA);
+check("v60 disabling food handoff also hides it in handoff provider mode", H60Off.window.document.getElementById("aiFoodCard").classList.contains("hidden"));
+check("v60 FAQ explains the default-on toggle", H60.window.eval(`FAQ.some(x=>x.q==="What is ChatGPT handoff mode?"&&/on by default/i.test(x.a)&&/Settings/.test(x.a))`));
+check("v60 keeps primary schemaVersion 2", H60.window.eval("SCHEMA_VERSION")===2);
+
 // ================= ChatGPT handoff paste flow =================
 const H = boot(Object.assign({}, EXISTING_CFG, {aiProvider:"handoff"}), EMPTY_DATA);
 const dH = H.window.document;
@@ -880,7 +898,7 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the three data files", ["data-quotes.js","data-foods.js","data-faq.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+"/.test(sw));
-check("v59 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v59"'));
+check("v60 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v60"'));
 const rawIndex = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 check("data scripts load before the app scripts (raw file order)",
   ["data-quotes.js","data-foods.js","data-faq.js"].every(f=>

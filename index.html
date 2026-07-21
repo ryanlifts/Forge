@@ -883,9 +883,12 @@
     </div>
 
     <div class="card">
-      <div class="label" style="margin-bottom:10px;">AI Coach (optional)</div>
-      <div class="note" style="margin:0 0 10px;">Powers the in-app Coach chat, photo meal logging, and AI quick-log. Pick how BlackPyre talks to an AI — keys are stored only on this device and excluded from backups.</div>
-      <div class="label">Provider</div>
+      <div class="label" style="margin-bottom:10px;">AI tools (optional)</div>
+      <div class="label">ChatGPT food handoff</div>
+      <button class="btn ghost small" id="foodHandoffToggleBtn" aria-pressed="true" style="width:100%; margin:8px 0 6px;">Disable ChatGPT food handoff</button>
+      <div class="note" style="margin:0 0 14px;">On by default and no API key is needed. When no live AI key is available, BlackPyre shows copy-and-paste food-estimate tools. Turn this off to hide those tools; normal food logging is unchanged.</div>
+      <div class="note" style="margin:0 0 10px;">The provider below controls live in-app Coach chat and API-based food tools. Keys are stored only on this device and excluded from backups.</div>
+      <div class="label">Live AI provider</div>
       <select id="sAiProvider" aria-label="AI provider" style="margin-bottom:10px;">
         <option value="anthropic">Claude (Anthropic API key)</option>
         <option value="openai">ChatGPT (OpenAI API key)</option>
