@@ -1,6 +1,6 @@
 # BlackPyre Data Model
 
-**Current as of v61 (July 2026). Primary schemaVersion: 2. Recovery format: 1.**
+**Current as of v62 (July 2026). Primary schemaVersion: 2. Recovery format: 1.**
 
 ## Storage keys
 
@@ -29,7 +29,7 @@ removes, or modifies that legacy key.
 `schemaVersion` is physically stored in `forge:cfg`, but versions the complete **primary**
 state and normal backup envelope: settings, logged data, and program.
 
-| Raw value | Meaning / behavior in v61 |
+| Raw value | Meaning / behavior in v62 |
 |---|---|
 | property absent or integer `0` | Pre-versioning legacy state; run numbered migrations from step 0 |
 | integer `1` | v45–v55 state; migrate 1 → 2 by adding an empty active-workout draft field |
@@ -88,11 +88,13 @@ treat unset values as real measurements or targets.
 | `anthropicKey` / `openaiKey` | string | BYOK AI keys | Excluded from normal/readable exports; may exist in device-only recovery records |
 | `aiProvider` | string | `anthropic` \| `openai` \| `handoff` | Controls live AI/coaching provider |
 | `foodHandoffOn` | bool | Show key-free ChatGPT food handoff when no live API key is active | Absent or `true` = enabled; `false` = hidden |
-| `foodSuggestionsOn` | bool | Show local next-food suggestions on today's Food page | Default `false`; opt-in only |
+| `foodSuggestionsOn` | bool | Show target-aware next-food suggestions from the bundled USDA reference catalog plus familiar foods on today's Food page | Default `false`; opt-in only |
 | `foodSuggestionsWeightLoss` | bool | Favor protein-forward and lower-calorie candidates in suggestion scoring | Default `true`; has no effect while suggestions are off |
 | `foodSuggestionsAvoid` | string | Comma/newline-separated name fragments excluded from suggestions | Simple name filter, not an allergy guarantee |
 | `aiModelAnth` / `aiModelOai` | string | Optional model overrides | |
 | `lastCoachDate` | string date | Last weekly coach check-in | |
+
+The v62 suggestion catalog lives in `data-suggestions.js`, not in `forge:cfg` or `forge:data`. Each entry keeps per-100g reference macros, an exact serving gram weight, its USDA NDB number, and the full USDA source description. Suggestions therefore require no schema migration or new stored-food shape.
 
 ## forge:data
 
@@ -239,6 +241,7 @@ fallback. The app cannot verify a browser download and states that limit honestl
 | v59 | No storage-schema change | Housekeeping and approximate browser-storage visibility; stored data unchanged |
 | v60 | No primary schema migration | Optional `foodHandoffOn` preference added; absent or `true` means enabled, so existing/fresh users receive the key-free food handoff without rewriting stored cfg |
 | v61 | No primary schema migration | Adds opt-in `foodSuggestionsOn`, weight-loss scoring preference, and name-exclusion text; all are ordinary cfg defaults and stored food/log shapes remain unchanged |
+| v62 | No primary schema migration | Adds a static 120-food USDA Standard Reference suggestion catalog outside localStorage; cfg fields and stored food/log shapes remain unchanged |
 
 Old backups from any era must continue restoring correctly; the permanent suite proves the
 range-era path.

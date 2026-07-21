@@ -768,8 +768,39 @@ const S61Familiar=boot(Object.assign({},V2_CFG,{foodSuggestionsOn:true}),familia
 S61Familiar.window.eval(`currentMeal="lunch"; foodSuggestionPage=0; renderMealSeg(); renderFood();`);
 check("v61 familiar meal history is represented in suggestions", /Ryan's lunch yogurt/.test(S61Familiar.window.document.getElementById("foodSuggestionsList").textContent) && /Familiar lunch choice/.test(S61Familiar.window.document.getElementById("foodSuggestionsList").textContent));
 check("v61 suggestion buttons remain keyboard-accessible native controls", [...S61Familiar.window.document.querySelectorAll("#foodSuggestionsList button")].every(b=>b.tagName==="BUTTON" && /Review suggestion:/.test(b.getAttribute("aria-label")||"")));
-check("v61 FAQ explains local, review-before-log suggestions and allergy limits", S61.window.eval(`FAQ.some(x=>x.q==="How do food suggestions work?"&&/stored in BlackPyre/.test(x.a)&&/review/.test(x.a)&&/allergy/i.test(x.a))`));
+check("v61 FAQ fully explains local suggestions, review-before-log, visibility limits, and allergy limits", S61.window.eval(`FAQ.some(x=>x.q==="How do food suggestions work?"&&/one food at a time/.test(x.a)&&/works offline/.test(x.a)&&/does not call USDA or an AI/.test(x.a)&&/nothing logs until/.test(x.a)&&/allergy/i.test(x.a)) && FAQ.some(x=>x.q==="Why aren't food suggestions showing?"&&/today's date/.test(x.a)&&/calorie and macro targets/.test(x.a)&&/individual foods/.test(x.a))`));
 check("v61 keeps primary schemaVersion 2", S61.window.eval("SCHEMA_VERSION")===2);
+
+
+// ================= v62: expanded USDA-anchored suggestion catalog =================
+const C62 = boot(Object.assign({},V2_CFG,{foodSuggestionsOn:true}), EMPTY_DATA);
+const dC62 = C62.window.document;
+check("v62 bundled USDA suggestion catalog loads with exactly 120 foods", C62.window.eval(`FOOD_SUGGESTION_CATALOG_VERSION==="USDA Standard Reference 28" && FOOD_SUGGESTION_CATALOG.length===120`));
+check("v62 catalog display names and USDA NDB numbers are unique", C62.window.eval(`new Set(FOOD_SUGGESTION_CATALOG.map(x=>x.name)).size===120 && new Set(FOOD_SUGGESTION_CATALOG.map(x=>x.ndb)).size===120`));
+check("v62 every catalog item keeps traceable source data and rational nutrition ranges", C62.window.eval(`FOOD_SUGGESTION_CATALOG.every(x=>/^\\d{5}$/.test(x.ndb) && x.usdaDescription.length>8 && x.cal100>0 && x.cal100<=900 && x.pro100>=0 && x.pro100<=100 && x.carb100>=0 && x.carb100<=100 && x.fat100>=0 && x.fat100<=100 && x.servingG>=5 && x.servingG<=500 && /g\\)/.test(x.servingLabel))`));
+check("v62 catalog covers protein, plant protein, carbs, produce, snacks, and fats", C62.window.eval(`["protein","plant-protein","carb","produce","snack","fat"].every(cat=>FOOD_SUGGESTION_CATALOG.some(x=>x.category===cat))`));
+check("v62 benchmark macros match the USDA source values exactly", C62.window.eval(`
+  (function(){
+    const by=n=>FOOD_SUGGESTION_CATALOG.find(x=>x.ndb===n);
+    return JSON.stringify([by("05064").cal100,by("05064").pro100,by("05064").carb100,by("05064").fat100])===JSON.stringify([165,31.02,0,3.57])
+      && JSON.stringify([by("01015").cal100,by("01015").pro100,by("01015").carb100,by("01015").fat100])===JSON.stringify([81,10.45,4.76,2.27])
+      && JSON.stringify([by("01256").cal100,by("01256").pro100,by("01256").carb100,by("01256").fat100])===JSON.stringify([59,10.19,3.6,0.39])
+      && JSON.stringify([by("01129").cal100,by("01129").pro100,by("01129").carb100,by("01129").fat100])===JSON.stringify([155,12.58,1.12,10.61])
+      && JSON.stringify([by("09040").cal100,by("09040").pro100,by("09040").carb100,by("09040").fat100])===JSON.stringify([89,1.09,22.84,0.33]);
+  })()`));
+check("v62 fresh users receive the full catalog without prior food history", C62.window.eval(`foodSuggestionCandidates().length===120 && foodSuggestionCandidates().every(c=>c.source==="catalog")`));
+check("v62 catalog candidates preserve USDA identity and exact serving metadata", C62.window.eval(`foodSuggestionCandidates().every(c=>c.food.brand==="USDA reference · SR28" && /^\\d{5}$/.test(c.food.suggestionNdb) && c.food.suggestionUsdaDescription && c.unit==="serving" && c.amount===1 && c.grams===c.food.servingG && c.portion===c.food.servingLabel)`));
+const suggestionSection62 = fs.readFileSync(path.join(__dirname,"..","scripts","02-food.js"),"utf8").split("v62: EXPANDED USDA-ANCHORED FOOD SUGGESTIONS")[1].split("OFF product mapping")[0];
+check("v62 recommendation catalog no longer depends on matching LOCAL_DB names", !/LOCAL_DB\\.find|FOOD_SUGGESTION_STARTERS/.test(suggestionSection62));
+check("v62 rendered recommendations identify USDA reference choices", dC62.querySelectorAll("#foodSuggestionsList button.result").length===3 && [...dC62.querySelectorAll("#foodSuggestionsList .r-brand")].every(x=>/USDA reference/.test(x.textContent)));
+const beforeReview62=C62.window.eval(`(data.food[todayStr()]||[]).length`);
+C62.window.eval(`reviewFoodSuggestion(foodSuggestionCandidates().find(c=>c.food.suggestionNdb==="05064"))`);
+check("v62 a catalog suggestion opens its exact listed serving for review", dC62.getElementById("qtyUnit").value==="serving" && Number(dC62.getElementById("qtyAmount").value)===1 && /4 oz cooked \(113g\)/.test(dC62.getElementById("qtyUnit").selectedOptions[0].textContent));
+check("v62 review shows the USDA per-100g values and correctly scaled serving", /USDA reference · SR28/.test(dC62.getElementById("selName").textContent) && /165 kcal/.test(dC62.getElementById("selPer100").textContent) && dC62.getElementById("calcCal").textContent==="186" && dC62.getElementById("calcPro").textContent==="35");
+check("v62 reviewing a broad-catalog suggestion never auto-logs it", C62.window.eval(`(data.food[todayStr()]||[]).length`)===beforeReview62);
+check("v62 FAQ explains USDA sourcing, exact servings, and real-world variation", C62.window.eval(`FAQ.some(x=>x.q==="How accurate are suggested-food calories and macros?"&&/per 100 grams/.test(x.a)&&/exact gram weight/.test(x.a)&&/NDB number/.test(x.a)&&/brand/.test(x.a)) && FAQ.some(x=>x.q==="How do food suggestions work?"&&/120 common foods/.test(x.a)&&/familiar foods receive a bonus but are not required/.test(x.a)&&/does not call USDA or an AI/.test(x.a))`));
+check("v62 service worker precaches the catalog and uses the v62 cache", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v62"'); })());
+check("v62 keeps primary schemaVersion 2", C62.window.eval("SCHEMA_VERSION")===2);
 
 // ================= ChatGPT handoff paste flow =================
 const H = boot(Object.assign({}, EXISTING_CFG, {aiProvider:"handoff"}), EMPTY_DATA);
@@ -939,15 +970,15 @@ check("v56 FAQ documents offline fast-fail and handoff availability", P.window.e
 
 check("FAQ uses current program identity and Manage labels", P.window.eval(`FAQ.some(x=>x.q==="How do programs work?"&&x.a.includes("Current program")&&x.a.includes("Manage")&&x.a.includes("Save file")&&x.a.includes("Share"))`));
 check("FAQ no longer sends users to the retired Program tools label", P.window.eval(`!FAQ.some(x=>x.a&&x.a.includes("Program tools"))`));
-check("FAQ privacy copy distinguishes local data from optional network requests", P.window.eval(`FAQ.some(x=>x.q==="Where is my data stored? Is it private?"&&/on this device/.test(x.a)&&/Online food searches/.test(x.a)&&/Optional AI features/.test(x.a))`));
+check("FAQ privacy and storage copy distinguish local data, network requests, and approximate usage", P.window.eval(`FAQ.some(x=>x.q==="Where is my data stored? Is it private?"&&/on this device/.test(x.a)&&/Local food suggestions/.test(x.a)&&/Online food searches/.test(x.a)&&/Optional AI features/.test(x.a)) && FAQ.some(x=>x.q==="How much storage is BlackPyre using?"&&/Settings → Data &amp; recovery/.test(x.a)&&/approximate browser-storage/.test(x.a)&&/Back up before clearing/.test(x.a))`));
 check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.some(f=>/chicken breast/i.test(f.n))`));
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
-check("SW precaches the three data files", ["data-quotes.js","data-foods.js","data-faq.js"].every(f=>sw.includes('"./'+f+'"')));
+check("SW precaches the four data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+"/.test(sw));
-check("v61 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v61"'));
+check("v62 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v62"'));
 const rawIndex = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 check("data scripts load before the app scripts (raw file order)",
-  ["data-quotes.js","data-foods.js","data-faq.js"].every(f=>
+  ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js"].every(f=>
     rawIndex.indexOf('src="'+f+'"') > -1 &&
     rawIndex.indexOf('src="'+f+'"') < rawIndex.indexOf('src="scripts/01-storage.js"')));
 
@@ -962,14 +993,14 @@ check("no inline app script remains in index.html", !/<script>(?!\s*<)/.test(raw
 check("SW precaches all 7 slices", SLICES.every(f=>sw.includes('"./scripts/'+f+'"')));
 
 // ================= Phase 2 corrections: strict mode, exact order, migration identity =================
-const LOCAL_SCRIPTS = ["data-quotes.js","data-foods.js","data-faq.js"].concat(SLICES.map(f=>"scripts/"+f));
+const LOCAL_SCRIPTS = ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js"].concat(SLICES.map(f=>"scripts/"+f));
 check("every local classic script begins with the strict-mode directive",
   LOCAL_SCRIPTS.every(f=>fs.readFileSync(path.join(__dirname, "..", f), "utf8").startsWith('"use strict";')));
 
 const APPROVED_ORDER = LOCAL_SCRIPTS; // data files, then slices 01..07 — this order is load-bearing
 const scriptTags = [...rawIndex.matchAll(/<script\b[^>]*\bsrc="([^"]+)"[^>]*><\/script>/g)];
-check("exactly the 10 approved scripts, each exactly once, in the approved order",
-  scriptTags.length===10 && scriptTags.every((t,i)=>t[1]===APPROVED_ORDER[i]));
+check("exactly the 11 approved scripts, each exactly once, in the approved order",
+  scriptTags.length===11 && scriptTags.every((t,i)=>t[1]===APPROVED_ORDER[i]));
 check("no local script tag uses async, defer, or type=module",
   scriptTags.every(t=>!/\basync\b|\bdefer\b|type="module"/.test(t[0])));
 

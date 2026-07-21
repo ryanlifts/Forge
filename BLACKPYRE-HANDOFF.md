@@ -1,11 +1,15 @@
-# BLACKPYRE HANDOFF — current as of v61 (July 2026)
+# BLACKPYRE HANDOFF — current as of v62 (July 2026)
 
 You are a collaborator on BlackPyre, a fitness PWA at
-`ryanlifts.github.io/Forge/` (repo: `ryanlifts/Forge`). This repository represents **v61**, built on the completed v57 Phase 4 foundation and the v58–v60 security, housekeeping, and food-handoff releases. Confirm the GitHub Pages deployment/cache
+`ryanlifts.github.io/Forge/` (repo: `ryanlifts/Forge`). This repository represents **v62**, built on the completed v57 Phase 4 foundation and the v58–v61 security, housekeeping, food-handoff, and local-suggestion releases. Confirm the GitHub Pages deployment/cache
 before calling it live.
 
 The two documents reproduced below (`ARCHITECTURE.md` and `DATA-MODEL.md`) live in the repo
-root, are binding, and are current as of v61. Read them before proposing or writing code.
+root, are binding, and are current as of v62. Read them before proposing or writing code.
+
+## v62 — expanded USDA-anchored food suggestions
+
+Expands “What could I eat next?” from a narrow starter set into a bundled catalog of 120 common foods spanning animal protein, plant protein, grains/starches, produce, snacks, and fats. Each entry uses USDA Standard Reference 28 calories and macros per 100g, an exact listed serving gram weight, a five-digit USDA NDB number, and the full source description. The recommendation engine ranks that catalog alongside recents and My Foods, so prior history earns a familiarity bonus but is never required. The catalog ships with the app and works offline; ranking still makes no live USDA or AI request. Tapping a choice opens the existing serving/macros review and never auto-logs. Copy and FAQ now state the essential accuracy limit: these are reference averages for the named preparation, while brands, recipes, trimming, draining, and cooking can differ. No primary schema migration or stored food-shape change. Cache: blackpyre-v62. Tests: **456 (105 unit + 351 integration)**.
 
 ## v61 — local food suggestions
 
@@ -42,11 +46,11 @@ Cache: blackpyre-v58. No storage, schema, or behavior changes.
 
 ## Current state
 
-1. The permanent `/tests` gauntlet has **441 checks: 105 unit + 336 integration**. GitHub
+1. The permanent `/tests` gauntlet has **456 checks: 105 unit + 351 integration**. GitHub
    Actions runs it on every push. Tests are cumulative and are never deleted or weakened.
 2. `tests/bella-reference.b64` is the frozen memorial byte truth. Exact identity and embed
    count 1 are test-enforced; never regenerate, re-render, edit, or replace it.
-3. App structure remains markup/styles in `index.html`, three static data scripts, then
+3. App structure remains markup/styles in `index.html`, four static data scripts, then
    `scripts/01-storage.js` through `scripts/07-boot.js` in strict order. Classic scripts,
    shared global scope, no ES modules, no build step — permanent.
 4. Primary state remains `forge:cfg`, `forge:data`, `forge:program` at **schemaVersion 2**.
@@ -55,11 +59,11 @@ Cache: blackpyre-v58. No storage, schema, or behavior changes.
    Undo; program replacement is confirmed; offline network-only actions fail fast.
 6. ChatGPT food handoff is on by default without a key, has an independent Settings toggle,
    and yields to a configured live API key for API-based food logging.
-7. Food suggestions are opt-in, local-only, target-aware, preference-filtered, and review-before-log.
+7. Food suggestions are opt-in, target-aware, preference-filtered, offline-capable, and review-before-log; the bundled 120-food USDA reference catalog does not require prior food history or a live request.
 8. v57 completes programmatic control names, semantic/keyboard bottom tabs, keyboard food
    results, named dynamic onboarding/workout/builder controls, and dialog focus entry/return.
 9. Browser zoom remains enabled; visible focus behavior is preserved.
-10. Cache: `blackpyre-v61`.
+10. Cache: `blackpyre-v62`.
 
 ## Five-phase status
 
@@ -99,7 +103,7 @@ notice or close/reopen as directed. Every release gets a plain-language report a
 
 # BlackPyre Architecture
 
-**Current as of v61 (July 2026).**
+**Current as of v62 (July 2026).**
 
 A single-page PWA: vanilla HTML/CSS/JS, no framework, no build step, localStorage only.
 Deployed on GitHub Pages. Developed AI-assisted (Claude / ChatGPT) from a phone — every rule
@@ -121,9 +125,9 @@ below exists to keep that workflow safe.
 
 | File | Role |
 |---|---|
-| `index.html` | Markup + styles only (~172 KB in v57); loads the data files then the 7 app slices; includes protected/recovery UI, semantic tabs/dialogs/live regions, Home/Settings disclosures, offline notice, compact program identity, persistent-workout-draft controls, the consolidated Train-only rest dock, the default-on ChatGPT food-handoff toggle, and opt-in local food-suggestion controls |
+| `index.html` | Markup + styles only (~172 KB in v57); loads the data files then the 7 app slices; includes protected/recovery UI, semantic tabs/dialogs/live regions, Home/Settings disclosures, offline notice, compact program identity, persistent-workout-draft controls, the consolidated Train-only rest dock, the default-on ChatGPT food-handoff toggle, and opt-in USDA-anchored food-suggestion controls |
 | `scripts/01-storage.js` | primary/recovery keys, defaults, schema 0→1→2 preparation, commit/rollback, LKG lifecycle, structured diagnosis, quarantine transaction, protected-mode guards, shared Undo service, state, AI-setting restore preservation, food-suggestion defaults, accessibility naming/dialog focus/tab keyboard behavior, network-status UI, predictable view activation/tabs |
-| `scripts/02-food.js` | bars, meals, food logging, keyboard-operable food/recent result buttons, deterministic local next-food suggestions (remaining-target scoring, familiar-food preference, exclusions, review-before-log), clear manual-entry validation, shared deletion Undo, offline local-search/barcode/scanner fast-fail |
+| `scripts/02-food.js` | bars, meals, food logging, keyboard-operable food/recent result buttons, deterministic next-food suggestions using a bundled 120-food USDA reference catalog plus familiar foods (remaining-target scoring, exact listed servings, exclusions, review-before-log), clear manual-entry validation, shared deletion Undo, offline local-search/barcode/scanner fast-fail |
 | `scripts/03-train.js` | training sessions, durable saved-exercise drafts with Resume/Discard, compact current-program identity and confirmed replacement, exercise-level Save/Completed/Edit integrity, named dynamic workout/program-builder controls, protected session-type changes, clear validation, conservative auto-progression, aligned mobile set controls and touch targets |
 | `scripts/04-weight.js` | weight chart, weigh-in/saved-meal Undo, motivation render, e1RM/PR engine, TDEE, streak, finish day, plate math, consolidated manual rest timer with duration chooser, share |
 | `scripts/05-ai.js` | USDA/barcode lookups, usual-meal, schedule UI, kudos, offline direct-AI fast-fail, confirmed AI/pasted program replacement, measurement Undo, coach chat, check-in, default-on/Settings-toggleable key-free food handoff with live-API preference and first-item review positioning, AI report, analytics |
@@ -132,20 +136,21 @@ below exists to keep that workflow safe.
 | `scripts/07-boot.js` | dash, Easter egg, protected/recovery panel orchestration, network-status initialization, approved update toast, boot |
 | `data-quotes.js` | QUOTES vault — classic script, loads before the app slices, shares global scope |
 | `data-foods.js` | LOCAL_DB food database + ALT_MAP exercise swaps — classic script |
+| `data-suggestions.js` | 120-food USDA Standard Reference suggestion catalog with per-100g calories/macros, exact serving grams, NDB numbers, and full source descriptions — classic script |
 | `data-faq.js` | FAQ content — classic script |
 | `sw.js` | Offline shell (cache-first), OFF API network-only, cache name = release version |
 | `manifest.json` | PWA identity — name/short_name **BlackPyre** |
 | `icon-*.png`, `apple-touch-icon.png` | Gold dumbbell icons |
 | `tests/PHASE2-PROOF.md` | Permanent historical record of the Phase 2 byte-identity proof |
-| `tests/` | Permanent gauntlet — 441 automated checks (105 unit + 336 integration), reproducible jsdom lockfile, and `bella-reference.b64` (frozen memorial byte truth; never edited). Not precached |
+| `tests/` | Permanent gauntlet — 456 automated checks (105 unit + 351 integration), reproducible jsdom lockfile, and `bella-reference.b64` (frozen memorial byte truth; never edited). Not precached |
 | `.github/workflows/tests.yml` | Runs the gauntlet on every push |
 | `DATA-MODEL.md` | Primary storage schema, recovery-record contracts, and migration history |
 
 ## index.html section map (JS, in execution order)
 
 storage keys & defaults → migrations/recovery vault → pure helpers → state → tabs → bars →
-FOOD (meals, logging, local remaining-target food suggestions, USDA/OFF/barcode, usual-meal, kudos, schedule UI) →
-*(QUOTES / LOCAL_DB / ALT_MAP / FAQ live in the data-*.js files, loaded first)* →
+FOOD (meals, logging, bundled USDA-anchored remaining-target food suggestions, USDA/OFF/barcode, usual-meal, kudos, schedule UI) →
+*(QUOTES / LOCAL_DB / ALT_MAP / FOOD_SUGGESTION_CATALOG / FAQ live in the data-*.js files, loaded first)* →
 TRAIN (sessions, e1RM/PR engine, plate math, rest timer, programs/share) →
 WEIGHT (chart, measurements, adaptive TDEE, projections) →
 streak → finish day → AI ENGINE (BYOK, multi-provider) →
@@ -203,13 +208,13 @@ Slice rules from here on:
 - Integration suite: all historic app flows plus protected zero-write behavior, mutation
   re-sync, interrupted commits, LKG create/refresh/failure/quota rules, area diagnosis,
   all three recovery sources, quarantine ordering/retention/export/deletion, legacy fallback,
-  API-key boundaries, read-back failure, durable workout-draft save/resume/discard/failure behavior, exercise-level workout saving, protected session-type changes, routine-deletion Undo, manual-food validation, confirmed program replacement, offline network fast-fail, conservative progression, compact program identity/separate management, consolidated Train-only rest duration/control dock, Home/Settings disclosure hierarchy, offline status transitions, practical compact-control touch targets, predictable tab/session positioning, 16px editable controls, complete control naming, semantic/keyboard bottom tabs, keyboard food results, dialog focus entry/return, dynamic onboarding/workout/builder accessibility, default-on food handoff/toggle/restore behavior, deterministic opt-in food suggestions (remaining targets, familiar foods, exclusions, refresh, historical-date hiding, and review-before-log), handoff paste/log and first-item review positioning, update toast, and Easter egg timing.
+  API-key boundaries, read-back failure, durable workout-draft save/resume/discard/failure behavior, exercise-level workout saving, protected session-type changes, routine-deletion Undo, manual-food validation, confirmed program replacement, offline network fast-fail, conservative progression, compact program identity/separate management, consolidated Train-only rest duration/control dock, Home/Settings disclosure hierarchy, offline status transitions, practical compact-control touch targets, predictable tab/session positioning, 16px editable controls, complete control naming, semantic/keyboard bottom tabs, keyboard food results, dialog focus entry/return, dynamic onboarding/workout/builder accessibility, default-on food handoff/toggle/restore behavior, deterministic opt-in food suggestions (120-item USDA reference catalog, exact servings, remaining targets, familiar-food bonus, exclusions, refresh, historical-date hiding, and review-before-log), handoff paste/log and first-item review positioning, update toast, and Easter egg timing.
 - **Wording-pin convention (v59):** tests that pin user-facing or FAQ text must pin only
   short, load-bearing guarantee phrases ("never starts automatically", "does not start or
   reset"), never full sentences, layout-adjacent wording, or phrasing that a routine copy
   edit would touch. Release-pinned assertions (like the exact SW cache string) are advanced
   each release as part of the bump — that advance is maintenance, not weakening.
-- The permanent suite is **441 automated checks** and only grows. New features add tests in
+- The permanent suite is **456 automated checks** and only grows. New features add tests in
   the same release; existing checks are never deleted or weakened. The roughly 700 checks
   written before Phase 0 were old throwaway checks, not this permanent suite.
 - jsdom quirks: stub `URL.createObjectURL`, ignore `scrollTo` warnings, `select()` runs via
@@ -231,7 +236,7 @@ Slice rules from here on:
 
 # BlackPyre Data Model
 
-**Current as of v61 (July 2026). Primary schemaVersion: 2. Recovery format: 1.**
+**Current as of v62 (July 2026). Primary schemaVersion: 2. Recovery format: 1.**
 
 ## Storage keys
 
@@ -260,7 +265,7 @@ removes, or modifies that legacy key.
 `schemaVersion` is physically stored in `forge:cfg`, but versions the complete **primary**
 state and normal backup envelope: settings, logged data, and program.
 
-| Raw value | Meaning / behavior in v61 |
+| Raw value | Meaning / behavior in v62 |
 |---|---|
 | property absent or integer `0` | Pre-versioning legacy state; run numbered migrations from step 0 |
 | integer `1` | v45–v55 state; migrate 1 → 2 by adding an empty active-workout draft field |
@@ -319,11 +324,13 @@ treat unset values as real measurements or targets.
 | `anthropicKey` / `openaiKey` | string | BYOK AI keys | Excluded from normal/readable exports; may exist in device-only recovery records |
 | `aiProvider` | string | `anthropic` \| `openai` \| `handoff` | Controls live AI/coaching provider |
 | `foodHandoffOn` | bool | Show key-free ChatGPT food handoff when no live API key is active | Absent or `true` = enabled; `false` = hidden |
-| `foodSuggestionsOn` | bool | Show local next-food suggestions on today's Food page | Default `false`; opt-in only |
+| `foodSuggestionsOn` | bool | Show target-aware next-food suggestions from the bundled USDA reference catalog plus familiar foods on today's Food page | Default `false`; opt-in only |
 | `foodSuggestionsWeightLoss` | bool | Favor protein-forward and lower-calorie candidates in suggestion scoring | Default `true`; has no effect while suggestions are off |
 | `foodSuggestionsAvoid` | string | Comma/newline-separated name fragments excluded from suggestions | Simple name filter, not an allergy guarantee |
 | `aiModelAnth` / `aiModelOai` | string | Optional model overrides | |
 | `lastCoachDate` | string date | Last weekly coach check-in | |
+
+The v62 suggestion catalog lives in `data-suggestions.js`, not in `forge:cfg` or `forge:data`. Each entry keeps per-100g reference macros, an exact serving gram weight, its USDA NDB number, and the full USDA source description. Suggestions therefore require no schema migration or new stored-food shape.
 
 ## forge:data
 
@@ -470,6 +477,7 @@ fallback. The app cannot verify a browser download and states that limit honestl
 | v59 | No storage-schema change | Housekeeping and approximate browser-storage visibility; stored data unchanged |
 | v60 | No primary schema migration | Optional `foodHandoffOn` preference added; absent or `true` means enabled, so existing/fresh users receive the key-free food handoff without rewriting stored cfg |
 | v61 | No primary schema migration | Adds opt-in `foodSuggestionsOn`, weight-loss scoring preference, and name-exclusion text; all are ordinary cfg defaults and stored food/log shapes remain unchanged |
+| v62 | No primary schema migration | Adds a static 120-food USDA Standard Reference suggestion catalog outside localStorage; cfg fields and stored food/log shapes remain unchanged |
 
 Old backups from any era must continue restoring correctly; the permanent suite proves the
 range-era path.

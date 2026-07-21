@@ -74,39 +74,10 @@ function allBarsHTML(s, ds){
 }
 
 
-// ================== v61: LOCAL FOOD SUGGESTIONS ==================
-// Deterministic and private: suggestions use only remaining targets plus foods already
-// stored in BlackPyre. Nothing is sent online and nothing is logged until the user
-// reviews the normal amount card and taps Add.
-const FOOD_SUGGESTION_STARTERS = [
-  {name:"Chicken breast, cooked", grams:150, portion:"150g", category:"protein"},
-  {name:"Turkey breast, cooked", grams:150, portion:"150g", category:"protein"},
-  {name:"Tuna, canned in water", grams:120, portion:"120g", category:"protein"},
-  {name:"Shrimp, cooked", grams:150, portion:"150g", category:"protein"},
-  {name:"Greek yogurt, nonfat plain", grams:170, portion:"170g", category:"protein"},
-  {name:"Cottage cheese, 2%", grams:200, portion:"200g", category:"protein"},
-  {name:"Egg, whole", grams:100, portion:"about 2 eggs (100g)", category:"protein"},
-  {name:"Egg white", grams:150, portion:"150g", category:"protein"},
-  {name:"Whey protein powder", grams:30, portion:"30g", category:"protein"},
-  {name:"Protein shake (premade)", grams:325, portion:"one 325g shake", category:"protein"},
-  {name:"White rice, cooked", grams:150, portion:"150g", category:"carb"},
-  {name:"Brown rice, cooked", grams:150, portion:"150g", category:"carb"},
-  {name:"Oats, dry", grams:40, portion:"40g", category:"carb"},
-  {name:"Oatmeal, cooked with water", grams:235, portion:"about 1 cup (235g)", category:"carb"},
-  {name:"Potato, baked with skin", grams:250, portion:"one medium-large potato (250g)", category:"carb"},
-  {name:"Sweet potato, baked", grams:200, portion:"one medium sweet potato (200g)", category:"carb"},
-  {name:"Whole wheat bread", grams:80, portion:"about 2 slices (80g)", category:"carb"},
-  {name:"Apple", grams:180, portion:"one medium apple (180g)", category:"produce"},
-  {name:"Banana", grams:120, portion:"one medium banana (120g)", category:"produce"},
-  {name:"Strawberries", grams:200, portion:"200g", category:"produce"},
-  {name:"Blueberries", grams:150, portion:"150g", category:"produce"},
-  {name:"Broccoli, cooked", grams:200, portion:"200g", category:"produce"},
-  {name:"Mixed salad greens", grams:150, portion:"a large bowl (150g)", category:"produce"},
-  {name:"Popcorn, air-popped", grams:25, portion:"about 3 cups (25g)", category:"snack"},
-  {name:"Avocado", grams:75, portion:"about half an avocado (75g)", category:"fat"},
-  {name:"Peanut butter", grams:32, portion:"2 tbsp (32g)", category:"fat"},
-  {name:"Almonds", grams:28, portion:"1 oz (28g)", category:"fat"},
-];
+// ================== v62: EXPANDED USDA-ANCHORED FOOD SUGGESTIONS ==================
+// Deterministic and private: suggestions rank the bundled USDA reference catalog
+// alongside foods already stored in BlackPyre. No live database or AI call is made.
+// Nothing is logged until the user reviews the normal amount card and taps Add.
 let foodSuggestionPage = 0;
 
 function foodSuggestionsEnabled(){ return cfg.foodSuggestionsOn===true; }
@@ -162,11 +133,14 @@ function foodSuggestionCandidates(){
     const c=makeFoodSuggestionCandidate(f,1,"serving",Number(f.servingG),portion,"saved",null);
     if (c) out.push(c);
   });
-  FOOD_SUGGESTION_STARTERS.forEach(st=>{
-    const f0=LOCAL_DB.find(x=>String(x.n).toLowerCase()===st.name.toLowerCase());
-    if (!f0) return;
-    const food={name:f0.n,brand:"Built-in · whole food",cal100:f0.cal,pro100:f0.pro,carb100:f0.carb,fat100:f0.fat,servingG:null,servingLabel:null};
-    const c=makeFoodSuggestionCandidate(food,st.grams,"g",st.grams,st.portion,"starter",st.category);
+  FOOD_SUGGESTION_CATALOG.forEach(st=>{
+    const food={
+      name:st.name, brand:"USDA reference · SR28",
+      cal100:st.cal100, pro100:st.pro100, carb100:st.carb100, fat100:st.fat100,
+      servingG:st.servingG, servingLabel:st.servingLabel,
+      suggestionNdb:st.ndb, suggestionUsdaDescription:st.usdaDescription
+    };
+    const c=makeFoodSuggestionCandidate(food,1,"serving",st.servingG,st.servingLabel,"catalog",st.category);
     if (c) out.push(c);
   });
   const avoids=foodSuggestionAvoidTerms();
@@ -176,7 +150,7 @@ function foodSuggestionCandidates(){
     if (avoids.some(t=>hay.includes(t))) return;
     const key=String(c.food.name).toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
     const old=best.get(key);
-    if (!old || c.familiar+c.mealFamiliar > old.familiar+old.mealFamiliar || (c.source!=="starter" && old.source==="starter")) best.set(key,c);
+    if (!old || c.familiar+c.mealFamiliar > old.familiar+old.mealFamiliar || (c.source!=="catalog" && old.source==="catalog")) best.set(key,c);
   });
   return [...best.values()];
 }
@@ -261,7 +235,7 @@ function renderFoodSuggestions(){
   }
   const picked=chooseFoodSuggestions(rankedFoodSuggestions(rem));
   if (!picked.length){
-    list.innerHTML='<div class="note">No stored food fits the remaining targets and your exclusion list. Adjust the exclusions or log normally.</div>';
+    list.innerHTML='<div class="note">No suggestion fits the remaining targets and your exclusion list. Adjust the exclusions or log normally.</div>';
     return;
   }
   list.innerHTML="";
@@ -270,7 +244,7 @@ function renderFoodSuggestions(){
     b.type="button"; b.className="result";
     b.setAttribute("aria-label","Review suggestion: "+c.food.name+", "+c.portion);
     b.innerHTML='<div class="r-name">'+esc(c.food.name)+' <span style="color:var(--dim); font-weight:400;">· '+esc(c.portion)+'</span></div>'
-      +'<div class="r-brand">'+esc(foodSuggestionReason(c,rem))+'</div>'
+      +'<div class="r-brand">'+esc(foodSuggestionReason(c,rem)+(c.source==="catalog" ? " · USDA reference" : ""))+'</div>'
       +'<div class="r-macros">'+Math.round(c.cal)+' kcal · '+Math.round(c.pro)+'P / '+Math.round(c.carb)+'C / '+Math.round(c.fat)+'F · tap to review</div>';
     b.addEventListener("click",()=>reviewFoodSuggestion(c));
     list.appendChild(b);

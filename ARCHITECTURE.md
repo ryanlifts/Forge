@@ -1,6 +1,6 @@
 # BlackPyre Architecture
 
-**Current as of v61 (July 2026).**
+**Current as of v62 (July 2026).**
 
 A single-page PWA: vanilla HTML/CSS/JS, no framework, no build step, localStorage only.
 Deployed on GitHub Pages. Developed AI-assisted (Claude / ChatGPT) from a phone — every rule
@@ -22,9 +22,9 @@ below exists to keep that workflow safe.
 
 | File | Role |
 |---|---|
-| `index.html` | Markup + styles only (~172 KB in v57); loads the data files then the 7 app slices; includes protected/recovery UI, semantic tabs/dialogs/live regions, Home/Settings disclosures, offline notice, compact program identity, persistent-workout-draft controls, the consolidated Train-only rest dock, the default-on ChatGPT food-handoff toggle, and opt-in local food-suggestion controls |
+| `index.html` | Markup + styles only (~172 KB in v57); loads the data files then the 7 app slices; includes protected/recovery UI, semantic tabs/dialogs/live regions, Home/Settings disclosures, offline notice, compact program identity, persistent-workout-draft controls, the consolidated Train-only rest dock, the default-on ChatGPT food-handoff toggle, and opt-in USDA-anchored food-suggestion controls |
 | `scripts/01-storage.js` | primary/recovery keys, defaults, schema 0→1→2 preparation, commit/rollback, LKG lifecycle, structured diagnosis, quarantine transaction, protected-mode guards, shared Undo service, state, AI-setting restore preservation, food-suggestion defaults, accessibility naming/dialog focus/tab keyboard behavior, network-status UI, predictable view activation/tabs |
-| `scripts/02-food.js` | bars, meals, food logging, keyboard-operable food/recent result buttons, deterministic local next-food suggestions (remaining-target scoring, familiar-food preference, exclusions, review-before-log), clear manual-entry validation, shared deletion Undo, offline local-search/barcode/scanner fast-fail |
+| `scripts/02-food.js` | bars, meals, food logging, keyboard-operable food/recent result buttons, deterministic next-food suggestions using a bundled 120-food USDA reference catalog plus familiar foods (remaining-target scoring, exact listed servings, exclusions, review-before-log), clear manual-entry validation, shared deletion Undo, offline local-search/barcode/scanner fast-fail |
 | `scripts/03-train.js` | training sessions, durable saved-exercise drafts with Resume/Discard, compact current-program identity and confirmed replacement, exercise-level Save/Completed/Edit integrity, named dynamic workout/program-builder controls, protected session-type changes, clear validation, conservative auto-progression, aligned mobile set controls and touch targets |
 | `scripts/04-weight.js` | weight chart, weigh-in/saved-meal Undo, motivation render, e1RM/PR engine, TDEE, streak, finish day, plate math, consolidated manual rest timer with duration chooser, share |
 | `scripts/05-ai.js` | USDA/barcode lookups, usual-meal, schedule UI, kudos, offline direct-AI fast-fail, confirmed AI/pasted program replacement, measurement Undo, coach chat, check-in, default-on/Settings-toggleable key-free food handoff with live-API preference and first-item review positioning, AI report, analytics |
@@ -33,20 +33,21 @@ below exists to keep that workflow safe.
 | `scripts/07-boot.js` | dash, Easter egg, protected/recovery panel orchestration, network-status initialization, approved update toast, boot |
 | `data-quotes.js` | QUOTES vault — classic script, loads before the app slices, shares global scope |
 | `data-foods.js` | LOCAL_DB food database + ALT_MAP exercise swaps — classic script |
+| `data-suggestions.js` | 120-food USDA Standard Reference suggestion catalog with per-100g calories/macros, exact serving grams, NDB numbers, and full source descriptions — classic script |
 | `data-faq.js` | FAQ content — classic script |
 | `sw.js` | Offline shell (cache-first), OFF API network-only, cache name = release version |
 | `manifest.json` | PWA identity — name/short_name **BlackPyre** |
 | `icon-*.png`, `apple-touch-icon.png` | Gold dumbbell icons |
 | `tests/PHASE2-PROOF.md` | Permanent historical record of the Phase 2 byte-identity proof |
-| `tests/` | Permanent gauntlet — 441 automated checks (105 unit + 336 integration), reproducible jsdom lockfile, and `bella-reference.b64` (frozen memorial byte truth; never edited). Not precached |
+| `tests/` | Permanent gauntlet — 456 automated checks (105 unit + 351 integration), reproducible jsdom lockfile, and `bella-reference.b64` (frozen memorial byte truth; never edited). Not precached |
 | `.github/workflows/tests.yml` | Runs the gauntlet on every push |
 | `DATA-MODEL.md` | Primary storage schema, recovery-record contracts, and migration history |
 
 ## index.html section map (JS, in execution order)
 
 storage keys & defaults → migrations/recovery vault → pure helpers → state → tabs → bars →
-FOOD (meals, logging, local remaining-target food suggestions, USDA/OFF/barcode, usual-meal, kudos, schedule UI) →
-*(QUOTES / LOCAL_DB / ALT_MAP / FAQ live in the data-*.js files, loaded first)* →
+FOOD (meals, logging, bundled USDA-anchored remaining-target food suggestions, USDA/OFF/barcode, usual-meal, kudos, schedule UI) →
+*(QUOTES / LOCAL_DB / ALT_MAP / FOOD_SUGGESTION_CATALOG / FAQ live in the data-*.js files, loaded first)* →
 TRAIN (sessions, e1RM/PR engine, plate math, rest timer, programs/share) →
 WEIGHT (chart, measurements, adaptive TDEE, projections) →
 streak → finish day → AI ENGINE (BYOK, multi-provider) →
@@ -104,13 +105,13 @@ Slice rules from here on:
 - Integration suite: all historic app flows plus protected zero-write behavior, mutation
   re-sync, interrupted commits, LKG create/refresh/failure/quota rules, area diagnosis,
   all three recovery sources, quarantine ordering/retention/export/deletion, legacy fallback,
-  API-key boundaries, read-back failure, durable workout-draft save/resume/discard/failure behavior, exercise-level workout saving, protected session-type changes, routine-deletion Undo, manual-food validation, confirmed program replacement, offline network fast-fail, conservative progression, compact program identity/separate management, consolidated Train-only rest duration/control dock, Home/Settings disclosure hierarchy, offline status transitions, practical compact-control touch targets, predictable tab/session positioning, 16px editable controls, complete control naming, semantic/keyboard bottom tabs, keyboard food results, dialog focus entry/return, dynamic onboarding/workout/builder accessibility, default-on food handoff/toggle/restore behavior, deterministic opt-in food suggestions (remaining targets, familiar foods, exclusions, refresh, historical-date hiding, and review-before-log), handoff paste/log and first-item review positioning, update toast, and Easter egg timing.
+  API-key boundaries, read-back failure, durable workout-draft save/resume/discard/failure behavior, exercise-level workout saving, protected session-type changes, routine-deletion Undo, manual-food validation, confirmed program replacement, offline network fast-fail, conservative progression, compact program identity/separate management, consolidated Train-only rest duration/control dock, Home/Settings disclosure hierarchy, offline status transitions, practical compact-control touch targets, predictable tab/session positioning, 16px editable controls, complete control naming, semantic/keyboard bottom tabs, keyboard food results, dialog focus entry/return, dynamic onboarding/workout/builder accessibility, default-on food handoff/toggle/restore behavior, deterministic opt-in food suggestions (120-item USDA reference catalog, exact servings, remaining targets, familiar-food bonus, exclusions, refresh, historical-date hiding, and review-before-log), handoff paste/log and first-item review positioning, update toast, and Easter egg timing.
 - **Wording-pin convention (v59):** tests that pin user-facing or FAQ text must pin only
   short, load-bearing guarantee phrases ("never starts automatically", "does not start or
   reset"), never full sentences, layout-adjacent wording, or phrasing that a routine copy
   edit would touch. Release-pinned assertions (like the exact SW cache string) are advanced
   each release as part of the bump — that advance is maintenance, not weakening.
-- The permanent suite is **441 automated checks** and only grows. New features add tests in
+- The permanent suite is **456 automated checks** and only grows. New features add tests in
   the same release; existing checks are never deleted or weakened. The roughly 700 checks
   written before Phase 0 were old throwaway checks, not this permanent suite.
 - jsdom quirks: stub `URL.createObjectURL`, ignore `scrollTo` warnings, `select()` runs via
