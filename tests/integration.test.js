@@ -1440,6 +1440,622 @@ await settleNativeVault(ExistingVaultFresh);
 check("Stage 1 never auto-restores native vault contents into an empty localStorage", ExistingVaultFresh.window.eval(`data.weights.length===0`) && JSON.parse(ExistingVaultFresh.window.localStorage.getItem("forge:data")).weights.length===0);
 check("a populated verified native vault is not overwritten by a fresh empty-state regression", ExistingVaultFs.files.get(nativePath)===NativeFs.files.get(nativePath) && nativeVaultField(ExistingVaultFresh,"retainedPrevious")===true);
 
+
+// ================= Native vault Stage 2: protected exact restore =================
+const STAGE2_VAULT_PATH = "blackpyre-native-vault.json";
+const STAGE2_RESTORE_QUARANTINE_PATH = "blackpyre-native-restore-quarantine.json";
+const STAGE2_KEYS = [
+  "forge:cfg",
+  "forge:data",
+  "forge:program",
+  "forge:lkg",
+  "forge:lkg:previous",
+  "forge:lkg:older",
+  "forge:quarantine",
+  "forge:install",
+  "ryan-cut:data"
+];
+
+function stage2VaultStrings(){
+  return {
+    "forge:cfg":RAW_V2_CFG,
+    "forge:data":JSON.stringify(V63_POPULATED_DATA),
+    "forge:program":RAW_PROGRAM,
+    "forge:lkg":V63_POP_LKG,
+    "forge:lkg:previous":V63_EMPTY_LKG,
+    "forge:lkg:older":null,
+    "forge:quarantine":"null",
+    "forge:install":JSON.stringify({
+      formatVersion:1,
+      establishedAt:"2026-07-20T10:00:00.000Z",
+      lastHealthyAt:"2026-07-21T10:00:00.000Z",
+      schemaVersion:2
+    }),
+    "ryan-cut:data":NATIVE_LEGACY_RAW
+  };
+}
+function stage2VaultRaw(options){
+  const opts=options||{};
+  const strings=Object.assign(stage2VaultStrings(),opts.strings||{});
+  if (opts.omitStringKey) delete strings[opts.omitStringKey];
+  return JSON.stringify({
+    type:opts.type===undefined ? "blackpyre-native-vault" : opts.type,
+    formatVersion:opts.formatVersion===undefined ? 1 : opts.formatVersion,
+    schemaVersion:opts.schemaVersion===undefined ? 2 : opts.schemaVersion,
+    savedAt:"2026-07-21T22:00:00.000Z",
+    source:"stage2-test",
+    strings:strings
+  });
+}
+function stage2StorageSnapshot(dom){
+  const out={};
+  const storage=dom.window.localStorage;
+  for(let i=0;i<storage.length;i++){
+    const key=storage.key(i);
+    out[key]=storage.getItem(key);
+  }
+  return out;
+}
+function stage2ContractedSnapshot(dom){
+  const out={};
+  STAGE2_KEYS.forEach(key=>{ out[key]=dom.window.localStorage.getItem(key); });
+  return out;
+}
+function stage2StorageMatchesVault(dom,strings){
+  return STAGE2_KEYS.every(key=>dom.window.localStorage.getItem(key)===strings[key]);
+}
+function stage2RestoreStatus(dom){
+  const status=nativeVaultStatusOf(dom);
+  return status || {};
+}
+function installStage2Timeline(w,fs,timeline){
+  fs.install(w);
+
+  const plugin=w.Capacitor.Plugins.Filesystem;
+  ["writeFile","readFile","deleteFile","rename"].forEach(method=>{
+    const original=plugin[method];
+    plugin[method]=async function(args){
+      timeline.push({kind:"filesystem",method:method,path:String(args.path||args.from||"")});
+      return original.call(plugin,args);
+    };
+  });
+
+  const proto=Object.getPrototypeOf(w.localStorage);
+  const trackedSet=proto.setItem;
+  const trackedRemove=proto.removeItem;
+  const trackedClear=proto.clear;
+
+  proto.setItem=function(key,value){
+    timeline.push({kind:"storage",method:"setItem",key:String(key)});
+    return trackedSet.call(this,key,value);
+  };
+  proto.removeItem=function(key){
+    timeline.push({kind:"storage",method:"removeItem",key:String(key)});
+    return trackedRemove.call(this,key);
+  };
+  proto.clear=function(){
+    timeline.push({kind:"storage",method:"clear",key:null});
+    return trackedClear.call(this);
+  };
+}
+
+
+// PWA and non-native environments must retain the established protected-mode behavior
+// without making any native Filesystem call.
+const Stage2WebFs=makeNativeFilesystem({
+  native:false,
+  files:{[STAGE2_VAULT_PATH]:stage2VaultRaw()}
+});
+const Stage2Web=bootRaw({
+  cfg:RAW_V2_CFG,
+  data:'{"broken":',
+  program:RAW_PROGRAM
+},w=>Stage2WebFs.install(w));
+await settleNativeVault(Stage2Web);
+check("Stage 2 performs no restore Filesystem work outside the native app",
+  Stage2WebFs.calls.length===0
+  && Stage2Web.window.localStorage.getItem("forge:data")==='{"broken":'
+  && Stage2Web.window.eval(`protectedMode===true`));
+
+
+// Healthy native localStorage must win over a different valid native vault.
+const Stage2HealthyVaultRaw=stage2VaultRaw();
+const Stage2HealthyFs=makeNativeFilesystem({
+  files:{[STAGE2_VAULT_PATH]:Stage2HealthyVaultRaw}
+});
+const Stage2Healthy=bootRaw({
+  cfg:RAW_V2_CFG,
+  data:RAW_V2_DATA,
+  program:RAW_PROGRAM
+},w=>Stage2HealthyFs.install(w));
+await settleNativeVault(Stage2Healthy);
+check("Stage 2 never replaces healthy native primary localStorage",
+  Stage2Healthy.window.localStorage.getItem("forge:cfg")===RAW_V2_CFG
+  && Stage2Healthy.window.localStorage.getItem("forge:data")===RAW_V2_DATA
+  && Stage2Healthy.window.localStorage.getItem("forge:program")===RAW_PROGRAM);
+check("healthy native localStorage does not create a restore quarantine",
+  !Stage2HealthyFs.files.has(STAGE2_RESTORE_QUARANTINE_PATH));
+
+
+// A valid empty state is still healthy and must not be replaced by a populated vault.
+const Stage2HealthyEmptyFs=makeNativeFilesystem({
+  files:{[STAGE2_VAULT_PATH]:Stage2HealthyVaultRaw}
+});
+const Stage2HealthyEmpty=bootRaw({
+  cfg:RAW_V2_CFG,
+  data:RAW_V2_DATA,
+  program:RAW_PROGRAM
+},w=>Stage2HealthyEmptyFs.install(w));
+await settleNativeVault(Stage2HealthyEmpty);
+check("Stage 2 does not replace a healthy empty state with a populated vault",
+  Stage2HealthyEmpty.window.localStorage.getItem("forge:data")===RAW_V2_DATA
+  && !Stage2HealthyEmptyFs.files.has(STAGE2_RESTORE_QUARANTINE_PATH));
+
+
+// Missing localStorage must be quarantined and restored from the verified vault
+// before defaults or onboarding can replace it.
+const Stage2MissingStrings=stage2VaultStrings();
+const Stage2MissingVaultRaw=stage2VaultRaw();
+const Stage2MissingFs=makeNativeFilesystem({
+  files:{[STAGE2_VAULT_PATH]:Stage2MissingVaultRaw}
+});
+const Stage2MissingTimeline=[];
+const Stage2Missing=bootRaw({},w=>{
+  w.__storageOriginalMethods.setItem.call(w.localStorage,"third-party:key","keep-me");
+  installStage2Timeline(w,Stage2MissingFs,Stage2MissingTimeline);
+});
+await settleNativeVault(Stage2Missing);
+
+const Stage2MissingStatus=stage2RestoreStatus(Stage2Missing);
+const Stage2QuarantineRaw=Stage2MissingFs.files.get(STAGE2_RESTORE_QUARANTINE_PATH);
+const Stage2Quarantine=parseNativeVault(Stage2QuarantineRaw);
+
+check("Stage 2 restores missing native localStorage from a valid vault",
+  stage2StorageMatchesVault(Stage2Missing,Stage2MissingStrings));
+check("Stage 2 exact restore distinguishes null absence from the string null",
+  Stage2Missing.window.localStorage.getItem("forge:lkg:older")===null
+  && Stage2Missing.window.localStorage.getItem("forge:quarantine")==="null");
+check("Stage 2 restore preserves unrelated localStorage entries",
+  Stage2Missing.window.localStorage.getItem("third-party:key")==="keep-me");
+check("Stage 2 writes a verified native restore quarantine containing the complete raw incident state",
+  !!Stage2Quarantine
+  && Stage2Quarantine.type==="blackpyre-native-restore-quarantine"
+  && Stage2Quarantine.formatVersion===1
+  && typeof Stage2Quarantine.quarantinedAt==="string"
+  && !Number.isNaN(Date.parse(Stage2Quarantine.quarantinedAt))
+  && typeof Stage2Quarantine.incidentReason==="string"
+  && Stage2Quarantine.incidentReason.length>0
+  && Stage2Quarantine.strings
+  && Stage2Quarantine.strings["third-party:key"]==="keep-me"
+  && Array.isArray(Stage2Quarantine.absentContractedKeys)
+  && STAGE2_KEYS.every(key=>Stage2Quarantine.absentContractedKeys.includes(key)));
+
+const Stage2FirstMutation=Stage2MissingTimeline.findIndex(event=>
+  event.kind==="storage"
+  && (event.key===null || STAGE2_KEYS.includes(event.key))
+);
+const Stage2QuarantineWrite=Stage2MissingTimeline.findIndex(event=>
+  event.kind==="filesystem"
+  && event.method==="writeFile"
+  && event.path===STAGE2_RESTORE_QUARANTINE_PATH
+);
+const Stage2QuarantineRead=Stage2MissingTimeline.findIndex(event=>
+  event.kind==="filesystem"
+  && event.method==="readFile"
+  && event.path===STAGE2_RESTORE_QUARANTINE_PATH
+);
+check("Stage 2 verifies quarantine before the first contracted localStorage mutation",
+  Stage2QuarantineWrite>-1
+  && Stage2QuarantineRead>Stage2QuarantineWrite
+  && Stage2FirstMutation>Stage2QuarantineRead);
+check("successful Stage 2 restore is reported as verified",
+  Stage2MissingStatus.restoreState==="restored"
+  && Stage2MissingStatus.restoreVerified===true
+  && Stage2MissingStatus.quarantineVerified===true
+  && !Stage2MissingStatus.restoreError);
+check("Stage 2 restoration leaves the verified native vault byte-identical",
+  Stage2MissingFs.files.get(STAGE2_VAULT_PATH)===Stage2MissingVaultRaw);
+
+
+// Invalid primary localStorage must also restore from a valid vault while preserving
+// its exact pre-restore bytes in native quarantine.
+const Stage2InvalidOriginal={
+  cfg:RAW_V2_CFG,
+  data:' {"damaged": ',
+  program:RAW_PROGRAM
+};
+const Stage2InvalidFs=makeNativeFilesystem({
+  files:{[STAGE2_VAULT_PATH]:stage2VaultRaw()}
+});
+const Stage2Invalid=bootRaw(Stage2InvalidOriginal,w=>{
+  w.__storageOriginalMethods.setItem.call(w.localStorage,"unrelated","unchanged");
+  Stage2InvalidFs.install(w);
+});
+await settleNativeVault(Stage2Invalid);
+const Stage2InvalidQuarantine=parseNativeVault(
+  Stage2InvalidFs.files.get(STAGE2_RESTORE_QUARANTINE_PATH)
+);
+check("Stage 2 restores invalid native localStorage from a valid vault",
+  stage2StorageMatchesVault(Stage2Invalid,stage2VaultStrings()));
+check("Stage 2 quarantine preserves exact invalid pre-restore strings",
+  !!Stage2InvalidQuarantine
+  && Stage2InvalidQuarantine.strings
+  && Stage2InvalidQuarantine.strings["forge:cfg"]===Stage2InvalidOriginal.cfg
+  && Stage2InvalidQuarantine.strings["forge:data"]===Stage2InvalidOriginal.data
+  && Stage2InvalidQuarantine.strings["forge:program"]===Stage2InvalidOriginal.program
+  && Stage2InvalidQuarantine.strings.unrelated==="unchanged");
+
+
+// A genuine first native launch with no BlackPyre state and no vault must retain
+// the existing onboarding/default path.
+const Stage2FirstInstallFs=makeNativeFilesystem();
+const Stage2FirstInstall=bootRaw({},w=>Stage2FirstInstallFs.install(w));
+await settleNativeVault(Stage2FirstInstall);
+check("Stage 2 allows a true first native install with no vault to use onboarding",
+  Stage2FirstInstall.window.eval(`protectedMode===false && cfg.setupDone!==true`)
+  && typeof Stage2FirstInstall.window.localStorage.getItem("forge:cfg")==="string"
+  && typeof Stage2FirstInstall.window.localStorage.getItem("forge:data")==="string"
+  && typeof Stage2FirstInstall.window.localStorage.getItem("forge:program")==="string");
+
+
+
+// ================= Native vault Stage 2: rejection and rollback paths =================
+function stage2PrimaryRawMatches(dom,expected){
+  return dom.window.localStorage.getItem("forge:cfg")===expected.cfg
+    && dom.window.localStorage.getItem("forge:data")===expected.data
+    && dom.window.localStorage.getItem("forge:program")===expected.program;
+}
+function stage2AllContractedAbsent(dom){
+  return STAGE2_KEYS.every(key=>dom.window.localStorage.getItem(key)===null);
+}
+function stage2VerifiedRestoreQuarantineRaw(){
+  return JSON.stringify({
+    type:"blackpyre-native-restore-quarantine",
+    formatVersion:1,
+    quarantinedAt:"2026-07-21T21:00:00.000Z",
+    incidentReason:"Earlier protected recovery incident.",
+    strings:{"third-party:key":"older evidence"},
+    absentContractedKeys:STAGE2_KEYS.slice()
+  });
+}
+
+
+// A malformed vault on otherwise empty native storage is not a true first install.
+// Defaults and onboarding must not replace the incident evidence.
+const Stage2MalformedVaultRaw='{"type":"blackpyre-native-vault","formatVersion":1,';
+const Stage2MalformedFs=makeNativeFilesystem({
+  files:{[STAGE2_VAULT_PATH]:Stage2MalformedVaultRaw}
+});
+const Stage2Malformed=bootRaw({},w=>Stage2MalformedFs.install(w));
+await settleNativeVault(Stage2Malformed);
+const Stage2MalformedStatus=stage2RestoreStatus(Stage2Malformed);
+check("Stage 2 rejects malformed vault JSON without creating empty defaults",
+  stage2AllContractedAbsent(Stage2Malformed)
+  && Stage2Malformed.window.eval(`protectedMode===true`)
+  && Stage2MalformedFs.files.get(STAGE2_VAULT_PATH)===Stage2MalformedVaultRaw
+  && Stage2MalformedStatus.restoreState==="rejected"
+  && !!Stage2MalformedStatus.restoreError);
+
+
+// Unsupported or incomplete records must never be restored.
+const Stage2RejectedVaultCases=[
+  {
+    name:"wrong vault type",
+    raw:stage2VaultRaw({type:"not-blackpyre"})
+  },
+  {
+    name:"unsupported vault formatVersion",
+    raw:stage2VaultRaw({formatVersion:2})
+  },
+  {
+    name:"wrong vault schemaVersion",
+    raw:stage2VaultRaw({schemaVersion:3})
+  },
+  {
+    name:"missing contracted vault key",
+    raw:stage2VaultRaw({omitStringKey:"forge:lkg:older"})
+  },
+  {
+    name:"non-string and non-null vault value",
+    raw:stage2VaultRaw({strings:{"forge:lkg:older":42}})
+  },
+  {
+    name:"invalid primary vault strings",
+    raw:stage2VaultRaw({strings:{"forge:data":'{"damaged":'}})
+  }
+];
+
+for (const rejectedCase of Stage2RejectedVaultCases){
+  const original={
+    cfg:RAW_V2_CFG,
+    data:' {"existing-invalid": ',
+    program:RAW_PROGRAM
+  };
+  const fs=makeNativeFilesystem({
+    files:{[STAGE2_VAULT_PATH]:rejectedCase.raw}
+  });
+  const dom=bootRaw(original,w=>fs.install(w));
+  await settleNativeVault(dom);
+  const status=stage2RestoreStatus(dom);
+
+  check("Stage 2 rejects "+rejectedCase.name,
+    stage2PrimaryRawMatches(dom,original)
+    && dom.window.eval(`protectedMode===true`)
+    && fs.files.get(STAGE2_VAULT_PATH)===rejectedCase.raw
+    && !fs.files.has(STAGE2_RESTORE_QUARANTINE_PATH)
+    && status.restoreState==="rejected"
+    && !!status.restoreError);
+}
+
+
+// An unreadable vault is not equivalent to an absent vault.
+const Stage2UnreadableFs=makeNativeFilesystem({
+  files:{[STAGE2_VAULT_PATH]:stage2VaultRaw()}
+});
+Stage2UnreadableFs.control.failRead=args=>args.path===STAGE2_VAULT_PATH;
+const Stage2Unreadable=bootRaw({},w=>Stage2UnreadableFs.install(w));
+await settleNativeVault(Stage2Unreadable);
+const Stage2UnreadableStatus=stage2RestoreStatus(Stage2Unreadable);
+check("Stage 2 keeps an unreadable native vault incident protected instead of starting onboarding",
+  stage2AllContractedAbsent(Stage2Unreadable)
+  && Stage2Unreadable.window.eval(`protectedMode===true`)
+  && Stage2UnreadableStatus.restoreState==="vault-read-failed"
+  && !!Stage2UnreadableStatus.restoreError);
+
+
+// A quarantine write failure must occur before any localStorage restoration.
+const Stage2QuarantineFailOriginal={
+  cfg:RAW_V2_CFG,
+  data:' {"quarantine-write-failure": ',
+  program:RAW_PROGRAM
+};
+const Stage2QuarantineFailFs=makeNativeFilesystem({
+  files:{[STAGE2_VAULT_PATH]:stage2VaultRaw()}
+});
+Stage2QuarantineFailFs.control.failWrite=args=>
+  args.path===STAGE2_RESTORE_QUARANTINE_PATH;
+
+const Stage2QuarantineFail=bootRaw(Stage2QuarantineFailOriginal,w=>{
+  w.__storageOriginalMethods.setItem.call(w.localStorage,"unrelated","preserve-this");
+  Stage2QuarantineFailFs.install(w);
+});
+await settleNativeVault(Stage2QuarantineFail);
+const Stage2QuarantineFailStatus=stage2RestoreStatus(Stage2QuarantineFail);
+check("Stage 2 quarantine write failure leaves localStorage byte-for-byte unchanged",
+  stage2PrimaryRawMatches(Stage2QuarantineFail,Stage2QuarantineFailOriginal)
+  && Stage2QuarantineFail.window.localStorage.getItem("unrelated")==="preserve-this"
+  && Stage2QuarantineFail.window.eval(`protectedMode===true`)
+  && Stage2QuarantineFailStatus.restoreState==="quarantine-failed"
+  && Stage2QuarantineFailStatus.quarantineVerified===false
+  && !!Stage2QuarantineFailStatus.restoreError
+  && Stage2QuarantineFailFs.files.get(STAGE2_VAULT_PATH)===stage2VaultRaw());
+
+
+// A quarantine read-back mismatch is also a hard stop before restoration.
+const Stage2QuarantineMismatchOriginal={
+  cfg:RAW_V2_CFG,
+  data:' {"quarantine-mismatch": ',
+  program:RAW_PROGRAM
+};
+const Stage2QuarantineMismatchVaultRaw=stage2VaultRaw();
+const Stage2QuarantineMismatchFs=makeNativeFilesystem({
+  files:{[STAGE2_VAULT_PATH]:Stage2QuarantineMismatchVaultRaw}
+});
+let Stage2QuarantineMismatchUsed=false;
+Stage2QuarantineMismatchFs.control.transformRead=(args,data)=>{
+  if (!Stage2QuarantineMismatchUsed && args.path===STAGE2_RESTORE_QUARANTINE_PATH){
+    Stage2QuarantineMismatchUsed=true;
+    return data+"corrupt";
+  }
+  return data;
+};
+const Stage2QuarantineMismatch=bootRaw(Stage2QuarantineMismatchOriginal,w=>
+  Stage2QuarantineMismatchFs.install(w)
+);
+await settleNativeVault(Stage2QuarantineMismatch);
+const Stage2QuarantineMismatchStatus=stage2RestoreStatus(Stage2QuarantineMismatch);
+check("Stage 2 quarantine verification mismatch prevents every restore mutation",
+  Stage2QuarantineMismatchUsed
+  && stage2PrimaryRawMatches(Stage2QuarantineMismatch,Stage2QuarantineMismatchOriginal)
+  && Stage2QuarantineMismatch.window.eval(`protectedMode===true`)
+  && Stage2QuarantineMismatchStatus.restoreState==="quarantine-failed"
+  && Stage2QuarantineMismatchStatus.quarantineVerified===false
+  && Stage2QuarantineMismatchFs.files.get(STAGE2_VAULT_PATH)===Stage2QuarantineMismatchVaultRaw);
+
+
+// Existing verified recovery evidence must never be silently replaced.
+const Stage2ExistingQuarantineRaw=stage2VerifiedRestoreQuarantineRaw();
+const Stage2ExistingQuarantineFs=makeNativeFilesystem({
+  files:{
+    [STAGE2_VAULT_PATH]:stage2VaultRaw(),
+    [STAGE2_RESTORE_QUARANTINE_PATH]:Stage2ExistingQuarantineRaw
+  }
+});
+const Stage2ExistingQuarantineOriginal={
+  cfg:RAW_V2_CFG,
+  data:' {"existing-quarantine-conflict": ',
+  program:RAW_PROGRAM
+};
+const Stage2ExistingQuarantine=bootRaw(Stage2ExistingQuarantineOriginal,w=>
+  Stage2ExistingQuarantineFs.install(w)
+);
+await settleNativeVault(Stage2ExistingQuarantine);
+const Stage2ExistingQuarantineStatus=stage2RestoreStatus(Stage2ExistingQuarantine);
+check("Stage 2 preserves an existing verified native restore quarantine",
+  Stage2ExistingQuarantineFs.files.get(STAGE2_RESTORE_QUARANTINE_PATH)===Stage2ExistingQuarantineRaw
+  && stage2PrimaryRawMatches(Stage2ExistingQuarantine,Stage2ExistingQuarantineOriginal)
+  && Stage2ExistingQuarantine.window.eval(`protectedMode===true`)
+  && Stage2ExistingQuarantineStatus.restoreState==="quarantine-conflict");
+
+
+// A null vault value must actively remove a currently present contracted key.
+const Stage2NullRemovalFs=makeNativeFilesystem({
+  files:{[STAGE2_VAULT_PATH]:stage2VaultRaw()}
+});
+const Stage2NullRemoval=bootRaw({
+  cfg:RAW_V2_CFG,
+  data:' {"invalid-before-null-removal": ',
+  program:RAW_PROGRAM,
+  lkgOlder:"old-value-that-must-be-removed",
+  quarantine:"old-quarantine-value"
+},w=>Stage2NullRemovalFs.install(w));
+await settleNativeVault(Stage2NullRemoval);
+check("Stage 2 exact restoration removes keys represented by null",
+  Stage2NullRemoval.window.localStorage.getItem("forge:lkg:older")===null
+  && Stage2NullRemoval.window.localStorage.getItem("forge:quarantine")==="null"
+  && stage2StorageMatchesVault(Stage2NullRemoval,stage2VaultStrings()));
+
+
+// Force one restore write to fail. Rollback must return the exact original state.
+const Stage2WriteFailVaultRaw=stage2VaultRaw();
+const Stage2WriteFailStrings=stage2VaultStrings();
+const Stage2WriteFailFs=makeNativeFilesystem({
+  files:{[STAGE2_VAULT_PATH]:Stage2WriteFailVaultRaw}
+});
+let Stage2WriteFailureTriggered=false;
+const Stage2WriteFail=bootRaw({},w=>{
+  w.__storageOriginalMethods.setItem.call(w.localStorage,"unrelated","rollback-keeps-me");
+  Stage2WriteFailFs.install(w);
+
+  const proto=Object.getPrototypeOf(w.localStorage);
+  const trackedSet=proto.setItem;
+
+  proto.setItem=function(key,value){
+    if (!Stage2WriteFailureTriggered
+        && String(key)==="forge:data"
+        && String(value)===Stage2WriteFailStrings["forge:data"]){
+      Stage2WriteFailureTriggered=true;
+      throw new Error("Forced Stage 2 restore write failure");
+    }
+    return trackedSet.call(this,key,value);
+  };
+});
+await settleNativeVault(Stage2WriteFail);
+const Stage2WriteFailStatus=stage2RestoreStatus(Stage2WriteFail);
+check("Stage 2 restore write failure rolls back the exact original localStorage state",
+  Stage2WriteFailureTriggered
+  && stage2AllContractedAbsent(Stage2WriteFail)
+  && Stage2WriteFail.window.localStorage.getItem("unrelated")==="rollback-keeps-me"
+  && Stage2WriteFail.window.eval(`protectedMode===true`)
+  && Stage2WriteFailStatus.restoreState==="failed"
+  && Stage2WriteFailStatus.restoreVerified===false
+  && Stage2WriteFailStatus.rollbackVerified===true
+  && Stage2WriteFailStatus.rollbackFailed===false
+  && Stage2WriteFailFs.files.has(STAGE2_RESTORE_QUARANTINE_PATH)
+  && Stage2WriteFailFs.files.get(STAGE2_VAULT_PATH)===Stage2WriteFailVaultRaw);
+
+
+// Force one restored read-back value to mismatch. This must also roll back.
+const Stage2ReadMismatchVaultRaw=stage2VaultRaw();
+const Stage2ReadMismatchStrings=stage2VaultStrings();
+const Stage2ReadMismatchFs=makeNativeFilesystem({
+  files:{[STAGE2_VAULT_PATH]:Stage2ReadMismatchVaultRaw}
+});
+let Stage2ReadMismatchArmed=false;
+let Stage2ReadMismatchUsed=false;
+const Stage2ReadMismatch=bootRaw({},w=>{
+  w.__storageOriginalMethods.setItem.call(w.localStorage,"unrelated","readback-keeps-me");
+  Stage2ReadMismatchFs.install(w);
+
+  const proto=Object.getPrototypeOf(w.localStorage);
+  const trackedSet=proto.setItem;
+  const originalGet=proto.getItem;
+
+  proto.setItem=function(key,value){
+    const result=trackedSet.call(this,key,value);
+    if (String(key)==="forge:data"
+        && String(value)===Stage2ReadMismatchStrings["forge:data"]){
+      Stage2ReadMismatchArmed=true;
+    }
+    return result;
+  };
+
+  proto.getItem=function(key){
+    const value=originalGet.call(this,key);
+    if (Stage2ReadMismatchArmed
+        && !Stage2ReadMismatchUsed
+        && String(key)==="forge:data"){
+      Stage2ReadMismatchUsed=true;
+      return String(value)+"corrupt";
+    }
+    return value;
+  };
+});
+await settleNativeVault(Stage2ReadMismatch);
+const Stage2ReadMismatchStatus=stage2RestoreStatus(Stage2ReadMismatch);
+check("Stage 2 restore read-back mismatch triggers verified rollback",
+  Stage2ReadMismatchUsed
+  && stage2AllContractedAbsent(Stage2ReadMismatch)
+  && Stage2ReadMismatch.window.localStorage.getItem("unrelated")==="readback-keeps-me"
+  && Stage2ReadMismatch.window.eval(`protectedMode===true`)
+  && Stage2ReadMismatchStatus.restoreState==="failed"
+  && Stage2ReadMismatchStatus.rollbackVerified===true
+  && Stage2ReadMismatchStatus.rollbackFailed===false
+  && Stage2ReadMismatchFs.files.get(STAGE2_VAULT_PATH)===Stage2ReadMismatchVaultRaw);
+
+
+// Force both a restore failure and a rollback failure. They must be reported separately.
+const Stage2RollbackFailVaultRaw=stage2VaultRaw();
+const Stage2RollbackFailStrings=stage2VaultStrings();
+const Stage2RollbackFailFs=makeNativeFilesystem({
+  files:{[STAGE2_VAULT_PATH]:Stage2RollbackFailVaultRaw}
+});
+let Stage2RollbackRestoreFailed=false;
+let Stage2RollbackFailureTriggered=false;
+const Stage2RollbackFail=bootRaw({},w=>{
+  Stage2RollbackFailFs.install(w);
+
+  const proto=Object.getPrototypeOf(w.localStorage);
+  const trackedSet=proto.setItem;
+  const trackedRemove=proto.removeItem;
+
+  proto.setItem=function(key,value){
+    if (!Stage2RollbackRestoreFailed
+        && String(key)==="forge:data"
+        && String(value)===Stage2RollbackFailStrings["forge:data"]){
+      Stage2RollbackRestoreFailed=true;
+      throw new Error("Forced restore failure before rollback failure");
+    }
+    return trackedSet.call(this,key,value);
+  };
+
+  proto.removeItem=function(key){
+    if (Stage2RollbackRestoreFailed
+        && !Stage2RollbackFailureTriggered
+        && STAGE2_KEYS.includes(String(key))){
+      Stage2RollbackFailureTriggered=true;
+      throw new Error("Forced rollback failure");
+    }
+    return trackedRemove.call(this,key);
+  };
+});
+await settleNativeVault(Stage2RollbackFail);
+const Stage2RollbackFailStatus=stage2RestoreStatus(Stage2RollbackFail);
+check("Stage 2 reports rollback failure separately and remains protected",
+  Stage2RollbackRestoreFailed
+  && Stage2RollbackFailureTriggered
+  && Stage2RollbackFail.window.eval(`protectedMode===true`)
+  && Stage2RollbackFailStatus.restoreState==="failed"
+  && Stage2RollbackFailStatus.restoreVerified===false
+  && Stage2RollbackFailStatus.rollbackVerified===false
+  && Stage2RollbackFailStatus.rollbackFailed===true
+  && !!Stage2RollbackFailStatus.restoreError
+  && !!Stage2RollbackFailStatus.rollbackError
+  && Stage2RollbackFailFs.files.has(STAGE2_RESTORE_QUARANTINE_PATH)
+  && Stage2RollbackFailFs.files.get(STAGE2_VAULT_PATH)===Stage2RollbackFailVaultRaw);
+
+
+// Successful restoration must finish validation, leave Protected mode, and retain
+// the established user data instead of showing onboarding.
+check("successful Stage 2 restoration exits Protected mode with validated established data",
+  Stage2Missing.window.eval(`
+    protectedMode===false
+    && cfg.setupDone===true
+    && data.weights.some(x=>x.date==="2026-07-21"&&x.lbs===219)
+  `)
+  && stage2StorageMatchesVault(Stage2Missing,Stage2MissingStrings));
+
+
 // ================= v44: update toast =================
 function bootSW(hasController){
   const fired = { listeners:{}, events:[] };
