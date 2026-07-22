@@ -1,6 +1,6 @@
 # BlackPyre Data Model
 
-**Current as of v63 (July 2026). Primary schemaVersion: 2. Recovery format: 1.**
+**Current as of v64 (July 2026). Primary schemaVersion: 2. Recovery format: 1.**
 
 ## Storage keys
 
@@ -12,7 +12,7 @@ BlackPyre has three permanent **primary user-state keys**:
 | `forge:data` | All logged data (object) |
 | `forge:program` | Loaded training program (object) |
 
-v46–v63 add permanent **internal, device-only protection keys**:
+v46–v64 add permanent **internal, device-only keys**:
 
 | Key | Contents |
 |---|---|
@@ -21,8 +21,9 @@ v46–v63 add permanent **internal, device-only protection keys**:
 | `forge:lkg:older` | Older validated whole-state snapshot |
 | `forge:quarantine` | One exact pre-recovery copy of unsafe primary strings plus diagnosis |
 | `forge:install` | Established-install marker used to distinguish data loss from a true first run |
+| `forge:rest-timer` | Temporary running/paused rest-timer state that survives suspension and restart |
 
-All eight primary/internal names are load-bearing once shipped and must not be renamed casually. The `forge:`
+All nine primary/internal names are load-bearing once shipped and must not be renamed casually. The `forge:`
 prefix predates the BlackPyre rebrand and is intentionally preserved. The legacy read-only
 fallback `ryan-cut:data` may supply logs when `forge:data` is missing; BlackPyre never renames,
 removes, or modifies that legacy key.
@@ -32,7 +33,7 @@ removes, or modifies that legacy key.
 `schemaVersion` is physically stored in `forge:cfg`, but versions the complete **primary**
 state and normal backup envelope: settings, logged data, and program.
 
-| Raw value | Meaning / behavior in v63 |
+| Raw value | Meaning / behavior in v64 |
 |---|---|
 | property absent or integer `0` | Pre-versioning legacy state; run numbered migrations from step 0 |
 | integer `1` | v45–v55 state; migrate 1 → 2 by adding an empty active-workout draft field |
@@ -48,7 +49,7 @@ its destination only after that complete step succeeds. `DEFAULT_CFG` does not c
 
 `forge:lkg`, `forge:lkg:previous`, `forge:lkg:older`, and `forge:quarantine` are not
 primary state and do not use `schemaVersion`. They carry strict `recoveryFormatVersion: 1`.
-`forge:install` is not a recovery record and uses its own `formatVersion: 1`.
+`forge:install` and `forge:rest-timer` are not recovery records and each uses its own `formatVersion: 1`.
 
 | Raw recovery value | Behavior |
 |---|---|
@@ -179,8 +180,46 @@ The marker is written only after a healthy validated snapshot exists. It contain
 or API keys. Together with existing settings, snapshots, or quarantine, it proves that missing
 `forge:data` or `forge:cfg` is a recovery incident rather than a first run. A marker with a newer
 format is treated as established evidence and is never overwritten by this version. A true fresh
-install has no primary/internal evidence; v63 writes a complete three-key default primary state
+install has no primary/internal evidence; v64 writes a complete three-key default primary state
 before creating the first snapshot and marker.
+
+## forge:rest-timer
+
+This is temporary device-only runtime state, separate from primary user data and recovery snapshots.
+It is written only when the manual Train rest timer starts, pauses, resumes, or gains time, and is
+removed when the timer ends or the user taps End.
+
+Running record:
+
+```json
+{
+  "formatVersion": 1,
+  "status": "running",
+  "endAt": 2000000090000,
+  "remainingSec": 90,
+  "savedAt": 2000000000000
+}
+```
+
+Paused record:
+
+```json
+{
+  "formatVersion": 1,
+  "status": "paused",
+  "remainingSec": 45,
+  "savedAt": 2000000045000
+}
+```
+
+Rules:
+- A running timer is calculated from `endAt - Date.now()`, not from the number of interval callbacks.
+  Background suspension therefore cannot freeze elapsed time.
+- A paused timer preserves the exact rounded-up seconds remaining and resumes from a new finish time.
+- The record survives a full app or phone restart. If its finish time has already passed, the app shows
+  `GO!` once and removes the temporary record.
+- It is excluded from primary schemaVersion, normal backups, LKG snapshots, quarantine, and migrations.
+- A newer format is never overwritten or removed by an older app.
 
 ## forge:quarantine
 
@@ -216,7 +255,7 @@ Rules:
 ## Normal backup envelope
 
 Normal backup is `{cfg, data, program}` JSON; its generation is announced by
-`cfg.schemaVersion`. Rolling snapshots, quarantine, and the installation marker are never included.
+`cfg.schemaVersion`. Rolling snapshots, quarantine, the installation marker, and rest-timer state are never included.
 `anthropicKey` and `openaiKey` are stripped.
 
 Normal restore uses the shared `prepareState()` path. Device AI fields
@@ -279,6 +318,7 @@ fallback. The app cannot verify a browser download and states that limit honestl
 | v61 | No primary schema migration | Adds opt-in `foodSuggestionsOn`, weight-loss scoring preference, and name-exclusion text; all are ordinary cfg defaults and stored food/log shapes remain unchanged |
 | v62 | No primary schema migration | Adds a static 120-food USDA Standard Reference suggestion catalog outside localStorage; cfg fields and stored food/log shapes remain unchanged |
 | v63 | No primary schema migration; recovery protections expanded | Adds established-install marker, missing-primary protected boot/runtime detection, three rolling LKG generations, populated-snapshot retention, manual snapshot restore, and exact storage diagnostic export |
+| v64 | No primary schema migration; device-only timer format 1 added | Stores running rest timers by absolute finish time and paused timers by remaining seconds so suspension and restart cannot freeze them |
 
 Old backups from any era must continue restoring correctly; the permanent suite proves the
 range-era path.

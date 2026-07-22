@@ -49,6 +49,7 @@ function bootRaw(raws, hooks){
       if (seed.lkgOlder!==null && seed.lkgOlder!==undefined) originals.setItem.call(storage, "forge:lkg:older", seed.lkgOlder);
       if (seed.install!==null && seed.install!==undefined) originals.setItem.call(storage, "forge:install", seed.install);
       if (seed.quarantine!==null && seed.quarantine!==undefined) originals.setItem.call(storage, "forge:quarantine", seed.quarantine);
+      if (seed.restTimer!==null && seed.restTimer!==undefined) originals.setItem.call(storage, "forge:rest-timer", seed.restTimer);
 
       proto.setItem = function(key, value){
         calls.push({method:"setItem", key:String(key), value:String(value)});

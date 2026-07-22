@@ -3,7 +3,9 @@
 const DATA_KEY = "forge:data", CFG_KEY = "forge:cfg", PROG_KEY = "forge:program";
 const LKG_KEY = "forge:lkg", LKG_PREVIOUS_KEY = "forge:lkg:previous", LKG_OLDER_KEY = "forge:lkg:older";
 const QUARANTINE_KEY = "forge:quarantine", INSTALL_KEY = "forge:install";
+const REST_TIMER_KEY = "forge:rest-timer";
 const SCHEMA_VERSION = 2, RECOVERY_FORMAT_VERSION = 1;
+const REST_TIMER_FORMAT_VERSION = 1;
 const AI_CFG_FIELDS = ["anthropicKey","openaiKey","aiProvider","aiModelAnth","aiModelOai","foodHandoffOn"];
 
 const DEFAULT_CFG = { startWt:0, goalWt:0, calTarget:0, proTarget:0, carbGoal:0, fatGoal:0, accent:"gold", foodSuggestionsOn:false, foodSuggestionsWeightLoss:true, foodSuggestionsAvoid:"" };
@@ -92,6 +94,50 @@ function download(filename, text){
   a.href = URL.createObjectURL(blob); a.download = filename;
   document.body.appendChild(a); a.click();
   setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+
+// ================== device-only rest timer state ==================
+// The rest timer is intentionally separate from the three primary user-state keys.
+// It is short-lived UI state, not backup/recovery data, and must not force a primary
+// save or LKG rotation every second. A fixed end timestamp lets iOS suspend the page
+// without stopping elapsed time; the record also survives a full app/phone restart.
+function inspectRestTimerRaw(raw){
+  if (raw===null || raw===undefined) return {ok:false, code:"missing"};
+  let record;
+  try { record = JSON.parse(raw); }
+  catch(e){ return {ok:false, code:"parse"}; }
+  if (!isPlainObject(record)) return {ok:false, code:"shape"};
+  const version = record.formatVersion;
+  if (!Number.isInteger(version) || version<1) return {ok:false, code:"format"};
+  if (version>REST_TIMER_FORMAT_VERSION) return {ok:false, newer:true, code:"newer", record:record};
+  if (version!==REST_TIMER_FORMAT_VERSION || !["running","paused"].includes(record.status)) return {ok:false, code:"shape"};
+  if (record.status==="running" && !(Number.isFinite(record.endAt) && record.endAt>0)) return {ok:false, code:"shape"};
+  if (record.status==="paused" && !(Number.isFinite(record.remainingSec) && record.remainingSec>0)) return {ok:false, code:"shape"};
+  return {ok:true, record:record};
+}
+function readRestTimerState(){
+  try { return inspectRestTimerRaw(localStorage.getItem(REST_TIMER_KEY)); }
+  catch(e){ return {ok:false, code:"storage-read"}; }
+}
+function writeRestTimerState(state){
+  const current = readRestTimerState();
+  if (current.newer) return false;
+  const record = Object.assign({formatVersion:REST_TIMER_FORMAT_VERSION}, state||{});
+  const checked = inspectRestTimerRaw(JSON.stringify(record));
+  if (!checked.ok) return false;
+  const raw = JSON.stringify(record);
+  try {
+    localStorage.setItem(REST_TIMER_KEY, raw);
+    return localStorage.getItem(REST_TIMER_KEY)===raw;
+  } catch(e){ return false; }
+}
+function clearRestTimerState(){
+  const current = readRestTimerState();
+  if (current.newer) return false;
+  try {
+    localStorage.removeItem(REST_TIMER_KEY);
+    return localStorage.getItem(REST_TIMER_KEY)===null;
+  } catch(e){ return false; }
 }
 
 // ================== migrations & prepared state ==================
@@ -814,7 +860,7 @@ function makeRawRecoveryEnvelope(){
     exportedAt:new Date().toISOString(), diagnostic:protectedModeDiagnostic || null, originals:exactRecoveryOriginals(read)}};
 }
 function makeStorageDiagnosticEnvelope(){
-  const keys = [CFG_KEY,DATA_KEY,PROG_KEY,"ryan-cut:data",LKG_KEY,LKG_PREVIOUS_KEY,LKG_OLDER_KEY,QUARANTINE_KEY,INSTALL_KEY];
+  const keys = [CFG_KEY,DATA_KEY,PROG_KEY,"ryan-cut:data",LKG_KEY,LKG_PREVIOUS_KEY,LKG_OLDER_KEY,QUARANTINE_KEY,INSTALL_KEY,REST_TIMER_KEY];
   const strings = {};
   try { keys.forEach(k=>{ strings[k]=localStorage.getItem(k); }); }
   catch(e){ return {ok:false,reason:"Browser storage could not be read for diagnostics."}; }

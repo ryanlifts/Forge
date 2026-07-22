@@ -1,6 +1,6 @@
 # BlackPyre Architecture
 
-**Current as of v63 (July 2026).**
+**Current as of v64 (July 2026).**
 
 A single-page PWA: vanilla HTML/CSS/JS, no framework, no build step, localStorage only.
 Deployed on GitHub Pages. Developed AI-assisted (Claude / ChatGPT) from a phone — every rule
@@ -9,7 +9,7 @@ below exists to keep that workflow safe.
 ## Invariants — do not violate, ever
 
 1. **Repo name and URL never change** — installed PWAs break.
-2. **Primary localStorage keys `forge:data`, `forge:cfg`, `forge:program` never rename.** Internal recovery/installation keys `forge:lkg`, `forge:lkg:previous`, `forge:lkg:older`, `forge:quarantine`, and `forge:install` are also permanent once shipped — see DATA-MODEL.md.
+2. **Primary localStorage keys `forge:data`, `forge:cfg`, `forge:program` never rename.** Internal device keys `forge:lkg`, `forge:lkg:previous`, `forge:lkg:older`, `forge:quarantine`, `forge:install`, and `forge:rest-timer` are also permanent once shipped — see DATA-MODEL.md.
 3. **No build step.** Files are edited as plain text and deployed as-is. Classic scripts only — **no ES modules** (the codebase uses one shared global scope by design).
 4. **Service-worker cache name bumps every release** (`blackpyre-vNN` in sw.js). No bump = users never get the update.
 5. **Deploy ritual:** all changed files in **one commit** → wait for the green check → use the update notice or close/reopen the installed app as directed.
@@ -23,10 +23,10 @@ below exists to keep that workflow safe.
 | File | Role |
 |---|---|
 | `index.html` | Markup + styles only (~172 KB in v57); loads the data files then the 7 app slices; includes protected/recovery UI, semantic tabs/dialogs/live regions, Home/Settings disclosures, offline notice, compact program identity, persistent-workout-draft controls, the consolidated Train-only rest dock, the default-on ChatGPT food-handoff toggle, and opt-in USDA-anchored food-suggestion controls |
-| `scripts/01-storage.js` | primary/recovery keys, defaults, schema 0→1→2 preparation, commit/rollback, established-install detection, three-generation rolling LKG lifecycle, missing-primary protection, structured diagnosis, quarantine transaction, protected-mode guards, shared Undo service, state, AI-setting restore preservation, food-suggestion defaults, accessibility naming/dialog focus/tab keyboard behavior, network-status UI, predictable view activation/tabs |
+| `scripts/01-storage.js` | primary/recovery keys, device-only rest-timer persistence, defaults, schema 0→1→2 preparation, commit/rollback, established-install detection, three-generation rolling LKG lifecycle, missing-primary protection, structured diagnosis, quarantine transaction, protected-mode guards, shared Undo service, state, AI-setting restore preservation, food-suggestion defaults, accessibility naming/dialog focus/tab keyboard behavior, network-status UI, predictable view activation/tabs |
 | `scripts/02-food.js` | bars, meals, food logging, keyboard-operable food/recent result buttons, deterministic next-food suggestions using a bundled 120-food USDA reference catalog plus familiar foods (remaining-target scoring, exact listed servings, exclusions, review-before-log), clear manual-entry validation, shared deletion Undo, offline local-search/barcode/scanner fast-fail |
 | `scripts/03-train.js` | training sessions, durable saved-exercise drafts with Resume/Discard, compact current-program identity and confirmed replacement, exercise-level Save/Completed/Edit integrity, named dynamic workout/program-builder controls, protected session-type changes, clear validation, conservative auto-progression, aligned mobile set controls and touch targets |
-| `scripts/04-weight.js` | weight chart, weigh-in/saved-meal Undo, motivation render, e1RM/PR engine, TDEE, streak, finish day, plate math, consolidated manual rest timer with duration chooser, share |
+| `scripts/04-weight.js` | weight chart, weigh-in/saved-meal Undo, motivation render, e1RM/PR engine, TDEE, streak, finish day, plate math, consolidated manual rest timer with duration chooser and elapsed-time/restart recovery, share |
 | `scripts/05-ai.js` | USDA/barcode lookups, usual-meal, schedule UI, kudos, offline direct-AI fast-fail, confirmed AI/pasted program replacement, measurement Undo, coach chat, check-in, default-on/Settings-toggleable key-free food handoff with live-API preference and first-item review positioning, AI report, analytics |
 | `scripts/06-settings.js` | setup wizard, FAQ, macro calculator, grouped settings including food-suggestion preferences, normal/partial/raw/diagnostic exports, backup restore, manual recovery-snapshot restore, recovery status and quarantine cleanup with automatic disclosure when attention is needed |
 | `vendor/html5-qrcode.min.js` | Vendored barcode scanner (npm-verified 2.3.8, Apache-2.0 notice adjacent). Precached; never fetched from a CDN |
@@ -39,7 +39,7 @@ below exists to keep that workflow safe.
 | `manifest.json` | PWA identity — name/short_name **BlackPyre** |
 | `icon-*.png`, `apple-touch-icon.png` | Gold dumbbell icons |
 | `tests/PHASE2-PROOF.md` | Permanent historical record of the Phase 2 byte-identity proof |
-| `tests/` | Permanent gauntlet — 478 automated checks (105 unit + 373 integration), reproducible jsdom lockfile, and `bella-reference.b64` (frozen memorial byte truth; never edited). Not precached |
+| `tests/` | Permanent gauntlet — 488 automated checks (109 unit + 379 integration), reproducible jsdom lockfile, and `bella-reference.b64` (frozen memorial byte truth; never edited). Not precached |
 | `.github/workflows/tests.yml` | Runs the gauntlet on every push |
 | `DATA-MODEL.md` | Primary storage schema, recovery-record contracts, and migration history |
 
@@ -71,7 +71,7 @@ Slice rules from here on:
 - Declarations and slice boundaries remain unchanged unless an approved plan covers them.
   New sections belong where their execution order requires; further splitting is a plan-level decision.
 
-## Storage safety conventions (v45–v63)
+## Storage safety conventions (v45–v64)
 
 - `schemaVersion` versions the complete primary state (`forge:cfg`, `forge:data`,
   `forge:program`) and is physically stored in `forge:cfg`; current primary schema = 2. v56 adds `forge:data.activeWorkoutDraft` so completed exercises survive reload before session finalization.
@@ -88,6 +88,9 @@ Slice rules from here on:
 - `forge:install` records that the device completed a healthy boot. On an established device,
   unexpectedly missing logs or settings enter protected mode before defaults or onboarding can
   write. The best populated validated snapshot is shown read-only and destructive reset is disabled.
+- `forge:rest-timer` is a separate format-1 device-only runtime record. It stores either an absolute
+  finish timestamp or a paused remainder, so iOS suspension and full app/phone restarts do not stop
+  elapsed time. It is excluded from primary schema, normal backups, and LKG rotation.
 - Before any protected or user-requested snapshot recovery overwrites primary storage, exact
   originals are written to `forge:quarantine` and read back byte-for-byte. Recovery succeeds
   only after primary read-back equality and a second `prepareState()` validation.
@@ -118,7 +121,7 @@ Slice rules from here on:
   reset"), never full sentences, layout-adjacent wording, or phrasing that a routine copy
   edit would touch. Release-pinned assertions (like the exact SW cache string) are advanced
   each release as part of the bump — that advance is maintenance, not weakening.
-- The permanent suite is **478 automated checks** and only grows. New features add tests in
+- The permanent suite is **488 automated checks** and only grows. New features add tests in
   the same release; existing checks are never deleted or weakened. The roughly 700 checks
   written before Phase 0 were old throwaway checks, not this permanent suite.
 - jsdom quirks: stub `URL.createObjectURL`, ignore `scrollTo` warnings, `select()` runs via
