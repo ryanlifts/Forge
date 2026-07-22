@@ -51,3 +51,16 @@ It may also preserve the legacy ryan-cut:data string for diagnostic and migratio
 5. Native vault failure must not cause a healthy normal app save to fail.
 6. The PWA must behave exactly as before when Capacitor is unavailable.
 7. Every meaningful path receives permanent automated coverage.
+
+## Verified runtime capability
+
+Tested in the iOS 26.5 simulator through the Capacitor Filesystem plugin:
+
+- Capacitor bridge present
+- Native platform detected as iOS
+- Filesystem plugin available
+- File written to the iOS Library directory
+- UTF-8 contents read back with exact equality
+- Temporary test file deleted successfully
+
+No BlackPyre storage key or user data was read, changed, or deleted during this capability test.
