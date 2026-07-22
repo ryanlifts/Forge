@@ -567,6 +567,17 @@ function exportRawRecoveryOriginals(){
   flashSave(rawRecoveryExportConfirmed ? "Raw recovery copy confirmed ✓" : "Raw export downloaded — confirmation still required", !rawRecoveryExportConfirmed);
   return rawRecoveryExportConfirmed;
 }
+function exportStorageDiagnostic(){
+  const payload = makeStorageDiagnosticEnvelope();
+  if (!payload.ok){ flashSave(payload.reason || "Diagnostic export unavailable", true); return false; }
+  const ok = confirm("This emergency diagnostic preserves exact local storage and may contain private API keys and personal logs. Store it securely and do not post it publicly. Export now?");
+  if (!ok) return false;
+  download("blackpyre-STORAGE-DIAGNOSTIC-"+todayStr()+".json", JSON.stringify(payload.envelope,null,2));
+  flashSave("Recovery diagnostic exported ✓");
+  ackBtn("exportDiagnosticBtn","✓ Exported");
+  return true;
+}
+document.getElementById("exportDiagnosticBtn").addEventListener("click", exportStorageDiagnostic);
 function exportStoredQuarantine(){
   let raw;
   try { raw = localStorage.getItem(QUARANTINE_KEY); }
@@ -578,12 +589,45 @@ function exportStoredQuarantine(){
   flashSave("Recovery copy exported ✓");
   return true;
 }
+function restoreBestSnapshotFromSettings(options){
+  if (protectedMode){
+    if (typeof openRecoveryPanel==="function" && recoveryWritesAllowed()) openRecoveryPanel();
+    else flashSave("Snapshot restore is available through Protected mode recovery", true);
+    return {ok:false,code:"protected"};
+  }
+  const candidate = buildLkgRecoveryCandidate();
+  if (!candidate.ok){ flashSave(candidate.reason || "No validated recovery snapshot is available", true); return candidate; }
+  if (!(options&&options.confirmed)){
+    const ok = confirm("Restore the best validated recovery snapshot? BlackPyre will preserve the exact current state in a recovery copy before replacing anything.\n\n"+candidate.summary);
+    if (!ok) return {ok:false,code:"cancelled"};
+  }
+  const result = performRecoveryCandidate(candidate,Object.assign({allowNormalRestore:true},options||{}));
+  if (result.code==="quarantine-conflict"){
+    const replace = confirm("A different recovery copy is already stored. Replace it with the exact current state before restoring this snapshot?");
+    if (replace) return restoreBestSnapshotFromSettings({confirmed:true,replaceExistingQuarantine:true});
+  }
+  if (result.ok){
+    flashSave("Recovery snapshot restored ✓");
+    ackBtn("restoreSnapshotBtn","✓ Restored");
+    renderBackup();
+  } else if (result.code!=="cancelled") flashSave(result.reason || "Snapshot restore could not be completed", true);
+  return result;
+}
+document.getElementById("restoreSnapshotBtn").addEventListener("click", ()=>restoreBestSnapshotFromSettings());
 function renderRecoveryStatus(){
   const line = document.getElementById("recoveryStatusLine");
   const card = document.getElementById("quarantineCard");
+  const best = getBestStoredLkgStatus();
+  const count = validSnapshotCount();
+  const restoreBtn = document.getElementById("restoreSnapshotBtn");
+  const snapshotMeta = document.getElementById("snapshotMetaLine");
+  if (restoreBtn) restoreBtn.disabled = !best.ok;
+  if (snapshotMeta) snapshotMeta.textContent = best.ok
+    ? count+" validated recovery snapshot"+(count===1?"":"s")+" stored on this device. Best snapshot: "+(best.record.savedAt ? new Date(best.record.savedAt).toLocaleString() : "date unavailable")+"."
+    : "No validated recovery snapshot is available yet.";
   if (line){
     if (protectedMode) line.textContent = "Automatic recovery is paused while BlackPyre protects the original saved data.";
-    else if (lkgStatus.state==="ready") line.textContent = "Automatic recovery protection: ready"+(lkgStatus.savedAt ? " · snapshot "+new Date(lkgStatus.savedAt).toLocaleString() : "")+".";
+    else if (lkgStatus.state==="ready") line.textContent = "Automatic recovery protection: ready"+(lkgStatus.savedAt ? " · snapshot "+new Date(lkgStatus.savedAt).toLocaleString() : "")+(lkgStatus.retained ? " · populated snapshot retained" : "")+".";
     else if (lkgStatus.state==="newer") line.textContent = "Automatic recovery protection: a newer-version snapshot is present and was left untouched.";
     else line.textContent = "Automatic recovery protection: unavailable. "+(lkgStatus.message||"");
   }

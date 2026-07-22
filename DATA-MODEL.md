@@ -1,6 +1,6 @@
 # BlackPyre Data Model
 
-**Current as of v62 (July 2026). Primary schemaVersion: 2. Recovery format: 1.**
+**Current as of v63 (July 2026). Primary schemaVersion: 2. Recovery format: 1.**
 
 ## Storage keys
 
@@ -12,14 +12,17 @@ BlackPyre has three permanent **primary user-state keys**:
 | `forge:data` | All logged data (object) |
 | `forge:program` | Loaded training program (object) |
 
-v46 adds two permanent **internal, device-only recovery keys**:
+v46–v63 add permanent **internal, device-only protection keys**:
 
 | Key | Contents |
 |---|---|
-| `forge:lkg` | One rolling, validated last-known-good whole-state snapshot |
+| `forge:lkg` | Current validated last-known-good whole-state snapshot |
+| `forge:lkg:previous` | Previous validated whole-state snapshot |
+| `forge:lkg:older` | Older validated whole-state snapshot |
 | `forge:quarantine` | One exact pre-recovery copy of unsafe primary strings plus diagnosis |
+| `forge:install` | Established-install marker used to distinguish data loss from a true first run |
 
-All five names are load-bearing once shipped and must not be renamed casually. The `forge:`
+All eight primary/internal names are load-bearing once shipped and must not be renamed casually. The `forge:`
 prefix predates the BlackPyre rebrand and is intentionally preserved. The legacy read-only
 fallback `ryan-cut:data` may supply logs when `forge:data` is missing; BlackPyre never renames,
 removes, or modifies that legacy key.
@@ -29,7 +32,7 @@ removes, or modifies that legacy key.
 `schemaVersion` is physically stored in `forge:cfg`, but versions the complete **primary**
 state and normal backup envelope: settings, logged data, and program.
 
-| Raw value | Meaning / behavior in v62 |
+| Raw value | Meaning / behavior in v63 |
 |---|---|
 | property absent or integer `0` | Pre-versioning legacy state; run numbered migrations from step 0 |
 | integer `1` | v45–v55 state; migrate 1 → 2 by adding an empty active-workout draft field |
@@ -43,8 +46,9 @@ its destination only after that complete step succeeds. `DEFAULT_CFG` does not c
 
 ## Recovery-record version
 
-`forge:lkg` and `forge:quarantine` are not primary state and do not use `schemaVersion`.
-They carry strict `recoveryFormatVersion: 1`.
+`forge:lkg`, `forge:lkg:previous`, `forge:lkg:older`, and `forge:quarantine` are not
+primary state and do not use `schemaVersion`. They carry strict `recoveryFormatVersion: 1`.
+`forge:install` is not a recovery record and uses its own `formatVersion: 1`.
 
 | Raw recovery value | Behavior |
 |---|---|
@@ -120,9 +124,9 @@ The v62 suggestion catalog lives in `data-suggestions.js`, not in `forge:cfg` or
 from JSON, pasted from an AI, or proposed in a coach JSON block. Export fallback filename:
 `blackpyre-program`.
 
-## forge:lkg
+## Rolling last-known-good snapshots
 
-Current record shape:
+`forge:lkg`, `forge:lkg:previous`, and `forge:lkg:older` use the same record shape:
 
 ```json
 {
@@ -144,12 +148,39 @@ Rules:
 - Built by rereading persisted storage and passing the complete state through pure
   `prepareState()`; unsaved in-memory changes are never snapshotted.
 - Identical state retains the existing timestamp and causes no redundant write.
-- Protected mode, failed primary save, or invalid persisted state cannot refresh it.
-- LKG failure never turns a successful primary save into a failure. The old record is
+- A changed healthy snapshot rotates current → previous → older before the new current is
+  written; a failed rotation/replacement is rolled back best-effort.
+- Protected mode, failed primary save, invalid persisted state, or unexpectedly missing
+  primary data cannot refresh any generation.
+- If any validated generation contains user records, an empty/default candidate cannot
+  replace it. Recovery selection prefers a populated generation, then the newest timestamp.
+- LKG failure never turns a successful primary save into a failure. Existing generations are
   restored best-effort if replacement/read-back fails, and Settings reports unavailable.
-- If a primary save fails specifically for quota, current-format LKG may be sacrificed and
-  that live save retried once. Quarantine and newer recovery records are never sacrificed.
-- It is device-only and may contain AI keys. Normal and readable exports still remove them.
+- If a primary save fails specifically for quota, the current-format `forge:lkg` may be
+  sacrificed and that live save retried once; previous/older generations remain available.
+  Quarantine and newer recovery records are never sacrificed.
+- The records are device-only and may contain AI keys. Normal/readable exports still remove them.
+
+
+## forge:install
+
+Current record shape:
+
+```json
+{
+  "formatVersion": 1,
+  "establishedAt": "ISO timestamp",
+  "lastHealthyAt": "ISO timestamp",
+  "schemaVersion": 2
+}
+```
+
+The marker is written only after a healthy validated snapshot exists. It contains no user logs
+or API keys. Together with existing settings, snapshots, or quarantine, it proves that missing
+`forge:data` or `forge:cfg` is a recovery incident rather than a first run. A marker with a newer
+format is treated as established evidence and is never overwritten by this version. A true fresh
+install has no primary/internal evidence; v63 writes a complete three-key default primary state
+before creating the first snapshot and marker.
 
 ## forge:quarantine
 
@@ -185,7 +216,7 @@ Rules:
 ## Normal backup envelope
 
 Normal backup is `{cfg, data, program}` JSON; its generation is announced by
-`cfg.schemaVersion`. `forge:lkg` and `forge:quarantine` are never included.
+`cfg.schemaVersion`. Rolling snapshots, quarantine, and the installation marker are never included.
 `anthropicKey` and `openaiKey` are stripped.
 
 Normal restore uses the shared `prepareState()` path. Device AI fields
@@ -197,7 +228,12 @@ healthy app into protected mode.
 
 ## Protected recovery and exports
 
-For corruption/validation failures, recovery appears before disclaimer/onboarding. Newer
+For corruption/validation failures or unexpectedly missing established primary data, recovery
+appears before disclaimer/onboarding. Missing-primary incidents disable the readable reset path;
+the user must restore a validated snapshot or their own backup. Empty defaults cannot replace a
+populated snapshot.
+
+For other corruption/validation failures, recovery appears before disclaimer/onboarding. Newer
 primary schema and storage-read failures offer no write-capable recovery.
 
 Recovery sources:
@@ -242,6 +278,7 @@ fallback. The app cannot verify a browser download and states that limit honestl
 | v60 | No primary schema migration | Optional `foodHandoffOn` preference added; absent or `true` means enabled, so existing/fresh users receive the key-free food handoff without rewriting stored cfg |
 | v61 | No primary schema migration | Adds opt-in `foodSuggestionsOn`, weight-loss scoring preference, and name-exclusion text; all are ordinary cfg defaults and stored food/log shapes remain unchanged |
 | v62 | No primary schema migration | Adds a static 120-food USDA Standard Reference suggestion catalog outside localStorage; cfg fields and stored food/log shapes remain unchanged |
+| v63 | No primary schema migration; recovery protections expanded | Adds established-install marker, missing-primary protected boot/runtime detection, three rolling LKG generations, populated-snapshot retention, manual snapshot restore, and exact storage diagnostic export |
 
 Old backups from any era must continue restoring correctly; the permanent suite proves the
 range-era path.

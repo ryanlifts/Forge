@@ -161,7 +161,7 @@ check("protected export does not mutate backup metadata", PC.window.eval("JSON.s
 let Fresh45 = bootRaw({});
 const freshCalls = sacredCalls(Fresh45);
 check("fresh install stamps schemaVersion 2", JSON.parse(Fresh45.window.localStorage.getItem("forge:cfg")).schemaVersion===2);
-check("fresh install writes only stamped settings", freshCalls.length===1 && freshCalls[0].method==="setItem" && freshCalls[0].key==="forge:cfg");
+check("fresh install writes a complete primary state", freshCalls.length===3 && freshCalls.map(c=>c.key).join(",")==="forge:data,forge:program,forge:cfg");
 const rawV44Cfg = JSON.stringify(Object.assign({},EXISTING_CFG,{futureField:"survives"}));
 let H45 = bootRaw({cfg:rawV44Cfg,data:RAW_DATA,program:RAW_PROGRAM});
 const h45Calls = sacredCalls(H45);
@@ -799,7 +799,7 @@ check("v62 a catalog suggestion opens its exact listed serving for review", dC62
 check("v62 review shows the USDA per-100g values and correctly scaled serving", /USDA reference · SR28/.test(dC62.getElementById("selName").textContent) && /165 kcal/.test(dC62.getElementById("selPer100").textContent) && dC62.getElementById("calcCal").textContent==="186" && dC62.getElementById("calcPro").textContent==="35");
 check("v62 reviewing a broad-catalog suggestion never auto-logs it", C62.window.eval(`(data.food[todayStr()]||[]).length`)===beforeReview62);
 check("v62 FAQ explains USDA sourcing, exact servings, and real-world variation", C62.window.eval(`FAQ.some(x=>x.q==="How accurate are suggested-food calories and macros?"&&/per 100 grams/.test(x.a)&&/exact gram weight/.test(x.a)&&/NDB number/.test(x.a)&&/brand/.test(x.a)) && FAQ.some(x=>x.q==="How do food suggestions work?"&&/120 common foods/.test(x.a)&&/familiar foods receive a bonus but are not required/.test(x.a)&&/does not call USDA or an AI/.test(x.a))`));
-check("v62 service worker precaches the catalog and uses the v62 cache", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v62"'); })());
+check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v63"'); })());
 check("v62 keeps primary schemaVersion 2", C62.window.eval("SCHEMA_VERSION")===2);
 
 // ================= ChatGPT handoff paste flow =================
@@ -975,7 +975,7 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the four data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+"/.test(sw));
-check("v62 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v62"'));
+check("v63 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v63"'));
 const rawIndex = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 check("data scripts load before the app scripts (raw file order)",
   ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js"].every(f=>
@@ -1230,6 +1230,72 @@ check("v57 every dynamically rendered onboarding control has an accessible name"
 check("v57 errors and save/network messages expose live status semantics", dA57.getElementById("searchErr").getAttribute("role")==="alert" && dA57.getElementById("saveState").getAttribute("role")==="status" && dA57.getElementById("offlineBanner").getAttribute("role")==="status");
 A57.window.eval("renderFAQ()");
 check("v57 FAQ documents keyboard and screen-reader support", /keyboard or screen reader/i.test(dA57.getElementById("faqBody").textContent));
+
+
+// ================= v63: missing-primary protection and rolling recovery =================
+const V63_POPULATED_DATA = Object.assign({}, V2_DATA, {
+  food:{"2026-07-20":[{name:"Chicken",cal:165,pro:31,carb:0,fat:3.6,meal:"dinner"}]},
+  workouts:[{date:"2026-07-20",day:"D1",sets:{"Bench Press":[{w:185,r:5}]}}],
+  weights:[{date:"2026-07-20",lbs:220}]
+});
+function makeV63Lkg(dataObj,savedAt){
+  return JSON.stringify({recoveryFormatVersion:1,savedAt:savedAt||"2026-07-20T12:00:00.000Z",source:"v63-test",
+    strings:{cfg:RAW_V2_CFG,data:JSON.stringify(dataObj),program:RAW_PROGRAM},legacyData:null});
+}
+const V63_POP_LKG = makeV63Lkg(V63_POPULATED_DATA);
+const V63_EMPTY_LKG = makeV63Lkg(V2_DATA,"2026-07-21T12:00:00.000Z");
+
+const Fresh63=bootRaw({});
+check("v63 fresh boot persists all three primary keys", ["forge:cfg","forge:data","forge:program"].every(k=>Fresh63.window.localStorage.getItem(k)!==null));
+check("v63 fresh boot establishes recovery marker and snapshot", Fresh63.window.eval(`installMarkerStatus().ok && inspectLkgRaw(localStorage.getItem("forge:lkg")).ok`));
+
+const V63_NEWER_INSTALL = JSON.stringify({formatVersion:2,establishedAt:"future",lastHealthyAt:"future",schemaVersion:99});
+const NewerInstall63=bootRaw({install:V63_NEWER_INSTALL});
+check("v63 newer installation markers are preserved and cannot be mistaken for a fresh install", NewerInstall63.window.eval(`protectedMode && installMarkerStatus().newer`) && NewerInstall63.window.localStorage.getItem("forge:install")===V63_NEWER_INSTALL && NewerInstall63.window.localStorage.getItem("forge:data")===null);
+
+const MissingData63=bootRaw({cfg:RAW_V2_CFG,program:RAW_PROGRAM,lkg:V63_POP_LKG});
+check("v63 missing logs on an established install enters protected mode", MissingData63.window.eval(`protectedMode && protectedModeDiagnostic.stage==="missing-primary" && protectedModeDiagnostic.part==="data"`));
+check("v63 missing-log protected view loads the validated snapshot", MissingData63.window.eval(`data.weights.length===1 && data.food["2026-07-20"].length===1`));
+check("v63 missing logs are never silently recreated or allowed to replace LKG", MissingData63.window.localStorage.getItem("forge:data")===null && MissingData63.window.localStorage.getItem("forge:lkg")===V63_POP_LKG && callsFor(MissingData63,"forge:lkg").length===0);
+check("v63 missing-primary recovery disables the destructive readable reset", MissingData63.window.document.getElementById("recoverReadableBtn").disabled===true && MissingData63.window.document.getElementById("recoverLkgBtn").disabled===false);
+
+const MissingCfg63=bootRaw({data:JSON.stringify(V63_POPULATED_DATA),program:RAW_PROGRAM,lkg:V63_POP_LKG});
+check("v63 missing settings on an established install enters protected mode", MissingCfg63.window.eval(`protectedMode && protectedModeDiagnostic.stage==="missing-primary" && protectedModeDiagnostic.part==="cfg"`));
+check("v63 missing-settings protected view uses snapshot settings without writing defaults", MissingCfg63.window.eval(`cfg.calTarget===1800`) && MissingCfg63.window.localStorage.getItem("forge:cfg")===null);
+
+const AllMissing63=bootRaw({lkg:V63_POP_LKG});
+check("v63 all-primary-keys-missing incident remains recoverable", AllMissing63.window.eval(`protectedMode && data.weights.length===1 && cfg.calTarget===1800 && program.name==="Test Program"`));
+
+const PreviousWins63=bootRaw({cfg:RAW_V2_CFG,program:RAW_PROGRAM,lkg:V63_EMPTY_LKG,lkgPrevious:V63_POP_LKG});
+check("v63 populated previous snapshot outranks a newer empty current snapshot", PreviousWins63.window.eval(`getBestStoredLkgStatus().key===LKG_PREVIOUS_KEY && data.weights.length===1`));
+check("v63 recovery summary reports multiple validated snapshots", /best of 2 validated snapshots/.test(PreviousWins63.window.eval(`buildLkgRecoveryCandidate().summary`)));
+
+const EmptyRegression63=bootRaw({cfg:RAW_V2_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM,lkg:V63_POP_LKG});
+check("v63 present-but-empty regression cannot replace a populated snapshot", EmptyRegression63.window.localStorage.getItem("forge:lkg")===V63_POP_LKG && EmptyRegression63.window.eval(`lkgStatus.retained===true`));
+
+const Old63=makeV63Lkg(Object.assign({},V63_POPULATED_DATA,{weights:[{date:"2026-07-19",lbs:221}]}),"2026-07-19T12:00:00.000Z");
+const Rotate63=bootRaw({cfg:RAW_V2_CFG,data:JSON.stringify(V63_POPULATED_DATA),program:RAW_PROGRAM,lkg:Old63});
+check("v63 healthy snapshot refresh rotates prior current into previous", Rotate63.window.localStorage.getItem("forge:lkg:previous")===Old63 && Rotate63.window.localStorage.getItem("forge:lkg")!==Old63);
+const firstCurrent63=Rotate63.window.localStorage.getItem("forge:lkg");
+Rotate63.window.eval(`data.weights.push({date:"2026-07-21",lbs:219}); save();`);
+check("v63 second healthy snapshot keeps two rolling generations", Rotate63.window.localStorage.getItem("forge:lkg:previous")===firstCurrent63 && Rotate63.window.localStorage.getItem("forge:lkg:older")===Old63);
+
+const RuntimeLoss63=bootRaw({cfg:RAW_V2_CFG,data:JSON.stringify(V63_POPULATED_DATA),program:RAW_PROGRAM});
+const runtimeLkg63=RuntimeLoss63.window.localStorage.getItem("forge:lkg");
+RuntimeLoss63.window.eval(`localStorage.removeItem(DATA_KEY); save();`);
+check("v63 runtime disappearance pauses all later saving", RuntimeLoss63.window.eval(`protectedMode && protectedModeDiagnostic.part==="data"`));
+check("v63 runtime disappearance leaves recovery snapshot byte-identical", RuntimeLoss63.window.localStorage.getItem("forge:lkg")===runtimeLkg63);
+
+const ManualRestore63=bootRaw({cfg:RAW_V2_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM,lkg:V63_POP_LKG});
+const manualBefore63=ManualRestore63.window.localStorage.getItem("forge:data");
+const manualResult63=ManualRestore63.window.eval(`performRecoveryCandidate(buildLkgRecoveryCandidate(),{allowNormalRestore:true})`);
+check("v63 normal-mode snapshot restore is verified and reaffirms the established install", manualResult63.ok && ManualRestore63.window.eval(`data.weights.length===1 && installMarkerStatus().ok`));
+check("v63 normal-mode snapshot restore quarantines exact prior primary data", JSON.parse(ManualRestore63.window.localStorage.getItem("forge:quarantine")).originals.data===manualBefore63);
+
+const diagnostic63=ManualRestore63.window.eval(`makeStorageDiagnosticEnvelope()`);
+check("v63 diagnostic export preserves primary, rolling snapshots, quarantine, and install marker fields", diagnostic63.ok && ["forge:cfg","forge:data","forge:program","forge:lkg","forge:lkg:previous","forge:lkg:older","forge:quarantine","forge:install"].every(k=>Object.prototype.hasOwnProperty.call(diagnostic63.envelope.strings,k)));
+check("v63 Data & recovery exposes manual snapshot restore and diagnostic export", !!ManualRestore63.window.document.getElementById("restoreSnapshotBtn") && !!ManualRestore63.window.document.getElementById("exportDiagnosticBtn"));
+check("v63 FAQ explains missing-key protection and rolling snapshots", ManualRestore63.window.eval(`FAQ.some(x=>x.q==="What happens if saved data unexpectedly disappears?"&&/saving is paused/i.test(x.a)&&/rolling/i.test(x.a))`));
 
 // ================= v44: update toast =================
 function bootSW(hasController){

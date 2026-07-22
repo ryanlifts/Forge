@@ -45,6 +45,9 @@ function bootRaw(raws, hooks){
       if (seed.program!==null && seed.program!==undefined) originals.setItem.call(storage, "forge:program", seed.program);
       if (seed.legacyData!==null && seed.legacyData!==undefined) originals.setItem.call(storage, "ryan-cut:data", seed.legacyData);
       if (seed.lkg!==null && seed.lkg!==undefined) originals.setItem.call(storage, "forge:lkg", seed.lkg);
+      if (seed.lkgPrevious!==null && seed.lkgPrevious!==undefined) originals.setItem.call(storage, "forge:lkg:previous", seed.lkgPrevious);
+      if (seed.lkgOlder!==null && seed.lkgOlder!==undefined) originals.setItem.call(storage, "forge:lkg:older", seed.lkgOlder);
+      if (seed.install!==null && seed.install!==undefined) originals.setItem.call(storage, "forge:install", seed.install);
       if (seed.quarantine!==null && seed.quarantine!==undefined) originals.setItem.call(storage, "forge:quarantine", seed.quarantine);
 
       proto.setItem = function(key, value){

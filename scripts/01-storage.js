@@ -1,7 +1,8 @@
 "use strict";
 // ================== storage keys & defaults ==================
 const DATA_KEY = "forge:data", CFG_KEY = "forge:cfg", PROG_KEY = "forge:program";
-const LKG_KEY = "forge:lkg", QUARANTINE_KEY = "forge:quarantine";
+const LKG_KEY = "forge:lkg", LKG_PREVIOUS_KEY = "forge:lkg:previous", LKG_OLDER_KEY = "forge:lkg:older";
+const QUARANTINE_KEY = "forge:quarantine", INSTALL_KEY = "forge:install";
 const SCHEMA_VERSION = 2, RECOVERY_FORMAT_VERSION = 1;
 const AI_CFG_FIELDS = ["anthropicKey","openaiKey","aiProvider","aiModelAnth","aiModelOai","foodHandoffOn"];
 
@@ -109,6 +110,20 @@ function normalizeDataState(obj){
   if(!out.meta) out.meta = {lastBackup:null, logsSince:0};
   if(!hasOwn(out,"activeWorkoutDraft")) out.activeWorkoutDraft = null;
   return out;
+}
+function dataContentScore(obj){
+  if (!isPlainObject(obj)) return 0;
+  let score = 0;
+  ["workouts","weights","measure","recents","meals"].forEach(k=>{ if (Array.isArray(obj[k])) score += obj[k].length; });
+  if (isPlainObject(obj.food)) Object.keys(obj.food).forEach(day=>{ if (Array.isArray(obj.food[day])) score += obj.food[day].length; });
+  if (isPlainObject(obj.water)) score += Object.keys(obj.water).filter(k=>Number(obj.water[k])>0).length;
+  ["myFoods","finished","foodCounts","mealCounts"].forEach(k=>{ if (isPlainObject(obj[k])) score += Object.keys(obj[k]).length; });
+  if (obj.activeWorkoutDraft) score += 1;
+  return score;
+}
+function cfgShowsEstablishedUse(obj){
+  if (!isPlainObject(obj)) return false;
+  return !!(obj.setupDone || obj.disclaimerAccepted || Number(obj.startWt)>0 || Number(obj.goalWt)>0 || Number(obj.calTarget)>0);
 }
 // migrate old range targets (calLo/calHi, proLo/proHi) to exact targets — must run on the RAW
 // object before defaults merge in, or the default calTarget masks the user's real numbers
@@ -372,6 +387,99 @@ function getStoredQuarantineStatus(){
   try { return inspectQuarantineRaw(localStorage.getItem(QUARANTINE_KEY)); }
   catch(e){ return {ok:false, code:"storage-read", reason:"Browser storage would not allow BlackPyre to read quarantine."}; }
 }
+function getStoredLkgStatuses(){
+  const defs = [
+    {key:LKG_KEY, tier:"current"},
+    {key:LKG_PREVIOUS_KEY, tier:"previous"},
+    {key:LKG_OLDER_KEY, tier:"older"}
+  ];
+  try {
+    return defs.map(d=>Object.assign({key:d.key,tier:d.tier}, inspectLkgRaw(localStorage.getItem(d.key))));
+  } catch(e){
+    return [{ok:false,code:"storage-read",reason:"Browser storage would not allow BlackPyre to read its recovery snapshots."}];
+  }
+}
+function snapshotDataScore(status){
+  return status && status.ok && status.prepared ? dataContentScore(status.prepared.state.data) : 0;
+}
+function getBestStoredLkgStatus(){
+  const statuses = getStoredLkgStatuses();
+  const valid = statuses.filter(x=>x.ok);
+  if (!valid.length){
+    const current = statuses.find(x=>x.key===LKG_KEY) || statuses[0];
+    return current || {ok:false,missing:true,code:"missing"};
+  }
+  valid.sort((a,b)=>{
+    const contentClass = (snapshotDataScore(b)>0?1:0)-(snapshotDataScore(a)>0?1:0);
+    if (contentClass) return contentClass;
+    const bt = Date.parse((b.record&&b.record.savedAt)||0)||0;
+    const at = Date.parse((a.record&&a.record.savedAt)||0)||0;
+    return bt-at;
+  });
+  return valid[0];
+}
+function validSnapshotCount(){ return getStoredLkgStatuses().filter(x=>x.ok).length; }
+function installMarkerStatus(){
+  try {
+    const raw = localStorage.getItem(INSTALL_KEY);
+    if (raw===null) return {ok:false,missing:true};
+    const record = JSON.parse(raw);
+    if (!isPlainObject(record) || !Number.isInteger(record.formatVersion) || record.formatVersion<1) return {ok:false,code:"shape"};
+    if (record.formatVersion>1) return {ok:false,newer:true,code:"newer",record:record};
+    if (typeof record.establishedAt!=="string" || typeof record.lastHealthyAt!=="string" || !Number.isInteger(record.schemaVersion)) return {ok:false,code:"shape"};
+    return {ok:true,record:record};
+  } catch(e){ return {ok:false,code:"read"}; }
+}
+function markEstablishedInstall(){
+  if (protectedMode) return {ok:false,code:"protected"};
+  let old = null;
+  try { old = installMarkerStatus(); } catch(e){}
+  if (old && old.newer) return {ok:false,code:"newer"};
+  const now = new Date().toISOString();
+  const record = {formatVersion:1, establishedAt:old&&old.ok&&old.record.establishedAt ? old.record.establishedAt : now,
+    lastHealthyAt:now, schemaVersion:SCHEMA_VERSION};
+  try {
+    const raw = JSON.stringify(record);
+    localStorage.setItem(INSTALL_KEY,raw);
+    return localStorage.getItem(INSTALL_KEY)===raw ? {ok:true,record:record} : {ok:false,code:"verify"};
+  } catch(e){ return {ok:false,code:"write"}; }
+}
+function parseCfgForEvidence(raw){
+  if (raw===null || raw===undefined) return null;
+  try { const obj=JSON.parse(raw); return isPlainObject(obj)?obj:null; } catch(e){ return null; }
+}
+function detectUnexpectedPrimaryLoss(read){
+  if (!read || !read.ok) return null;
+  const marker = installMarkerStatus();
+  const snapshots = getStoredLkgStatuses();
+  const hasSnapshot = snapshots.some(x=>x.ok);
+  const quarantine = getStoredQuarantineStatus();
+  const cfgObj = parseCfgForEvidence(read.originals.cfg);
+  const established = marker.ok || marker.newer || hasSnapshot || quarantine.ok || cfgShowsEstablishedUse(cfgObj);
+  if (read.originals.data===null && read.legacyData===null && established){
+    return {part:"data", reason:"Saved logs are missing from an established BlackPyre installation. Saving is paused so recovery snapshots cannot be replaced by empty defaults."};
+  }
+  if (read.originals.cfg===null && (marker.ok || hasSnapshot || read.originals.data!==null)){
+    return {part:"cfg", reason:"Saved settings are missing from an established BlackPyre installation. Saving is paused until the validated state is reviewed."};
+  }
+  return null;
+}
+function missingPrimaryPreparation(read, incident){
+  const parsed = {
+    cfg:parseStatePart(read.inputs.cfg,"Saved settings","cfg"),
+    data:parseStatePart(read.inputs.data,"Saved logs","data"),
+    program:parseStatePart(read.inputs.program,"Saved program","program")
+  };
+  let state = safeProtectedState(parsed);
+  const best = getBestStoredLkgStatus();
+  if (best.ok && best.prepared){
+    if (read.originals.data===null && read.legacyData===null) state.data = cloneJSON(best.prepared.state.data);
+    if (read.originals.cfg===null) state.cfg = cloneJSON(best.prepared.state.cfg);
+    if (read.originals.program===null) state.program = cloneJSON(best.prepared.state.program);
+  }
+  const diagnostic = makeDiagnostic("missing-primary",incident.part,"unexpected-missing-key",incident.reason);
+  return {ok:false,reason:incident.reason,kind:"failure",diagnostic:diagnostic,state:state,originalStrings:read.originals};
+}
 function sameLkgPayload(record, prepared, read){
   if (!record || !record.strings) return false;
   const legacy = read.dataSource==="legacy" ? read.legacyData : null;
@@ -392,20 +500,41 @@ function refreshLastKnownGood(source){
   if (protectedMode) return {ok:false, code:"protected"};
   const read = readStorageStrings();
   if (!read.ok){ noteLkgProblem(read.reason); return {ok:false, code:"storage-read"}; }
+  const missingIncident = detectUnexpectedPrimaryLoss(read);
+  if (missingIncident){
+    protectUnexpectedPrimaryLoss(missingIncident);
+    return {ok:false,code:"missing-primary"};
+  }
   const prepared = prepareState(read.inputs.cfg, read.inputs.data, read.inputs.program, {originalStrings:read.originals});
   if (!prepared.ok){ noteLkgProblem("Persisted state did not validate for a recovery snapshot."); return {ok:false, code:"invalid-state"}; }
-  let existingRaw;
-  try { existingRaw = localStorage.getItem(LKG_KEY); }
-  catch(e){ noteLkgProblem("Browser storage would not allow recovery snapshot access."); return {ok:false, code:"storage-read"}; }
+  let existingRaw, previousRaw, olderRaw;
+  try {
+    existingRaw = localStorage.getItem(LKG_KEY);
+    previousRaw = localStorage.getItem(LKG_PREVIOUS_KEY);
+    olderRaw = localStorage.getItem(LKG_OLDER_KEY);
+  } catch(e){ noteLkgProblem("Browser storage would not allow recovery snapshot access."); return {ok:false, code:"storage-read"}; }
   const existing = inspectLkgRaw(existingRaw);
   if (existing.newer){
     lkgStatus = {state:"newer", message:"A newer BlackPyre recovery snapshot is present and was left untouched."};
     return {ok:false, code:"newer"};
   }
   if (existing.ok && sameLkgPayload(existing.record, prepared, read)){
-    lkgStatus = {state:"ready", savedAt:existing.record.savedAt, message:"Automatic recovery protection is ready."};
+    lkgStatus = {state:"ready", savedAt:existing.record.savedAt, snapshots:validSnapshotCount(), message:"Automatic recovery protection is ready."};
     return {ok:true, unchanged:true, record:existing.record};
   }
+
+  // Never let a valid snapshot containing user records be replaced by an empty/default state.
+  // Intentional individual deletions keep the primary data key present; a missing key is handled
+  // above, while this guard also catches a present-but-suddenly-empty regression.
+  const candidateScore = dataContentScore(prepared.state.data);
+  const populated = getStoredLkgStatuses().filter(x=>x.ok && snapshotDataScore(x)>0);
+  if (candidateScore===0 && populated.length){
+    const best = getBestStoredLkgStatus();
+    lkgStatus = {state:"ready",savedAt:best.record.savedAt,snapshots:validSnapshotCount(),retained:true,
+      message:"A populated recovery snapshot was retained instead of replacing it with an empty state."};
+    return {ok:true,retained:true,record:best.record};
+  }
+
   const record = {
     recoveryFormatVersion:RECOVERY_FORMAT_VERSION,
     savedAt:new Date().toISOString(),
@@ -414,16 +543,23 @@ function refreshLastKnownGood(source){
     legacyData:read.dataSource==="legacy" ? read.legacyData : null
   };
   const raw = JSON.stringify(record);
+  const previous = inspectLkgRaw(previousRaw);
   try {
+    // Rotate oldest first. A failed write is rolled back; the current snapshot is written last.
+    if (existing.ok){
+      if (!previous.newer && previous.ok && previousRaw!==existingRaw) localStorage.setItem(LKG_OLDER_KEY,previousRaw);
+      if (!previous.newer && previousRaw!==existingRaw) localStorage.setItem(LKG_PREVIOUS_KEY,existingRaw);
+    }
     localStorage.setItem(LKG_KEY, raw);
     if (localStorage.getItem(LKG_KEY)!==raw) throw new Error("Recovery snapshot read-back did not match.");
-    lkgStatus = {state:"ready", savedAt:record.savedAt, message:"Automatic recovery protection is ready."};
+    lkgStatus = {state:"ready", savedAt:record.savedAt, snapshots:validSnapshotCount(), message:"Automatic recovery protection is ready."};
     return {ok:true, record:record};
   } catch(e){
     let rollbackFailed = false;
     try {
-      if (existingRaw===null) localStorage.removeItem(LKG_KEY);
-      else localStorage.setItem(LKG_KEY, existingRaw);
+      [[LKG_KEY,existingRaw],[LKG_PREVIOUS_KEY,previousRaw],[LKG_OLDER_KEY,olderRaw]].forEach(pair=>{
+        if (pair[1]===null) localStorage.removeItem(pair[0]); else localStorage.setItem(pair[0],pair[1]);
+      });
     } catch(rollbackError){ rollbackFailed = true; }
     noteLkgProblem("The live save succeeded, but browser storage could not refresh automatic recovery protection.");
     return {ok:false, code:"write", rollbackFailed:rollbackFailed, error:e};
@@ -499,15 +635,17 @@ function buildReadableRecoveryCandidate(){
   return {ok:true, source:"readable", raws:raws, prepared:prepared, parts:parts, summary:recoverySummary(parts)};
 }
 function buildLkgRecoveryCandidate(){
-  const lkg = getStoredLkgStatus();
+  const lkg = getBestStoredLkgStatus();
   if (!lkg.ok) return {ok:false, code:lkg.code, reason:lkg.reason || "No validated last-known-good snapshot is available."};
   const read = readStorageStrings();
   if (!read.ok) return {ok:false, code:"storage-read", reason:read.reason};
   const raws = {cfg:lkg.record.strings.cfg,data:lkg.record.strings.data,program:lkg.record.strings.program};
   const prepared = prepareState(raws.cfg,raws.data,raws.program,{originalStrings:read.originals});
   if (!prepared.ok) return {ok:false, code:"prepare", reason:prepared.reason};
-  return {ok:true, source:"lkg", raws:raws, prepared:prepared, lkg:lkg.record,
-    summary:"Restore settings, logs, and training program from "+(lkg.record.savedAt ? new Date(lkg.record.savedAt).toLocaleString() : "the validated snapshot")+"."};
+  const count = validSnapshotCount();
+  return {ok:true, source:"lkg", raws:raws, prepared:prepared, lkg:lkg.record, lkgKey:lkg.key,
+    summary:"Restore settings, logs, and training program from "+(lkg.record.savedAt ? new Date(lkg.record.savedAt).toLocaleString() : "the validated snapshot")+
+      (count>1 ? " (best of "+count+" validated snapshots)." : ".")};
 }
 function bestValidatedDeviceCfg(parts, lkg){
   if (parts && parts.cfg && parts.cfg.usable) return cloneJSON(parts.cfg.value);
@@ -524,7 +662,7 @@ function prepareRecoveryBackupEnvelope(b){
   const read = readStorageStrings();
   if (!read.ok) return {ok:false, code:"storage-read", reason:read.reason};
   const parts = getReadableLiveParts(read);
-  const lkg = getStoredLkgStatus();
+  const lkg = getBestStoredLkgStatus();
   const bestCfg = bestValidatedDeviceCfg(parts,lkg);
   let cfgObj, dataObj, programObj;
   try {
@@ -619,13 +757,15 @@ function markRecoveryFailure(reason, diagnostic){
   if (typeof renderRecoveryPanel==="function") renderRecoveryPanel();
 }
 function performRecoveryCandidate(candidate, options){
-  if (!recoveryWritesAllowed()) return {ok:false, code:"blocked", reason:"Recovery writes are not allowed for this protected state."};
+  const opts = options || {};
+  const normalSnapshotRestore = !protectedMode && !!opts.allowNormalRestore;
+  if (!normalSnapshotRestore && !recoveryWritesAllowed()) return {ok:false, code:"blocked", reason:"Recovery writes are not allowed for this protected state."};
   if (!candidate || !candidate.ok || !candidate.raws) return {ok:false, code:"candidate", reason:"The recovery candidate is not ready."};
   const read = readStorageStrings();
   if (!read.ok) return {ok:false, code:"storage-read", reason:read.reason};
   const prepared = prepareState(candidate.raws.cfg,candidate.raws.data,candidate.raws.program,{originalStrings:read.originals});
   if (!prepared.ok) return {ok:false, code:"prepare", reason:prepared.reason};
-  const quarantined = ensureQuarantine(read,options);
+  const quarantined = ensureQuarantine(read,opts);
   if (!quarantined.ok) return quarantined;
   const committed = commitState(prepared,{writeMask:{cfg:true,data:true,program:true}});
   if (!committed.ok){
@@ -657,7 +797,8 @@ function performRecoveryCandidate(candidate, options){
   protectedSnapshotStrings = null;
   rawRecoveryExportConfirmed = false;
   activeRecoveryQuarantineRaw = null;
-  refreshLastKnownGood("recovery");
+  const recoverySnapshot = refreshLastKnownGood("recovery");
+  if (recoverySnapshot.ok) markEstablishedInstall();
   if (typeof showProtectedBanner==="function") showProtectedBanner();
   if (typeof renderRecoveryPanel==="function") renderRecoveryPanel();
   if (typeof renderDayOptions==="function") renderDayOptions();
@@ -671,6 +812,15 @@ function makeRawRecoveryEnvelope(){
   if (!read.ok) return {ok:false, reason:read.reason};
   return {ok:true, envelope:{recoveryFormatVersion:RECOVERY_FORMAT_VERSION, type:"blackpyre-raw-recovery",
     exportedAt:new Date().toISOString(), diagnostic:protectedModeDiagnostic || null, originals:exactRecoveryOriginals(read)}};
+}
+function makeStorageDiagnosticEnvelope(){
+  const keys = [CFG_KEY,DATA_KEY,PROG_KEY,"ryan-cut:data",LKG_KEY,LKG_PREVIOUS_KEY,LKG_OLDER_KEY,QUARANTINE_KEY,INSTALL_KEY];
+  const strings = {};
+  try { keys.forEach(k=>{ strings[k]=localStorage.getItem(k); }); }
+  catch(e){ return {ok:false,reason:"Browser storage could not be read for diagnostics."}; }
+  return {ok:true,envelope:{type:"blackpyre-storage-diagnostic",formatVersion:1,exportedAt:new Date().toISOString(),
+    schemaVersion:SCHEMA_VERSION,recoveryFormatVersion:RECOVERY_FORMAT_VERSION,protectedMode:protectedMode,
+    diagnostic:protectedModeDiagnostic||null,strings:strings}};
 }
 function deleteStoredQuarantine(){
   const status = getStoredQuarantineStatus();
@@ -692,12 +842,38 @@ let lkgWarningShown = false;
 let lkgStatus = {state:"checking", message:"Checking automatic recovery protection…"};
 let saveTimer;
 
+function protectUnexpectedPrimaryLoss(incident){
+  // Rebuild the protected view from persisted readable parts and the best validated snapshot.
+  // A save attempt may already have changed memory, so never present that unsaved mutation as recovered data.
+  try {
+    const read = readStorageStrings();
+    if (read.ok){
+      const safe = missingPrimaryPreparation(read,incident);
+      if (safe && safe.state){ data=safe.state.data; cfg=safe.state.cfg; program=safe.state.program; }
+    }
+  } catch(e){}
+  protectedMode = true;
+  protectedModeKind = "failure";
+  protectedModeReason = incident.reason;
+  protectedModeDiagnostic = makeDiagnostic("missing-primary",incident.part,"unexpected-missing-key",incident.reason);
+  try {
+    protectedSnapshotStrings = {data:JSON.stringify(data),cfg:JSON.stringify(cfg),program:JSON.stringify(program)};
+  } catch(e){}
+  if (typeof showProtectedBanner==="function") showProtectedBanner();
+  if (typeof renderRecoveryPanel==="function") renderRecoveryPanel();
+}
+
 const _bootRead = readStorageStrings();
 let _bootPrepared;
 if (_bootRead.ok){
-  const testOptions = (typeof window!=="undefined" && window.__BP_TEST_PREPARE_OPTIONS) || {};
-  _bootPrepared = prepareState(_bootRead.inputs.cfg, _bootRead.inputs.data, _bootRead.inputs.program,
-    Object.assign({}, testOptions, {originalStrings:_bootRead.originals}));
+  const missingIncident = detectUnexpectedPrimaryLoss(_bootRead);
+  if (missingIncident){
+    _bootPrepared = missingPrimaryPreparation(_bootRead,missingIncident);
+  } else {
+    const testOptions = (typeof window!=="undefined" && window.__BP_TEST_PREPARE_OPTIONS) || {};
+    _bootPrepared = prepareState(_bootRead.inputs.cfg, _bootRead.inputs.data, _bootRead.inputs.program,
+      Object.assign({}, testOptions, {originalStrings:_bootRead.originals}));
+  }
 } else {
   _bootPrepared = failedPreparation(_bootRead.reason, "failure", {}, {cfg:null,data:null,program:null}, _bootRead.diagnostic);
 }
@@ -705,9 +881,13 @@ let _bootState = _bootPrepared.state;
 if (_bootPrepared.ok){
   // A legacy fallback remains evidence at its original key. Migrations may normalize
   // the in-memory copy and LKG, but boot never promotes it into forge:data implicitly.
+  const bootMarker = installMarkerStatus();
+  const trulyFresh = _bootRead.ok && _bootRead.originals.cfg===null && _bootRead.originals.data===null
+    && _bootRead.originals.program===null && _bootRead.legacyData===null
+    && !bootMarker.ok && !bootMarker.newer && validSnapshotCount()===0 && getStoredQuarantineStatus().missing;
   const bootCommitOptions = _bootRead.ok && _bootRead.dataSource==="legacy" && _bootRead.originals.data===null
     ? {writeMask:{cfg:_bootPrepared.changed.cfg, data:false, program:_bootPrepared.changed.program}}
-    : undefined;
+    : (trulyFresh ? {writeMask:{cfg:true,data:true,program:true}} : undefined);
   const committed = commitState(_bootPrepared, bootCommitOptions);
   if (!committed.ok){
     protectedMode = true;
@@ -731,7 +911,8 @@ if (protectedMode){
     data:JSON.stringify(data), cfg:JSON.stringify(cfg), program:JSON.stringify(program)
   };
 } else {
-  refreshLastKnownGood("boot");
+  const bootSnapshot = refreshLastKnownGood("boot");
+  if (bootSnapshot.ok) markEstablishedInstall();
 }
 // exact calorie target for a given date (schedule-aware); presets always rebalance to the same weekly total
 // days are Sun..Sat (JS getDay order)
@@ -804,41 +985,52 @@ function blockProtectedWrite(){
     setTimeout(()=>{
       protectedResyncPending = false;
       rerenderProtectedState();
-      flashSave("Not saved — protected mode", true);
+      if (typeof flashSave==="function") flashSave("Not saved — protected mode", true);
     }, 0);
   }
-  flashSave("Not saved — protected mode", true);
+  if (typeof flashSave==="function") flashSave("Not saved — protected mode", true);
+  return true;
+}
+function blockUnexpectedPrimaryLossBeforeWrite(){
+  const read = readStorageStrings();
+  if (!read.ok) return false; // the primary write will still fail safely if storage itself is unavailable
+  const incident = detectUnexpectedPrimaryLoss(read);
+  if (!incident) return false;
+  protectUnexpectedPrimaryLoss(incident);
+  blockProtectedWrite();
   return true;
 }
 function save(){
-  if (blockProtectedWrite()) return false;
+  if (blockProtectedWrite() || blockUnexpectedPrimaryLossBeforeWrite()) return false;
   let raw;
   try { raw = JSON.stringify(data); }
   catch(e){ flashSave("Save failed", true); return false; }
   const written = writePrimaryString(DATA_KEY, raw);
   if (!written.ok){ flashSave("Save failed", true); return false; }
   const snapshot = refreshLastKnownGood("data-save");
-  if (snapshot.ok) flashSave("Saved ✓");
+  if (snapshot.ok){ markEstablishedInstall(); flashSave("Saved ✓"); }
   return true;
 }
 function saveCfg(){
-  if (blockProtectedWrite()) return false;
+  if (blockProtectedWrite() || blockUnexpectedPrimaryLossBeforeWrite()) return false;
   let raw;
   try { raw = JSON.stringify(cfg); }
   catch(e){ flashSave("Save failed", true); return false; }
   const written = writePrimaryString(CFG_KEY, raw);
   if (!written.ok){ flashSave("Save failed", true); return false; }
-  refreshLastKnownGood("settings-save");
+  const snapshot = refreshLastKnownGood("settings-save");
+  if (snapshot.ok) markEstablishedInstall();
   return true;
 }
 function saveProgram(){
-  if (blockProtectedWrite()) return false;
+  if (blockProtectedWrite() || blockUnexpectedPrimaryLossBeforeWrite()) return false;
   let raw;
   try { raw = JSON.stringify(program); }
   catch(e){ flashSave("Save failed", true); return false; }
   const written = writePrimaryString(PROG_KEY, raw);
   if (!written.ok){ flashSave("Save failed", true); return false; }
-  refreshLastKnownGood("program-save");
+  const snapshot = refreshLastKnownGood("program-save");
+  if (snapshot.ok) markEstablishedInstall();
   return true;
 }
 

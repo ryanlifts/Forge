@@ -1,11 +1,15 @@
-# BLACKPYRE HANDOFF — current as of v62 (July 2026)
+# BLACKPYRE HANDOFF — current as of v63 (July 2026)
 
 You are a collaborator on BlackPyre, a fitness PWA at
-`ryanlifts.github.io/Forge/` (repo: `ryanlifts/Forge`). This repository represents **v62**, built on the completed v57 Phase 4 foundation and the v58–v61 security, housekeeping, food-handoff, and local-suggestion releases. Confirm the GitHub Pages deployment/cache
+`ryanlifts.github.io/Forge/` (repo: `ryanlifts/Forge`). This repository represents **v63**, built on the completed v57 Phase 4 foundation and the v58–v62 security, housekeeping, food-handoff, and food-suggestion releases. Confirm the GitHub Pages deployment/cache
 before calling it live.
 
 The two documents reproduced below (`ARCHITECTURE.md` and `DATA-MODEL.md`) live in the repo
-root, are binding, and are current as of v62. Read them before proposing or writing code.
+root, are binding, and are current as of v63. Read them before proposing or writing code.
+
+## v63 — missing-primary data-protection hotfix
+
+Closes the recovery gap exposed during testing when an established installation unexpectedly loses `forge:data` or `forge:cfg`. BlackPyre now detects missing primary state before defaults or onboarding can write, enters protected mode, pauses every normal save, and presents the best validated snapshot read-only. Empty/default state can never replace a populated recovery snapshot. Recovery now keeps three validated rolling generations (`forge:lkg`, `forge:lkg:previous`, `forge:lkg:older`) and chooses a populated snapshot ahead of a newer empty one. A permanent `forge:install` marker distinguishes an established installation from a truly fresh first launch. Settings adds verified manual snapshot restore plus a separately warned raw storage diagnostic export; recovery still quarantines exact prior primary strings and verifies read-back before success. The destructive readable/reset option is disabled during a missing-primary incident. No primary schema migration: `schemaVersion` remains 2; recovery records remain format 1 and the install marker uses format 1. Cache: blackpyre-v63. Tests: **478 (105 unit + 373 integration)**.
 
 ## v62 — expanded USDA-anchored food suggestions
 
@@ -46,7 +50,7 @@ Cache: blackpyre-v58. No storage, schema, or behavior changes.
 
 ## Current state
 
-1. The permanent `/tests` gauntlet has **456 checks: 105 unit + 351 integration**. GitHub
+1. The permanent `/tests` gauntlet has **478 checks: 105 unit + 373 integration**. GitHub
    Actions runs it on every push. Tests are cumulative and are never deleted or weakened.
 2. `tests/bella-reference.b64` is the frozen memorial byte truth. Exact identity and embed
    count 1 are test-enforced; never regenerate, re-render, edit, or replace it.
@@ -54,16 +58,17 @@ Cache: blackpyre-v58. No storage, schema, or behavior changes.
    `scripts/01-storage.js` through `scripts/07-boot.js` in strict order. Classic scripts,
    shared global scope, no ES modules, no build step — permanent.
 4. Primary state remains `forge:cfg`, `forge:data`, `forge:program` at **schemaVersion 2**.
-   Internal `forge:lkg` and `forge:quarantine` remain `recoveryFormatVersion:1`.
-5. Saved exercises persist immediately in `data.activeWorkoutDraft`; routine deletions have
+   Internal `forge:lkg`, `forge:lkg:previous`, `forge:lkg:older`, and `forge:quarantine` remain `recoveryFormatVersion:1`; `forge:install` uses `formatVersion:1`.
+5. Missing primary logs/settings on an established device enter protected mode before defaults can write; three rolling snapshots are retained and populated recovery can never be replaced by empty state.
+6. Saved exercises persist immediately in `data.activeWorkoutDraft`; routine deletions have
    Undo; program replacement is confirmed; offline network-only actions fail fast.
-6. ChatGPT food handoff is on by default without a key, has an independent Settings toggle,
+7. ChatGPT food handoff is on by default without a key, has an independent Settings toggle,
    and yields to a configured live API key for API-based food logging.
-7. Food suggestions are opt-in, target-aware, preference-filtered, offline-capable, and review-before-log; the bundled 120-food USDA reference catalog does not require prior food history or a live request.
-8. v57 completes programmatic control names, semantic/keyboard bottom tabs, keyboard food
+8. Food suggestions are opt-in, target-aware, preference-filtered, offline-capable, and review-before-log; the bundled 120-food USDA reference catalog does not require prior food history or a live request.
+9. v57 completes programmatic control names, semantic/keyboard bottom tabs, keyboard food
    results, named dynamic onboarding/workout/builder controls, and dialog focus entry/return.
-9. Browser zoom remains enabled; visible focus behavior is preserved.
-10. Cache: `blackpyre-v62`.
+10. Browser zoom remains enabled; visible focus behavior is preserved.
+11. Cache: `blackpyre-v63`.
 
 ## Five-phase status
 
@@ -103,7 +108,7 @@ notice or close/reopen as directed. Every release gets a plain-language report a
 
 # BlackPyre Architecture
 
-**Current as of v62 (July 2026).**
+**Current as of v63 (July 2026).**
 
 A single-page PWA: vanilla HTML/CSS/JS, no framework, no build step, localStorage only.
 Deployed on GitHub Pages. Developed AI-assisted (Claude / ChatGPT) from a phone — every rule
@@ -112,7 +117,7 @@ below exists to keep that workflow safe.
 ## Invariants — do not violate, ever
 
 1. **Repo name and URL never change** — installed PWAs break.
-2. **Primary localStorage keys `forge:data`, `forge:cfg`, `forge:program` never rename.** The v46 internal recovery keys `forge:lkg` and `forge:quarantine` are also permanent once shipped — see DATA-MODEL.md.
+2. **Primary localStorage keys `forge:data`, `forge:cfg`, `forge:program` never rename.** Internal recovery/installation keys `forge:lkg`, `forge:lkg:previous`, `forge:lkg:older`, `forge:quarantine`, and `forge:install` are also permanent once shipped — see DATA-MODEL.md.
 3. **No build step.** Files are edited as plain text and deployed as-is. Classic scripts only — **no ES modules** (the codebase uses one shared global scope by design).
 4. **Service-worker cache name bumps every release** (`blackpyre-vNN` in sw.js). No bump = users never get the update.
 5. **Deploy ritual:** all changed files in **one commit** → wait for the green check → use the update notice or close/reopen the installed app as directed.
@@ -126,12 +131,12 @@ below exists to keep that workflow safe.
 | File | Role |
 |---|---|
 | `index.html` | Markup + styles only (~172 KB in v57); loads the data files then the 7 app slices; includes protected/recovery UI, semantic tabs/dialogs/live regions, Home/Settings disclosures, offline notice, compact program identity, persistent-workout-draft controls, the consolidated Train-only rest dock, the default-on ChatGPT food-handoff toggle, and opt-in USDA-anchored food-suggestion controls |
-| `scripts/01-storage.js` | primary/recovery keys, defaults, schema 0→1→2 preparation, commit/rollback, LKG lifecycle, structured diagnosis, quarantine transaction, protected-mode guards, shared Undo service, state, AI-setting restore preservation, food-suggestion defaults, accessibility naming/dialog focus/tab keyboard behavior, network-status UI, predictable view activation/tabs |
+| `scripts/01-storage.js` | primary/recovery keys, defaults, schema 0→1→2 preparation, commit/rollback, established-install detection, three-generation rolling LKG lifecycle, missing-primary protection, structured diagnosis, quarantine transaction, protected-mode guards, shared Undo service, state, AI-setting restore preservation, food-suggestion defaults, accessibility naming/dialog focus/tab keyboard behavior, network-status UI, predictable view activation/tabs |
 | `scripts/02-food.js` | bars, meals, food logging, keyboard-operable food/recent result buttons, deterministic next-food suggestions using a bundled 120-food USDA reference catalog plus familiar foods (remaining-target scoring, exact listed servings, exclusions, review-before-log), clear manual-entry validation, shared deletion Undo, offline local-search/barcode/scanner fast-fail |
 | `scripts/03-train.js` | training sessions, durable saved-exercise drafts with Resume/Discard, compact current-program identity and confirmed replacement, exercise-level Save/Completed/Edit integrity, named dynamic workout/program-builder controls, protected session-type changes, clear validation, conservative auto-progression, aligned mobile set controls and touch targets |
 | `scripts/04-weight.js` | weight chart, weigh-in/saved-meal Undo, motivation render, e1RM/PR engine, TDEE, streak, finish day, plate math, consolidated manual rest timer with duration chooser, share |
 | `scripts/05-ai.js` | USDA/barcode lookups, usual-meal, schedule UI, kudos, offline direct-AI fast-fail, confirmed AI/pasted program replacement, measurement Undo, coach chat, check-in, default-on/Settings-toggleable key-free food handoff with live-API preference and first-item review positioning, AI report, analytics |
-| `scripts/06-settings.js` | setup wizard, FAQ, macro calculator, grouped settings including food-suggestion preferences, normal/partial/raw exports, restore, recovery status and quarantine cleanup with automatic disclosure when attention is needed |
+| `scripts/06-settings.js` | setup wizard, FAQ, macro calculator, grouped settings including food-suggestion preferences, normal/partial/raw/diagnostic exports, backup restore, manual recovery-snapshot restore, recovery status and quarantine cleanup with automatic disclosure when attention is needed |
 | `vendor/html5-qrcode.min.js` | Vendored barcode scanner (npm-verified 2.3.8, Apache-2.0 notice adjacent). Precached; never fetched from a CDN |
 | `scripts/07-boot.js` | dash, Easter egg, protected/recovery panel orchestration, network-status initialization, approved update toast, boot |
 | `data-quotes.js` | QUOTES vault — classic script, loads before the app slices, shares global scope |
@@ -142,7 +147,7 @@ below exists to keep that workflow safe.
 | `manifest.json` | PWA identity — name/short_name **BlackPyre** |
 | `icon-*.png`, `apple-touch-icon.png` | Gold dumbbell icons |
 | `tests/PHASE2-PROOF.md` | Permanent historical record of the Phase 2 byte-identity proof |
-| `tests/` | Permanent gauntlet — 456 automated checks (105 unit + 351 integration), reproducible jsdom lockfile, and `bella-reference.b64` (frozen memorial byte truth; never edited). Not precached |
+| `tests/` | Permanent gauntlet — 478 automated checks (105 unit + 373 integration), reproducible jsdom lockfile, and `bella-reference.b64` (frozen memorial byte truth; never edited). Not precached |
 | `.github/workflows/tests.yml` | Runs the gauntlet on every push |
 | `DATA-MODEL.md` | Primary storage schema, recovery-record contracts, and migration history |
 
@@ -174,7 +179,7 @@ Slice rules from here on:
 - Declarations and slice boundaries remain unchanged unless an approved plan covers them.
   New sections belong where their execution order requires; further splitting is a plan-level decision.
 
-## Storage safety conventions (v45–v46)
+## Storage safety conventions (v45–v63)
 
 - `schemaVersion` versions the complete primary state (`forge:cfg`, `forge:data`,
   `forge:program`) and is physically stored in `forge:cfg`; current primary schema = 2. v56 adds `forge:data.activeWorkoutDraft` so completed exercises survive reload before session finalization.
@@ -184,13 +189,19 @@ Slice rules from here on:
   Save routines restore the protected in-memory snapshot and perform no normal write.
 - Normal restore uses the same preparation pipeline. Bad/newer backups are refused without
   poisoning a healthy app; absent envelope members leave that device area untouched.
-- v46 maintains one validated device-only LKG at `forge:lkg`. It refreshes only from
-  successfully persisted, fully prepared primary state; it never snapshots unsaved memory.
-- Before any protected recovery overwrites primary storage, exact originals are written to
-  `forge:quarantine` and read back byte-for-byte. Recovery succeeds only after primary
-  read-back equality and a second `prepareState()` validation.
-- LKG/quarantine use strict `recoveryFormatVersion:1`, separate from primary schemaVersion.
-  Newer recovery records are never consumed, deleted, or overwritten by an older app.
+- v63 maintains three validated device-only LKG generations at `forge:lkg`,
+  `forge:lkg:previous`, and `forge:lkg:older`. They refresh only from successfully persisted,
+  fully prepared primary state; unsaved memory is never snapshotted. A populated generation
+  cannot be replaced by an empty/default candidate.
+- `forge:install` records that the device completed a healthy boot. On an established device,
+  unexpectedly missing logs or settings enter protected mode before defaults or onboarding can
+  write. The best populated validated snapshot is shown read-only and destructive reset is disabled.
+- Before any protected or user-requested snapshot recovery overwrites primary storage, exact
+  originals are written to `forge:quarantine` and read back byte-for-byte. Recovery succeeds
+  only after primary read-back equality and a second `prepareState()` validation.
+- All three LKG generations and quarantine use strict `recoveryFormatVersion:1`, separate
+  from primary schemaVersion. The installation marker uses its own `formatVersion:1`. Newer
+  recovery records are never consumed, deleted, or overwritten by an older app.
 - localStorage is not transactional. Primary commit skips unchanged keys, writes settings
   last, and attempts rollback. Quarantine-first ordering and post-write verification bound
   risk but do not claim true atomicity.
@@ -200,21 +211,22 @@ Slice rules from here on:
 - Run with `bash tests/run-tests.sh` — it does `npm ci` against the committed lockfile,
   then runs both suites. Test tooling only; the app still has zero runtime dependencies.
 - Harness (`tests/harness.js`) boots the **shipped** app in jsdom and inlines local scripts/
-  styles. It records `setItem`, `removeItem`, and `clear` calls across all five BlackPyre keys.
+  styles. It records `setItem`, `removeItem`, and `clear` calls across primary and internal BlackPyre storage keys.
 - Memorial integrity is enforced byte-for-byte against `tests/bella-reference.b64`, with
   an exact embed count of 1. The reference file never changes.
 - Unit suite: pure math/parsers, schema preparation including 1→2 draft migration/validation, strict recovery-record parsing,
   structured diagnostics, candidate summaries, and version-separation rules.
 - Integration suite: all historic app flows plus protected zero-write behavior, mutation
-  re-sync, interrupted commits, LKG create/refresh/failure/quota rules, area diagnosis,
-  all three recovery sources, quarantine ordering/retention/export/deletion, legacy fallback,
+  re-sync, interrupted commits, missing-primary boot/runtime protection, established-install
+  marking, three-generation LKG rotation/populated-snapshot retention/manual restore, area diagnosis,
+  all three recovery sources, quarantine ordering/retention/export/deletion, exact diagnostic export, legacy fallback,
   API-key boundaries, read-back failure, durable workout-draft save/resume/discard/failure behavior, exercise-level workout saving, protected session-type changes, routine-deletion Undo, manual-food validation, confirmed program replacement, offline network fast-fail, conservative progression, compact program identity/separate management, consolidated Train-only rest duration/control dock, Home/Settings disclosure hierarchy, offline status transitions, practical compact-control touch targets, predictable tab/session positioning, 16px editable controls, complete control naming, semantic/keyboard bottom tabs, keyboard food results, dialog focus entry/return, dynamic onboarding/workout/builder accessibility, default-on food handoff/toggle/restore behavior, deterministic opt-in food suggestions (120-item USDA reference catalog, exact servings, remaining targets, familiar-food bonus, exclusions, refresh, historical-date hiding, and review-before-log), handoff paste/log and first-item review positioning, update toast, and Easter egg timing.
 - **Wording-pin convention (v59):** tests that pin user-facing or FAQ text must pin only
   short, load-bearing guarantee phrases ("never starts automatically", "does not start or
   reset"), never full sentences, layout-adjacent wording, or phrasing that a routine copy
   edit would touch. Release-pinned assertions (like the exact SW cache string) are advanced
   each release as part of the bump — that advance is maintenance, not weakening.
-- The permanent suite is **456 automated checks** and only grows. New features add tests in
+- The permanent suite is **478 automated checks** and only grows. New features add tests in
   the same release; existing checks are never deleted or weakened. The roughly 700 checks
   written before Phase 0 were old throwaway checks, not this permanent suite.
 - jsdom quirks: stub `URL.createObjectURL`, ignore `scrollTo` warnings, `select()` runs via
@@ -236,7 +248,7 @@ Slice rules from here on:
 
 # BlackPyre Data Model
 
-**Current as of v62 (July 2026). Primary schemaVersion: 2. Recovery format: 1.**
+**Current as of v63 (July 2026). Primary schemaVersion: 2. Recovery format: 1.**
 
 ## Storage keys
 
@@ -248,14 +260,17 @@ BlackPyre has three permanent **primary user-state keys**:
 | `forge:data` | All logged data (object) |
 | `forge:program` | Loaded training program (object) |
 
-v46 adds two permanent **internal, device-only recovery keys**:
+v46–v63 add permanent **internal, device-only protection keys**:
 
 | Key | Contents |
 |---|---|
-| `forge:lkg` | One rolling, validated last-known-good whole-state snapshot |
+| `forge:lkg` | Current validated last-known-good whole-state snapshot |
+| `forge:lkg:previous` | Previous validated whole-state snapshot |
+| `forge:lkg:older` | Older validated whole-state snapshot |
 | `forge:quarantine` | One exact pre-recovery copy of unsafe primary strings plus diagnosis |
+| `forge:install` | Established-install marker used to distinguish data loss from a true first run |
 
-All five names are load-bearing once shipped and must not be renamed casually. The `forge:`
+All eight primary/internal names are load-bearing once shipped and must not be renamed casually. The `forge:`
 prefix predates the BlackPyre rebrand and is intentionally preserved. The legacy read-only
 fallback `ryan-cut:data` may supply logs when `forge:data` is missing; BlackPyre never renames,
 removes, or modifies that legacy key.
@@ -265,7 +280,7 @@ removes, or modifies that legacy key.
 `schemaVersion` is physically stored in `forge:cfg`, but versions the complete **primary**
 state and normal backup envelope: settings, logged data, and program.
 
-| Raw value | Meaning / behavior in v62 |
+| Raw value | Meaning / behavior in v63 |
 |---|---|
 | property absent or integer `0` | Pre-versioning legacy state; run numbered migrations from step 0 |
 | integer `1` | v45–v55 state; migrate 1 → 2 by adding an empty active-workout draft field |
@@ -279,8 +294,9 @@ its destination only after that complete step succeeds. `DEFAULT_CFG` does not c
 
 ## Recovery-record version
 
-`forge:lkg` and `forge:quarantine` are not primary state and do not use `schemaVersion`.
-They carry strict `recoveryFormatVersion: 1`.
+`forge:lkg`, `forge:lkg:previous`, `forge:lkg:older`, and `forge:quarantine` are not
+primary state and do not use `schemaVersion`. They carry strict `recoveryFormatVersion: 1`.
+`forge:install` is not a recovery record and uses its own `formatVersion: 1`.
 
 | Raw recovery value | Behavior |
 |---|---|
@@ -356,9 +372,9 @@ The v62 suggestion catalog lives in `data-suggestions.js`, not in `forge:cfg` or
 from JSON, pasted from an AI, or proposed in a coach JSON block. Export fallback filename:
 `blackpyre-program`.
 
-## forge:lkg
+## Rolling last-known-good snapshots
 
-Current record shape:
+`forge:lkg`, `forge:lkg:previous`, and `forge:lkg:older` use the same record shape:
 
 ```json
 {
@@ -380,12 +396,39 @@ Rules:
 - Built by rereading persisted storage and passing the complete state through pure
   `prepareState()`; unsaved in-memory changes are never snapshotted.
 - Identical state retains the existing timestamp and causes no redundant write.
-- Protected mode, failed primary save, or invalid persisted state cannot refresh it.
-- LKG failure never turns a successful primary save into a failure. The old record is
+- A changed healthy snapshot rotates current → previous → older before the new current is
+  written; a failed rotation/replacement is rolled back best-effort.
+- Protected mode, failed primary save, invalid persisted state, or unexpectedly missing
+  primary data cannot refresh any generation.
+- If any validated generation contains user records, an empty/default candidate cannot
+  replace it. Recovery selection prefers a populated generation, then the newest timestamp.
+- LKG failure never turns a successful primary save into a failure. Existing generations are
   restored best-effort if replacement/read-back fails, and Settings reports unavailable.
-- If a primary save fails specifically for quota, current-format LKG may be sacrificed and
-  that live save retried once. Quarantine and newer recovery records are never sacrificed.
-- It is device-only and may contain AI keys. Normal and readable exports still remove them.
+- If a primary save fails specifically for quota, the current-format `forge:lkg` may be
+  sacrificed and that live save retried once; previous/older generations remain available.
+  Quarantine and newer recovery records are never sacrificed.
+- The records are device-only and may contain AI keys. Normal/readable exports still remove them.
+
+
+## forge:install
+
+Current record shape:
+
+```json
+{
+  "formatVersion": 1,
+  "establishedAt": "ISO timestamp",
+  "lastHealthyAt": "ISO timestamp",
+  "schemaVersion": 2
+}
+```
+
+The marker is written only after a healthy validated snapshot exists. It contains no user logs
+or API keys. Together with existing settings, snapshots, or quarantine, it proves that missing
+`forge:data` or `forge:cfg` is a recovery incident rather than a first run. A marker with a newer
+format is treated as established evidence and is never overwritten by this version. A true fresh
+install has no primary/internal evidence; v63 writes a complete three-key default primary state
+before creating the first snapshot and marker.
 
 ## forge:quarantine
 
@@ -421,7 +464,7 @@ Rules:
 ## Normal backup envelope
 
 Normal backup is `{cfg, data, program}` JSON; its generation is announced by
-`cfg.schemaVersion`. `forge:lkg` and `forge:quarantine` are never included.
+`cfg.schemaVersion`. Rolling snapshots, quarantine, and the installation marker are never included.
 `anthropicKey` and `openaiKey` are stripped.
 
 Normal restore uses the shared `prepareState()` path. Device AI fields
@@ -433,7 +476,12 @@ healthy app into protected mode.
 
 ## Protected recovery and exports
 
-For corruption/validation failures, recovery appears before disclaimer/onboarding. Newer
+For corruption/validation failures or unexpectedly missing established primary data, recovery
+appears before disclaimer/onboarding. Missing-primary incidents disable the readable reset path;
+the user must restore a validated snapshot or their own backup. Empty defaults cannot replace a
+populated snapshot.
+
+For other corruption/validation failures, recovery appears before disclaimer/onboarding. Newer
 primary schema and storage-read failures offer no write-capable recovery.
 
 Recovery sources:
@@ -478,6 +526,7 @@ fallback. The app cannot verify a browser download and states that limit honestl
 | v60 | No primary schema migration | Optional `foodHandoffOn` preference added; absent or `true` means enabled, so existing/fresh users receive the key-free food handoff without rewriting stored cfg |
 | v61 | No primary schema migration | Adds opt-in `foodSuggestionsOn`, weight-loss scoring preference, and name-exclusion text; all are ordinary cfg defaults and stored food/log shapes remain unchanged |
 | v62 | No primary schema migration | Adds a static 120-food USDA Standard Reference suggestion catalog outside localStorage; cfg fields and stored food/log shapes remain unchanged |
+| v63 | No primary schema migration; recovery protections expanded | Adds established-install marker, missing-primary protected boot/runtime detection, three rolling LKG generations, populated-snapshot retention, manual snapshot restore, and exact storage diagnostic export |
 
 Old backups from any era must continue restoring correctly; the permanent suite proves the
 range-era path.

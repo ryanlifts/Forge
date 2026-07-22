@@ -150,6 +150,9 @@ function showProtectedBanner(){
   } else if (protectedModeDiagnostic && protectedModeDiagnostic.stage==="storage-read"){
     text.textContent = "BlackPyre could not safely read browser storage. No recovery write is allowed because the app cannot prove what it would preserve. Do not uninstall the app.";
     recoveryBtn.classList.add("hidden");
+  } else if (protectedModeDiagnostic && protectedModeDiagnostic.stage==="missing-primary"){
+    text.textContent = "BlackPyre detected that saved logs or settings unexpectedly disappeared. Saving is paused, empty defaults cannot replace recovery snapshots, and recovery is ready. Do not uninstall the app.";
+    recoveryBtn.classList.remove("hidden");
   } else {
     text.textContent = "BlackPyre couldn't safely use part of your saved data, so normal saving is paused. Your original data is still preserved. Open recovery to restore a validated snapshot, use a backup, or keep every readable area.";
     recoveryBtn.classList.remove("hidden");
@@ -190,10 +193,12 @@ function renderRecoveryPanel(){
 
   const readable = buildReadableRecoveryCandidate();
   const readableBtn = document.getElementById("recoverReadableBtn");
-  readableBtn.disabled = !readable.ok;
-  document.getElementById("recoveryReadableText").textContent = readable.ok
-    ? readable.summary+". No malformed JSON or damaged records will be guessed."
-    : "BlackPyre could not build a validated readable-state candidate.";
+  const missingPrimary = protectedModeDiagnostic && protectedModeDiagnostic.stage==="missing-primary";
+  readableBtn.disabled = !readable.ok || missingPrimary;
+  document.getElementById("recoveryReadableText").textContent = missingPrimary
+    ? "Resetting an unexpectedly missing primary area is disabled. Restore a validated snapshot or your own backup instead."
+    : (readable.ok ? readable.summary+". No malformed JSON or damaged records will be guessed."
+      : "BlackPyre could not build a validated readable-state candidate.");
 }
 function confirmRecoveryCandidate(candidate){
   return confirm("Review this recovery:\n\n"+candidate.summary+"\n\nBlackPyre will preserve the exact current originals before changing primary storage. Continue?");
