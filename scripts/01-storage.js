@@ -597,6 +597,9 @@ const NATIVE_VAULT_FORMAT_VERSION = 1;
 const NATIVE_VAULT_TYPE = "blackpyre-native-vault";
 const NATIVE_VAULT_PATH = "blackpyre-native-vault.json";
 const NATIVE_VAULT_CANDIDATE_PATH = "blackpyre-native-vault.candidate.json";
+const NATIVE_RESTORE_QUARANTINE_PATH = "blackpyre-native-restore-quarantine.json";
+const NATIVE_RESTORE_QUARANTINE_TYPE = "blackpyre-native-restore-quarantine";
+const NATIVE_RESTORE_QUARANTINE_FORMAT_VERSION = 1;
 const NATIVE_VAULT_DIRECTORY = "LIBRARY";
 const NATIVE_VAULT_ENCODING = "utf8";
 const NATIVE_VAULT_KEYS = [CFG_KEY,DATA_KEY,PROG_KEY,LKG_KEY,LKG_PREVIOUS_KEY,LKG_OLDER_KEY,QUARANTINE_KEY,INSTALL_KEY,"ryan-cut:data"];
@@ -604,7 +607,9 @@ let nativeVaultQueue = Promise.resolve();
 let nativeVaultDiagnostic = {
   state:"unavailable", available:false, native:false, platform:null, verified:false,
   retainedPrevious:false, path:NATIVE_VAULT_PATH, directory:NATIVE_VAULT_DIRECTORY,
-  lastSource:null, lastAttemptAt:null, lastVerifiedAt:null, lastError:null
+  lastSource:null, lastAttemptAt:null, lastVerifiedAt:null, lastError:null,
+  restoreState:"not-needed", restoreVerified:false, quarantineVerified:false,
+  restoreError:null, rollbackVerified:false, rollbackFailed:false, rollbackError:null
 };
 function updateNativeVaultDiagnostic(patch){
   nativeVaultDiagnostic = Object.assign({},nativeVaultDiagnostic,patch||{});
@@ -796,6 +801,436 @@ function scheduleNativeVaultRefresh(source){
   nativeVaultQueue = nativeVaultQueue.then(()=>refreshNativeVaultNow(source)).catch(error=>{
     const capability=nativeVaultCapability();
     return nativeVaultFailure(capability,source,"Native vault task failed: "+nativeVaultErrorText(error),null,false);
+  });
+  return nativeVaultQueue;
+}
+
+function nativeRestoreDiagnostic(capability,patch){
+  return updateNativeVaultDiagnostic(Object.assign({
+    available:!!(capability&&capability.available),
+    native:!!(capability&&capability.native),
+    platform:capability ? capability.platform : null,
+    lastSource:"stage2-boot",
+    lastAttemptAt:new Date().toISOString()
+  },patch||{}));
+}
+function notifyNativeRestoreUi(){
+  if (typeof showProtectedBanner==="function") showProtectedBanner();
+  if (typeof renderRecoveryPanel==="function") renderRecoveryPanel();
+  if (typeof renderDayOptions==="function") renderDayOptions();
+  if (typeof renderSessionInputs==="function") renderSessionInputs();
+  if (typeof renderAll==="function") renderAll();
+  if (typeof resumeGatesAfterRecovery==="function") resumeGatesAfterRecovery();
+}
+function markNativeRestoreProtected(reason,code){
+  protectedMode = true;
+  protectedModeKind = "failure";
+  protectedModeReason = reason || "Native recovery could not be completed safely.";
+  protectedModeDiagnostic = makeDiagnostic(
+    "native-vault-restore",
+    "state",
+    code || "native-vault-restore-failed",
+    protectedModeReason
+  );
+  try {
+    protectedSnapshotStrings = {
+      data:JSON.stringify(data),
+      cfg:JSON.stringify(cfg),
+      program:JSON.stringify(program)
+    };
+  } catch(e){}
+  if (typeof showProtectedBanner==="function") showProtectedBanner();
+  if (typeof renderRecoveryPanel==="function") renderRecoveryPanel();
+}
+function captureNativeRestoreIncident(reason){
+  const strings=Object.create(null);
+  const contracted=Object.create(null);
+  const absentContractedKeys=[];
+  try {
+    for (let i=0;i<localStorage.length;i++){
+      const key=localStorage.key(i);
+      if (key!==null) strings[key]=localStorage.getItem(key);
+    }
+    NATIVE_VAULT_KEYS.forEach(key=>{
+      const value=localStorage.getItem(key);
+      contracted[key]=value;
+      if (value===null) absentContractedKeys.push(key);
+    });
+  } catch(error){
+    return {ok:false,error:error,reason:"Browser storage could not be captured for native restore quarantine."};
+  }
+  const record={
+    type:NATIVE_RESTORE_QUARANTINE_TYPE,
+    formatVersion:NATIVE_RESTORE_QUARANTINE_FORMAT_VERSION,
+    quarantinedAt:new Date().toISOString(),
+    incidentReason:reason || "Native localStorage was missing or invalid.",
+    strings:strings,
+    absentContractedKeys:absentContractedKeys
+  };
+  try {
+    return {
+      ok:true,
+      record:record,
+      raw:JSON.stringify(record),
+      contracted:contracted,
+      allContractedAbsent:absentContractedKeys.length===NATIVE_VAULT_KEYS.length
+    };
+  } catch(error){
+    return {ok:false,error:error,reason:"Native restore quarantine could not be serialized."};
+  }
+}
+function inspectNativeRestoreQuarantineRaw(raw){
+  if (raw===null || raw===undefined) return {ok:false,missing:true,code:"missing"};
+  let record;
+  try { record=JSON.parse(raw); }
+  catch(error){ return {ok:false,code:"parse",reason:"The native restore quarantine is unreadable."}; }
+  if (!isPlainObject(record) || record.type!==NATIVE_RESTORE_QUARANTINE_TYPE){
+    return {ok:false,code:"shape",reason:"The native restore quarantine has an unusable shape."};
+  }
+  if (record.formatVersion!==NATIVE_RESTORE_QUARANTINE_FORMAT_VERSION){
+    return {ok:false,code:"format",reason:"The native restore quarantine format is unsupported."};
+  }
+  if (typeof record.quarantinedAt!=="string"
+      || typeof record.incidentReason!=="string"
+      || !isPlainObject(record.strings)
+      || !Array.isArray(record.absentContractedKeys)){
+    return {ok:false,code:"shape",reason:"The native restore quarantine is incomplete."};
+  }
+  if (Object.keys(record.strings).some(key=>typeof record.strings[key]!=="string")){
+    return {ok:false,code:"shape",reason:"The native restore quarantine contains an invalid storage value."};
+  }
+  const absent=new Set(record.absentContractedKeys);
+  if (record.absentContractedKeys.some(key=>typeof key!=="string")){
+    return {ok:false,code:"shape",reason:"The native restore quarantine absence list is invalid."};
+  }
+  for (const key of NATIVE_VAULT_KEYS){
+    const present=hasOwn(record.strings,key);
+    const missing=absent.has(key);
+    if (present===missing){
+      return {ok:false,code:"shape",reason:"The native restore quarantine does not describe every contracted key exactly once."};
+    }
+  }
+  return {ok:true,record:record};
+}
+async function writeNativeRestoreQuarantine(fs,capture){
+  if (!capture || !capture.ok){
+    return {
+      ok:false,
+      code:"quarantine-capture",
+      reason:capture&&capture.reason ? capture.reason : "Native restore quarantine could not be captured."
+    };
+  }
+  const existingRead=await readNativeVaultFile(fs,NATIVE_RESTORE_QUARANTINE_PATH);
+  if (!existingRead.ok && !existingRead.missing){
+    return {ok:false,code:"quarantine-read",reason:"The existing native restore quarantine could not be read safely."};
+  }
+  if (existingRead.ok){
+    const existing=inspectNativeRestoreQuarantineRaw(existingRead.raw);
+    return {
+      ok:false,
+      code:"quarantine-conflict",
+      reason:existing.ok
+        ? "A verified native restore quarantine already exists and was preserved."
+        : "An existing native restore quarantine could not be safely replaced."
+    };
+  }
+  try {
+    await fs.writeFile({
+      path:NATIVE_RESTORE_QUARANTINE_PATH,
+      data:capture.raw,
+      directory:NATIVE_VAULT_DIRECTORY,
+      encoding:NATIVE_VAULT_ENCODING
+    });
+  } catch(error){
+    return {
+      ok:false,
+      code:"quarantine-write",
+      reason:"Native restore quarantine write failed: "+nativeVaultErrorText(error),
+      error:error
+    };
+  }
+  const verifiedRead=await readNativeVaultFile(fs,NATIVE_RESTORE_QUARANTINE_PATH);
+  const inspected=verifiedRead.ok ? inspectNativeRestoreQuarantineRaw(verifiedRead.raw) : {ok:false};
+  if (!verifiedRead.ok || verifiedRead.raw!==capture.raw || !inspected.ok){
+    return {
+      ok:false,
+      code:"quarantine-verify",
+      reason:"Native restore quarantine read-back did not match."
+    };
+  }
+  return {ok:true,verified:true,capture:capture,record:inspected.record};
+}
+function writeExactNativeVaultStrings(strings){
+  for (const key of NATIVE_VAULT_KEYS){
+    const value=strings[key];
+    if (value===null){
+      if (localStorage.getItem(key)!==null) localStorage.removeItem(key);
+    } else {
+      localStorage.setItem(key,value);
+    }
+  }
+}
+function verifyExactNativeVaultStrings(strings){
+  try {
+    return NATIVE_VAULT_KEYS.every(key=>localStorage.getItem(key)===strings[key]);
+  } catch(error){ return false; }
+}
+function rollbackNativeRestore(contracted){
+  let firstError=null;
+  for (const key of NATIVE_VAULT_KEYS){
+    try {
+      const value=contracted[key];
+      if (value===null){
+        if (localStorage.getItem(key)!==null) localStorage.removeItem(key);
+      } else {
+        localStorage.setItem(key,value);
+      }
+    } catch(error){
+      if (!firstError) firstError=error;
+    }
+  }
+  let verified=false;
+  try {
+    verified=NATIVE_VAULT_KEYS.every(key=>localStorage.getItem(key)===contracted[key]);
+  } catch(error){
+    if (!firstError) firstError=error;
+  }
+  return {
+    ok:verified && !firstError,
+    verified:verified && !firstError,
+    failed:!verified || !!firstError,
+    error:firstError
+  };
+}
+function completeNativeRestore(prepared,capability,vaultRecord){
+  applyPreparedState(prepared);
+  protectedMode=false;
+  protectedModeKind=null;
+  protectedModeReason="";
+  protectedModeDiagnostic=null;
+  protectedSnapshotStrings=null;
+  protectedResyncPending=false;
+  nativeRestoreDiagnostic(capability,{
+    state:"ready",
+    verified:true,
+    retainedPrevious:false,
+    lastVerifiedAt:vaultRecord.savedAt||null,
+    lastError:null,
+    restoreState:"restored",
+    restoreVerified:true,
+    quarantineVerified:true,
+    restoreError:null,
+    rollbackVerified:false,
+    rollbackFailed:false,
+    rollbackError:null
+  });
+  notifyNativeRestoreUi();
+}
+async function continueNativeFirstInstall(capability,context){
+  if (!context.prepared || !context.prepared.ok){
+    const reason="BlackPyre could not prepare a safe first-install state.";
+    markNativeRestoreProtected(reason,"native-first-install-prepare-failed");
+    nativeRestoreDiagnostic(capability,{
+      state:"error",
+      verified:false,
+      restoreState:"first-install-failed",
+      restoreVerified:false,
+      quarantineVerified:false,
+      restoreError:reason,
+      lastError:reason
+    });
+    return {ok:false,code:"first-install-prepare"};
+  }
+  const committed=commitState(context.prepared,{writeMask:{cfg:true,data:true,program:true}});
+  if (!committed.ok){
+    const reason=committed.rollbackFailed
+      ? "First-install storage failed and browser storage also refused a complete rollback."
+      : "First-install storage could not be completed safely.";
+    markNativeRestoreProtected(reason,"native-first-install-commit-failed");
+    nativeRestoreDiagnostic(capability,{
+      state:"error",
+      verified:false,
+      restoreState:"first-install-failed",
+      restoreVerified:false,
+      quarantineVerified:false,
+      restoreError:reason,
+      rollbackFailed:!!committed.rollbackFailed,
+      lastError:reason
+    });
+    return {ok:false,code:"first-install-commit"};
+  }
+  applyPreparedState(context.prepared);
+  protectedMode=false;
+  protectedModeKind=null;
+  protectedModeReason="";
+  protectedModeDiagnostic=null;
+  protectedSnapshotStrings=null;
+
+  const bootSnapshot=refreshLastKnownGood("boot");
+  if (bootSnapshot.ok) markEstablishedInstall();
+
+  nativeRestoreDiagnostic(capability,{
+    state:"ready",
+    verified:false,
+    restoreState:"first-install",
+    restoreVerified:false,
+    quarantineVerified:false,
+    restoreError:null,
+    rollbackVerified:false,
+    rollbackFailed:false,
+    rollbackError:null,
+    lastError:null
+  });
+
+  if (bootSnapshot.ok) await refreshNativeVaultNow("boot");
+  notifyNativeRestoreUi();
+  return {ok:true,firstInstall:true};
+}
+async function restoreNativeVaultAtBoot(context){
+  const capability=nativeVaultCapability();
+  if (!capability.available){
+    return {ok:false,skipped:true,code:"unavailable"};
+  }
+  nativeRestoreDiagnostic(capability,{
+    state:"checking",
+    verified:false,
+    restoreState:"checking",
+    restoreVerified:false,
+    quarantineVerified:false,
+    restoreError:null,
+    rollbackVerified:false,
+    rollbackFailed:false,
+    rollbackError:null,
+    lastError:null
+  });
+
+  const vaultRead=await readNativeVaultFile(capability.fs,NATIVE_VAULT_PATH);
+  if (!vaultRead.ok){
+    if (vaultRead.missing && context.trueFirstInstall){
+      return continueNativeFirstInstall(capability,context);
+    }
+    const state=vaultRead.missing ? "vault-missing" : "vault-read-failed";
+    const reason=vaultRead.missing
+      ? "Native localStorage needs recovery, but no native vault is available."
+      : "The native vault could not be read safely.";
+    markNativeRestoreProtected(reason,state);
+    nativeRestoreDiagnostic(capability,{
+      state:"error",
+      verified:false,
+      restoreState:state,
+      restoreVerified:false,
+      quarantineVerified:false,
+      restoreError:reason,
+      lastError:reason
+    });
+    return {ok:false,code:state};
+  }
+
+  const inspected=inspectNativeVaultRaw(vaultRead.raw);
+  if (!inspected.ok || !inspected.record || inspected.record.schemaVersion!==SCHEMA_VERSION){
+    const reason=inspected.reason || "The native vault did not pass restore validation.";
+    markNativeRestoreProtected(reason,"native-vault-rejected");
+    nativeRestoreDiagnostic(capability,{
+      state:inspected.newer ? "newer" : "error",
+      verified:false,
+      retainedPrevious:true,
+      restoreState:"rejected",
+      restoreVerified:false,
+      quarantineVerified:false,
+      restoreError:reason,
+      lastError:reason
+    });
+    return {ok:false,code:"rejected"};
+  }
+
+  const quarantined=await writeNativeRestoreQuarantine(capability.fs,context.capture);
+  if (!quarantined.ok){
+    const conflict=quarantined.code==="quarantine-conflict";
+    const restoreState=conflict ? "quarantine-conflict" : "quarantine-failed";
+    markNativeRestoreProtected(quarantined.reason,quarantined.code);
+    nativeRestoreDiagnostic(capability,{
+      state:"error",
+      verified:true,
+      retainedPrevious:true,
+      lastVerifiedAt:inspected.record.savedAt||null,
+      restoreState:restoreState,
+      restoreVerified:false,
+      quarantineVerified:false,
+      restoreError:quarantined.reason,
+      lastError:quarantined.reason
+    });
+    return {ok:false,code:restoreState};
+  }
+
+  let restoreError=null;
+  try {
+    writeExactNativeVaultStrings(inspected.record.strings);
+    if (!verifyExactNativeVaultStrings(inspected.record.strings)){
+      throw new Error("Restored localStorage read-back did not match the native vault.");
+    }
+    const verified=prepareState(
+      localStorage.getItem(CFG_KEY),
+      localStorage.getItem(DATA_KEY),
+      localStorage.getItem(PROG_KEY),
+      {
+        originalStrings:{
+          cfg:localStorage.getItem(CFG_KEY),
+          data:localStorage.getItem(DATA_KEY),
+          program:localStorage.getItem(PROG_KEY)
+        }
+      }
+    );
+    if (!verified.ok) throw new Error("Restored primary storage did not pass final validation.");
+    completeNativeRestore(verified,capability,inspected.record);
+    return {ok:true,restored:true};
+  } catch(error){
+    restoreError=error;
+  }
+
+  const rollback=rollbackNativeRestore(context.capture.contracted);
+  const restoreReason="Native vault restoration failed: "+nativeVaultErrorText(restoreError);
+  markNativeRestoreProtected(
+    rollback.ok
+      ? restoreReason+" The exact pre-restore state was restored."
+      : restoreReason+" The browser also refused a complete rollback.",
+    rollback.ok ? "native-restore-failed" : "native-restore-rollback-failed"
+  );
+  nativeRestoreDiagnostic(capability,{
+    state:"error",
+    verified:true,
+    retainedPrevious:true,
+    lastVerifiedAt:inspected.record.savedAt||null,
+    restoreState:"failed",
+    restoreVerified:false,
+    quarantineVerified:true,
+    restoreError:restoreReason,
+    rollbackVerified:rollback.verified,
+    rollbackFailed:rollback.failed,
+    rollbackError:rollback.error ? nativeVaultErrorText(rollback.error) : null,
+    lastError:restoreReason
+  });
+  return {
+    ok:false,
+    code:"restore-failed",
+    rollbackVerified:rollback.verified,
+    rollbackFailed:rollback.failed
+  };
+}
+function scheduleNativeVaultBootRecovery(context){
+  nativeVaultQueue=nativeVaultQueue.then(()=>restoreNativeVaultAtBoot(context)).catch(error=>{
+    const capability=nativeVaultCapability();
+    const reason="Native vault restore task failed: "+nativeVaultErrorText(error);
+    markNativeRestoreProtected(reason,"native-restore-task-failed");
+    nativeRestoreDiagnostic(capability,{
+      state:"error",
+      verified:false,
+      restoreState:"failed",
+      restoreVerified:false,
+      quarantineVerified:false,
+      restoreError:reason,
+      lastError:reason
+    });
+    return {ok:false,code:"task-failed"};
   });
   return nativeVaultQueue;
 }
@@ -1075,20 +1510,65 @@ function protectUnexpectedPrimaryLoss(incident){
 
 const _bootRead = readStorageStrings();
 let _bootPrepared;
+let _bootMissingIncident=null;
 if (_bootRead.ok){
-  const missingIncident = detectUnexpectedPrimaryLoss(_bootRead);
-  if (missingIncident){
-    _bootPrepared = missingPrimaryPreparation(_bootRead,missingIncident);
+  _bootMissingIncident = detectUnexpectedPrimaryLoss(_bootRead);
+  if (_bootMissingIncident){
+    _bootPrepared = missingPrimaryPreparation(_bootRead,_bootMissingIncident);
   } else {
     const testOptions = (typeof window!=="undefined" && window.__BP_TEST_PREPARE_OPTIONS) || {};
     _bootPrepared = prepareState(_bootRead.inputs.cfg, _bootRead.inputs.data, _bootRead.inputs.program,
       Object.assign({}, testOptions, {originalStrings:_bootRead.originals}));
   }
 } else {
-  _bootPrepared = failedPreparation(_bootRead.reason, "failure", {}, {cfg:null,data:null,program:null}, _bootRead.diagnostic);
+  _bootPrepared = failedPreparation(
+    _bootRead.reason,
+    "failure",
+    {},
+    {cfg:null,data:null,program:null},
+    _bootRead.diagnostic
+  );
 }
+
+const _bootNativeCapability=nativeVaultCapability();
+const _bootPrimaryStringsComplete=!!(
+  _bootRead.ok
+  && typeof _bootRead.originals.cfg==="string"
+  && typeof _bootRead.originals.data==="string"
+  && typeof _bootRead.originals.program==="string"
+);
+const _bootNeedsNativeRecovery=!!(
+  _bootNativeCapability.available
+  && (!_bootPrepared.ok || !_bootPrimaryStringsComplete)
+);
+const _bootNativeReason=_bootMissingIncident
+  ? _bootMissingIncident.reason
+  : (!_bootPrimaryStringsComplete
+      ? "Native localStorage is missing one or more required BlackPyre values."
+      : (_bootPrepared.reason || "Native localStorage did not pass BlackPyre validation."));
+const _bootNativeCapture=_bootNeedsNativeRecovery
+  ? captureNativeRestoreIncident(_bootNativeReason)
+  : null;
+const _bootTrueFirstInstall=!!(
+  _bootNeedsNativeRecovery
+  && _bootNativeCapture
+  && _bootNativeCapture.ok
+  && _bootNativeCapture.allContractedAbsent
+);
+
 let _bootState = _bootPrepared.state;
-if (_bootPrepared.ok){
+
+if (_bootNeedsNativeRecovery){
+  protectedMode=true;
+  protectedModeKind="failure";
+  protectedModeReason=_bootNativeReason;
+  protectedModeDiagnostic=makeDiagnostic(
+    "native-vault-check",
+    "state",
+    "native-vault-recovery-pending",
+    _bootNativeReason
+  );
+} else if (_bootPrepared.ok){
   // A legacy fallback remains evidence at its original key. Migrations may normalize
   // the in-memory copy and LKG, but boot never promotes it into forge:data implicitly.
   const bootMarker = installMarkerStatus();
@@ -1113,10 +1593,24 @@ if (_bootPrepared.ok){
   protectedModeReason = _bootPrepared.reason;
   protectedModeDiagnostic = _bootPrepared.diagnostic;
 }
+
 let data = _bootState.data;
 let cfg = _bootState.cfg;
 let program = _bootState.program;
-if (protectedMode){
+
+if (_bootNeedsNativeRecovery){
+  protectedSnapshotStrings = {
+    data:JSON.stringify(data),
+    cfg:JSON.stringify(cfg),
+    program:JSON.stringify(program)
+  };
+  scheduleNativeVaultBootRecovery({
+    prepared:_bootPrepared,
+    capture:_bootNativeCapture,
+    reason:_bootNativeReason,
+    trueFirstInstall:_bootTrueFirstInstall
+  });
+} else if (protectedMode){
   protectedSnapshotStrings = {
     data:JSON.stringify(data), cfg:JSON.stringify(cfg), program:JSON.stringify(program)
   };

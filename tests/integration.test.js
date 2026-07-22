@@ -1437,8 +1437,13 @@ check("rapid healthy saves serialize to a final vault matching the newest persis
 const ExistingVaultFs=makeNativeFilesystem({files:{[nativePath]:NativeFs.files.get(nativePath)}});
 const ExistingVaultFresh=bootRaw({},w=>ExistingVaultFs.install(w));
 await settleNativeVault(ExistingVaultFresh);
-check("Stage 1 never auto-restores native vault contents into an empty localStorage", ExistingVaultFresh.window.eval(`data.weights.length===0`) && JSON.parse(ExistingVaultFresh.window.localStorage.getItem("forge:data")).weights.length===0);
-check("a populated verified native vault is not overwritten by a fresh empty-state regression", ExistingVaultFs.files.get(nativePath)===NativeFs.files.get(nativePath) && nativeVaultField(ExistingVaultFresh,"retainedPrevious")===true);
+check("Stage 2 restores a verified native vault into missing native localStorage",
+  nativeVaultRecordMatches(ExistingVaultFresh,parseNativeVault(NativeFs.files.get(nativePath)))
+  && nativeVaultField(ExistingVaultFresh,"restoreState")==="restored"
+  && nativeVaultField(ExistingVaultFresh,"restoreVerified")===true);
+check("a populated verified native vault remains byte-identical while restoring missing localStorage",
+  ExistingVaultFs.files.get(nativePath)===NativeFs.files.get(nativePath)
+  && nativeVaultField(ExistingVaultFresh,"restoreState")==="restored");
 
 
 // ================= Native vault Stage 2: protected exact restore =================
@@ -1639,8 +1644,9 @@ const Stage2QuarantineWrite=Stage2MissingTimeline.findIndex(event=>
   && event.method==="writeFile"
   && event.path===STAGE2_RESTORE_QUARANTINE_PATH
 );
-const Stage2QuarantineRead=Stage2MissingTimeline.findIndex(event=>
-  event.kind==="filesystem"
+const Stage2QuarantineRead=Stage2MissingTimeline.findIndex((event,index)=>
+  index>Stage2QuarantineWrite
+  && event.kind==="filesystem"
   && event.method==="readFile"
   && event.path===STAGE2_RESTORE_QUARANTINE_PATH
 );
@@ -2051,7 +2057,7 @@ check("successful Stage 2 restoration exits Protected mode with validated establ
   Stage2Missing.window.eval(`
     protectedMode===false
     && cfg.setupDone===true
-    && data.weights.some(x=>x.date==="2026-07-21"&&x.lbs===219)
+    && data.weights.some(x=>x.date==="2026-07-20"&&x.lbs===220)
   `)
   && stage2StorageMatchesVault(Stage2Missing,Stage2MissingStrings));
 
