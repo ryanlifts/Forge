@@ -590,6 +590,216 @@ function writePrimaryString(key, value){
     return {ok:false, error:e};
   }
 }
+
+
+// ================== native vault (Capacitor Stage 1) ==================
+const NATIVE_VAULT_FORMAT_VERSION = 1;
+const NATIVE_VAULT_TYPE = "blackpyre-native-vault";
+const NATIVE_VAULT_PATH = "blackpyre-native-vault.json";
+const NATIVE_VAULT_CANDIDATE_PATH = "blackpyre-native-vault.candidate.json";
+const NATIVE_VAULT_DIRECTORY = "LIBRARY";
+const NATIVE_VAULT_ENCODING = "utf8";
+const NATIVE_VAULT_KEYS = [CFG_KEY,DATA_KEY,PROG_KEY,LKG_KEY,LKG_PREVIOUS_KEY,LKG_OLDER_KEY,QUARANTINE_KEY,INSTALL_KEY,"ryan-cut:data"];
+let nativeVaultQueue = Promise.resolve();
+let nativeVaultDiagnostic = {
+  state:"unavailable", available:false, native:false, platform:null, verified:false,
+  retainedPrevious:false, path:NATIVE_VAULT_PATH, directory:NATIVE_VAULT_DIRECTORY,
+  lastSource:null, lastAttemptAt:null, lastVerifiedAt:null, lastError:null
+};
+function updateNativeVaultDiagnostic(patch){
+  nativeVaultDiagnostic = Object.assign({},nativeVaultDiagnostic,patch||{});
+  return nativeVaultDiagnostic;
+}
+function getNativeVaultStatus(){ return Object.assign({},nativeVaultDiagnostic); }
+function waitForNativeVaultIdle(){
+  return nativeVaultQueue.then(()=>getNativeVaultStatus(),()=>getNativeVaultStatus());
+}
+function nativeVaultErrorText(error, fallback){
+  return error && error.message ? error.message : (fallback || "Native vault operation failed.");
+}
+function nativeVaultCapability(){
+  const c = typeof window!=="undefined" ? window.Capacitor : null;
+  let platform=null, native=false, pluginAvailable=false, fs=null;
+  try { platform = c && typeof c.getPlatform==="function" ? c.getPlatform() : null; } catch(e){}
+  try { native = !!(c && typeof c.isNativePlatform==="function" && c.isNativePlatform()); } catch(e){}
+  try { pluginAvailable = !!(c && typeof c.isPluginAvailable==="function" && c.isPluginAvailable("Filesystem")); } catch(e){}
+  try { fs = c && c.Plugins ? c.Plugins.Filesystem : null; } catch(e){}
+  const available = !!(native && pluginAvailable && fs
+    && typeof fs.writeFile==="function" && typeof fs.readFile==="function" && typeof fs.deleteFile==="function");
+  return {available:available,native:native,platform:platform,fs:fs};
+}
+function isNativeVaultMissingError(error){
+  const code = String(error && error.code || "").toLowerCase();
+  const msg = String(error && error.message || error || "").toLowerCase();
+  return code==="enoent" || code==="os-plug-file-0008" || /not found|does not exist|no such file/.test(msg);
+}
+async function readNativeVaultFile(fs,path){
+  try {
+    const result = await fs.readFile({path:path,directory:NATIVE_VAULT_DIRECTORY,encoding:NATIVE_VAULT_ENCODING});
+    if (!result || typeof result.data!=="string") return {ok:false,error:new Error("Native vault read did not return UTF-8 text.")};
+    return {ok:true,raw:result.data};
+  } catch(error){
+    if (isNativeVaultMissingError(error)) return {ok:false,missing:true,error:error};
+    return {ok:false,error:error};
+  }
+}
+async function deleteNativeVaultFileQuiet(fs,path){
+  try { await fs.deleteFile({path:path,directory:NATIVE_VAULT_DIRECTORY}); return true; }
+  catch(error){ return isNativeVaultMissingError(error); }
+}
+function captureNativeVaultCandidate(source){
+  const strings={};
+  try { NATIVE_VAULT_KEYS.forEach(key=>{ strings[key]=localStorage.getItem(key); }); }
+  catch(error){ return {ok:false,reason:"Browser storage could not be read for the native vault.",error:error}; }
+  if (![CFG_KEY,DATA_KEY,PROG_KEY].every(key=>typeof strings[key]==="string")){
+    return {ok:false,reason:"The validated primary state is incomplete and cannot be vaulted."};
+  }
+  const prepared = prepareState(strings[CFG_KEY],strings[DATA_KEY],strings[PROG_KEY],{
+    originalStrings:{cfg:strings[CFG_KEY],data:strings[DATA_KEY],program:strings[PROG_KEY]}
+  });
+  if (!prepared.ok) return {ok:false,reason:"The persisted primary state did not validate for the native vault."};
+  const record = {
+    type:NATIVE_VAULT_TYPE,
+    formatVersion:NATIVE_VAULT_FORMAT_VERSION,
+    schemaVersion:SCHEMA_VERSION,
+    savedAt:new Date().toISOString(),
+    source:source||"healthy",
+    strings:strings
+  };
+  try {
+    return {ok:true,record:record,raw:JSON.stringify(record),score:dataContentScore(prepared.state.data)};
+  } catch(error){ return {ok:false,reason:"The native vault candidate could not be serialized.",error:error}; }
+}
+function inspectNativeVaultRaw(raw){
+  if (raw===null || raw===undefined) return {ok:false,missing:true,code:"missing"};
+  let record;
+  try { record=JSON.parse(raw); }
+  catch(error){ return {ok:false,code:"parse",reason:"The existing native vault is unreadable."}; }
+  if (!isPlainObject(record) || record.type!==NATIVE_VAULT_TYPE) return {ok:false,code:"shape",reason:"The existing native vault has an unusable shape."};
+  if (!Number.isInteger(record.formatVersion) || record.formatVersion<1) return {ok:false,code:"format",reason:"The existing native vault format is invalid."};
+  if (record.formatVersion>NATIVE_VAULT_FORMAT_VERSION) return {ok:false,newer:true,code:"newer",record:record,reason:"A newer native vault is present."};
+  if (!Number.isInteger(record.schemaVersion) || record.schemaVersion<1) return {ok:false,code:"schema",reason:"The native vault schema marker is invalid."};
+  if (record.schemaVersion>SCHEMA_VERSION) return {ok:false,newer:true,code:"newer-schema",record:record,reason:"The native vault contains newer BlackPyre data."};
+  if (!isPlainObject(record.strings)) return {ok:false,code:"shape",reason:"The native vault strings are missing."};
+  for (const key of NATIVE_VAULT_KEYS){
+    if (!hasOwn(record.strings,key)) return {ok:false,code:"shape",reason:"The native vault is incomplete."};
+    const value=record.strings[key];
+    if (value!==null && typeof value!=="string") return {ok:false,code:"shape",reason:"The native vault contains an invalid storage value."};
+  }
+  if (![CFG_KEY,DATA_KEY,PROG_KEY].every(key=>typeof record.strings[key]==="string")) return {ok:false,code:"shape",reason:"The native vault primary state is incomplete."};
+  const prepared=prepareState(record.strings[CFG_KEY],record.strings[DATA_KEY],record.strings[PROG_KEY],{
+    originalStrings:{cfg:record.strings[CFG_KEY],data:record.strings[DATA_KEY],program:record.strings[PROG_KEY]}
+  });
+  if (!prepared.ok){
+    if (prepared.kind==="newer") return {ok:false,newer:true,code:"newer-state",record:record,reason:"The native vault contains newer primary data."};
+    return {ok:false,code:"state",record:record,reason:"The native vault primary state no longer validates."};
+  }
+  return {ok:true,record:record,prepared:prepared,score:dataContentScore(prepared.state.data)};
+}
+function sameNativeVaultPayload(existing,candidate){
+  return !!(existing && existing.ok && existing.record && existing.record.strings
+    && NATIVE_VAULT_KEYS.every(key=>existing.record.strings[key]===candidate.record.strings[key]));
+}
+async function restorePreviousNativeVault(fs,previousRaw){
+  if (previousRaw===null || previousRaw===undefined){
+    await deleteNativeVaultFileQuiet(fs,NATIVE_VAULT_PATH);
+    const absent=await readNativeVaultFile(fs,NATIVE_VAULT_PATH);
+    return !!absent.missing;
+  }
+  const current=await readNativeVaultFile(fs,NATIVE_VAULT_PATH);
+  if (current.ok && current.raw===previousRaw) return true;
+  try {
+    await fs.writeFile({path:NATIVE_VAULT_PATH,data:previousRaw,directory:NATIVE_VAULT_DIRECTORY,encoding:NATIVE_VAULT_ENCODING});
+  } catch(error){ return false; }
+  const verified=await readNativeVaultFile(fs,NATIVE_VAULT_PATH);
+  return !!(verified.ok && verified.raw===previousRaw);
+}
+function nativeVaultFailure(capability,source,message,existing,retained){
+  const verified=!!(retained && existing && existing.ok);
+  updateNativeVaultDiagnostic({
+    state:"error", available:true, native:true, platform:capability.platform, verified:verified,
+    retainedPrevious:verified, lastSource:source||null, lastAttemptAt:new Date().toISOString(),
+    lastVerifiedAt:verified && existing.record ? existing.record.savedAt || null : null,
+    lastError:message || "Native vault operation failed."
+  });
+  return {ok:false,retainedPrevious:verified,reason:message};
+}
+async function refreshNativeVaultNow(source){
+  const capability=nativeVaultCapability();
+  const attemptedAt=new Date().toISOString();
+  if (!capability.available){
+    updateNativeVaultDiagnostic({
+      state:"unavailable",available:false,native:capability.native,platform:capability.platform,verified:false,
+      retainedPrevious:false,lastSource:source||null,lastAttemptAt:attemptedAt,lastVerifiedAt:null,lastError:null
+    });
+    return {ok:false,skipped:true,code:"unavailable"};
+  }
+  updateNativeVaultDiagnostic({available:true,native:true,platform:capability.platform,lastSource:source||null,lastAttemptAt:attemptedAt});
+  const candidate=captureNativeVaultCandidate(source);
+  if (!candidate.ok) return nativeVaultFailure(capability,source,candidate.reason,null,false);
+
+  const existingRead=await readNativeVaultFile(capability.fs,NATIVE_VAULT_PATH);
+  if (!existingRead.ok && !existingRead.missing){
+    return nativeVaultFailure(capability,source,"The existing native vault could not be read safely.",null,false);
+  }
+  const existing=existingRead.ok ? inspectNativeVaultRaw(existingRead.raw) : {ok:false,missing:true};
+  if (existing.newer){
+    updateNativeVaultDiagnostic({state:"newer",available:true,native:true,platform:capability.platform,verified:false,
+      retainedPrevious:true,lastSource:source||null,lastAttemptAt:attemptedAt,lastVerifiedAt:null,
+      lastError:"A newer native vault was preserved and was not modified."});
+    return {ok:false,retainedPrevious:true,newer:true};
+  }
+  if (sameNativeVaultPayload(existing,candidate)){
+    updateNativeVaultDiagnostic({state:"ready",available:true,native:true,platform:capability.platform,verified:true,
+      retainedPrevious:false,lastSource:source||null,lastAttemptAt:attemptedAt,lastVerifiedAt:existing.record.savedAt||null,lastError:null});
+    return {ok:true,unchanged:true};
+  }
+  if (existing.ok && existing.score>0 && candidate.score===0){
+    updateNativeVaultDiagnostic({state:"ready",available:true,native:true,platform:capability.platform,verified:true,
+      retainedPrevious:true,lastSource:source||null,lastAttemptAt:attemptedAt,lastVerifiedAt:existing.record.savedAt||null,lastError:null});
+    return {ok:true,retainedPrevious:true,emptyRegression:true};
+  }
+
+  try {
+    await capability.fs.writeFile({path:NATIVE_VAULT_CANDIDATE_PATH,data:candidate.raw,directory:NATIVE_VAULT_DIRECTORY,encoding:NATIVE_VAULT_ENCODING});
+  } catch(error){
+    return nativeVaultFailure(capability,source,"Native vault candidate write failed: "+nativeVaultErrorText(error),existing,existing.ok);
+  }
+  const candidateRead=await readNativeVaultFile(capability.fs,NATIVE_VAULT_CANDIDATE_PATH);
+  if (!candidateRead.ok || candidateRead.raw!==candidate.raw){
+    await deleteNativeVaultFileQuiet(capability.fs,NATIVE_VAULT_CANDIDATE_PATH);
+    return nativeVaultFailure(capability,source,"Native vault candidate read-back did not match.",existing,existing.ok);
+  }
+
+  let finalWriteError=null;
+  try {
+    await capability.fs.writeFile({path:NATIVE_VAULT_PATH,data:candidate.raw,directory:NATIVE_VAULT_DIRECTORY,encoding:NATIVE_VAULT_ENCODING});
+  } catch(error){ finalWriteError=error; }
+  if (finalWriteError){
+    const retained=await restorePreviousNativeVault(capability.fs,existingRead.ok?existingRead.raw:null);
+    await deleteNativeVaultFileQuiet(capability.fs,NATIVE_VAULT_CANDIDATE_PATH);
+    return nativeVaultFailure(capability,source,"Native vault promotion failed: "+nativeVaultErrorText(finalWriteError),existing,retained);
+  }
+
+  const finalRead=await readNativeVaultFile(capability.fs,NATIVE_VAULT_PATH);
+  if (!finalRead.ok || finalRead.raw!==candidate.raw){
+    const retained=await restorePreviousNativeVault(capability.fs,existingRead.ok?existingRead.raw:null);
+    await deleteNativeVaultFileQuiet(capability.fs,NATIVE_VAULT_CANDIDATE_PATH);
+    return nativeVaultFailure(capability,source,"Native vault final read-back did not match.",existing,retained);
+  }
+  await deleteNativeVaultFileQuiet(capability.fs,NATIVE_VAULT_CANDIDATE_PATH);
+  updateNativeVaultDiagnostic({state:"ready",available:true,native:true,platform:capability.platform,verified:true,
+    retainedPrevious:false,lastSource:source||null,lastAttemptAt:attemptedAt,lastVerifiedAt:candidate.record.savedAt,lastError:null});
+  return {ok:true,record:candidate.record};
+}
+function scheduleNativeVaultRefresh(source){
+  nativeVaultQueue = nativeVaultQueue.then(()=>refreshNativeVaultNow(source)).catch(error=>{
+    const capability=nativeVaultCapability();
+    return nativeVaultFailure(capability,source,"Native vault task failed: "+nativeVaultErrorText(error),null,false);
+  });
+  return nativeVaultQueue;
+}
+
 function probeCfgPart(raw){
   if (raw===null || raw===undefined) return {usable:false, reason:"Settings were missing."};
   const p = prepareState(raw, JSON.stringify(makeDefaultData()), JSON.stringify(DEFAULT_PROGRAM));
@@ -798,7 +1008,7 @@ function performRecoveryCandidate(candidate, options){
   rawRecoveryExportConfirmed = false;
   activeRecoveryQuarantineRaw = null;
   const recoverySnapshot = refreshLastKnownGood("recovery");
-  if (recoverySnapshot.ok) markEstablishedInstall();
+  if (recoverySnapshot.ok){ markEstablishedInstall(); scheduleNativeVaultRefresh("recovery"); }
   if (typeof showProtectedBanner==="function") showProtectedBanner();
   if (typeof renderRecoveryPanel==="function") renderRecoveryPanel();
   if (typeof renderDayOptions==="function") renderDayOptions();
@@ -912,7 +1122,7 @@ if (protectedMode){
   };
 } else {
   const bootSnapshot = refreshLastKnownGood("boot");
-  if (bootSnapshot.ok) markEstablishedInstall();
+  if (bootSnapshot.ok){ markEstablishedInstall(); scheduleNativeVaultRefresh("boot"); }
 }
 // exact calorie target for a given date (schedule-aware); presets always rebalance to the same weekly total
 // days are Sun..Sat (JS getDay order)
@@ -1008,7 +1218,7 @@ function save(){
   const written = writePrimaryString(DATA_KEY, raw);
   if (!written.ok){ flashSave("Save failed", true); return false; }
   const snapshot = refreshLastKnownGood("data-save");
-  if (snapshot.ok){ markEstablishedInstall(); flashSave("Saved ✓"); }
+  if (snapshot.ok){ markEstablishedInstall(); scheduleNativeVaultRefresh("data-save"); flashSave("Saved ✓"); }
   return true;
 }
 function saveCfg(){
@@ -1019,7 +1229,7 @@ function saveCfg(){
   const written = writePrimaryString(CFG_KEY, raw);
   if (!written.ok){ flashSave("Save failed", true); return false; }
   const snapshot = refreshLastKnownGood("settings-save");
-  if (snapshot.ok) markEstablishedInstall();
+  if (snapshot.ok){ markEstablishedInstall(); scheduleNativeVaultRefresh("settings-save"); }
   return true;
 }
 function saveProgram(){
@@ -1030,7 +1240,7 @@ function saveProgram(){
   const written = writePrimaryString(PROG_KEY, raw);
   if (!written.ok){ flashSave("Save failed", true); return false; }
   const snapshot = refreshLastKnownGood("program-save");
-  if (snapshot.ok) markEstablishedInstall();
+  if (snapshot.ok){ markEstablishedInstall(); scheduleNativeVaultRefresh("program-save"); }
   return true;
 }
 

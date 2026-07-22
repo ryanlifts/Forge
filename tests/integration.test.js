@@ -1,5 +1,5 @@
 // BlackPyre permanent integration suite — boots the shipped app and exercises whole flows.
-const { boot, bootRaw, assembleHTML, sacredCalls, allBlackPyreCalls, check, summary, dstr, wait, EXISTING_CFG, EMPTY_DATA } = require("./harness");
+const { boot, bootRaw, assembleHTML, sacredCalls, allBlackPyreCalls, makeNativeFilesystem, check, summary, dstr, wait, EXISTING_CFG, EMPTY_DATA } = require("./harness");
 const fs = require("fs");
 const path = require("path");
 
@@ -1296,6 +1296,149 @@ const diagnostic63=ManualRestore63.window.eval(`makeStorageDiagnosticEnvelope()`
 check("v63 diagnostic export preserves primary, rolling snapshots, quarantine, and install marker fields", diagnostic63.ok && ["forge:cfg","forge:data","forge:program","forge:lkg","forge:lkg:previous","forge:lkg:older","forge:quarantine","forge:install"].every(k=>Object.prototype.hasOwnProperty.call(diagnostic63.envelope.strings,k)));
 check("v63 Data & recovery exposes manual snapshot restore and diagnostic export", !!ManualRestore63.window.document.getElementById("restoreSnapshotBtn") && !!ManualRestore63.window.document.getElementById("exportDiagnosticBtn"));
 check("v63 FAQ explains missing-key protection and rolling snapshots", ManualRestore63.window.eval(`FAQ.some(x=>x.q==="What happens if saved data unexpectedly disappears?"&&/saving is paused/i.test(x.a)&&/rolling/i.test(x.a))`));
+
+
+// ================= Native vault Stage 1: verified iOS Library backup =================
+function nativeVaultApiPresent(dom){
+  try { return dom.window.eval(`typeof getNativeVaultStatus==="function" && typeof waitForNativeVaultIdle==="function"`); }
+  catch(e){ return false; }
+}
+function nativeVaultStatusOf(dom){
+  try { return dom.window.eval(`typeof getNativeVaultStatus==="function" ? getNativeVaultStatus() : null`); }
+  catch(e){ return null; }
+}
+function nativeVaultField(dom,key){
+  const status=nativeVaultStatusOf(dom);
+  return status ? status[key] : undefined;
+}
+async function settleNativeVault(dom){
+  try {
+    if (dom.window.eval(`typeof waitForNativeVaultIdle==="function"`)) await dom.window.eval(`waitForNativeVaultIdle()`);
+    else await wait(25);
+  } catch(e){ await wait(25); }
+}
+function parseNativeVault(raw){ try { return JSON.parse(raw); } catch(e){ return null; } }
+function exactNativeStrings(dom){
+  const out={};
+  ["forge:cfg","forge:data","forge:program","forge:lkg","forge:lkg:previous","forge:lkg:older","forge:quarantine","forge:install","ryan-cut:data"]
+    .forEach(k=>{ out[k]=dom.window.localStorage.getItem(k); });
+  return out;
+}
+function nativeVaultRecordMatches(dom,record){
+  const expected=exactNativeStrings(dom);
+  return !!record && record.type==="blackpyre-native-vault" && record.formatVersion===1
+    && record.schemaVersion===2 && record.strings
+    && Object.keys(expected).every(k=>Object.prototype.hasOwnProperty.call(record.strings,k) && record.strings[k]===expected[k]);
+}
+
+const PwaVault=bootRaw({cfg:RAW_V2_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM});
+await settleNativeVault(PwaVault);
+const pwaVaultStatus=nativeVaultStatusOf(PwaVault);
+check("native vault exposes stable diagnostic and idle APIs", nativeVaultApiPresent(PwaVault));
+check("native vault stays unavailable in the ordinary PWA", pwaVaultStatus && pwaVaultStatus.available===false && pwaVaultStatus.native===false);
+
+const NotNativeFs=makeNativeFilesystem({native:false});
+const NotNativeVault=bootRaw({cfg:RAW_V2_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM},w=>NotNativeFs.install(w));
+await settleNativeVault(NotNativeVault);
+check("Capacitor bridge presence alone cannot activate the vault on a web platform", NotNativeFs.calls.length===0 && nativeVaultField(NotNativeVault,"available")===false);
+
+const MissingPluginFs=makeNativeFilesystem({available:false});
+const MissingPluginVault=bootRaw({cfg:RAW_V2_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM},w=>MissingPluginFs.install(w));
+await settleNativeVault(MissingPluginVault);
+check("native mode without the Filesystem plugin leaves all app storage behavior unchanged", MissingPluginFs.calls.length===0 && nativeVaultField(MissingPluginVault,"available")===false);
+
+const NATIVE_LEGACY_RAW=' {"food":{"2026-07-18":[{"name":"Legacy oats","cal":150,"pro":5,"carb":27,"fat":3}]},"workouts":[],"weights":[],"recents":[],"myFoods":{},"meals":[],"finished":{},"foodCounts":{},"mealCounts":{},"meta":{"lastBackup":null,"logsSince":0},"activeWorkoutDraft":null} ';
+const NativeFs=makeNativeFilesystem();
+const NativeVault=bootRaw({
+  cfg:RAW_V2_CFG,
+  data:JSON.stringify(V63_POPULATED_DATA),
+  program:RAW_PROGRAM,
+  legacyData:NATIVE_LEGACY_RAW,
+  lkgPrevious:V63_EMPTY_LKG,
+  lkgOlder:Old63,
+  quarantine:JSON.stringify({recoveryFormatVersion:1,quarantinedAt:"2026-07-20T11:00:00.000Z",diagnostic:null,
+    originals:{cfg:RAW_V2_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM,legacyData:NATIVE_LEGACY_RAW}}),
+  install:JSON.stringify({formatVersion:1,establishedAt:"2026-07-20T10:00:00.000Z",lastHealthyAt:"2026-07-20T10:00:00.000Z",schemaVersion:2})
+},w=>NativeFs.install(w));
+const nativeStorageCallsAfterBoot=NativeVault.__storageCalls.length;
+await settleNativeVault(NativeVault);
+const nativeStatus=nativeVaultStatusOf(NativeVault);
+const nativePath=nativeStatus && nativeStatus.path;
+const nativeRaw=nativePath && NativeFs.files.get(nativePath);
+const nativeRecord=parseNativeVault(nativeRaw);
+check("healthy native boot writes one verified vault file in the iOS Library directory", !!nativePath && NativeFs.files.size===1 && NativeFs.calls.some(c=>c.method==="writeFile"&&c.args.directory==="LIBRARY") && NativeFs.calls.some(c=>c.method==="readFile"&&c.args.path===nativePath));
+check("native vault preserves every contracted localStorage value byte-for-byte", nativeVaultRecordMatches(NativeVault,nativeRecord) && nativeRecord && nativeRecord.strings && nativeRecord.strings["ryan-cut:data"]===NATIVE_LEGACY_RAW);
+check("native vault work never writes, removes, or clears browser storage", NativeVault.__storageCalls.length===nativeStorageCallsAfterBoot);
+check("successful native verification is visible through diagnostics", nativeStatus && nativeStatus.available===true && nativeStatus.verified===true && nativeStatus.state==="ready" && nativeStatus.lastSource==="boot");
+
+const bootVaultRaw=nativeRaw;
+NativeVault.window.eval(`data.weights.push({date:"2026-07-22",lbs:218}); window.__nativeDataSaveResult=save();`);
+await settleNativeVault(NativeVault);
+let refreshedRaw=NativeFs.files.get(nativePath), refreshedRecord=parseNativeVault(refreshedRaw);
+check("a successful healthy data save refreshes the exact native vault", NativeVault.window.eval(`window.__nativeDataSaveResult===true`) && refreshedRaw!==bootVaultRaw && nativeVaultRecordMatches(NativeVault,refreshedRecord) && nativeVaultField(NativeVault,"lastSource")==="data-save");
+
+NativeVault.window.eval(`cfg.goalWt=170; window.__nativeCfgSaveResult=saveCfg();`);
+await settleNativeVault(NativeVault);
+refreshedRecord=parseNativeVault(NativeFs.files.get(nativePath));
+check("a successful healthy settings save refreshes the native vault", NativeVault.window.eval(`window.__nativeCfgSaveResult===true`) && refreshedRecord && refreshedRecord.strings && refreshedRecord.strings["forge:cfg"]===NativeVault.window.localStorage.getItem("forge:cfg") && nativeVaultField(NativeVault,"lastSource")==="settings-save");
+
+NativeVault.window.eval(`program.name="Native Vault Program"; window.__nativeProgramSaveResult=saveProgram();`);
+await settleNativeVault(NativeVault);
+refreshedRecord=parseNativeVault(NativeFs.files.get(nativePath));
+check("a successful healthy program save refreshes the native vault", NativeVault.window.eval(`window.__nativeProgramSaveResult===true`) && refreshedRecord && refreshedRecord.strings && refreshedRecord.strings["forge:program"]===NativeVault.window.localStorage.getItem("forge:program") && nativeVaultField(NativeVault,"lastSource")==="program-save");
+
+const beforePrimaryFailureRaw=NativeFs.files.get(nativePath);
+const nativeStore=NativeVault.window.localStorage;
+const nativeProto=Object.getPrototypeOf(nativeStore);
+const nativeSet=nativeProto.setItem;
+nativeProto.setItem=function(k,v){ if(k==="forge:data") throw new Error("forced primary failure"); return nativeSet.call(this,k,v); };
+NativeVault.window.eval(`data.weights.push({date:"2026-07-23",lbs:217}); window.__nativePrimaryFailureResult=save();`);
+nativeProto.setItem=nativeSet;
+await settleNativeVault(NativeVault);
+check("a failed primary save never schedules or changes the native vault", NativeVault.window.eval(`window.__nativePrimaryFailureResult===false`) && NativeFs.files.get(nativePath)===beforePrimaryFailureRaw);
+
+const beforeUnhealthyRaw=NativeFs.files.get(nativePath);
+const nativeSet2=nativeProto.setItem;
+nativeProto.setItem=function(k,v){ if(k==="forge:lkg") throw new Error("forced LKG failure"); return nativeSet2.call(this,k,v); };
+NativeVault.window.eval(`data.weights.push({date:"2026-07-24",lbs:216}); window.__nativeUnhealthyResult=save();`);
+nativeProto.setItem=nativeSet2;
+await settleNativeVault(NativeVault);
+check("a live save that cannot refresh validated recovery protection cannot replace the native vault", NativeVault.window.eval(`window.__nativeUnhealthyResult===true`) && NativeFs.files.get(nativePath)===beforeUnhealthyRaw);
+
+const beforeNativeFailureRaw=NativeFs.files.get(nativePath);
+const writeBaseline=NativeFs.counts().write;
+NativeFs.control.failWrite=(args,ctx)=>ctx.writeCount===writeBaseline+1;
+NativeVault.window.eval(`data.weights.push({date:"2026-07-25",lbs:215}); window.__nativeFailureSaveResult=save();`);
+await settleNativeVault(NativeVault);
+NativeFs.control.failWrite=null;
+const failedNativeStatus=nativeVaultStatusOf(NativeVault);
+check("native vault failure never turns a healthy normal app save into a failure", NativeVault.window.eval(`window.__nativeFailureSaveResult===true`) && JSON.parse(NativeVault.window.localStorage.getItem("forge:data")).weights.some(x=>x.date==="2026-07-25"));
+check("failed native write retains the previous verified vault and reports the failure", NativeFs.files.get(nativePath)===beforeNativeFailureRaw && failedNativeStatus && failedNativeStatus.verified===true && failedNativeStatus.retainedPrevious===true && !!failedNativeStatus.lastError);
+
+const beforeMismatchRaw=NativeFs.files.get(nativePath);
+const mismatchWriteBaseline=NativeFs.counts().write;
+let mismatchUsed=false;
+NativeFs.control.transformRead=(args,data,ctx)=>{
+  if(!mismatchUsed && ctx.writeCount>mismatchWriteBaseline){ mismatchUsed=true; return data+"corrupt"; }
+  return data;
+};
+NativeVault.window.eval(`data.weights.push({date:"2026-07-26",lbs:214}); window.__nativeMismatchSaveResult=save();`);
+await settleNativeVault(NativeVault);
+NativeFs.control.transformRead=null;
+const mismatchStatus=nativeVaultStatusOf(NativeVault);
+check("read-back mismatch cannot promote corrupt bytes over the previous verified vault", NativeVault.window.eval(`window.__nativeMismatchSaveResult===true`) && mismatchUsed && NativeFs.files.get(nativePath)===beforeMismatchRaw);
+check("read-back mismatch is exposed diagnostically without entering protected mode", mismatchStatus && mismatchStatus.retainedPrevious===true && !!mismatchStatus.lastError && NativeVault.window.eval(`protectedMode===false`));
+
+NativeVault.window.eval(`data.weights.push({date:"2026-07-27",lbs:213}); save(); data.weights.push({date:"2026-07-28",lbs:212}); save();`);
+await settleNativeVault(NativeVault);
+const queuedRecord=parseNativeVault(NativeFs.files.get(nativePath));
+check("rapid healthy saves serialize to a final vault matching the newest persisted state", nativeVaultRecordMatches(NativeVault,queuedRecord) && queuedRecord && queuedRecord.strings && JSON.parse(queuedRecord.strings["forge:data"]).weights.some(x=>x.date==="2026-07-28"));
+
+const ExistingVaultFs=makeNativeFilesystem({files:{[nativePath]:NativeFs.files.get(nativePath)}});
+const ExistingVaultFresh=bootRaw({},w=>ExistingVaultFs.install(w));
+await settleNativeVault(ExistingVaultFresh);
+check("Stage 1 never auto-restores native vault contents into an empty localStorage", ExistingVaultFresh.window.eval(`data.weights.length===0`) && JSON.parse(ExistingVaultFresh.window.localStorage.getItem("forge:data")).weights.length===0);
+check("a populated verified native vault is not overwritten by a fresh empty-state regression", ExistingVaultFs.files.get(nativePath)===NativeFs.files.get(nativePath) && nativeVaultField(ExistingVaultFresh,"retainedPrevious")===true);
 
 // ================= v44: update toast =================
 function bootSW(hasController){

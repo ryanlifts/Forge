@@ -107,4 +107,89 @@ const wait = ms=>new Promise(r=>setTimeout(r,ms));
 const sacredCalls = dom=>dom.__storageCalls.filter(c=>c.key===null || ["forge:cfg","forge:data","forge:program"].includes(c.key));
 const allBlackPyreCalls = dom=>dom.__storageCalls.filter(c=>c.key===null || ["forge:cfg","forge:data","forge:program","forge:lkg","forge:quarantine"].includes(c.key));
 
-module.exports = { boot, bootRaw, assembleHTML, check, summary, dstr, nextDow, wait, sacredCalls, allBlackPyreCalls, EXISTING_CFG, EMPTY_DATA };
+
+// Capacitor Filesystem test double for native-only storage coverage.
+// It intentionally models only the small API surface BlackPyre uses and keeps
+// exact file bytes in memory so tests can prove read-back equality and retention.
+function makeNativeFilesystem(options){
+  const opts = options || {};
+  const files = new Map(Object.entries(opts.files || {}).map(([k,v])=>[String(k),String(v)]));
+  const calls = [];
+  const control = {
+    failWrite:null,
+    failRead:null,
+    failDelete:null,
+    failRename:null,
+    transformRead:null
+  };
+  let writeCount=0, readCount=0, deleteCount=0, renameCount=0;
+
+  function shouldFail(rule, args, count){
+    if (typeof rule==="function") return !!rule(args,{count,writeCount,readCount,deleteCount,renameCount,files,calls});
+    return rule===true;
+  }
+  function missing(pathname){
+    const err = new Error("File does not exist: "+pathname);
+    err.code = "ENOENT";
+    return err;
+  }
+  const Filesystem = {
+    async writeFile(args){
+      writeCount++;
+      const a=Object.assign({},args);
+      calls.push({method:"writeFile",args:a});
+      if (shouldFail(control.failWrite,a,writeCount)) throw new Error("Mock native write failure");
+      files.set(String(a.path),String(a.data));
+      return {uri:"mock://"+String(a.path)};
+    },
+    async readFile(args){
+      readCount++;
+      const a=Object.assign({},args);
+      calls.push({method:"readFile",args:a});
+      if (shouldFail(control.failRead,a,readCount)) throw new Error("Mock native read failure");
+      const pathname=String(a.path);
+      if (!files.has(pathname)) throw missing(pathname);
+      let data=files.get(pathname);
+      if (typeof control.transformRead==="function"){
+        const changed=control.transformRead(a,data,{count:readCount,writeCount,readCount,deleteCount,renameCount,files,calls});
+        if (changed!==undefined) data=String(changed);
+      }
+      return {data:data};
+    },
+    async deleteFile(args){
+      deleteCount++;
+      const a=Object.assign({},args);
+      calls.push({method:"deleteFile",args:a});
+      if (shouldFail(control.failDelete,a,deleteCount)) throw new Error("Mock native delete failure");
+      const pathname=String(a.path);
+      if (!files.has(pathname)) throw missing(pathname);
+      files.delete(pathname);
+      return {};
+    },
+    async rename(args){
+      renameCount++;
+      const a=Object.assign({},args);
+      calls.push({method:"rename",args:a});
+      if (shouldFail(control.failRename,a,renameCount)) throw new Error("Mock native rename failure");
+      const from=String(a.from), to=String(a.to);
+      if (!files.has(from)) throw missing(from);
+      files.set(to,files.get(from));
+      files.delete(from);
+      return {};
+    }
+  };
+  function install(w){
+    w.Capacitor = {
+      getPlatform:()=>opts.platform || "ios",
+      isNativePlatform:()=>opts.native!==false,
+      isPluginAvailable:name=>name==="Filesystem" && opts.available!==false,
+      Plugins:{Filesystem:Filesystem}
+    };
+  }
+  return {
+    install, Filesystem, files, calls, control,
+    counts:()=>({write:writeCount,read:readCount,delete:deleteCount,rename:renameCount})
+  };
+}
+
+module.exports = { boot, bootRaw, assembleHTML, check, summary, dstr, nextDow, wait, sacredCalls, allBlackPyreCalls, makeNativeFilesystem, EXISTING_CFG, EMPTY_DATA };
