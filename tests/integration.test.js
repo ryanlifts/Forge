@@ -799,7 +799,7 @@ check("v62 a catalog suggestion opens its exact listed serving for review", dC62
 check("v62 review shows the USDA per-100g values and correctly scaled serving", /USDA reference · SR28/.test(dC62.getElementById("selName").textContent) && /165 kcal/.test(dC62.getElementById("selPer100").textContent) && dC62.getElementById("calcCal").textContent==="186" && dC62.getElementById("calcPro").textContent==="35");
 check("v62 reviewing a broad-catalog suggestion never auto-logs it", C62.window.eval(`(data.food[todayStr()]||[]).length`)===beforeReview62);
 check("v62 FAQ explains USDA sourcing, exact servings, and real-world variation", C62.window.eval(`FAQ.some(x=>x.q==="How accurate are suggested-food calories and macros?"&&/per 100 grams/.test(x.a)&&/exact gram weight/.test(x.a)&&/NDB number/.test(x.a)&&/brand/.test(x.a)) && FAQ.some(x=>x.q==="How do food suggestions work?"&&/120 common foods/.test(x.a)&&/familiar foods receive a bonus but are not required/.test(x.a)&&/does not call USDA or an AI/.test(x.a))`));
-check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v63"'); })());
+check("v64 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v64"'); })());
 check("v62 keeps primary schemaVersion 2", C62.window.eval("SCHEMA_VERSION")===2);
 
 // ================= ChatGPT handoff paste flow =================
@@ -883,6 +883,41 @@ preset120.dispatchEvent(new T54.window.Event("click",{bubbles:true}));
 check("v54 choosing a rest preset changes the duration without auto-starting", T54.window.eval("cfg.restSec===120 && restRunning===false") && dT54.getElementById("restDisplay").textContent==="2:00");
 T54.window.eval(`activateView("food",null,false)`);
 check("v54 leaving Train hides the rest control", dT54.getElementById("restDock").classList.contains("hidden") && !dT54.body.classList.contains("rest-dock-visible"));
+
+// ================= v64: elapsed-time rest timer =================
+const CLOCK64 = 2000000000000;
+const T64 = boot(V2_CFG, EMPTY_DATA, w=>{ w.Date.now=()=>CLOCK64; }, TEST_PROGRAM);
+const dT64 = T64.window.document;
+T64.window.eval(`activateView("work",null,false)`);
+dT64.getElementById("restStartBtn").dispatchEvent(new T64.window.Event("click",{bubbles:true}));
+const startedTimer64 = JSON.parse(T64.window.localStorage.getItem("forge:rest-timer"));
+check("v64 starting rest saves a fixed finish time outside primary state", startedTimer64.status==="running" && startedTimer64.endAt===CLOCK64+90000 && T64.window.eval("restRunning && restRemaining===90"));
+T64.window.Date.now=()=>CLOCK64+45000;
+T64.window.eval("reconcileRestTimer()");
+check("v64 foreground reconciliation uses actual elapsed time after suspension", T64.window.eval("restRemaining===45") && dT64.getElementById("restDisplay").textContent==="0:45");
+dT64.getElementById("restPauseBtn").dispatchEvent(new T64.window.Event("click",{bubbles:true}));
+const pausedTimer64 = T64.window.localStorage.getItem("forge:rest-timer");
+check("v64 pausing saves the exact remaining duration", JSON.parse(pausedTimer64).status==="paused" && JSON.parse(pausedTimer64).remainingSec===45);
+
+const T64PausedReload = bootRaw({
+  cfg:T64.window.localStorage.getItem("forge:cfg"),
+  data:T64.window.localStorage.getItem("forge:data"),
+  program:T64.window.localStorage.getItem("forge:program"),
+  restTimer:pausedTimer64
+}, w=>{ w.Date.now=()=>CLOCK64+45000; });
+check("v64 paused rest timer survives a full app or phone restart", T64PausedReload.window.eval("restPaused && !restRunning && restRemaining===45") && T64PausedReload.window.document.getElementById("restDisplay").textContent==="0:45");
+T64PausedReload.window.document.getElementById("restPauseBtn").dispatchEvent(new T64PausedReload.window.Event("click",{bubbles:true}));
+const resumedTimer64 = JSON.parse(T64PausedReload.window.localStorage.getItem("forge:rest-timer"));
+check("v64 resumed timer writes a new finish time from the restored remainder", resumedTimer64.status==="running" && resumedTimer64.endAt===CLOCK64+90000);
+T64PausedReload.window.eval("cancelRest()");
+
+const T64Expired = bootRaw({
+  cfg:T64.window.localStorage.getItem("forge:cfg"),
+  data:T64.window.localStorage.getItem("forge:data"),
+  program:T64.window.localStorage.getItem("forge:program"),
+  restTimer:JSON.stringify({formatVersion:1,status:"running",endAt:CLOCK64+30000,remainingSec:30,savedAt:CLOCK64})
+}, w=>{ w.Date.now=()=>CLOCK64+45000; });
+check("v64 an expired timer returns as GO after restart and clears its temporary record", T64Expired.window.eval("restFinished && !restRunning && restRemaining===0") && T64Expired.window.document.getElementById("restDisplay").textContent==="GO!" && T64Expired.window.localStorage.getItem("forge:rest-timer")===null);
 
 // ================= v59: audit-recommended structural protections =================
 check("v59 storage-use line renders an honest approximation", (()=>{ const B = boot(EXISTING_CFG, EMPTY_DATA); const t = B.window.document.getElementById("storageUseNote").textContent; return /~\d+ (KB|MB)/.test(t) && /approximate/.test(t); })());
@@ -975,7 +1010,7 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the four data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+"/.test(sw));
-check("v63 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v63"'));
+check("v64 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v64"'));
 const rawIndex = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 check("data scripts load before the app scripts (raw file order)",
   ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js"].every(f=>
@@ -1293,7 +1328,7 @@ check("v63 normal-mode snapshot restore is verified and reaffirms the establishe
 check("v63 normal-mode snapshot restore quarantines exact prior primary data", JSON.parse(ManualRestore63.window.localStorage.getItem("forge:quarantine")).originals.data===manualBefore63);
 
 const diagnostic63=ManualRestore63.window.eval(`makeStorageDiagnosticEnvelope()`);
-check("v63 diagnostic export preserves primary, rolling snapshots, quarantine, and install marker fields", diagnostic63.ok && ["forge:cfg","forge:data","forge:program","forge:lkg","forge:lkg:previous","forge:lkg:older","forge:quarantine","forge:install"].every(k=>Object.prototype.hasOwnProperty.call(diagnostic63.envelope.strings,k)));
+check("v64 diagnostic export preserves primary, recovery, install, and temporary timer fields", diagnostic63.ok && ["forge:cfg","forge:data","forge:program","forge:lkg","forge:lkg:previous","forge:lkg:older","forge:quarantine","forge:install","forge:rest-timer"].every(k=>Object.prototype.hasOwnProperty.call(diagnostic63.envelope.strings,k)));
 check("v63 Data & recovery exposes manual snapshot restore and diagnostic export", !!ManualRestore63.window.document.getElementById("restoreSnapshotBtn") && !!ManualRestore63.window.document.getElementById("exportDiagnosticBtn"));
 check("v63 FAQ explains missing-key protection and rolling snapshots", ManualRestore63.window.eval(`FAQ.some(x=>x.q==="What happens if saved data unexpectedly disappears?"&&/saving is paused/i.test(x.a)&&/rolling/i.test(x.a))`));
 

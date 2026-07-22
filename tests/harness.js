@@ -52,6 +52,9 @@ function bootRaw(raws, hooks){
       if (seed.nativeRestorePreservation!==null && seed.nativeRestorePreservation!==undefined){
         originals.setItem.call(storage, "blackpyre:native-restore-preservation", seed.nativeRestorePreservation);
       }
+      if (seed.restTimer!==null && seed.restTimer!==undefined){
+        originals.setItem.call(storage, "forge:rest-timer", seed.restTimer);
+      }
 
       proto.setItem = function(key, value){
         calls.push({method:"setItem", key:String(key), value:String(value)});

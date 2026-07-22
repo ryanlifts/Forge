@@ -339,7 +339,7 @@ document.getElementById("plateTarget").addEventListener("input", updatePlates);
 document.getElementById("plateBar").addEventListener("change", updatePlates);
 
 let restInterval = null, restRunning = false, restPaused = false, restFinished = false;
-let restRemaining = 0;
+let restRemaining = 0, restEndsAt = 0, restStateRestored = false;
 function fmtRest(sec){ return Math.floor(sec/60)+":"+String(sec%60).padStart(2,"0"); }
 function selectedRestSeconds(){ return Math.max(10, Math.round(Number(cfg.restSec)||90)); }
 function setRestOptionsOpen(open){
@@ -373,24 +373,56 @@ function paintRestDock(){
   end.classList.toggle("hidden", !(restRunning || restPaused));
   pause.textContent = restPaused ? "Resume" : "Pause";
 }
-function runRestCountdown(){
+function stopRestInterval(){
   clearInterval(restInterval);
+  restInterval = null;
+}
+function persistRestTimer(){
+  if (restRunning){
+    writeRestTimerState({status:"running", endAt:restEndsAt, remainingSec:restRemaining, savedAt:Date.now()});
+  } else if (restPaused){
+    writeRestTimerState({status:"paused", remainingSec:restRemaining, savedAt:Date.now()});
+  }
+}
+function finishRestCountdown(){
+  stopRestInterval();
+  restRunning = false;
+  restPaused = false;
+  restFinished = true;
+  restRemaining = 0;
+  restEndsAt = 0;
+  clearRestTimerState();
+  paintRestDock();
+}
+function syncRestFromClock(){
+  if (!restRunning) return false;
+  restRemaining = Math.max(0, Math.ceil((restEndsAt-Date.now())/1000));
+  if (restRemaining<=0){
+    finishRestCountdown();
+    return false;
+  }
+  return true;
+}
+function tickRestCountdown(){
+  if (syncRestFromClock()) paintRestDock();
+}
+function armRestInterval(){
+  stopRestInterval();
+  restInterval = setInterval(tickRestCountdown, 1000);
+}
+function runRestCountdown(){
+  stopRestInterval();
+  if (restRemaining<=0){
+    finishRestCountdown();
+    return;
+  }
+  restEndsAt = Date.now() + (restRemaining*1000);
   restRunning = true;
   restPaused = false;
   restFinished = false;
+  persistRestTimer();
   paintRestDock();
-  restInterval = setInterval(()=>{
-    restRemaining -= 1;
-    if (restRemaining<=0){
-      restRemaining = 0;
-      clearInterval(restInterval);
-      restInterval = null;
-      restRunning = false;
-      restPaused = false;
-      restFinished = true;
-    }
-    paintRestDock();
-  }, 1000);
+  armRestInterval();
 }
 function startRest(seconds){
   restRemaining = Math.max(1, Math.round(Number(seconds)||selectedRestSeconds()));
@@ -398,10 +430,12 @@ function startRest(seconds){
 }
 function pauseRest(){
   if (restRunning){
-    clearInterval(restInterval);
-    restInterval = null;
+    if (!syncRestFromClock()) return;
+    stopRestInterval();
     restRunning = false;
     restPaused = true;
+    restEndsAt = 0;
+    persistRestTimer();
     paintRestDock();
     return;
   }
@@ -409,19 +443,55 @@ function pauseRest(){
 }
 function addRest(seconds){
   if (!(restRunning || restPaused)) return;
-  restRemaining += Math.max(1, Math.round(Number(seconds)||30));
+  const added = Math.max(1, Math.round(Number(seconds)||30));
+  if (restRunning){
+    if (!syncRestFromClock()) return;
+    restRemaining += added;
+    restEndsAt += added*1000;
+  } else {
+    restRemaining += added;
+  }
   restFinished = false;
+  persistRestTimer();
   paintRestDock();
 }
 function cancelRest(){
-  clearInterval(restInterval);
-  restInterval = null;
+  stopRestInterval();
   restRunning = false;
   restPaused = false;
   restFinished = false;
   restRemaining = 0;
+  restEndsAt = 0;
+  clearRestTimerState();
   paintRestDock();
 }
+function restoreRestTimerState(){
+  if (restStateRestored) return;
+  restStateRestored = true;
+  const saved = readRestTimerState();
+  if (!saved.ok) return;
+  if (saved.record.status==="running"){
+    restEndsAt = saved.record.endAt;
+    restRunning = true;
+    restPaused = false;
+    restFinished = false;
+    if (!syncRestFromClock()) return;
+    armRestInterval();
+  } else {
+    restRemaining = Math.max(1, Math.round(saved.record.remainingSec));
+    restRunning = false;
+    restPaused = true;
+    restFinished = false;
+    restEndsAt = 0;
+  }
+}
+function reconcileRestTimer(){
+  if (restRunning) tickRestCountdown();
+  else if (restPaused || restFinished) paintRestDock();
+}
+document.addEventListener("visibilitychange", ()=>{ if (!document.hidden) reconcileRestTimer(); });
+window.addEventListener("pageshow", reconcileRestTimer);
+window.addEventListener("focus", reconcileRestTimer);
 document.getElementById("restDurationBtn").addEventListener("click", ()=>{
   const box = document.getElementById("restDockOptions");
   setRestOptionsOpen(box.classList.contains("hidden"));
@@ -431,6 +501,7 @@ document.getElementById("restPauseBtn").addEventListener("click", pauseRest);
 document.getElementById("restAddBtn").addEventListener("click", ()=>addRest(30));
 document.getElementById("restEndBtn").addEventListener("click", cancelRest);
 function renderRestPresets(){
+  restoreRestTimerState();
   // migrate old single custom to list
   if (cfg.customRestSec && !cfg.customRests){ cfg.customRests = [cfg.customRestSec]; delete cfg.customRestSec; saveCfg(); }
   if (!cfg.customRests) cfg.customRests = [];
