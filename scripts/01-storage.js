@@ -600,6 +600,9 @@ const NATIVE_VAULT_CANDIDATE_PATH = "blackpyre-native-vault.candidate.json";
 const NATIVE_RESTORE_QUARANTINE_PATH = "blackpyre-native-restore-quarantine.json";
 const NATIVE_RESTORE_QUARANTINE_TYPE = "blackpyre-native-restore-quarantine";
 const NATIVE_RESTORE_QUARANTINE_FORMAT_VERSION = 1;
+const NATIVE_RESTORE_PRESERVATION_KEY = "blackpyre:native-restore-preservation";
+const NATIVE_RESTORE_PRESERVATION_TYPE = "blackpyre-native-restore-preservation";
+const NATIVE_RESTORE_PRESERVATION_FORMAT_VERSION = 1;
 const NATIVE_VAULT_DIRECTORY = "LIBRARY";
 const NATIVE_VAULT_ENCODING = "utf8";
 const NATIVE_VAULT_KEYS = [CFG_KEY,DATA_KEY,PROG_KEY,LKG_KEY,LKG_PREVIOUS_KEY,LKG_OLDER_KEY,QUARANTINE_KEY,INSTALL_KEY,"ryan-cut:data"];
@@ -846,6 +849,7 @@ function captureNativeRestoreIncident(reason){
   const strings=Object.create(null);
   const contracted=Object.create(null);
   const absentContractedKeys=[];
+  let preservationRaw=null;
   try {
     for (let i=0;i<localStorage.length;i++){
       const key=localStorage.key(i);
@@ -856,6 +860,7 @@ function captureNativeRestoreIncident(reason){
       contracted[key]=value;
       if (value===null) absentContractedKeys.push(key);
     });
+    preservationRaw=localStorage.getItem(NATIVE_RESTORE_PRESERVATION_KEY);
   } catch(error){
     return {ok:false,error:error,reason:"Browser storage could not be captured for native restore quarantine."};
   }
@@ -873,6 +878,7 @@ function captureNativeRestoreIncident(reason){
       record:record,
       raw:JSON.stringify(record),
       contracted:contracted,
+      preservationRaw:preservationRaw,
       allContractedAbsent:absentContractedKeys.length===NATIVE_VAULT_KEYS.length
     };
   } catch(error){
@@ -975,7 +981,97 @@ function verifyExactNativeVaultStrings(strings){
     return NATIVE_VAULT_KEYS.every(key=>localStorage.getItem(key)===strings[key]);
   } catch(error){ return false; }
 }
-function rollbackNativeRestore(contracted){
+function inspectNativeRestorePreservationRaw(raw){
+  if (raw===null || raw===undefined) return {ok:false,missing:true,code:"missing"};
+  let record;
+  try { record=JSON.parse(raw); }
+  catch(error){ return {ok:false,code:"parse"}; }
+
+  if (!isPlainObject(record)
+      || record.type!==NATIVE_RESTORE_PRESERVATION_TYPE
+      || record.formatVersion!==NATIVE_RESTORE_PRESERVATION_FORMAT_VERSION
+      || typeof record.restoredAt!=="string"
+      || !isPlainObject(record.strings)){
+    return {ok:false,code:"shape"};
+  }
+
+  const keys=Object.keys(record.strings);
+  if (keys.length!==NATIVE_VAULT_KEYS.length
+      || NATIVE_VAULT_KEYS.some(key=>!hasOwn(record.strings,key))){
+    return {ok:false,code:"keys"};
+  }
+
+  for (const key of NATIVE_VAULT_KEYS){
+    const value=record.strings[key];
+    if (value!==null && typeof value!=="string"){
+      return {ok:false,code:"value"};
+    }
+  }
+
+  return {ok:true,record:record};
+}
+function writeNativeRestorePreservation(strings){
+  const exact=Object.create(null);
+  for (const key of NATIVE_VAULT_KEYS){
+    const value=strings[key];
+    if (value!==null && typeof value!=="string"){
+      return {ok:false,code:"value"};
+    }
+    exact[key]=value;
+  }
+
+  let raw;
+  try {
+    raw=JSON.stringify({
+      type:NATIVE_RESTORE_PRESERVATION_TYPE,
+      formatVersion:NATIVE_RESTORE_PRESERVATION_FORMAT_VERSION,
+      restoredAt:new Date().toISOString(),
+      strings:exact
+    });
+    localStorage.setItem(NATIVE_RESTORE_PRESERVATION_KEY,raw);
+    if (localStorage.getItem(NATIVE_RESTORE_PRESERVATION_KEY)!==raw){
+      return {ok:false,code:"verify"};
+    }
+  } catch(error){
+    return {ok:false,code:"write",error:error};
+  }
+
+  const inspected=inspectNativeRestorePreservationRaw(raw);
+  return inspected.ok
+    ? {ok:true,raw:raw,record:inspected.record}
+    : {ok:false,code:"inspect"};
+}
+function nativeRestorePreservationMatchesCurrent(){
+  try {
+    const inspected=inspectNativeRestorePreservationRaw(
+      localStorage.getItem(NATIVE_RESTORE_PRESERVATION_KEY)
+    );
+    if (!inspected.ok) return false;
+
+    return NATIVE_VAULT_KEYS.every(
+      key=>localStorage.getItem(key)===inspected.record.strings[key]
+    );
+  } catch(error){
+    return false;
+  }
+}
+function adoptPreservedNativeLkgStatus(){
+  try {
+    const current=inspectLkgRaw(localStorage.getItem(LKG_KEY));
+    if (!current.ok) return false;
+
+    lkgStatus={
+      state:"ready",
+      savedAt:current.record.savedAt,
+      snapshots:validSnapshotCount(),
+      message:"Automatic recovery protection is ready."
+    };
+    return true;
+  } catch(error){
+    return false;
+  }
+}
+function rollbackNativeRestore(contracted,preservationRaw){
   let firstError=null;
   for (const key of NATIVE_VAULT_KEYS){
     try {
@@ -989,9 +1085,24 @@ function rollbackNativeRestore(contracted){
       if (!firstError) firstError=error;
     }
   }
+
+  try {
+    if (preservationRaw===null){
+      if (localStorage.getItem(NATIVE_RESTORE_PRESERVATION_KEY)!==null){
+        localStorage.removeItem(NATIVE_RESTORE_PRESERVATION_KEY);
+      }
+    } else {
+      localStorage.setItem(NATIVE_RESTORE_PRESERVATION_KEY,preservationRaw);
+    }
+  } catch(error){
+    if (!firstError) firstError=error;
+  }
+
   let verified=false;
   try {
-    verified=NATIVE_VAULT_KEYS.every(key=>localStorage.getItem(key)===contracted[key]);
+    verified=
+      NATIVE_VAULT_KEYS.every(key=>localStorage.getItem(key)===contracted[key])
+      && localStorage.getItem(NATIVE_RESTORE_PRESERVATION_KEY)===preservationRaw;
   } catch(error){
     if (!firstError) firstError=error;
   }
@@ -1181,13 +1292,22 @@ async function restoreNativeVaultAtBoot(context){
       }
     );
     if (!verified.ok) throw new Error("Restored primary storage did not pass final validation.");
+
+    const preservation=writeNativeRestorePreservation(inspected.record.strings);
+    if (!preservation.ok){
+      throw new Error("The restored state could not record exact restart-preservation proof.");
+    }
+
     completeNativeRestore(verified,capability,inspected.record);
     return {ok:true,restored:true};
   } catch(error){
     restoreError=error;
   }
 
-  const rollback=rollbackNativeRestore(context.capture.contracted);
+  const rollback=rollbackNativeRestore(
+    context.capture.contracted,
+    context.capture.preservationRaw
+  );
   const restoreReason="Native vault restoration failed: "+nativeVaultErrorText(restoreError);
   markNativeRestoreProtected(
     rollback.ok
@@ -1615,8 +1735,21 @@ if (_bootNeedsNativeRecovery){
     data:JSON.stringify(data), cfg:JSON.stringify(cfg), program:JSON.stringify(program)
   };
 } else {
-  const bootSnapshot = refreshLastKnownGood("boot");
-  if (bootSnapshot.ok){ markEstablishedInstall(); scheduleNativeVaultRefresh("boot"); }
+  const preserveExactNativeRestore=!!(
+    _bootNativeCapability.available
+    && nativeRestorePreservationMatchesCurrent()
+  );
+
+  if (preserveExactNativeRestore){
+    adoptPreservedNativeLkgStatus();
+    scheduleNativeVaultRefresh("boot");
+  } else {
+    const bootSnapshot=refreshLastKnownGood("boot");
+    if (bootSnapshot.ok){
+      markEstablishedInstall();
+      scheduleNativeVaultRefresh("boot");
+    }
+  }
 }
 // exact calorie target for a given date (schedule-aware); presets always rebalance to the same weekly total
 // days are Sun..Sat (JS getDay order)

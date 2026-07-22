@@ -2062,6 +2062,58 @@ check("successful Stage 2 restoration exits Protected mode with validated establ
   && stage2StorageMatchesVault(Stage2Missing,Stage2MissingStrings));
 
 
+
+// ================= Native vault Stage 2: post-restore restart exactness =================
+// After a verified restore, the next ordinary native launch must not immediately
+// rewrite restored metadata or replace the exact source vault.
+const Stage2RestartVaultBefore =
+  Stage2MissingFs.files.get(STAGE2_VAULT_PATH);
+
+const Stage2RestartStringsBefore =
+  stage2ContractedSnapshot(Stage2Missing);
+
+const Stage2RestartPreservationBefore =
+  Stage2Missing.window.localStorage.getItem(
+    "blackpyre:native-restore-preservation"
+  );
+
+check("successful Stage 2 restoration records exact restart-preservation proof",
+  typeof Stage2RestartPreservationBefore==="string"
+  && Stage2Missing.window.eval(`
+    inspectNativeRestorePreservationRaw(
+      localStorage.getItem(NATIVE_RESTORE_PRESERVATION_KEY)
+    ).ok
+  `));
+
+const Stage2Restart=bootRaw({
+  cfg:Stage2RestartStringsBefore["forge:cfg"],
+  data:Stage2RestartStringsBefore["forge:data"],
+  program:Stage2RestartStringsBefore["forge:program"],
+  lkg:Stage2RestartStringsBefore["forge:lkg"],
+  lkgPrevious:Stage2RestartStringsBefore["forge:lkg:previous"],
+  lkgOlder:Stage2RestartStringsBefore["forge:lkg:older"],
+  quarantine:Stage2RestartStringsBefore["forge:quarantine"],
+  install:Stage2RestartStringsBefore["forge:install"],
+  legacyData:Stage2RestartStringsBefore["ryan-cut:data"],
+  nativeRestorePreservation:Stage2RestartPreservationBefore
+},w=>Stage2MissingFs.install(w));
+
+await settleNativeVault(Stage2Restart);
+
+const Stage2RestartStringsAfter =
+  stage2ContractedSnapshot(Stage2Restart);
+
+check("Stage 2 exact restore survives the next healthy native boot without metadata drift",
+  STAGE2_KEYS.every(key=>
+    Stage2RestartStringsAfter[key]===Stage2RestartStringsBefore[key]
+  )
+  && Stage2MissingFs.files.get(STAGE2_VAULT_PATH)===Stage2RestartVaultBefore
+  && Stage2Restart.window.localStorage.getItem(
+    "blackpyre:native-restore-preservation"
+  )===Stage2RestartPreservationBefore
+  && nativeVaultField(Stage2Restart,"restoreState")==="not-needed");
+
+
 // ================= v44: update toast =================
 function bootSW(hasController){
   const fired = { listeners:{}, events:[] };
