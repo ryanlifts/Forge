@@ -286,11 +286,38 @@ function mapOFFProduct(p){
   const name = String(p.product_name || "").trim();
   if (!name || vals.some(v=>!Number.isFinite(v) || v<0)) return null;
   const serving = Number(p.serving_quantity);
+  const servingOk = Number.isFinite(serving) && serving>0 && serving<=1000;
+  let [cal100,pro100,carb100,fat100] = vals;
+
+  // Some OFF records are tagged per 100g even though their entered macros
+  // are label-serving values. Repair only when the independent calorie
+  // fields strongly confirm that exact inconsistency.
+  const nutritionBasis = String(p.nutrition_data_per || "").trim().toLowerCase();
+  const calServing = Number(nu["energy-kcal_serving"]);
+  const enteredMacros = [nu.proteins,nu.carbohydrates,nu.fat].map(Number);
+  const macroCalories = (pro,carb,fat)=>pro*4+carb*4+fat*9;
+  const relativeGap = (a,b)=>Math.abs(a-b)/Math.max(Math.abs(b),1);
+
+  if (
+    nutritionBasis==="100g" &&
+    servingOk &&
+    Math.abs(serving-100)>=20 &&
+    Number.isFinite(calServing) && calServing>0 &&
+    enteredMacros.every(v=>Number.isFinite(v) && v>=0) &&
+    relativeGap(cal100*serving/100,calServing)<=0.1 &&
+    relativeGap(macroCalories(pro100,carb100,fat100),cal100)>0.35 &&
+    relativeGap(macroCalories(enteredMacros[0],enteredMacros[1],enteredMacros[2]),calServing)<=0.2
+  ){
+    pro100=enteredMacros[0]*100/serving;
+    carb100=enteredMacros[1]*100/serving;
+    fat100=enteredMacros[2]*100/serving;
+  }
+
   return {
     name:name,
     brand:String(p.brands || "Generic").trim() || "Generic",
-    cal100:vals[0], pro100:vals[1], carb100:vals[2], fat100:vals[3],
-    servingG:Number.isFinite(serving) && serving>0 ? serving : null,
+    cal100:cal100, pro100:pro100, carb100:carb100, fat100:fat100,
+    servingG:servingOk ? serving : null,
     servingLabel:p.serving_size || p.quantity || null,
   };
 }
@@ -303,7 +330,7 @@ function fetchWithTimeout(url, ms){
   });
 }
 async function searchOFF(q){
-  const fields = "product_name,brands,nutriments,serving_size,serving_quantity";
+  const fields = "product_name,brands,nutriments,serving_size,serving_quantity,nutrition_data_per";
   // 1) modern search API
   try {
     const res = await fetchWithTimeout("https://search.openfoodfacts.org/search?q="+encodeURIComponent(q)+"&page_size=15&fields="+fields, 8000);
@@ -436,6 +463,31 @@ document.getElementById("scanCancelBtn").addEventListener("click", stopScanner);
 // --- barcode ---
 document.getElementById("barcodeBtn").addEventListener("click", runBarcode);
 document.getElementById("barcodeInput").addEventListener("keydown", e=>{ if(e.key==="Enter") runBarcode(); });
+async function lookupOFFBarcode(code, fields){
+  const url = "https://world.openfoodfacts.org/api/v2/product/"+encodeURIComponent(code)+".json?fields="+fields;
+
+  for (let attempt=0; attempt<2; attempt++){
+    try {
+      const res = await fetchWithTimeout(url, 10000);
+
+      if (res.status===404) return {state:"not-found", product:null};
+
+      if (!res.ok){
+        const transient = res.status===408 || res.status===429 || res.status>=500;
+        if (transient && attempt===0) continue;
+        return {state:"unavailable", product:null};
+      }
+
+      const json = await res.json();
+      return {state:"ok", product:json && json.product};
+    } catch(e){
+      if (attempt===0) continue;
+    }
+  }
+
+  return {state:"unavailable", product:null};
+}
+
 async function runBarcode(){
   const code = document.getElementById("barcodeInput").value.trim().replace(/\D/g,"");
   const errEl = document.getElementById("searchErr");
@@ -453,34 +505,44 @@ async function runBarcode(){
     errEl.classList.remove("hidden");
     return;
   }
+
   const btn = document.getElementById("barcodeBtn");
   btn.disabled = true; btn.textContent = "…";
+
   try {
-    // Open Food Facts API v3.6 product schema (v3 product-by-barcode endpoint)
-    const fields = "code,product_name,brands,quantity,serving_size,serving_quantity,nutriments";
-    const res = await fetchWithTimeout("https://world.openfoodfacts.org/api/v3.6/product/"+encodeURIComponent(code)+".json?fields="+fields, 10000);
-    if (!res.ok){ await tryUSDABarcode(code); }
-    else {
-      const json = await res.json();
-      const h = mapOFFProduct(json && json.product);
+    // Open Food Facts API v2 product schema (includes nutriments used by mapOFFProduct)
+    const fields = "code,product_name,brands,quantity,serving_size,serving_quantity,nutrition_data_per,nutriments";
+    const result = await lookupOFFBarcode(code, fields);
+
+    if (result.state==="unavailable"){
+      const found = await tryUSDABarcode(code, false);
+      if (!found){
+        errEl.textContent = "Barcode databases could not be reached. Check your connection and tap Look up again.";
+        errEl.classList.remove("hidden");
+      }
+    } else if (result.state==="not-found"){
+      await tryUSDABarcode(code, true);
+    } else {
+      const h = mapOFFProduct(result.product);
       if (h) selectFood(h);
-      else await tryUSDABarcode(code);
+      else await tryUSDABarcode(code, true);
     }
-  } catch(e){
-    // Network/malformed OFF responses still continue through USDA, then manual entry.
-    await tryUSDABarcode(code);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Look up";
   }
-  btn.disabled = false; btn.textContent = "Look up";
 }
 
-async function tryUSDABarcode(code){
+async function tryUSDABarcode(code, openManualOnMiss=true){
   if (effectiveUsdaKey()){
     try {
       const hits = await searchUSDA(code); // USDA matches UPC/GTIN in query
-      if (hits.length){ selectFood(hits[0]); return; }
+      if (hits.length){ selectFood(hits[0]); return true; }
     } catch(e){}
   }
-  openCustomForm(code);
+
+  if (openManualOnMiss) openCustomForm(code);
+  return false;
 }
 
 // --- personal barcode library ---

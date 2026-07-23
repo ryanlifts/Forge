@@ -525,28 +525,113 @@ check("recovery quarantine preserves active legacy fallback as evidence", legacy
 check("recovery writes forge:data but never alters legacy fallback", LegacyRecover46.window.localStorage.getItem("forge:data")!==null && LegacyRecover46.window.localStorage.getItem("ryan-cut:data")===legacyRaw && !LegacyRecover46.__storageCalls.some(c=>c.key==="ryan-cut:data"));
 
 // ================= barcode chain =================
-function bootOFF(offResponder){
-  return boot(Object.assign({}, EXISTING_CFG, {usdaKey:"k"}),
+function bootOFF(offResponder, usdaResponder, cfgOverrides){
+  return boot(Object.assign({}, EXISTING_CFG, {usdaKey:"k"}, cfgOverrides||{}),
     Object.assign({}, EMPTY_DATA, {myFoods:{"111":{name:"Saved thing", brand:"Mine", cal100:100, pro100:10, carb100:5, fat100:2}}}),
     (w)=>{ w.__calls=[]; w.fetch=(url)=>{ w.__calls.push(url);
       if (url.includes("openfoodfacts")) return offResponder(url);
-      if (url.includes("usda")) return Promise.resolve({ok:true,status:200,json:()=>Promise.resolve({foods:[{description:"USDA Fallback Bar", brandOwner:"USDA Co", servingSize:50, servingSizeUnit:"g", foodNutrients:[{nutrientId:1008,value:400},{nutrientId:1003,value:30},{nutrientId:1005,value:40},{nutrientId:1004,value:12}]}]})});
+      if (url.includes("usda")){
+        if (typeof usdaResponder==="function") return usdaResponder(url);
+        return Promise.resolve({ok:true,status:200,json:()=>Promise.resolve({foods:[{description:"USDA Fallback Bar", brandOwner:"USDA Co", servingSize:50, servingSizeUnit:"g", foodNutrients:[{nutrientId:1008,value:400},{nutrientId:1003,value:30},{nutrientId:1005,value:40},{nutrientId:1004,value:12}]}]})});
+      }
       return Promise.resolve({ok:false,status:500,json:()=>Promise.resolve({})});
     };});
 }
 async function scan(C, code){ C.window.document.getElementById("barcodeInput").value=code; await C.window.eval("runBarcode()"); await wait(30); }
-let C = bootOFF(()=>Promise.resolve({ok:true,status:200,json:()=>Promise.resolve({status:"success", product:{code:"222", product_name:"Greek Yogurt", brands:"BrandX", serving_size:"170 g", serving_quantity:170, nutriments:{"energy-kcal_100g":59,"proteins_100g":10,"carbohydrates_100g":3.6,"fat_100g":0.4}}})}));
-await scan(C,"222");
-check("OFF v3.6 found → selected", C.window.document.getElementById("selName").textContent.includes("Greek Yogurt") && C.window.eval("window.__calls[0]").includes("/api/v3.6/product/"));
+const yoplaitOFF = {
+  code:"0070470343488",
+  product_name:"mixed berry",
+  brands:"Yoplait Original",
+  serving_size:"170.0g",
+  serving_quantity:170,
+  nutrition_data_per:"100g",
+  nutriments:{
+    "energy-kcal_100g":82.3529411764706,
+    "energy-kcal_serving":140,
+    "proteins_100g":5,
+    "carbohydrates_100g":28,
+    "fat_100g":1.5,
+    "proteins":5,
+    "carbohydrates":28,
+    "fat":1.5
+  }
+};
+let C = bootOFF(()=>Promise.resolve({ok:true,status:200,json:()=>Promise.resolve({status:1,product:yoplaitOFF})}));
+await scan(C,"070470343488");
+check("v69 OFF v2 barcode lookup selects Yoplait product", C.window.document.getElementById("selName").textContent.includes("mixed berry") && C.window.eval("window.__calls[0]").includes("/api/v2/product/070470343488.json") && !C.window.eval("window.__calls[0]").includes("/api/v3.6/product/"));
+
+const repairedYoplait = C.window.eval("mapOFFProduct("+JSON.stringify(yoplaitOFF)+")");
+check("v69 repairs OFF serving macros mislabeled as per 100g", repairedYoplait &&
+  Math.abs(repairedYoplait.cal100-82.3529411764706)<0.001 &&
+  Math.abs(repairedYoplait.pro100-(5*100/170))<0.001 &&
+  Math.abs(repairedYoplait.carb100-(28*100/170))<0.001 &&
+  Math.abs(repairedYoplait.fat100-(1.5*100/170))<0.001);
+
+const consistentOFF = {
+  product_name:"Consistent Yogurt",
+  brands:"Test",
+  serving_size:"170g",
+  serving_quantity:170,
+  nutrition_data_per:"100g",
+  nutriments:{
+    "energy-kcal_100g":82.35,
+    "energy-kcal_serving":140,
+    "proteins_100g":2.94,
+    "carbohydrates_100g":16.47,
+    "fat_100g":0.88,
+    "proteins":2.94,
+    "carbohydrates":16.47,
+    "fat":0.88
+  }
+};
+const unchangedOFF = C.window.eval("mapOFFProduct("+JSON.stringify(consistentOFF)+")");
+check("v69 leaves consistent OFF per-100g macros unchanged", unchangedOFF &&
+  Math.abs(unchangedOFF.pro100-2.94)<0.001 &&
+  Math.abs(unchangedOFF.carb100-16.47)<0.001 &&
+  Math.abs(unchangedOFF.fat100-0.88)<0.001);
 C = bootOFF(()=>Promise.resolve({ok:true,status:200,json:()=>Promise.resolve({})}));
 await scan(C,"111");
 check("saved barcode short-circuits (zero network)", C.window.eval("window.__calls.length")===0);
-C = bootOFF(()=>Promise.resolve({ok:false,status:404,json:()=>Promise.resolve({})}));
+let retryAttempts = 0;
+C = bootOFF(()=>{
+  retryAttempts++;
+  if (retryAttempts===1) return Promise.reject(new Error("temporary network failure"));
+  return Promise.resolve({ok:true,status:200,json:()=>Promise.resolve({status:1,product:yoplaitOFF})});
+});
+await scan(C,"444");
+check("v69 transient OFF failure retries once and succeeds", retryAttempts===2 &&
+  C.window.document.getElementById("selName").textContent.includes("mixed berry") &&
+  C.window.document.getElementById("customCard").classList.contains("hidden"));
+
+let notFoundAttempts = 0;
+C = bootOFF(()=>{
+  notFoundAttempts++;
+  return Promise.resolve({ok:false,status:404,json:()=>Promise.resolve({})});
+});
 await scan(C,"333");
-check("OFF 404 → USDA fallback", C.window.document.getElementById("selName").textContent.includes("USDA Fallback Bar"));
-C = bootOFF(()=>Promise.reject(new Error("offline")));
+check("v69 confirmed OFF 404 does not retry and uses USDA", notFoundAttempts===1 &&
+  C.window.document.getElementById("selName").textContent.includes("USDA Fallback Bar"));
+
+let networkAttempts = 0;
+C = bootOFF(()=>{
+  networkAttempts++;
+  return Promise.reject(new Error("offline"));
+});
 await scan(C,"666");
-check("OFF network failure → USDA (chain never dead-ends)", C.window.document.getElementById("selName").textContent.includes("USDA Fallback Bar"));
+check("v69 OFF network failure retries once before USDA", networkAttempts===2 &&
+  C.window.document.getElementById("selName").textContent.includes("USDA Fallback Bar"));
+
+let unavailableAttempts = 0;
+C = bootOFF(()=>{
+  unavailableAttempts++;
+  return Promise.reject(new Error("OFF unavailable"));
+}, ()=>Promise.reject(new Error("USDA unavailable")));
+await scan(C,"777");
+check("v69 unavailable databases show retry message instead of false not-found form", unavailableAttempts===2 &&
+  C.window.document.getElementById("customCard").classList.contains("hidden") &&
+  !C.window.document.getElementById("searchErr").classList.contains("hidden") &&
+  /could not be reached/i.test(C.window.document.getElementById("searchErr").textContent));
+
 C = bootOFF(()=>Promise.resolve({ok:true,status:200,json:()=>Promise.resolve({status:"success", product:{product_name:"Bad", nutriments:{"energy-kcal_100g":"NaN-city","proteins_100g":-5}}})}));
 await scan(C,"555");
 check("malformed nutrition rejected → USDA", C.window.document.getElementById("selName").textContent.includes("USDA Fallback Bar"));
@@ -817,7 +902,7 @@ check("v62 a catalog suggestion opens its exact listed serving for review", dC62
 check("v62 review shows the USDA per-100g values and correctly scaled serving", /USDA reference · SR28/.test(dC62.getElementById("selName").textContent) && /165 kcal/.test(dC62.getElementById("selPer100").textContent) && dC62.getElementById("calcCal").textContent==="186" && dC62.getElementById("calcPro").textContent==="35");
 check("v62 reviewing a broad-catalog suggestion never auto-logs it", C62.window.eval(`(data.food[todayStr()]||[]).length`)===beforeReview62);
 check("v62 FAQ explains USDA sourcing, exact servings, and real-world variation", C62.window.eval(`FAQ.some(x=>x.q==="How accurate are suggested-food calories and macros?"&&/per 100 grams/.test(x.a)&&/exact gram weight/.test(x.a)&&/NDB number/.test(x.a)&&/brand/.test(x.a)) && FAQ.some(x=>x.q==="How do food suggestions work?"&&/120 common foods/.test(x.a)&&/familiar foods receive a bonus but are not required/.test(x.a)&&/does not call USDA or an AI/.test(x.a))`));
-check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v69"'); })());
+check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v70"'); })());
 check("v62 keeps primary schemaVersion 2", C62.window.eval("SCHEMA_VERSION")===2);
 
 // ================= ChatGPT handoff paste flow =================
@@ -1068,7 +1153,7 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the four data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+"/.test(sw));
-check("v69 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v69"'));
+check("v70 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v70"'));
 const rawIndex = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 check("data scripts load before the app scripts (raw file order)",
   ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js"].every(f=>
