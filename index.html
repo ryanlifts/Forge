@@ -451,21 +451,51 @@
       <button class="btn ghost mt14" id="scanCancelBtn" aria-label="Cancel barcode scanner" style="max-width:420px;">Cancel</button>
     </div>
 
-    <!-- custom food creator (shown when a barcode isn't in the database) -->
+    <!-- custom food creator (shown when a barcode isn't in the database or its nutrition is unreliable) -->
     <div class="card hidden" id="customCard">
-      <div class="label">Not in the database — save it once, own it forever</div>
-      <div class="note" style="margin-top:0; margin-bottom:12px;">Copy these from the nutrition label. Next time you scan this barcode, your entry comes up instantly.</div>
-      <input id="cfName" aria-label="Custom food name" placeholder="Food name (e.g. Friendly Farms Vanilla Greek Yogurt)" style="margin-bottom:10px;">
+      <div class="label">Save this barcode once, own it forever</div>
+      <div class="note" id="customNote" style="margin-top:0; margin-bottom:12px;">Copy these from the nutrition label. Next time you scan this barcode, your entry comes up instantly.</div>
+
       <div class="row" style="margin-bottom:10px;">
-        <div><div class="label">Serving size (g)</div><input type="number" id="cfServG" aria-label="Custom food serving size in grams" inputmode="decimal" placeholder="e.g. 170"></div>
-        <div><div class="label">Calories / serving</div><input type="number" id="cfCal" aria-label="Custom food calories per serving" inputmode="numeric" placeholder="kcal"></div>
+        <div>
+          <div class="label">Food name</div>
+          <input id="cfName" aria-label="Custom food name" placeholder="e.g. Frozen Mango">
+        </div>
+        <div>
+          <div class="label">Brand</div>
+          <input id="cfBrand" aria-label="Custom food brand" placeholder="e.g. Valle Nuevo">
+        </div>
       </div>
+
+      <div class="row" style="margin-bottom:10px;">
+        <div>
+          <div class="label">Barcode</div>
+          <input id="cfBarcode" aria-label="Custom food barcode" inputmode="numeric" placeholder="Barcode number">
+        </div>
+        <div>
+          <div class="label">Serving description</div>
+          <input id="cfServingLabel" aria-label="Custom food serving description" placeholder="e.g. 1 cup (140 g)">
+        </div>
+      </div>
+
+      <div class="row" style="margin-bottom:10px;">
+        <div>
+          <div class="label">Serving size (g)</div>
+          <input type="number" id="cfServG" aria-label="Custom food serving size in grams" inputmode="decimal" placeholder="e.g. 140">
+        </div>
+        <div>
+          <div class="label">Calories / serving</div>
+          <input type="number" id="cfCal" aria-label="Custom food calories per serving" inputmode="numeric" placeholder="kcal">
+        </div>
+      </div>
+
       <div class="row" style="margin-bottom:12px;">
         <div><div class="label">Protein g</div><input type="number" id="cfPro" aria-label="Custom food protein grams per serving" inputmode="decimal" placeholder="g"></div>
         <div><div class="label">Carbs g</div><input type="number" id="cfCarb" aria-label="Custom food carbohydrate grams per serving" inputmode="decimal" placeholder="g"></div>
         <div><div class="label">Fat g</div><input type="number" id="cfFat" aria-label="Custom food fat grams per serving" inputmode="decimal" placeholder="g"></div>
       </div>
-      <button class="btn" id="cfSaveBtn">Save & select</button>
+
+      <button class="btn" id="cfSaveBtn">Save &amp; select</button>
     </div>
 
     <div class="card" id="quickCard">

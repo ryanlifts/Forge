@@ -488,6 +488,18 @@ async function lookupOFFBarcode(code, fields){
   return {state:"unavailable", product:null};
 }
 
+
+function offNutritionNeedsManualReview(p){
+  if (!p || typeof p!=="object") return false;
+  const nu = p.nutriments || {};
+  const cal100 = Number(nu["energy-kcal_100g"]);
+
+  // Do not recalculate or silently replace database nutrition.
+  // Only stop an unmistakably impossible value: even pure fat is about
+  // 900 kcal per 100 g, so more than 1000 kcal per 100 g requires review.
+  return Number.isFinite(cal100) && cal100>1000;
+}
+
 async function runBarcode(){
   const code = document.getElementById("barcodeInput").value.trim().replace(/\D/g,"");
   const errEl = document.getElementById("searchErr");
@@ -523,9 +535,24 @@ async function runBarcode(){
     } else if (result.state==="not-found"){
       await tryUSDABarcode(code, true);
     } else {
-      const h = mapOFFProduct(result.product);
-      if (h) selectFood(h);
-      else await tryUSDABarcode(code, true);
+      const product = result.product;
+
+      if (offNutritionNeedsManualReview(product)){
+        const serving = Number(product && product.serving_quantity);
+        openCustomForm(code, {
+          name:String((product && product.product_name) || "").trim(),
+          brand:String((product && product.brands) || "").trim(),
+          barcode:code,
+          servingG:Number.isFinite(serving) && serving>0 && serving<=1000 ? serving : "",
+          servingLabel:String((product && (product.serving_size || product.quantity)) || "").trim()
+        }, true);
+        errEl.textContent = "This product's database nutrition does not make sense. Enter the calories and macros from the package label below. BlackPyre will save your correction for this barcode.";
+        errEl.classList.remove("hidden");
+      } else {
+        const h = mapOFFProduct(product);
+        if (h) selectFood(h);
+        else await tryUSDABarcode(code, true);
+      }
     }
   } finally {
     btn.disabled = false;
@@ -546,30 +573,69 @@ async function tryUSDABarcode(code, openManualOnMiss=true){
 }
 
 // --- personal barcode library ---
+const CUSTOM_FOOD_NOTE = "Copy these from the nutrition label. Next time you scan this barcode, your entry comes up instantly.";
 let pendingBarcode = null;
-function openCustomForm(code){
-  pendingBarcode = code;
+
+function openCustomForm(code, prefill, reviewWarning){
+  pendingBarcode = String(code || "").replace(/\D/g,"");
+  const values = prefill || {};
+
+  document.getElementById("cfName").value = values.name || "";
+  document.getElementById("cfBrand").value = values.brand || "";
+  document.getElementById("cfBarcode").value = values.barcode || pendingBarcode;
+  document.getElementById("cfServingLabel").value = values.servingLabel || "";
+  document.getElementById("cfServG").value = values.servingG || "";
+
+  ["cfCal","cfPro","cfCarb","cfFat"].forEach(id=>{
+    document.getElementById(id).value="";
+  });
+
+  document.getElementById("customNote").textContent = reviewWarning
+    ? "The online nutrition values appear incorrect. Check the package label and enter the calories and macros yourself. All prefilled product details remain editable."
+    : CUSTOM_FOOD_NOTE;
+
   document.getElementById("customCard").classList.remove("hidden");
   const cc = document.getElementById("customCard");
   if (cc.scrollIntoView) cc.scrollIntoView({behavior:"smooth", block:"center"});
 }
+
 document.getElementById("cfSaveBtn").addEventListener("click", ()=>{
   const name = document.getElementById("cfName").value.trim();
+  const brand = document.getElementById("cfBrand").value.trim();
+  const barcode = document.getElementById("cfBarcode").value.trim().replace(/\D/g,"");
+  const servingLabel = document.getElementById("cfServingLabel").value.trim();
   const servG = Number(document.getElementById("cfServG").value);
   const cal = Number(document.getElementById("cfCal").value);
-  if(!name || !servG || !cal){ flashSave("Need name, serving size, calories", true); return; }
+
+  if(!name || !barcode || !servG || !cal){
+    flashSave("Need name, barcode, serving size, calories", true);
+    return;
+  }
+
   const pro = Number(document.getElementById("cfPro").value||0);
   const carb = Number(document.getElementById("cfCarb").value||0);
   const fat = Number(document.getElementById("cfFat").value||0);
+
   const food = {
-    name: name, brand: "My foods",
-    cal100: cal/servG*100, pro100: pro/servG*100, carb100: carb/servG*100, fat100: fat/servG*100,
-    servingG: servG, servingLabel: servG+"g",
+    name:name,
+    brand:brand || "My foods",
+    cal100:cal/servG*100,
+    pro100:pro/servG*100,
+    carb100:carb/servG*100,
+    fat100:fat/servG*100,
+    servingG:servG,
+    servingLabel:servingLabel || servG+"g",
   };
+
   if(!data.myFoods) data.myFoods = {};
-  if(pendingBarcode) data.myFoods[pendingBarcode] = food;
+  data.myFoods[barcode] = food;
   save();
-  ["cfName","cfServG","cfCal","cfPro","cfCarb","cfFat"].forEach(id=>document.getElementById(id).value="");
+
+  ["cfName","cfBrand","cfBarcode","cfServingLabel","cfServG","cfCal","cfPro","cfCarb","cfFat"].forEach(id=>{
+    document.getElementById(id).value="";
+  });
+
+  document.getElementById("customNote").textContent = CUSTOM_FOOD_NOTE;
   document.getElementById("customCard").classList.add("hidden");
   pendingBarcode = null;
   selectFood(food);
