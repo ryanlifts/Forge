@@ -1,6 +1,6 @@
 # BlackPyre Data Model
 
-**Current as of v65 (July 2026). Primary schemaVersion: 2. Recovery format: 1.**
+**Current as of v66 (July 2026). Primary schemaVersion: 2. Recovery format: 1.**
 
 ## Storage keys
 
@@ -12,7 +12,7 @@ BlackPyre has three permanent **primary user-state keys**:
 | `forge:data` | All logged data (object) |
 | `forge:program` | Loaded training program (object) |
 
-v46–v65 add permanent **internal, device-only keys**:
+v46–v66 add permanent **internal, device-only keys**:
 
 | Key | Contents |
 |---|---|
@@ -33,7 +33,7 @@ removes, or modifies that legacy key.
 `schemaVersion` is physically stored in `forge:cfg`, but versions the complete **primary**
 state and normal backup envelope: settings, logged data, and program.
 
-| Raw value | Meaning / behavior in v65 |
+| Raw value | Meaning / behavior in v66 |
 |---|---|
 | property absent or integer `0` | Pre-versioning legacy state; run numbered migrations from step 0 |
 | integer `1` | v45–v55 state; migrate 1 → 2 by adding an empty active-workout draft field |
@@ -335,6 +335,7 @@ fallback. The app cannot verify a browser download and states that limit honestl
 | v63 | No primary schema migration; recovery protections expanded | Adds established-install marker, missing-primary protected boot/runtime detection, three rolling LKG generations, populated-snapshot retention, manual snapshot restore, and exact storage diagnostic export |
 | v64 | No primary schema migration; device-only timer format 1 added | Stores running rest timers by absolute finish time and paused timers by remaining seconds so suspension and restart cannot freeze them |
 | v65 | No primary schema migration; timer format 1 extended compatibly | Adds `durationSec` plus a deadline-free `ready` status so expiration resets to the exact last started duration instead of showing a completion word |
+| v66 | No primary schema migration | Adds `cfg.autoProgressionOn` (legacy/default `true`) so automatic progression can be disabled; assisted exercise names reduce assistance by 5 lb when progression is enabled |
 
 Old backups from any era must continue restoring correctly; the permanent suite proves the
 range-era path.
@@ -345,3 +346,7 @@ The coach may embed JSON blocks: `{"bpTargets":{calTarget,proTarget,carbGoal,fat
 (legacy ranges tolerated via averaging) for an **Apply targets** action; a `program` object
 for **Load**; and food estimates `{"foods":[{name,cal,pro,carb,fat}]}` with all four macros.
 Parsing normalizes smart quotes, fences, and zero-width junk. Raw AI responses are never persisted.
+
+
+### Training progression setting
+`cfg.autoProgressionOn` is a boolean stored with normal settings. Missing legacy values migrate to `true`; an explicit `false` is preserved.

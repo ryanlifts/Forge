@@ -1,6 +1,6 @@
 # BlackPyre Architecture
 
-**Current as of v65 (July 2026).**
+**Current as of v66 (July 2026).**
 
 A single-page PWA: vanilla HTML/CSS/JS, no framework, no build step, localStorage only.
 Deployed on GitHub Pages. Developed AI-assisted (Claude / ChatGPT) from a phone — every rule
@@ -39,7 +39,7 @@ below exists to keep that workflow safe.
 | `manifest.json` | PWA identity — name/short_name **BlackPyre** |
 | `icon-*.png`, `apple-touch-icon.png` | Gold dumbbell icons |
 | `tests/PHASE2-PROOF.md` | Permanent historical record of the Phase 2 byte-identity proof |
-| `tests/` | Permanent gauntlet — 493 automated checks (110 unit + 383 integration), reproducible jsdom lockfile, and `bella-reference.b64` (frozen memorial byte truth; never edited). Not precached |
+| `tests/` | Permanent gauntlet — 506 automated checks (115 unit + 391 integration), reproducible jsdom lockfile, and `bella-reference.b64` (frozen memorial byte truth; never edited). Not precached |
 | `.github/workflows/tests.yml` | Runs the gauntlet on every push |
 | `DATA-MODEL.md` | Primary storage schema, recovery-record contracts, and migration history |
 
@@ -71,7 +71,7 @@ Slice rules from here on:
 - Declarations and slice boundaries remain unchanged unless an approved plan covers them.
   New sections belong where their execution order requires; further splitting is a plan-level decision.
 
-## Storage safety conventions (v45–v65)
+## Storage safety conventions (v45–v66)
 
 - `schemaVersion` versions the complete primary state (`forge:cfg`, `forge:data`,
   `forge:program`) and is physically stored in `forge:cfg`; current primary schema = 2. v56 adds `forge:data.activeWorkoutDraft` so completed exercises survive reload before session finalization.
@@ -121,7 +121,7 @@ Slice rules from here on:
   reset"), never full sentences, layout-adjacent wording, or phrasing that a routine copy
   edit would touch. Release-pinned assertions (like the exact SW cache string) are advanced
   each release as part of the bump — that advance is maintenance, not weakening.
-- The permanent suite is **493 automated checks** and only grows. New features add tests in
+- The permanent suite is **506 automated checks** and only grows. New features add tests in
   the same release; existing checks are never deleted or weakened. The roughly 700 checks
   written before Phase 0 were old throwaway checks, not this permanent suite.
 - jsdom quirks: stub `URL.createObjectURL`, ignore `scrollTo` warnings, `select()` runs via
@@ -135,3 +135,8 @@ Slice rules from here on:
 - `node --check` every local JS file after edits; run the full gauntlet before packaging.
 - Package changed files in one folder + zip; diff the package against the working copy.
 - Do not rename IDs, storage fields, keys, or functions as “cleanup” — each rename is a feature-sized change.
+
+
+### v66 progression/scanner
+- Automatic progression is gated by `cfg.autoProgressionOn` (legacy/default `true`). Standard loads add 5 lb; exercise names containing `assisted` reduce assistance by 5 lb.
+- Barcode scanning uses a square adaptive crop, 20 fps, and the browser-native BarcodeDetector through html5-qrcode when supported so horizontal and vertical UPCs can be read without rotating the phone.

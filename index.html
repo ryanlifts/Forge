@@ -444,7 +444,8 @@
 
     <!-- barcode scanner overlay -->
     <div id="scanOverlay" class="hidden" role="dialog" aria-modal="true" aria-labelledby="scanTitle" tabindex="-1" data-initial-focus="scanCancelBtn" style="position:fixed; inset:0; z-index:50; background:rgba(16,18,21,.97); display:flex; flex-direction:column; align-items:center; justify-content:center; padding:20px;">
-      <div class="label" id="scanTitle" style="margin-bottom:12px;">Point camera at the barcode</div>
+      <div class="label" id="scanTitle" style="margin-bottom:6px;">Point camera at the barcode</div>
+      <div class="note" id="scanHint" style="margin:0 0 12px; text-align:center; max-width:420px;">Keep the phone upright. Hold the full barcode inside the square — horizontal or vertical.</div>
       <div id="scanRegion" style="width:100%; max-width:420px; border-radius:14px; overflow:hidden; border:1px solid var(--border);"></div>
       <div class="err hidden" id="scanErr" role="alert" aria-live="assertive" style="max-width:420px;"></div>
       <button class="btn ghost mt14" id="scanCancelBtn" aria-label="Cancel barcode scanner" style="max-width:420px;">Cancel</button>
@@ -882,6 +883,16 @@
       <div class="label">Accent color</div>
       <div id="accentRow" style="display:flex; gap:10px; margin-top:8px;"></div>
     </div>
+      </div>
+    </details>
+    <details class="disclosure" id="settingsTrainingDetails">
+      <summary><div><div class="disclosure-title">Training</div><div class="disclosure-sub">Automatic progression and workout behavior</div></div></summary>
+      <div class="disclosure-body">
+        <div class="card">
+          <div class="label">Automatic progression</div>
+          <button class="btn ghost small" id="autoProgressionToggleBtn" aria-pressed="true" style="width:100%; margin:8px 0 6px;">Automatic progression: On</button>
+          <div class="note">When enabled, BlackPyre may preload the next weight after every programmed set reaches its target. Standard exercises add 5 lb; assisted exercises reduce assistance by 5 lb. Turn it off to carry the last logged weights forward unchanged.</div>
+        </div>
       </div>
     </details>
     <details class="disclosure" id="settingsServicesDetails">

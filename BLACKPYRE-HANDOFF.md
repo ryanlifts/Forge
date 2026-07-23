@@ -1,11 +1,15 @@
-# BLACKPYRE HANDOFF — current as of v65 (July 2026)
+# BLACKPYRE HANDOFF — current as of v66 (July 2026)
 
 You are a collaborator on BlackPyre, a fitness PWA at
-`ryanlifts.github.io/Forge/` (repo: `ryanlifts/Forge`). This repository represents **v65**, built on the completed v57 Phase 4 foundation and the v58–v64 security, housekeeping, food-handoff, food-suggestion, data-protection, and elapsed-time timer releases. Confirm the GitHub Pages deployment/cache
+`ryanlifts.github.io/Forge/` (repo: `ryanlifts/Forge`). This repository represents **v66**, built on the completed v57 Phase 4 foundation and the v58–v65 security, housekeeping, food-handoff, food-suggestion, data-protection, and elapsed-time timer releases. Confirm the GitHub Pages deployment/cache
 before calling it live.
 
 The two documents reproduced below (`ARCHITECTURE.md` and `DATA-MODEL.md`) live in the repo
-root, are binding, and are current as of v65. Read them before proposing or writing code.
+root, are binding, and are current as of v66. Read them before proposing or writing code.
+
+## v66 — optional progression and faster barcode scanning
+
+Adds a Settings → Training toggle for automatic progression. The setting defaults on for legacy users; when off, the next session carries the last logged weights forward unchanged. With progression enabled, standard exercises preload 5 lb more only after all programmed sets reach their target, while exercise names containing `assisted` preload 5 lb less assistance. Barcode scanning now uses a square adaptive crop, 20 fps, and the browser-native BarcodeDetector through html5-qrcode when supported so horizontal and vertical retail barcodes can be read with the phone upright. Primary schemaVersion 2, Native Vault, workout data, and recovery format 1 are unchanged. Cache: blackpyre-v66. Tests: **506 (115 unit + 391 integration)**.
 
 ## v65 — completed timer resets to its last duration
 
@@ -58,7 +62,7 @@ Cache: blackpyre-v58. No storage, schema, or behavior changes.
 
 ## Current state
 
-1. The permanent `/tests` gauntlet has **493 checks: 110 unit + 383 integration**. GitHub
+1. The permanent `/tests` gauntlet has **506 checks: 115 unit + 391 integration**. GitHub
    Actions runs it on every push. Tests are cumulative and are never deleted or weakened.
 2. `tests/bella-reference.b64` is the frozen memorial byte truth. Exact identity and embed
    count 1 are test-enforced; never regenerate, re-render, edit, or replace it.
@@ -76,7 +80,7 @@ Cache: blackpyre-v58. No storage, schema, or behavior changes.
 9. v57 completes programmatic control names, semantic/keyboard bottom tabs, keyboard food
    results, named dynamic onboarding/workout/builder controls, and dialog focus entry/return.
 10. Browser zoom remains enabled; visible focus behavior is preserved.
-11. Cache: `blackpyre-v65`.
+11. Cache: `blackpyre-v66`.
 
 ## Five-phase status
 
@@ -116,7 +120,7 @@ notice or close/reopen as directed. Every release gets a plain-language report a
 
 # BlackPyre Architecture
 
-**Current as of v65 (July 2026).**
+**Current as of v66 (July 2026).**
 
 A single-page PWA: vanilla HTML/CSS/JS, no framework, no build step, localStorage only.
 Deployed on GitHub Pages. Developed AI-assisted (Claude / ChatGPT) from a phone — every rule
@@ -155,7 +159,7 @@ below exists to keep that workflow safe.
 | `manifest.json` | PWA identity — name/short_name **BlackPyre** |
 | `icon-*.png`, `apple-touch-icon.png` | Gold dumbbell icons |
 | `tests/PHASE2-PROOF.md` | Permanent historical record of the Phase 2 byte-identity proof |
-| `tests/` | Permanent gauntlet — 493 automated checks (110 unit + 383 integration), reproducible jsdom lockfile, and `bella-reference.b64` (frozen memorial byte truth; never edited). Not precached |
+| `tests/` | Permanent gauntlet — 506 automated checks (115 unit + 391 integration), reproducible jsdom lockfile, and `bella-reference.b64` (frozen memorial byte truth; never edited). Not precached |
 | `.github/workflows/tests.yml` | Runs the gauntlet on every push |
 | `DATA-MODEL.md` | Primary storage schema, recovery-record contracts, and migration history |
 
@@ -187,7 +191,7 @@ Slice rules from here on:
 - Declarations and slice boundaries remain unchanged unless an approved plan covers them.
   New sections belong where their execution order requires; further splitting is a plan-level decision.
 
-## Storage safety conventions (v45–v65)
+## Storage safety conventions (v45–v66)
 
 - `schemaVersion` versions the complete primary state (`forge:cfg`, `forge:data`,
   `forge:program`) and is physically stored in `forge:cfg`; current primary schema = 2. v56 adds `forge:data.activeWorkoutDraft` so completed exercises survive reload before session finalization.
@@ -237,7 +241,7 @@ Slice rules from here on:
   reset"), never full sentences, layout-adjacent wording, or phrasing that a routine copy
   edit would touch. Release-pinned assertions (like the exact SW cache string) are advanced
   each release as part of the bump — that advance is maintenance, not weakening.
-- The permanent suite is **493 automated checks** and only grows. New features add tests in
+- The permanent suite is **506 automated checks** and only grows. New features add tests in
   the same release; existing checks are never deleted or weakened. The roughly 700 checks
   written before Phase 0 were old throwaway checks, not this permanent suite.
 - jsdom quirks: stub `URL.createObjectURL`, ignore `scrollTo` warnings, `select()` runs via
@@ -258,7 +262,7 @@ Slice rules from here on:
 
 # BlackPyre Data Model
 
-**Current as of v65 (July 2026). Primary schemaVersion: 2. Recovery format: 1.**
+**Current as of v66 (July 2026). Primary schemaVersion: 2. Recovery format: 1.**
 
 ## Storage keys
 
@@ -270,7 +274,7 @@ BlackPyre has three permanent **primary user-state keys**:
 | `forge:data` | All logged data (object) |
 | `forge:program` | Loaded training program (object) |
 
-v46–v65 add permanent **internal, device-only keys**:
+v46–v66 add permanent **internal, device-only keys**:
 
 | Key | Contents |
 |---|---|
@@ -291,7 +295,7 @@ removes, or modifies that legacy key.
 `schemaVersion` is physically stored in `forge:cfg`, but versions the complete **primary**
 state and normal backup envelope: settings, logged data, and program.
 
-| Raw value | Meaning / behavior in v65 |
+| Raw value | Meaning / behavior in v66 |
 |---|---|
 | property absent or integer `0` | Pre-versioning legacy state; run numbered migrations from step 0 |
 | integer `1` | v45–v55 state; migrate 1 → 2 by adding an empty active-workout draft field |
@@ -593,6 +597,7 @@ fallback. The app cannot verify a browser download and states that limit honestl
 | v63 | No primary schema migration; recovery protections expanded | Adds established-install marker, missing-primary protected boot/runtime detection, three rolling LKG generations, populated-snapshot retention, manual snapshot restore, and exact storage diagnostic export |
 | v64 | No primary schema migration; device-only timer format 1 added | Stores running rest timers by absolute finish time and paused timers by remaining seconds so suspension and restart cannot freeze them |
 | v65 | No primary schema migration; timer format 1 extended compatibly | Adds `durationSec` plus a deadline-free `ready` status so expiration resets to the exact last started duration instead of showing a completion word |
+| v66 | No primary schema migration | Adds `cfg.autoProgressionOn` (legacy/default `true`), assisted-load progression direction, and faster orientation-friendly barcode scanning |
 
 Old backups from any era must continue restoring correctly; the permanent suite proves the
 range-era path.

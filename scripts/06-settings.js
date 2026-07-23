@@ -476,6 +476,13 @@ document.getElementById("adjustYesBtn").addEventListener("click", ()=>{
 });
 
 // ================== SETTINGS ==================
+function renderAutoProgressionSetting(){
+  const btn = document.getElementById("autoProgressionToggleBtn");
+  if (!btn) return;
+  const on = cfg.autoProgressionOn !== false;
+  btn.textContent = "Automatic progression: "+(on ? "On" : "Off");
+  btn.setAttribute("aria-pressed", String(on));
+}
 function renderSettings(){
   const shown = v=>Number(v)>0 ? v : "";
   document.getElementById("sStartWt").value = shown(cfg.startWt);
@@ -498,7 +505,14 @@ function renderSettings(){
   if (cfg.splitState) splitState = Object.assign({}, cfg.splitState);
   renderSched();
   renderFoodSuggestionSettings();
+  renderAutoProgressionSetting();
 }
+document.getElementById("autoProgressionToggleBtn").addEventListener("click", ()=>{
+  cfg.autoProgressionOn = !(cfg.autoProgressionOn !== false);
+  saveCfg();
+  renderAutoProgressionSetting();
+  flashSave(cfg.autoProgressionOn ? "Automatic progression enabled ✓" : "Automatic progression disabled");
+});
 document.getElementById("saveSettingsBtn").addEventListener("click", ()=>{
   const g = id=>Number(document.getElementById(id).value);
   let schedSaveMsg = null;

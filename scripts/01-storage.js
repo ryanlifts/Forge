@@ -8,7 +8,7 @@ const SCHEMA_VERSION = 2, RECOVERY_FORMAT_VERSION = 1;
 const REST_TIMER_FORMAT_VERSION = 1;
 const AI_CFG_FIELDS = ["anthropicKey","openaiKey","aiProvider","aiModelAnth","aiModelOai","foodHandoffOn"];
 
-const DEFAULT_CFG = { startWt:0, goalWt:0, calTarget:0, proTarget:0, carbGoal:0, fatGoal:0, accent:"gold", foodSuggestionsOn:false, foodSuggestionsWeightLoss:true, foodSuggestionsAvoid:"" };
+const DEFAULT_CFG = { startWt:0, goalWt:0, calTarget:0, proTarget:0, carbGoal:0, fatGoal:0, accent:"gold", autoProgressionOn:true, foodSuggestionsOn:false, foodSuggestionsWeightLoss:true, foodSuggestionsAvoid:"" };
 const ACCENT_KEYS = ["ember","steel","emerald","crimson","violet","gold","pink"];
 
 const DEFAULT_PROGRAM = {
@@ -188,6 +188,8 @@ function migrateCfgObject(obj){
   if (obj.calSchedMode==="weekend") obj.calSchedMode = "frisat";
   if (!obj.calSchedMode) obj.calSchedMode = "same";
   if (!ACCENT_KEYS.includes(obj.accent)) obj.accent = "gold";
+  // Preserve the historic behavior for existing installs while allowing an explicit opt-out.
+  obj.autoProgressionOn = obj.autoProgressionOn !== false;
   return obj;
 }
 // Retained (not dead): the permanent suite's range-era restore simulation exercises this
