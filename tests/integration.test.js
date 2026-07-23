@@ -589,6 +589,85 @@ check("v69 leaves consistent OFF per-100g macros unchanged", unchangedOFF &&
   Math.abs(unchangedOFF.pro100-2.94)<0.001 &&
   Math.abs(unchangedOFF.carb100-16.47)<0.001 &&
   Math.abs(unchangedOFF.fat100-0.88)<0.001);
+
+const mangoOFF = {
+  code:"7500462317515",
+  product_name:"Frozen Mango",
+  brands:"Valle Nuevo",
+  serving_size:"1 cup (140 g)",
+  serving_quantity:140,
+  nutrition_data_per:"100g",
+  nutriments:{
+    "energy-kcal_100g":8000,
+    "energy-kcal_serving":11200,
+    "energy-kj_100g":278.571428571429,
+    "proteins_100g":0.714285714285714,
+    "carbohydrates_100g":15,
+    "fat_100g":0
+  }
+};
+
+check("v70 impossible OFF calories require manual label review without recalculation",
+  C.window.eval("offNutritionNeedsManualReview("+JSON.stringify(mangoOFF)+")")===true &&
+  C.window.eval("offNutritionNeedsManualReview("+JSON.stringify(consistentOFF)+")")===false &&
+  C.window.eval("offNutritionNeedsManualReview("+JSON.stringify(yoplaitOFF)+")")===false);
+
+C = bootOFF(()=>Promise.resolve({
+  ok:true,
+  status:200,
+  json:()=>Promise.resolve({status:1,product:mangoOFF})
+}));
+
+await scan(C,"7500462317515");
+const dMango70 = C.window.document;
+
+check("v70 corrupt mango nutrition opens manual review instead of selecting bad calories",
+  !dMango70.getElementById("customCard").classList.contains("hidden") &&
+  /does not make sense/i.test(dMango70.getElementById("searchErr").textContent) &&
+  !dMango70.getElementById("searchErr").classList.contains("hidden"));
+
+check("v70 manual review prefills editable product metadata but leaves nutrition blank",
+  dMango70.getElementById("cfName").value==="Frozen Mango" &&
+  dMango70.getElementById("cfBrand").value==="Valle Nuevo" &&
+  dMango70.getElementById("cfBarcode").value==="7500462317515" &&
+  dMango70.getElementById("cfServingLabel").value==="1 cup (140 g)" &&
+  dMango70.getElementById("cfServG").value==="140" &&
+  dMango70.getElementById("cfCal").value==="" &&
+  dMango70.getElementById("cfPro").value==="" &&
+  dMango70.getElementById("cfCarb").value==="" &&
+  dMango70.getElementById("cfFat").value==="" &&
+  !dMango70.getElementById("cfName").readOnly &&
+  !dMango70.getElementById("cfBrand").readOnly &&
+  !dMango70.getElementById("cfBarcode").readOnly &&
+  !dMango70.getElementById("cfServingLabel").readOnly &&
+  !dMango70.getElementById("cfServG").readOnly);
+
+dMango70.getElementById("cfCal").value="90";
+dMango70.getElementById("cfPro").value="1";
+dMango70.getElementById("cfCarb").value="22";
+dMango70.getElementById("cfFat").value="0";
+dMango70.getElementById("cfSaveBtn").dispatchEvent(new C.window.Event("click",{bubbles:true}));
+
+check("v70 confirmed label values save with brand and serving details under the barcode",
+  C.window.eval(`(()=>{
+    const f=data.myFoods["7500462317515"];
+    return !!f &&
+      f.name==="Frozen Mango" &&
+      f.brand==="Valle Nuevo" &&
+      f.servingG===140 &&
+      f.servingLabel==="1 cup (140 g)" &&
+      Math.abs(f.cal100-(90/140*100))<0.001 &&
+      Math.abs(f.pro100-(1/140*100))<0.001 &&
+      Math.abs(f.carb100-(22/140*100))<0.001 &&
+      f.fat100===0;
+  })()`));
+
+C.window.eval("window.__calls.length=0");
+await scan(C,"7500462317515");
+
+check("v70 future scans use the saved barcode correction with zero network calls",
+  C.window.eval("window.__calls.length")===0 &&
+  dMango70.getElementById("selName").textContent.includes("Frozen Mango"));
 C = bootOFF(()=>Promise.resolve({ok:true,status:200,json:()=>Promise.resolve({})}));
 await scan(C,"111");
 check("saved barcode short-circuits (zero network)", C.window.eval("window.__calls.length")===0);
@@ -902,7 +981,7 @@ check("v62 a catalog suggestion opens its exact listed serving for review", dC62
 check("v62 review shows the USDA per-100g values and correctly scaled serving", /USDA reference · SR28/.test(dC62.getElementById("selName").textContent) && /165 kcal/.test(dC62.getElementById("selPer100").textContent) && dC62.getElementById("calcCal").textContent==="186" && dC62.getElementById("calcPro").textContent==="35");
 check("v62 reviewing a broad-catalog suggestion never auto-logs it", C62.window.eval(`(data.food[todayStr()]||[]).length`)===beforeReview62);
 check("v62 FAQ explains USDA sourcing, exact servings, and real-world variation", C62.window.eval(`FAQ.some(x=>x.q==="How accurate are suggested-food calories and macros?"&&/per 100 grams/.test(x.a)&&/exact gram weight/.test(x.a)&&/NDB number/.test(x.a)&&/brand/.test(x.a)) && FAQ.some(x=>x.q==="How do food suggestions work?"&&/120 common foods/.test(x.a)&&/familiar foods receive a bonus but are not required/.test(x.a)&&/does not call USDA or an AI/.test(x.a))`));
-check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v70"'); })());
+check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v71"'); })());
 check("v62 keeps primary schemaVersion 2", C62.window.eval("SCHEMA_VERSION")===2);
 
 // ================= ChatGPT handoff paste flow =================
@@ -1153,7 +1232,7 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the four data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+"/.test(sw));
-check("v70 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v70"'));
+check("v71 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v71"'));
 const rawIndex = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 check("data scripts load before the app scripts (raw file order)",
   ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js"].every(f=>
