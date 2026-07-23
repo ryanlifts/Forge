@@ -33,6 +33,7 @@ check("reps > 30 rejected (formula breaks down)", E(`parseBestSet([{w:100,r:31}]
 check("zero/missing values rejected", E(`parseBestSet([{w:0,r:5},{r:5},{w:100}])`)===null);
 
 // ---------- workout auto-progression ----------
+check("fresh-install configuration defaults automatic progression off", E(`DEFAULT_CFG.autoProgressionOn===false`));
 check("legacy settings keep automatic progression enabled", E(`cfg.autoProgressionOn===true`));
 r = E(`parseScheme("4×5")`);
 check("fixed-rep scheme exposes one progression target", r.sets===4 && r.reps===5 && r.topReps===5);

@@ -335,7 +335,7 @@ fallback. The app cannot verify a browser download and states that limit honestl
 | v63 | No primary schema migration; recovery protections expanded | Adds established-install marker, missing-primary protected boot/runtime detection, three rolling LKG generations, populated-snapshot retention, manual snapshot restore, and exact storage diagnostic export |
 | v64 | No primary schema migration; device-only timer format 1 added | Stores running rest timers by absolute finish time and paused timers by remaining seconds so suspension and restart cannot freeze them |
 | v65 | No primary schema migration; timer format 1 extended compatibly | Adds `durationSec` plus a deadline-free `ready` status so expiration resets to the exact last started duration instead of showing a completion word |
-| v66 | No primary schema migration | Adds `cfg.autoProgressionOn` (legacy/default `true`) so automatic progression can be disabled; assisted exercise names reduce assistance by 5 lb when progression is enabled |
+| v66 | No primary schema migration | Adds `cfg.autoProgressionOn` (fresh-install default `false`; missing legacy values migrate to `true`) so automatic progression can be disabled; assisted exercise names reduce assistance by 5 lb when progression is enabled |
 
 Old backups from any era must continue restoring correctly; the permanent suite proves the
 range-era path.
@@ -349,4 +349,4 @@ Parsing normalizes smart quotes, fences, and zero-width junk. Raw AI responses a
 
 
 ### Training progression setting
-`cfg.autoProgressionOn` is a boolean stored with normal settings. Missing legacy values migrate to `true`; an explicit `false` is preserved.
+`cfg.autoProgressionOn` is a boolean stored with normal settings. A fresh install starts at `false`; a pre-v66 settings record missing the field migrates to `true`; explicit `true` or `false` choices are preserved.

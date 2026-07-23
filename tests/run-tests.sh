@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# BlackPyre permanent test gauntlet - 506 automated checks against the shipped app.
+# BlackPyre permanent test gauntlet - 509 automated checks against the shipped app.
 # Reproducible installs via the committed lockfile (npm ci). No build step, ever.
 set -e
 cd "$(dirname "$0")"

@@ -9,7 +9,7 @@ root, are binding, and are current as of v66. Read them before proposing or writ
 
 ## v66 — optional progression and faster barcode scanning
 
-Adds a Settings → Training toggle for automatic progression. The setting defaults on for legacy users; when off, the next session carries the last logged weights forward unchanged. With progression enabled, standard exercises preload 5 lb more only after all programmed sets reach their target, while exercise names containing `assisted` preload 5 lb less assistance. Barcode scanning now uses a square adaptive crop, 20 fps, and the browser-native BarcodeDetector through html5-qrcode when supported so horizontal and vertical retail barcodes can be read with the phone upright. Primary schemaVersion 2, Native Vault, workout data, and recovery format 1 are unchanged. Cache: blackpyre-v66. Tests: **506 (115 unit + 391 integration)**.
+Adds a Settings → Training toggle for automatic progression. Fresh installs default off, while legacy users missing the setting retain the previous on behavior; when off, the next session carries the last logged weights forward unchanged. With progression enabled, standard exercises preload 5 lb more only after all programmed sets reach their target, while exercise names containing `assisted` preload 5 lb less assistance. Barcode scanning now uses a square adaptive crop, 20 fps, and the browser-native BarcodeDetector through html5-qrcode when supported so horizontal and vertical retail barcodes can be read with the phone upright. Primary schemaVersion 2, Native Vault, workout data, and recovery format 1 are unchanged. Cache: blackpyre-v66. Tests: **509 (116 unit + 393 integration)**.
 
 ## v65 — completed timer resets to its last duration
 
@@ -62,7 +62,7 @@ Cache: blackpyre-v58. No storage, schema, or behavior changes.
 
 ## Current state
 
-1. The permanent `/tests` gauntlet has **506 checks: 115 unit + 391 integration**. GitHub
+1. The permanent `/tests` gauntlet has **509 checks: 116 unit + 393 integration**. GitHub
    Actions runs it on every push. Tests are cumulative and are never deleted or weakened.
 2. `tests/bella-reference.b64` is the frozen memorial byte truth. Exact identity and embed
    count 1 are test-enforced; never regenerate, re-render, edit, or replace it.
@@ -159,7 +159,7 @@ below exists to keep that workflow safe.
 | `manifest.json` | PWA identity — name/short_name **BlackPyre** |
 | `icon-*.png`, `apple-touch-icon.png` | Gold dumbbell icons |
 | `tests/PHASE2-PROOF.md` | Permanent historical record of the Phase 2 byte-identity proof |
-| `tests/` | Permanent gauntlet — 506 automated checks (115 unit + 391 integration), reproducible jsdom lockfile, and `bella-reference.b64` (frozen memorial byte truth; never edited). Not precached |
+| `tests/` | Permanent gauntlet — 509 automated checks (116 unit + 393 integration), reproducible jsdom lockfile, and `bella-reference.b64` (frozen memorial byte truth; never edited). Not precached |
 | `.github/workflows/tests.yml` | Runs the gauntlet on every push |
 | `DATA-MODEL.md` | Primary storage schema, recovery-record contracts, and migration history |
 
@@ -241,7 +241,7 @@ Slice rules from here on:
   reset"), never full sentences, layout-adjacent wording, or phrasing that a routine copy
   edit would touch. Release-pinned assertions (like the exact SW cache string) are advanced
   each release as part of the bump — that advance is maintenance, not weakening.
-- The permanent suite is **506 automated checks** and only grows. New features add tests in
+- The permanent suite is **509 automated checks** and only grows. New features add tests in
   the same release; existing checks are never deleted or weakened. The roughly 700 checks
   written before Phase 0 were old throwaway checks, not this permanent suite.
 - jsdom quirks: stub `URL.createObjectURL`, ignore `scrollTo` warnings, `select()` runs via
@@ -597,7 +597,7 @@ fallback. The app cannot verify a browser download and states that limit honestl
 | v63 | No primary schema migration; recovery protections expanded | Adds established-install marker, missing-primary protected boot/runtime detection, three rolling LKG generations, populated-snapshot retention, manual snapshot restore, and exact storage diagnostic export |
 | v64 | No primary schema migration; device-only timer format 1 added | Stores running rest timers by absolute finish time and paused timers by remaining seconds so suspension and restart cannot freeze them |
 | v65 | No primary schema migration; timer format 1 extended compatibly | Adds `durationSec` plus a deadline-free `ready` status so expiration resets to the exact last started duration instead of showing a completion word |
-| v66 | No primary schema migration | Adds `cfg.autoProgressionOn` (legacy/default `true`), assisted-load progression direction, and faster orientation-friendly barcode scanning |
+| v66 | No primary schema migration | Adds `cfg.autoProgressionOn` (fresh-install default `false`; missing legacy values migrate to `true`), assisted-load progression direction, and faster orientation-friendly barcode scanning |
 
 Old backups from any era must continue restoring correctly; the permanent suite proves the
 range-era path.

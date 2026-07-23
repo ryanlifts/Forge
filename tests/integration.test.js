@@ -997,6 +997,10 @@ check("v59 quota crunch: snapshot is rebuilt fresh after the sacrifice (self-hea
   Q59.window.eval(`JSON.parse(localStorage.getItem("forge:lkg")).savedAt`) !== lkgBefore59);
 
 // ================= v66: optional progression + orientation-friendly barcode scanner =================
+const FreshAP66 = boot(null, null);
+check("v66 fresh installs default automatic progression off", FreshAP66.window.eval("cfg.autoProgressionOn===false") && JSON.parse(FreshAP66.window.localStorage.getItem("forge:cfg")).autoProgressionOn===false && FreshAP66.window.document.getElementById("autoProgressionToggleBtn").getAttribute("aria-pressed")==="false");
+const LegacyAP66 = boot(EXISTING_CFG, EMPTY_DATA);
+check("v66 legacy installs missing the new setting retain automatic progression on", LegacyAP66.window.eval("cfg.autoProgressionOn===true") && JSON.parse(LegacyAP66.window.localStorage.getItem("forge:cfg")).autoProgressionOn===true);
 const AP66 = boot(Object.assign({}, EXISTING_CFG, {autoProgressionOn:true}), EMPTY_DATA);
 const dAP66 = AP66.window.document;
 check("v66 Settings includes a dedicated automatic progression toggle", !!dAP66.getElementById("settingsTrainingDetails") && dAP66.getElementById("autoProgressionToggleBtn").textContent.includes("On") && dAP66.getElementById("autoProgressionToggleBtn").getAttribute("aria-pressed")==="true");
@@ -1028,7 +1032,7 @@ check("ALT_MAP loads from data-foods.js", P.window.eval("typeof ALT_MAP==='objec
 check("FAQ loads from data-faq.js", P.window.eval("Array.isArray(FAQ) && FAQ.length > 10"));
 check("FAQ explains exercise-level Save/Completed/Edit flow", P.window.eval(`FAQ.some(x=>x.q&&/Unsaved, Completed/.test(x.q)&&/Save Exercise/.test(x.a)&&/Log session/.test(x.a))`));
 check("FAQ no longer instructs per-set checkmarks", P.window.eval(`!FAQ.some(x=>x.a&&(x.a.includes("tap <b>✓</b>")||x.a.includes("Checking ✓")))`));
-check("FAQ documents optional automatic progression and assisted direction", P.window.eval(`FAQ.some(x=>x.q==="How does automatic progression work?"&&x.a.includes("Settings → Training")&&x.a.includes("5 lb less assistance")&&x.a.includes("carries the last logged weights forward unchanged"))`));
+check("FAQ documents optional automatic progression and assisted direction", P.window.eval(`FAQ.some(x=>x.q==="How does automatic progression work?"&&x.a.includes("Settings → Training")&&x.a.includes("5 lb less assistance")&&x.a.includes("New users start with it off")&&x.a.includes("Existing users retain")&&x.a.includes("carries the last logged weights forward unchanged"))`));
 check("FAQ documents upright horizontal-or-vertical barcode scanning", P.window.eval(`FAQ.some(x=>x.q==="How does barcode scanning work?"&&x.a.includes("keep the phone upright")&&x.a.includes("horizontal or vertical")&&x.a.includes("native detector"))`));
 check("FAQ documents food deletion Undo", P.window.eval(`FAQ.some(x=>x.a&&x.a.includes("six-second <b>Undo</b>"))`));
 check("FAQ documents protected mode and recovery", P.window.eval(`FAQ.some(x=>x.q==="What are Protected mode and recovery?"&&/last-known-good snapshot/.test(x.a)&&/do not uninstall/.test(x.a))`));
