@@ -110,9 +110,11 @@ function inspectRestTimerRaw(raw){
   const version = record.formatVersion;
   if (!Number.isInteger(version) || version<1) return {ok:false, code:"format"};
   if (version>REST_TIMER_FORMAT_VERSION) return {ok:false, newer:true, code:"newer", record:record};
-  if (version!==REST_TIMER_FORMAT_VERSION || !["running","paused"].includes(record.status)) return {ok:false, code:"shape"};
+  if (version!==REST_TIMER_FORMAT_VERSION || !["running","paused","ready"].includes(record.status)) return {ok:false, code:"shape"};
+  if (Object.prototype.hasOwnProperty.call(record,"durationSec") && !(Number.isFinite(record.durationSec) && record.durationSec>0)) return {ok:false, code:"shape"};
   if (record.status==="running" && !(Number.isFinite(record.endAt) && record.endAt>0)) return {ok:false, code:"shape"};
   if (record.status==="paused" && !(Number.isFinite(record.remainingSec) && record.remainingSec>0)) return {ok:false, code:"shape"};
+  if (record.status==="ready" && !(Number.isFinite(record.durationSec) && record.durationSec>0)) return {ok:false, code:"shape"};
   return {ok:true, record:record};
 }
 function readRestTimerState(){

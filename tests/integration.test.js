@@ -799,7 +799,7 @@ check("v62 a catalog suggestion opens its exact listed serving for review", dC62
 check("v62 review shows the USDA per-100g values and correctly scaled serving", /USDA reference · SR28/.test(dC62.getElementById("selName").textContent) && /165 kcal/.test(dC62.getElementById("selPer100").textContent) && dC62.getElementById("calcCal").textContent==="186" && dC62.getElementById("calcPro").textContent==="35");
 check("v62 reviewing a broad-catalog suggestion never auto-logs it", C62.window.eval(`(data.food[todayStr()]||[]).length`)===beforeReview62);
 check("v62 FAQ explains USDA sourcing, exact servings, and real-world variation", C62.window.eval(`FAQ.some(x=>x.q==="How accurate are suggested-food calories and macros?"&&/per 100 grams/.test(x.a)&&/exact gram weight/.test(x.a)&&/NDB number/.test(x.a)&&/brand/.test(x.a)) && FAQ.some(x=>x.q==="How do food suggestions work?"&&/120 common foods/.test(x.a)&&/familiar foods receive a bonus but are not required/.test(x.a)&&/does not call USDA or an AI/.test(x.a))`));
-check("v64 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v64"'); })());
+check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v65"'); })());
 check("v62 keeps primary schemaVersion 2", C62.window.eval("SCHEMA_VERSION")===2);
 
 // ================= ChatGPT handoff paste flow =================
@@ -915,9 +915,30 @@ const T64Expired = bootRaw({
   cfg:T64.window.localStorage.getItem("forge:cfg"),
   data:T64.window.localStorage.getItem("forge:data"),
   program:T64.window.localStorage.getItem("forge:program"),
-  restTimer:JSON.stringify({formatVersion:1,status:"running",endAt:CLOCK64+30000,remainingSec:30,savedAt:CLOCK64})
+  restTimer:JSON.stringify({formatVersion:1,status:"running",endAt:CLOCK64+30000,remainingSec:30,durationSec:30,savedAt:CLOCK64})
 }, w=>{ w.Date.now=()=>CLOCK64+45000; });
-check("v64 an expired timer returns as GO after restart and clears its temporary record", T64Expired.window.eval("restFinished && !restRunning && restRemaining===0") && T64Expired.window.document.getElementById("restDisplay").textContent==="GO!" && T64Expired.window.localStorage.getItem("forge:rest-timer")===null);
+const relaunchedReady64 = JSON.parse(T64Expired.window.localStorage.getItem("forge:rest-timer"));
+check("v65 relaunch or phone restart expiration resets to the last started duration", T64Expired.window.eval("!restRunning && !restPaused && restRemaining===0 && restReadySec===30") && T64Expired.window.document.getElementById("restDisplay").textContent==="0:30" && relaunchedReady64.status==="ready" && relaunchedReady64.durationSec===30);
+
+const T65VisibleExpired = boot(Object.assign({},V2_CFG,{restSec:75}), EMPTY_DATA, w=>{ w.Date.now=()=>CLOCK64; }, TEST_PROGRAM);
+T65VisibleExpired.window.eval(`activateView("work",null,false)`);
+T65VisibleExpired.window.document.getElementById("restStartBtn").dispatchEvent(new T65VisibleExpired.window.Event("click",{bubbles:true}));
+T65VisibleExpired.window.Date.now=()=>CLOCK64+76000;
+T65VisibleExpired.window.eval("tickRestCountdown()");
+const visibleReady65 = JSON.parse(T65VisibleExpired.window.localStorage.getItem("forge:rest-timer"));
+check("v65 visible timer expiration resets to the exact last started duration", T65VisibleExpired.window.eval("!restRunning && !restPaused && restRemaining===0 && restReadySec===75") && T65VisibleExpired.window.document.getElementById("restDisplay").textContent==="1:15" && !T65VisibleExpired.window.document.getElementById("restStartBtn").classList.contains("hidden"));
+
+const T65BackgroundExpired = boot(Object.assign({},V2_CFG,{restSec:120}), EMPTY_DATA, w=>{ w.Date.now=()=>CLOCK64; }, TEST_PROGRAM);
+T65BackgroundExpired.window.eval(`activateView("work",null,false)`);
+T65BackgroundExpired.window.document.getElementById("restStartBtn").dispatchEvent(new T65BackgroundExpired.window.Event("click",{bubbles:true}));
+T65BackgroundExpired.window.Date.now=()=>CLOCK64+121000;
+T65BackgroundExpired.window.document.dispatchEvent(new T65BackgroundExpired.window.Event("visibilitychange"));
+check("v65 background or unlock expiration resets to the exact last started duration", T65BackgroundExpired.window.eval("!restRunning && !restPaused && restReadySec===120") && T65BackgroundExpired.window.document.getElementById("restDisplay").textContent==="2:00");
+
+const timerSource65 = fs.readFileSync(path.join(__dirname,"..","scripts","04-weight.js"),"utf8");
+const timerSection65 = timerSource65.slice(timerSource65.indexOf("// ================== PLATE MATH & REST TIMER"), timerSource65.indexOf("// ================== SHARE PROGRAM"));
+check("v65 completed timer display no longer uses GO", !timerSection65.includes("GO!") && T65VisibleExpired.window.document.getElementById("restDisplay").textContent!=="GO!");
+check("v65 expiration clears the active deadline without restarting", T65VisibleExpired.window.eval("restEndsAt===0 && restInterval===null && !restRunning") && visibleReady65.status==="ready" && !Object.prototype.hasOwnProperty.call(visibleReady65,"endAt"));
 
 // ================= v59: audit-recommended structural protections =================
 check("v59 storage-use line renders an honest approximation", (()=>{ const B = boot(EXISTING_CFG, EMPTY_DATA); const t = B.window.document.getElementById("storageUseNote").textContent; return /~\d+ (KB|MB)/.test(t) && /approximate/.test(t); })());
@@ -1010,7 +1031,7 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the four data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+"/.test(sw));
-check("v64 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v64"'));
+check("v65 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v65"'));
 const rawIndex = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 check("data scripts load before the app scripts (raw file order)",
   ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js"].every(f=>

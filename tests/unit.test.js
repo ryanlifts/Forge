@@ -146,6 +146,7 @@ check("primary schema 2 and recovery format 1 remain separate contracts", E(`SCH
 // ---------- v64 device-only rest timer record ----------
 check("v64 running rest timer record validates", E(`inspectRestTimerRaw('${JSON.stringify({formatVersion:1,status:"running",endAt:2000000000000,remainingSec:90,savedAt:1999999990000})}').ok`)===true);
 check("v64 paused rest timer record validates", E(`inspectRestTimerRaw('${JSON.stringify({formatVersion:1,status:"paused",remainingSec:47,savedAt:1999999990000})}').ok`)===true);
+check("v65 completed rest timer record preserves its ready duration without a deadline", E(`inspectRestTimerRaw('${JSON.stringify({formatVersion:1,status:"ready",durationSec:75,savedAt:2000000000000})}').ok`)===true);
 check("v64 malformed rest timer record is rejected", E(`inspectRestTimerRaw('${JSON.stringify({formatVersion:1,status:"running",endAt:"later"})}').code`)==="shape");
 check("v64 newer rest timer record receives version protection", E(`inspectRestTimerRaw('${JSON.stringify({formatVersion:2,status:"running",endAt:2000000000000})}').newer`)===true);
 

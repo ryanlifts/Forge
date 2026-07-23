@@ -1,11 +1,15 @@
-# BLACKPYRE HANDOFF — current as of v64 (July 2026)
+# BLACKPYRE HANDOFF — current as of v65 (July 2026)
 
 You are a collaborator on BlackPyre, a fitness PWA at
-`ryanlifts.github.io/Forge/` (repo: `ryanlifts/Forge`). This repository represents **v64**, built on the completed v57 Phase 4 foundation and the v58–v63 security, housekeeping, food-handoff, food-suggestion, and data-protection releases. Confirm the GitHub Pages deployment/cache
+`ryanlifts.github.io/Forge/` (repo: `ryanlifts/Forge`). This repository represents **v65**, built on the completed v57 Phase 4 foundation and the v58–v64 security, housekeeping, food-handoff, food-suggestion, data-protection, and elapsed-time timer releases. Confirm the GitHub Pages deployment/cache
 before calling it live.
 
 The two documents reproduced below (`ARCHITECTURE.md` and `DATA-MODEL.md`) live in the repo
-root, are binding, and are current as of v64. Read them before proposing or writing code.
+root, are binding, and are current as of v65. Read them before proposing or writing code.
+
+## v65 — completed timer resets to its last duration
+
+Changes only the completed-state UX of the elapsed-time rest timer. When a countdown expires—while visible, after backgrounding or unlocking, or during a full relaunch/phone restart—the timer stops and resets to the exact duration used to start that countdown. It does not auto-restart and no longer displays `GO!`. The device-only `forge:rest-timer` format remains version 1 and now stores `durationSec`; completion replaces the running deadline with a deadline-free `ready` record. Primary schemaVersion 2, workout data, Native Vault, normal backups, LKG snapshots, and recovery format 1 are unchanged. Cache: blackpyre-v65. Tests: **493 (110 unit + 383 integration)**.
 
 ## v64 — elapsed-time rest timer
 
@@ -54,7 +58,7 @@ Cache: blackpyre-v58. No storage, schema, or behavior changes.
 
 ## Current state
 
-1. The permanent `/tests` gauntlet has **488 checks: 109 unit + 379 integration**. GitHub
+1. The permanent `/tests` gauntlet has **493 checks: 110 unit + 383 integration**. GitHub
    Actions runs it on every push. Tests are cumulative and are never deleted or weakened.
 2. `tests/bella-reference.b64` is the frozen memorial byte truth. Exact identity and embed
    count 1 are test-enforced; never regenerate, re-render, edit, or replace it.
@@ -72,7 +76,7 @@ Cache: blackpyre-v58. No storage, schema, or behavior changes.
 9. v57 completes programmatic control names, semantic/keyboard bottom tabs, keyboard food
    results, named dynamic onboarding/workout/builder controls, and dialog focus entry/return.
 10. Browser zoom remains enabled; visible focus behavior is preserved.
-11. Cache: `blackpyre-v64`.
+11. Cache: `blackpyre-v65`.
 
 ## Five-phase status
 
@@ -112,7 +116,7 @@ notice or close/reopen as directed. Every release gets a plain-language report a
 
 # BlackPyre Architecture
 
-**Current as of v64 (July 2026).**
+**Current as of v65 (July 2026).**
 
 A single-page PWA: vanilla HTML/CSS/JS, no framework, no build step, localStorage only.
 Deployed on GitHub Pages. Developed AI-assisted (Claude / ChatGPT) from a phone — every rule
@@ -151,7 +155,7 @@ below exists to keep that workflow safe.
 | `manifest.json` | PWA identity — name/short_name **BlackPyre** |
 | `icon-*.png`, `apple-touch-icon.png` | Gold dumbbell icons |
 | `tests/PHASE2-PROOF.md` | Permanent historical record of the Phase 2 byte-identity proof |
-| `tests/` | Permanent gauntlet — 488 automated checks (109 unit + 379 integration), reproducible jsdom lockfile, and `bella-reference.b64` (frozen memorial byte truth; never edited). Not precached |
+| `tests/` | Permanent gauntlet — 493 automated checks (110 unit + 383 integration), reproducible jsdom lockfile, and `bella-reference.b64` (frozen memorial byte truth; never edited). Not precached |
 | `.github/workflows/tests.yml` | Runs the gauntlet on every push |
 | `DATA-MODEL.md` | Primary storage schema, recovery-record contracts, and migration history |
 
@@ -183,7 +187,7 @@ Slice rules from here on:
 - Declarations and slice boundaries remain unchanged unless an approved plan covers them.
   New sections belong where their execution order requires; further splitting is a plan-level decision.
 
-## Storage safety conventions (v45–v64)
+## Storage safety conventions (v45–v65)
 
 - `schemaVersion` versions the complete primary state (`forge:cfg`, `forge:data`,
   `forge:program`) and is physically stored in `forge:cfg`; current primary schema = 2. v56 adds `forge:data.activeWorkoutDraft` so completed exercises survive reload before session finalization.
@@ -233,7 +237,7 @@ Slice rules from here on:
   reset"), never full sentences, layout-adjacent wording, or phrasing that a routine copy
   edit would touch. Release-pinned assertions (like the exact SW cache string) are advanced
   each release as part of the bump — that advance is maintenance, not weakening.
-- The permanent suite is **488 automated checks** and only grows. New features add tests in
+- The permanent suite is **493 automated checks** and only grows. New features add tests in
   the same release; existing checks are never deleted or weakened. The roughly 700 checks
   written before Phase 0 were old throwaway checks, not this permanent suite.
 - jsdom quirks: stub `URL.createObjectURL`, ignore `scrollTo` warnings, `select()` runs via
@@ -254,7 +258,7 @@ Slice rules from here on:
 
 # BlackPyre Data Model
 
-**Current as of v64 (July 2026). Primary schemaVersion: 2. Recovery format: 1.**
+**Current as of v65 (July 2026). Primary schemaVersion: 2. Recovery format: 1.**
 
 ## Storage keys
 
@@ -266,7 +270,7 @@ BlackPyre has three permanent **primary user-state keys**:
 | `forge:data` | All logged data (object) |
 | `forge:program` | Loaded training program (object) |
 
-v46–v64 add permanent **internal, device-only keys**:
+v46–v65 add permanent **internal, device-only keys**:
 
 | Key | Contents |
 |---|---|
@@ -275,7 +279,7 @@ v46–v64 add permanent **internal, device-only keys**:
 | `forge:lkg:older` | Older validated whole-state snapshot |
 | `forge:quarantine` | One exact pre-recovery copy of unsafe primary strings plus diagnosis |
 | `forge:install` | Established-install marker used to distinguish data loss from a true first run |
-| `forge:rest-timer` | Temporary running/paused rest-timer state that survives suspension and restart |
+| `forge:rest-timer` | Temporary running/paused/ready rest-timer state that survives suspension and restart |
 
 All nine primary/internal names are load-bearing once shipped and must not be renamed casually. The `forge:`
 prefix predates the BlackPyre rebrand and is intentionally preserved. The legacy read-only
@@ -287,7 +291,7 @@ removes, or modifies that legacy key.
 `schemaVersion` is physically stored in `forge:cfg`, but versions the complete **primary**
 state and normal backup envelope: settings, logged data, and program.
 
-| Raw value | Meaning / behavior in v64 |
+| Raw value | Meaning / behavior in v65 |
 |---|---|
 | property absent or integer `0` | Pre-versioning legacy state; run numbered migrations from step 0 |
 | integer `1` | v45–v55 state; migrate 1 → 2 by adding an empty active-workout draft field |
@@ -434,14 +438,15 @@ The marker is written only after a healthy validated snapshot exists. It contain
 or API keys. Together with existing settings, snapshots, or quarantine, it proves that missing
 `forge:data` or `forge:cfg` is a recovery incident rather than a first run. A marker with a newer
 format is treated as established evidence and is never overwritten by this version. A true fresh
-install has no primary/internal evidence; v64 writes a complete three-key default primary state
+install has no primary/internal evidence; v65 writes a complete three-key default primary state
 before creating the first snapshot and marker.
 
 ## forge:rest-timer
 
-This is temporary device-only runtime state, separate from primary user data and recovery snapshots.
-It is written only when the manual Train rest timer starts, pauses, resumes, or gains time, and is
-removed when the timer ends or the user taps End.
+This is device-only runtime state, separate from primary user data and recovery snapshots.
+It is written when the manual Train rest timer starts, pauses, resumes, gains time, or completes.
+After completion it keeps only the last started duration in a ready record; tapping End or choosing
+another idle duration removes that temporary record.
 
 Running record:
 
@@ -451,6 +456,7 @@ Running record:
   "status": "running",
   "endAt": 2000000090000,
   "remainingSec": 90,
+  "durationSec": 90,
   "savedAt": 2000000000000
 }
 ```
@@ -462,7 +468,19 @@ Paused record:
   "formatVersion": 1,
   "status": "paused",
   "remainingSec": 45,
+  "durationSec": 90,
   "savedAt": 2000000045000
+}
+```
+
+Completed/ready record:
+
+```json
+{
+  "formatVersion": 1,
+  "status": "ready",
+  "durationSec": 90,
+  "savedAt": 2000000090000
 }
 ```
 
@@ -470,8 +488,9 @@ Rules:
 - A running timer is calculated from `endAt - Date.now()`, not from the number of interval callbacks.
   Background suspension therefore cannot freeze elapsed time.
 - A paused timer preserves the exact rounded-up seconds remaining and resumes from a new finish time.
-- The record survives a full app or phone restart. If its finish time has already passed, the app shows
-  `GO!` once and removes the temporary record.
+- `durationSec` is the exact duration used to start that countdown; adding time does not replace it.
+- The record survives a full app or phone restart. If its finish time has already passed, the app stops,
+  clears `endAt`, and stores a ready record so the display resets to `durationSec` without auto-restarting.
 - It is excluded from primary schemaVersion, normal backups, LKG snapshots, quarantine, and migrations.
 - A newer format is never overwritten or removed by an older app.
 
@@ -573,6 +592,7 @@ fallback. The app cannot verify a browser download and states that limit honestl
 | v62 | No primary schema migration | Adds a static 120-food USDA Standard Reference suggestion catalog outside localStorage; cfg fields and stored food/log shapes remain unchanged |
 | v63 | No primary schema migration; recovery protections expanded | Adds established-install marker, missing-primary protected boot/runtime detection, three rolling LKG generations, populated-snapshot retention, manual snapshot restore, and exact storage diagnostic export |
 | v64 | No primary schema migration; device-only timer format 1 added | Stores running rest timers by absolute finish time and paused timers by remaining seconds so suspension and restart cannot freeze them |
+| v65 | No primary schema migration; timer format 1 extended compatibly | Adds `durationSec` plus a deadline-free `ready` status so expiration resets to the exact last started duration instead of showing a completion word |
 
 Old backups from any era must continue restoring correctly; the permanent suite proves the
 range-era path.
