@@ -525,12 +525,15 @@ check("recovery quarantine preserves active legacy fallback as evidence", legacy
 check("recovery writes forge:data but never alters legacy fallback", LegacyRecover46.window.localStorage.getItem("forge:data")!==null && LegacyRecover46.window.localStorage.getItem("ryan-cut:data")===legacyRaw && !LegacyRecover46.__storageCalls.some(c=>c.key==="ryan-cut:data"));
 
 // ================= barcode chain =================
-function bootOFF(offResponder){
-  return boot(Object.assign({}, EXISTING_CFG, {usdaKey:"k"}),
+function bootOFF(offResponder, usdaResponder, cfgOverrides){
+  return boot(Object.assign({}, EXISTING_CFG, {usdaKey:"k"}, cfgOverrides||{}),
     Object.assign({}, EMPTY_DATA, {myFoods:{"111":{name:"Saved thing", brand:"Mine", cal100:100, pro100:10, carb100:5, fat100:2}}}),
     (w)=>{ w.__calls=[]; w.fetch=(url)=>{ w.__calls.push(url);
       if (url.includes("openfoodfacts")) return offResponder(url);
-      if (url.includes("usda")) return Promise.resolve({ok:true,status:200,json:()=>Promise.resolve({foods:[{description:"USDA Fallback Bar", brandOwner:"USDA Co", servingSize:50, servingSizeUnit:"g", foodNutrients:[{nutrientId:1008,value:400},{nutrientId:1003,value:30},{nutrientId:1005,value:40},{nutrientId:1004,value:12}]}]})});
+      if (url.includes("usda")){
+        if (typeof usdaResponder==="function") return usdaResponder(url);
+        return Promise.resolve({ok:true,status:200,json:()=>Promise.resolve({foods:[{description:"USDA Fallback Bar", brandOwner:"USDA Co", servingSize:50, servingSizeUnit:"g", foodNutrients:[{nutrientId:1008,value:400},{nutrientId:1003,value:30},{nutrientId:1005,value:40},{nutrientId:1004,value:12}]}]})});
+      }
       return Promise.resolve({ok:false,status:500,json:()=>Promise.resolve({})});
     };});
 }
@@ -589,12 +592,46 @@ check("v69 leaves consistent OFF per-100g macros unchanged", unchangedOFF &&
 C = bootOFF(()=>Promise.resolve({ok:true,status:200,json:()=>Promise.resolve({})}));
 await scan(C,"111");
 check("saved barcode short-circuits (zero network)", C.window.eval("window.__calls.length")===0);
-C = bootOFF(()=>Promise.resolve({ok:false,status:404,json:()=>Promise.resolve({})}));
+let retryAttempts = 0;
+C = bootOFF(()=>{
+  retryAttempts++;
+  if (retryAttempts===1) return Promise.reject(new Error("temporary network failure"));
+  return Promise.resolve({ok:true,status:200,json:()=>Promise.resolve({status:1,product:yoplaitOFF})});
+});
+await scan(C,"444");
+check("v69 transient OFF failure retries once and succeeds", retryAttempts===2 &&
+  C.window.document.getElementById("selName").textContent.includes("mixed berry") &&
+  C.window.document.getElementById("customCard").classList.contains("hidden"));
+
+let notFoundAttempts = 0;
+C = bootOFF(()=>{
+  notFoundAttempts++;
+  return Promise.resolve({ok:false,status:404,json:()=>Promise.resolve({})});
+});
 await scan(C,"333");
-check("OFF 404 → USDA fallback", C.window.document.getElementById("selName").textContent.includes("USDA Fallback Bar"));
-C = bootOFF(()=>Promise.reject(new Error("offline")));
+check("v69 confirmed OFF 404 does not retry and uses USDA", notFoundAttempts===1 &&
+  C.window.document.getElementById("selName").textContent.includes("USDA Fallback Bar"));
+
+let networkAttempts = 0;
+C = bootOFF(()=>{
+  networkAttempts++;
+  return Promise.reject(new Error("offline"));
+});
 await scan(C,"666");
-check("OFF network failure → USDA (chain never dead-ends)", C.window.document.getElementById("selName").textContent.includes("USDA Fallback Bar"));
+check("v69 OFF network failure retries once before USDA", networkAttempts===2 &&
+  C.window.document.getElementById("selName").textContent.includes("USDA Fallback Bar"));
+
+let unavailableAttempts = 0;
+C = bootOFF(()=>{
+  unavailableAttempts++;
+  return Promise.reject(new Error("OFF unavailable"));
+}, ()=>Promise.reject(new Error("USDA unavailable")));
+await scan(C,"777");
+check("v69 unavailable databases show retry message instead of false not-found form", unavailableAttempts===2 &&
+  C.window.document.getElementById("customCard").classList.contains("hidden") &&
+  !C.window.document.getElementById("searchErr").classList.contains("hidden") &&
+  /could not be reached/i.test(C.window.document.getElementById("searchErr").textContent));
+
 C = bootOFF(()=>Promise.resolve({ok:true,status:200,json:()=>Promise.resolve({status:"success", product:{product_name:"Bad", nutriments:{"energy-kcal_100g":"NaN-city","proteins_100g":-5}}})}));
 await scan(C,"555");
 check("malformed nutrition rejected → USDA", C.window.document.getElementById("selName").textContent.includes("USDA Fallback Bar"));

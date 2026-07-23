@@ -463,6 +463,31 @@ document.getElementById("scanCancelBtn").addEventListener("click", stopScanner);
 // --- barcode ---
 document.getElementById("barcodeBtn").addEventListener("click", runBarcode);
 document.getElementById("barcodeInput").addEventListener("keydown", e=>{ if(e.key==="Enter") runBarcode(); });
+async function lookupOFFBarcode(code, fields){
+  const url = "https://world.openfoodfacts.org/api/v2/product/"+encodeURIComponent(code)+".json?fields="+fields;
+
+  for (let attempt=0; attempt<2; attempt++){
+    try {
+      const res = await fetchWithTimeout(url, 10000);
+
+      if (res.status===404) return {state:"not-found", product:null};
+
+      if (!res.ok){
+        const transient = res.status===408 || res.status===429 || res.status>=500;
+        if (transient && attempt===0) continue;
+        return {state:"unavailable", product:null};
+      }
+
+      const json = await res.json();
+      return {state:"ok", product:json && json.product};
+    } catch(e){
+      if (attempt===0) continue;
+    }
+  }
+
+  return {state:"unavailable", product:null};
+}
+
 async function runBarcode(){
   const code = document.getElementById("barcodeInput").value.trim().replace(/\D/g,"");
   const errEl = document.getElementById("searchErr");
@@ -480,34 +505,44 @@ async function runBarcode(){
     errEl.classList.remove("hidden");
     return;
   }
+
   const btn = document.getElementById("barcodeBtn");
   btn.disabled = true; btn.textContent = "…";
+
   try {
     // Open Food Facts API v2 product schema (includes nutriments used by mapOFFProduct)
     const fields = "code,product_name,brands,quantity,serving_size,serving_quantity,nutrition_data_per,nutriments";
-    const res = await fetchWithTimeout("https://world.openfoodfacts.org/api/v2/product/"+encodeURIComponent(code)+".json?fields="+fields, 10000);
-    if (!res.ok){ await tryUSDABarcode(code); }
-    else {
-      const json = await res.json();
-      const h = mapOFFProduct(json && json.product);
+    const result = await lookupOFFBarcode(code, fields);
+
+    if (result.state==="unavailable"){
+      const found = await tryUSDABarcode(code, false);
+      if (!found){
+        errEl.textContent = "Barcode databases could not be reached. Check your connection and tap Look up again.";
+        errEl.classList.remove("hidden");
+      }
+    } else if (result.state==="not-found"){
+      await tryUSDABarcode(code, true);
+    } else {
+      const h = mapOFFProduct(result.product);
       if (h) selectFood(h);
-      else await tryUSDABarcode(code);
+      else await tryUSDABarcode(code, true);
     }
-  } catch(e){
-    // Network/malformed OFF responses still continue through USDA, then manual entry.
-    await tryUSDABarcode(code);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Look up";
   }
-  btn.disabled = false; btn.textContent = "Look up";
 }
 
-async function tryUSDABarcode(code){
+async function tryUSDABarcode(code, openManualOnMiss=true){
   if (effectiveUsdaKey()){
     try {
       const hits = await searchUSDA(code); // USDA matches UPC/GTIN in query
-      if (hits.length){ selectFood(hits[0]); return; }
+      if (hits.length){ selectFood(hits[0]); return true; }
     } catch(e){}
   }
-  openCustomForm(code);
+
+  if (openManualOnMiss) openCustomForm(code);
+  return false;
 }
 
 // --- personal barcode library ---
