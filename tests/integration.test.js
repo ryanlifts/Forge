@@ -1302,6 +1302,16 @@ for (let step57=0; step57<8; step57++){
   setupNamed57 = setupNamed57 && [...dFresh57.querySelectorAll("#setupBody input,#setupBody select,#setupBody textarea,#setupBody button")].every(hasAccessibleName57);
 }
 check("v57 every dynamically rendered onboarding control has an accessible name", setupNamed57);
+
+fresh57.window.eval(`setupStep=6; renderSetupStep();`);
+await wait(20);
+dFresh57.getElementById("suUsda").value="  onboarding-usda-test-key  ";
+dFresh57.getElementById("setupNext").click();
+await wait(20);
+check("onboarding USDA key saves when advancing without the separate Save button",
+  fresh57.window.eval(`setupStep===7 && cfg.usdaKey==="onboarding-usda-test-key"`) &&
+  JSON.parse(fresh57.window.localStorage.getItem("forge:cfg")).usdaKey==="onboarding-usda-test-key");
+
 check("v57 errors and save/network messages expose live status semantics", dA57.getElementById("searchErr").getAttribute("role")==="alert" && dA57.getElementById("saveState").getAttribute("role")==="status" && dA57.getElementById("offlineBanner").getAttribute("role")==="status");
 A57.window.eval("renderFAQ()");
 check("v57 FAQ documents keyboard and screen-reader support", /keyboard or screen reader/i.test(dA57.getElementById("faqBody").textContent));
