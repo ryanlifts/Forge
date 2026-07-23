@@ -535,9 +535,57 @@ function bootOFF(offResponder){
     };});
 }
 async function scan(C, code){ C.window.document.getElementById("barcodeInput").value=code; await C.window.eval("runBarcode()"); await wait(30); }
-let C = bootOFF(()=>Promise.resolve({ok:true,status:200,json:()=>Promise.resolve({status:"success", product:{code:"222", product_name:"Greek Yogurt", brands:"BrandX", serving_size:"170 g", serving_quantity:170, nutriments:{"energy-kcal_100g":59,"proteins_100g":10,"carbohydrates_100g":3.6,"fat_100g":0.4}}})}));
-await scan(C,"222");
-check("OFF v3.6 found → selected", C.window.document.getElementById("selName").textContent.includes("Greek Yogurt") && C.window.eval("window.__calls[0]").includes("/api/v3.6/product/"));
+const yoplaitOFF = {
+  code:"0070470343488",
+  product_name:"mixed berry",
+  brands:"Yoplait Original",
+  serving_size:"170.0g",
+  serving_quantity:170,
+  nutrition_data_per:"100g",
+  nutriments:{
+    "energy-kcal_100g":82.3529411764706,
+    "energy-kcal_serving":140,
+    "proteins_100g":5,
+    "carbohydrates_100g":28,
+    "fat_100g":1.5,
+    "proteins":5,
+    "carbohydrates":28,
+    "fat":1.5
+  }
+};
+let C = bootOFF(()=>Promise.resolve({ok:true,status:200,json:()=>Promise.resolve({status:1,product:yoplaitOFF})}));
+await scan(C,"070470343488");
+check("v69 OFF v2 barcode lookup selects Yoplait product", C.window.document.getElementById("selName").textContent.includes("mixed berry") && C.window.eval("window.__calls[0]").includes("/api/v2/product/070470343488.json") && !C.window.eval("window.__calls[0]").includes("/api/v3.6/product/"));
+
+const repairedYoplait = C.window.eval("mapOFFProduct("+JSON.stringify(yoplaitOFF)+")");
+check("v69 repairs OFF serving macros mislabeled as per 100g", repairedYoplait &&
+  Math.abs(repairedYoplait.cal100-82.3529411764706)<0.001 &&
+  Math.abs(repairedYoplait.pro100-(5*100/170))<0.001 &&
+  Math.abs(repairedYoplait.carb100-(28*100/170))<0.001 &&
+  Math.abs(repairedYoplait.fat100-(1.5*100/170))<0.001);
+
+const consistentOFF = {
+  product_name:"Consistent Yogurt",
+  brands:"Test",
+  serving_size:"170g",
+  serving_quantity:170,
+  nutrition_data_per:"100g",
+  nutriments:{
+    "energy-kcal_100g":82.35,
+    "energy-kcal_serving":140,
+    "proteins_100g":2.94,
+    "carbohydrates_100g":16.47,
+    "fat_100g":0.88,
+    "proteins":2.94,
+    "carbohydrates":16.47,
+    "fat":0.88
+  }
+};
+const unchangedOFF = C.window.eval("mapOFFProduct("+JSON.stringify(consistentOFF)+")");
+check("v69 leaves consistent OFF per-100g macros unchanged", unchangedOFF &&
+  Math.abs(unchangedOFF.pro100-2.94)<0.001 &&
+  Math.abs(unchangedOFF.carb100-16.47)<0.001 &&
+  Math.abs(unchangedOFF.fat100-0.88)<0.001);
 C = bootOFF(()=>Promise.resolve({ok:true,status:200,json:()=>Promise.resolve({})}));
 await scan(C,"111");
 check("saved barcode short-circuits (zero network)", C.window.eval("window.__calls.length")===0);
