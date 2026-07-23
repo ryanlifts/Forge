@@ -799,7 +799,7 @@ check("v62 a catalog suggestion opens its exact listed serving for review", dC62
 check("v62 review shows the USDA per-100g values and correctly scaled serving", /USDA reference · SR28/.test(dC62.getElementById("selName").textContent) && /165 kcal/.test(dC62.getElementById("selPer100").textContent) && dC62.getElementById("calcCal").textContent==="186" && dC62.getElementById("calcPro").textContent==="35");
 check("v62 reviewing a broad-catalog suggestion never auto-logs it", C62.window.eval(`(data.food[todayStr()]||[]).length`)===beforeReview62);
 check("v62 FAQ explains USDA sourcing, exact servings, and real-world variation", C62.window.eval(`FAQ.some(x=>x.q==="How accurate are suggested-food calories and macros?"&&/per 100 grams/.test(x.a)&&/exact gram weight/.test(x.a)&&/NDB number/.test(x.a)&&/brand/.test(x.a)) && FAQ.some(x=>x.q==="How do food suggestions work?"&&/120 common foods/.test(x.a)&&/familiar foods receive a bonus but are not required/.test(x.a)&&/does not call USDA or an AI/.test(x.a))`));
-check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v66"'); })());
+check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v67"'); })());
 check("v62 keeps primary schemaVersion 2", C62.window.eval("SCHEMA_VERSION")===2);
 
 // ================= ChatGPT handoff paste flow =================
@@ -1050,7 +1050,7 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the four data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+"/.test(sw));
-check("v66 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v66"'));
+check("v67 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v67"'));
 const rawIndex = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 check("data scripts load before the app scripts (raw file order)",
   ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js"].every(f=>
