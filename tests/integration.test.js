@@ -708,6 +708,24 @@ dF51.getElementById("addSelBtn").dispatchEvent(new F51.window.Event("click",{bub
 check("v51 logging from search returns to the search box for the next entry", F51.window.eval("window.__f51 && window.__f51.id")==="foodQuery" && F51.window.eval("data.food[todayStr()].length")===4);
 check("v51 handoff behavior untouched by food changes", !!dF51.getElementById("hfPasteBtn"));
 
+// ================= v68: default ChatGPT handoff provider =================
+const H68Cfg = Object.assign({},V2_CFG);
+delete H68Cfg.aiProvider;
+delete H68Cfg.foodHandoffOn;
+const H68 = boot(H68Cfg,EMPTY_DATA);
+const dH68 = H68.window.document;
+check("v68 missing AI provider defaults to ChatGPT handoff",
+  H68.window.eval("cfg.aiProvider")==="handoff"
+  && H68.window.eval("aiProvider()")==="handoff"
+  && dH68.getElementById("sAiProvider").value==="handoff");
+check("v68 default provider and Quick Log defaults are aligned",
+  H68.window.eval("foodHandoffEnabled()")===true
+  && !dH68.getElementById("aiHandoffControls").classList.contains("hidden"));
+const H68Claude = boot(Object.assign({},V2_CFG,{aiProvider:"anthropic",anthropicKey:"sk-test"}),EMPTY_DATA);
+check("v68 explicit Claude provider remains unchanged",
+  H68Claude.window.eval("cfg.aiProvider")==="anthropic"
+  && H68Claude.window.document.getElementById("sAiProvider").value==="anthropic");
+
 // ================= v60: default-on ChatGPT food handoff =================
 const H60 = boot(V2_CFG, EMPTY_DATA);
 const dH60 = H60.window.document;
