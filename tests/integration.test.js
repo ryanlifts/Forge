@@ -799,7 +799,7 @@ check("v62 a catalog suggestion opens its exact listed serving for review", dC62
 check("v62 review shows the USDA per-100g values and correctly scaled serving", /USDA reference · SR28/.test(dC62.getElementById("selName").textContent) && /165 kcal/.test(dC62.getElementById("selPer100").textContent) && dC62.getElementById("calcCal").textContent==="186" && dC62.getElementById("calcPro").textContent==="35");
 check("v62 reviewing a broad-catalog suggestion never auto-logs it", C62.window.eval(`(data.food[todayStr()]||[]).length`)===beforeReview62);
 check("v62 FAQ explains USDA sourcing, exact servings, and real-world variation", C62.window.eval(`FAQ.some(x=>x.q==="How accurate are suggested-food calories and macros?"&&/per 100 grams/.test(x.a)&&/exact gram weight/.test(x.a)&&/NDB number/.test(x.a)&&/brand/.test(x.a)) && FAQ.some(x=>x.q==="How do food suggestions work?"&&/120 common foods/.test(x.a)&&/familiar foods receive a bonus but are not required/.test(x.a)&&/does not call USDA or an AI/.test(x.a))`));
-check("v64 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v64"'); })());
+check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v67"'); })());
 check("v62 keeps primary schemaVersion 2", C62.window.eval("SCHEMA_VERSION")===2);
 
 // ================= ChatGPT handoff paste flow =================
@@ -915,9 +915,30 @@ const T64Expired = bootRaw({
   cfg:T64.window.localStorage.getItem("forge:cfg"),
   data:T64.window.localStorage.getItem("forge:data"),
   program:T64.window.localStorage.getItem("forge:program"),
-  restTimer:JSON.stringify({formatVersion:1,status:"running",endAt:CLOCK64+30000,remainingSec:30,savedAt:CLOCK64})
+  restTimer:JSON.stringify({formatVersion:1,status:"running",endAt:CLOCK64+30000,remainingSec:30,durationSec:30,savedAt:CLOCK64})
 }, w=>{ w.Date.now=()=>CLOCK64+45000; });
-check("v64 an expired timer returns as GO after restart and clears its temporary record", T64Expired.window.eval("restFinished && !restRunning && restRemaining===0") && T64Expired.window.document.getElementById("restDisplay").textContent==="GO!" && T64Expired.window.localStorage.getItem("forge:rest-timer")===null);
+const relaunchedReady64 = JSON.parse(T64Expired.window.localStorage.getItem("forge:rest-timer"));
+check("v65 relaunch or phone restart expiration resets to the last started duration", T64Expired.window.eval("!restRunning && !restPaused && restRemaining===0 && restReadySec===30") && T64Expired.window.document.getElementById("restDisplay").textContent==="0:30" && relaunchedReady64.status==="ready" && relaunchedReady64.durationSec===30);
+
+const T65VisibleExpired = boot(Object.assign({},V2_CFG,{restSec:75}), EMPTY_DATA, w=>{ w.Date.now=()=>CLOCK64; }, TEST_PROGRAM);
+T65VisibleExpired.window.eval(`activateView("work",null,false)`);
+T65VisibleExpired.window.document.getElementById("restStartBtn").dispatchEvent(new T65VisibleExpired.window.Event("click",{bubbles:true}));
+T65VisibleExpired.window.Date.now=()=>CLOCK64+76000;
+T65VisibleExpired.window.eval("tickRestCountdown()");
+const visibleReady65 = JSON.parse(T65VisibleExpired.window.localStorage.getItem("forge:rest-timer"));
+check("v65 visible timer expiration resets to the exact last started duration", T65VisibleExpired.window.eval("!restRunning && !restPaused && restRemaining===0 && restReadySec===75") && T65VisibleExpired.window.document.getElementById("restDisplay").textContent==="1:15" && !T65VisibleExpired.window.document.getElementById("restStartBtn").classList.contains("hidden"));
+
+const T65BackgroundExpired = boot(Object.assign({},V2_CFG,{restSec:120}), EMPTY_DATA, w=>{ w.Date.now=()=>CLOCK64; }, TEST_PROGRAM);
+T65BackgroundExpired.window.eval(`activateView("work",null,false)`);
+T65BackgroundExpired.window.document.getElementById("restStartBtn").dispatchEvent(new T65BackgroundExpired.window.Event("click",{bubbles:true}));
+T65BackgroundExpired.window.Date.now=()=>CLOCK64+121000;
+T65BackgroundExpired.window.document.dispatchEvent(new T65BackgroundExpired.window.Event("visibilitychange"));
+check("v65 background or unlock expiration resets to the exact last started duration", T65BackgroundExpired.window.eval("!restRunning && !restPaused && restReadySec===120") && T65BackgroundExpired.window.document.getElementById("restDisplay").textContent==="2:00");
+
+const timerSource65 = fs.readFileSync(path.join(__dirname,"..","scripts","04-weight.js"),"utf8");
+const timerSection65 = timerSource65.slice(timerSource65.indexOf("// ================== PLATE MATH & REST TIMER"), timerSource65.indexOf("// ================== SHARE PROGRAM"));
+check("v65 completed timer display no longer uses GO", !timerSection65.includes("GO!") && T65VisibleExpired.window.document.getElementById("restDisplay").textContent!=="GO!");
+check("v65 expiration clears the active deadline without restarting", T65VisibleExpired.window.eval("restEndsAt===0 && restInterval===null && !restRunning") && visibleReady65.status==="ready" && !Object.prototype.hasOwnProperty.call(visibleReady65,"endAt"));
 
 // ================= v59: audit-recommended structural protections =================
 check("v59 storage-use line renders an honest approximation", (()=>{ const B = boot(EXISTING_CFG, EMPTY_DATA); const t = B.window.document.getElementById("storageUseNote").textContent; return /~\d+ (KB|MB)/.test(t) && /approximate/.test(t); })());
@@ -975,6 +996,24 @@ check("v59 quota crunch: snapshot is rebuilt fresh after the sacrifice (self-hea
   Q59.window.eval(`localStorage.getItem("forge:lkg")!==null && lkgStatus.state==="ready"`) &&
   Q59.window.eval(`JSON.parse(localStorage.getItem("forge:lkg")).savedAt`) !== lkgBefore59);
 
+// ================= v66: optional progression + orientation-friendly barcode scanner =================
+const FreshAP66 = boot(null, null);
+check("v66 fresh installs default automatic progression off", FreshAP66.window.eval("cfg.autoProgressionOn===false") && JSON.parse(FreshAP66.window.localStorage.getItem("forge:cfg")).autoProgressionOn===false && FreshAP66.window.document.getElementById("autoProgressionToggleBtn").getAttribute("aria-pressed")==="false");
+const LegacyAP66 = boot(EXISTING_CFG, EMPTY_DATA);
+check("v66 legacy installs missing the new setting retain automatic progression on", LegacyAP66.window.eval("cfg.autoProgressionOn===true") && JSON.parse(LegacyAP66.window.localStorage.getItem("forge:cfg")).autoProgressionOn===true);
+const AP66 = boot(Object.assign({}, EXISTING_CFG, {autoProgressionOn:true}), EMPTY_DATA);
+const dAP66 = AP66.window.document;
+check("v66 Settings includes a dedicated automatic progression toggle", !!dAP66.getElementById("settingsTrainingDetails") && dAP66.getElementById("autoProgressionToggleBtn").textContent.includes("On") && dAP66.getElementById("autoProgressionToggleBtn").getAttribute("aria-pressed")==="true");
+dAP66.getElementById("autoProgressionToggleBtn").dispatchEvent(new AP66.window.Event("click",{bubbles:true}));
+check("v66 progression toggle persists an explicit off setting", AP66.window.eval("cfg.autoProgressionOn===false") && JSON.parse(AP66.window.localStorage.getItem("forge:cfg")).autoProgressionOn===false && dAP66.getElementById("autoProgressionToggleBtn").getAttribute("aria-pressed")==="false");
+check("v66 disabled progression carries completed weights forward unchanged", AP66.window.eval(`(()=>{const x=prefillRows({name:"Bench Press",scheme:"4×5"},[{w:100,r:5},{w:100,r:5},{w:100,r:5},{w:100,r:5}]);return !x.auto&&x.rows.every(r=>r.w===100&&r.r===5);})()`));
+dAP66.getElementById("autoProgressionToggleBtn").dispatchEvent(new AP66.window.Event("click",{bubbles:true}));
+check("v66 assisted progression reduces assistance and labels it clearly", AP66.window.eval(`(()=>{const x=prefillRows({name:"Assisted Wide Grip Pull Ups",scheme:"3×8"},[{w:80,r:8},{w:80,r:8},{w:80,r:8}]);return x.auto&&x.autoDelta===-5&&x.rows.every(r=>r.w===75);})()`));
+const foodSrc66 = fs.readFileSync(path.join(__dirname, "..", "scripts", "02-food.js"), "utf8");
+check("v66 scanner enables native BarcodeDetector with a safe fallback", foodSrc66.includes("useBarCodeDetectorIfSupported: true") && foodSrc66.includes("new window.Html5Qrcode"));
+check("v66 scanner checks frames faster and uses the adaptive square crop", foodSrc66.includes("fps: 20") && foodSrc66.includes("qrbox: barcodeScanBox") && AP66.window.eval(`(()=>{const b=barcodeScanBox(320,500);return b.width===288&&b.height===288;})()`));
+check("v66 scanner overlay tells users not to rotate the phone", /Keep the phone upright/.test(dAP66.getElementById("scanHint").textContent) && /horizontal or vertical/.test(dAP66.getElementById("scanHint").textContent));
+
 // ================= v58: self-hosted barcode scanner =================
 check("v58 vendored scanner library exists in the repo", fs.existsSync(path.join(__dirname, "..", "vendor", "html5-qrcode.min.js")));
 check("v58 scanner license notice preserved alongside the library", (()=>{ const p=path.join(__dirname, "..", "vendor", "html5-qrcode.LICENSE.txt"); return fs.existsSync(p) && /Apache License/.test(fs.readFileSync(p,"utf8")); })());
@@ -993,7 +1032,8 @@ check("ALT_MAP loads from data-foods.js", P.window.eval("typeof ALT_MAP==='objec
 check("FAQ loads from data-faq.js", P.window.eval("Array.isArray(FAQ) && FAQ.length > 10"));
 check("FAQ explains exercise-level Save/Completed/Edit flow", P.window.eval(`FAQ.some(x=>x.q&&/Unsaved, Completed/.test(x.q)&&/Save Exercise/.test(x.a)&&/Log session/.test(x.a))`));
 check("FAQ no longer instructs per-set checkmarks", P.window.eval(`!FAQ.some(x=>x.a&&(x.a.includes("tap <b>✓</b>")||x.a.includes("Checking ✓")))`));
-check("FAQ states full auto-progression requirements", P.window.eval(`FAQ.some(x=>x.q==="What does '+5 auto' mean?"&&x.a.includes("programmed number of sets")&&x.a.includes("top</b> of a range"))`));
+check("FAQ documents optional automatic progression and assisted direction", P.window.eval(`FAQ.some(x=>x.q==="How does automatic progression work?"&&x.a.includes("Settings → Training")&&x.a.includes("5 lb less assistance")&&x.a.includes("New users start with it off")&&x.a.includes("Existing users retain")&&x.a.includes("carries the last logged weights forward unchanged"))`));
+check("FAQ documents upright horizontal-or-vertical barcode scanning", P.window.eval(`FAQ.some(x=>x.q==="How does barcode scanning work?"&&x.a.includes("keep the phone upright")&&x.a.includes("horizontal or vertical")&&x.a.includes("native detector"))`));
 check("FAQ documents food deletion Undo", P.window.eval(`FAQ.some(x=>x.a&&x.a.includes("six-second <b>Undo</b>"))`));
 check("FAQ documents protected mode and recovery", P.window.eval(`FAQ.some(x=>x.q==="What are Protected mode and recovery?"&&/last-known-good snapshot/.test(x.a)&&/do not uninstall/.test(x.a))`));
 check("FAQ documents the update toast", P.window.eval(`FAQ.some(x=>x.q&&/updates work/.test(x.q)&&/Use it now/.test(x.a)&&/Later/.test(x.a))`));
@@ -1010,7 +1050,7 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the four data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+"/.test(sw));
-check("v64 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v64"'));
+check("v67 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v67"'));
 const rawIndex = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 check("data scripts load before the app scripts (raw file order)",
   ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js"].every(f=>

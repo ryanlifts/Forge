@@ -8,7 +8,7 @@ const SCHEMA_VERSION = 2, RECOVERY_FORMAT_VERSION = 1;
 const REST_TIMER_FORMAT_VERSION = 1;
 const AI_CFG_FIELDS = ["anthropicKey","openaiKey","aiProvider","aiModelAnth","aiModelOai","foodHandoffOn"];
 
-const DEFAULT_CFG = { startWt:0, goalWt:0, calTarget:0, proTarget:0, carbGoal:0, fatGoal:0, accent:"gold", foodSuggestionsOn:false, foodSuggestionsWeightLoss:true, foodSuggestionsAvoid:"" };
+const DEFAULT_CFG = { startWt:0, goalWt:0, calTarget:0, proTarget:0, carbGoal:0, fatGoal:0, accent:"gold", autoProgressionOn:false, foodSuggestionsOn:false, foodSuggestionsWeightLoss:true, foodSuggestionsAvoid:"" };
 const ACCENT_KEYS = ["ember","steel","emerald","crimson","violet","gold","pink"];
 
 const DEFAULT_PROGRAM = {
@@ -110,9 +110,11 @@ function inspectRestTimerRaw(raw){
   const version = record.formatVersion;
   if (!Number.isInteger(version) || version<1) return {ok:false, code:"format"};
   if (version>REST_TIMER_FORMAT_VERSION) return {ok:false, newer:true, code:"newer", record:record};
-  if (version!==REST_TIMER_FORMAT_VERSION || !["running","paused"].includes(record.status)) return {ok:false, code:"shape"};
+  if (version!==REST_TIMER_FORMAT_VERSION || !["running","paused","ready"].includes(record.status)) return {ok:false, code:"shape"};
+  if (Object.prototype.hasOwnProperty.call(record,"durationSec") && !(Number.isFinite(record.durationSec) && record.durationSec>0)) return {ok:false, code:"shape"};
   if (record.status==="running" && !(Number.isFinite(record.endAt) && record.endAt>0)) return {ok:false, code:"shape"};
   if (record.status==="paused" && !(Number.isFinite(record.remainingSec) && record.remainingSec>0)) return {ok:false, code:"shape"};
+  if (record.status==="ready" && !(Number.isFinite(record.durationSec) && record.durationSec>0)) return {ok:false, code:"shape"};
   return {ok:true, record:record};
 }
 function readRestTimerState(){
@@ -186,6 +188,9 @@ function migrateCfgObject(obj){
   if (obj.calSchedMode==="weekend") obj.calSchedMode = "frisat";
   if (!obj.calSchedMode) obj.calSchedMode = "same";
   if (!ACCENT_KEYS.includes(obj.accent)) obj.accent = "gold";
+  // prepareState supplies an explicit boolean before defaults are merged: fresh installs
+  // start off, legacy installs missing the field retain the historic on behavior.
+  obj.autoProgressionOn = obj.autoProgressionOn === true;
   return obj;
 }
 // Retained (not dead): the permanent suite's range-era restore simulation exercises this
@@ -262,6 +267,11 @@ function prepareState(rawCfg, rawData, rawProgram, options){
   if (!parsed.program.missing && !isPlainObject(parsed.program.value)) return failedPreparation("Saved program is not an object.", "failure", parsed, originals, makeDiagnostic("validation","program","not-object","Saved program is not an object."));
 
   const rawCfgObj = parsed.cfg.missing ? {} : cloneJSON(parsed.cfg.value);
+  // v66 introduced this setting without changing the primary schema. A truly fresh
+  // install has no settings record and starts with progression off. Any pre-v66
+  // settings record that lacks the field is an existing install and keeps the old
+  // automatic-progression behavior. Explicit true/false choices are preserved.
+  if (!hasOwn(rawCfgObj,"autoProgressionOn")) rawCfgObj.autoProgressionOn = !parsed.cfg.missing;
   const hasVersion = hasOwn(rawCfgObj, "schemaVersion");
   const version = hasVersion ? rawCfgObj.schemaVersion : 0;
   if (!Number.isInteger(version) || version<0){

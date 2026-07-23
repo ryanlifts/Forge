@@ -159,29 +159,36 @@ function parseScheme(scheme){
   const topReps = m[3] ? Math.max(reps, parseInt(m[3],10)) : reps;
   return {sets:parseInt(m[1],10), reps:reps, topReps:topReps};
 }
+function autoProgressionEnabled(){ return cfg.autoProgressionOn !== false; }
+function isAssistedExercise(name){ return /\bassist(?:ed|ance)\b/i.test(String(name||"")); }
+function progressionDeltaFor(ex){ return isAssistedExercise(ex&&ex.name) ? -5 : 5; }
 function prefillRows(ex, lastVal){
   const sch = parseScheme(ex.scheme);
   if (lastVal){
     const rows = toRows(lastVal);
     if (rows.length){
-      // auto-progression: complete the programmed sets at the top of the rep target,
-      // with every logged set using the same positive weight, before suggesting +5
-      let auto = false;
-      if (sch && rows.length>=sch.sets && rows.every(r=>r.r>=sch.topReps)){
+      // Optional auto-progression: complete the programmed sets at the top of the rep target,
+      // with every logged set using the same positive weight. Normal loads add 5 lb;
+      // assisted movements reduce assistance by 5 lb, which is the harder direction.
+      let auto = false, autoDelta = 0;
+      if (autoProgressionEnabled() && sch && rows.length>=sch.sets && rows.every(r=>r.r>=sch.topReps)){
         const w0 = rows[0].w;
-        if (rows.every(r=>r.w===w0) && w0>0){
-          rows.forEach(r=>{ r.w = w0+5; r.r = sch.reps; });
+        const delta = progressionDeltaFor(ex);
+        const nextWeight = Number(w0)+delta;
+        if (rows.every(r=>r.w===w0) && w0>0 && nextWeight>0){
+          rows.forEach(r=>{ r.w = nextWeight; r.r = sch.reps; });
           auto = true;
+          autoDelta = delta;
         }
       }
-      return {rows:rows, auto:auto};
+      return {rows:rows, auto:auto, autoDelta:autoDelta};
     }
   }
   // no history: build empty rows from scheme
   const n = sch ? sch.sets : 3;
   const rows = [];
   for(let i=0;i<n;i++) rows.push({w:"", r: sch?sch.reps:"", done:false, touched:false});
-  return {rows:rows, auto:false};
+  return {rows:rows, auto:false, autoDelta:0};
 }
 function initSessionState(){
   workoutDraftLoaded = false;
@@ -194,10 +201,10 @@ function initSessionState(){
   sessionList().forEach(ex=>{
     const isCardio = ex.name.indexOf("[Cardio] ")===0;
     if (isCardio){
-      sessionState[ex.name] = {mode:"text", rows:[], text:"", textTouched:false, auto:false, saved:null, status:"plan"};
+      sessionState[ex.name] = {mode:"text", rows:[], text:"", textTouched:false, auto:false, autoDelta:0, saved:null, status:"plan"};
     } else {
       const pf = prefillRows(ex, last && last.sets ? last.sets[ex.name.replace("[Cardio] ","")] : null);
-      sessionState[ex.name] = {mode:"rows", rows:pf.rows, text:"", textTouched:false, auto:pf.auto, saved:null, status:"plan"};
+      sessionState[ex.name] = {mode:"rows", rows:pf.rows, text:"", textTouched:false, auto:pf.auto, autoDelta:pf.autoDelta, saved:null, status:"plan"};
     }
   });
 }
@@ -339,9 +346,9 @@ function resumeWorkoutDraft(){
   Object.keys(d.sets||{}).forEach(key=>{
     const stateName = Object.keys(sessionState).find(n=>n.replace("[Cardio] ","")===key) || key;
     const val = d.sets[key];
-    if (!sessionState[stateName]) sessionState[stateName] = {mode:"rows",rows:[],text:"",textTouched:false,auto:false,saved:null,status:"plan"};
-    if (Array.isArray(val)) sessionState[stateName] = {mode:"rows",rows:[],text:"",textTouched:false,auto:false,saved:cloneJSON(val),status:"saved"};
-    else sessionState[stateName] = {mode:"text",rows:[],text:"",textTouched:false,auto:false,saved:String(val),status:"saved"};
+    if (!sessionState[stateName]) sessionState[stateName] = {mode:"rows",rows:[],text:"",textTouched:false,auto:false,autoDelta:0,saved:null,status:"plan"};
+    if (Array.isArray(val)) sessionState[stateName] = {mode:"rows",rows:[],text:"",textTouched:false,auto:false,autoDelta:0,saved:cloneJSON(val),status:"saved"};
+    else sessionState[stateName] = {mode:"text",rows:[],text:"",textTouched:false,auto:false,autoDelta:0,saved:String(val),status:"saved"};
   });
   activeSessionType = wDaySel.value;
   workoutDraftLoaded = true;
@@ -423,8 +430,8 @@ function renderSessionInputs(){
     if (!sessionState[ex.name]) {
       const pf = prefillRows(ex, last && last.sets ? last.sets[ex.name.replace("[Cardio] ","")] : null);
       sessionState[ex.name] = ex.name.indexOf("[Cardio] ")===0
-        ? {mode:"text", rows:[], text:"", textTouched:false, auto:false, saved:null, status:"plan"}
-        : {mode:"rows", rows:pf.rows, text:"", textTouched:false, auto:pf.auto, saved:null, status:"plan"};
+        ? {mode:"text", rows:[], text:"", textTouched:false, auto:false, autoDelta:0, saved:null, status:"plan"}
+        : {mode:"rows", rows:pf.rows, text:"", textTouched:false, auto:pf.auto, autoDelta:pf.autoDelta, saved:null, status:"plan"};
     }
     const st = sessionState[ex.name];
     const prevVal = last && last.sets ? last.sets[ex.name.replace("[Cardio] ","")] : null;
@@ -463,7 +470,7 @@ function renderSessionInputs(){
     head.className = "x-head";
     head.innerHTML = '<span><b>'+esc(ex.name.replace("[Cardio] ",""))+'</b>'
       +(ex.scheme?' <span class="scheme">\u00b7 '+esc(ex.scheme)+'</span>':'')
-      +(st.auto?' <span class="autoUp">+5 auto</span>':'')+'</span>';
+      +(st.auto?' <span class="autoUp">'+(st.autoDelta<0?'−5 assist':'+5 auto')+'</span>':'')+'</span>';
     const tools = document.createElement("div");
     tools.className = "x-tools";
     if (prevVal){
@@ -797,15 +804,15 @@ function startEditWorkout(i){
       const val = sess.sets[key];
       if (val==null){
         sessionState[exName] = exName.indexOf("[Cardio] ")===0
-          ? {mode:"text", rows:[], text:"", textTouched:false, auto:false, saved:null, status:"plan"}
-          : {mode:"rows", rows:[{w:"",r:"",done:false,touched:false}], text:"", textTouched:false, auto:false, saved:null, status:"plan"};
+          ? {mode:"text", rows:[], text:"", textTouched:false, auto:false, autoDelta:0, saved:null, status:"plan"}
+          : {mode:"rows", rows:[{w:"",r:"",done:false,touched:false}], text:"", textTouched:false, auto:false, autoDelta:0, saved:null, status:"plan"};
       } else if (Array.isArray(val)){
-        sessionState[exName] = {mode:"rows", rows:[], text:"", textTouched:false, auto:false, saved:val.map(r=>({w:r.w, r:r.r})), status:"saved"};
+        sessionState[exName] = {mode:"rows", rows:[], text:"", textTouched:false, auto:false, autoDelta:0, saved:val.map(r=>({w:r.w, r:r.r})), status:"saved"};
       } else {
         const rows = toRows(val);
         sessionState[exName] = rows.length
-          ? {mode:"rows", rows:[], text:"", textTouched:false, auto:false, saved:rows.map(r=>({w:r.w, r:r.r})), status:"saved"}
-          : {mode:"text", rows:[], text:"", textTouched:false, auto:false, saved:String(val), status:"saved"};
+          ? {mode:"rows", rows:[], text:"", textTouched:false, auto:false, autoDelta:0, saved:rows.map(r=>({w:r.w, r:r.r})), status:"saved"}
+          : {mode:"text", rows:[], text:"", textTouched:false, auto:false, autoDelta:0, saved:String(val), status:"saved"};
       }
     });
     renderSessionInputs();

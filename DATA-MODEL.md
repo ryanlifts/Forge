@@ -1,6 +1,6 @@
 # BlackPyre Data Model
 
-**Current as of v64 (July 2026). Primary schemaVersion: 2. Recovery format: 1.**
+**Current as of v66 (July 2026). Primary schemaVersion: 2. Recovery format: 1.**
 
 ## Storage keys
 
@@ -12,7 +12,7 @@ BlackPyre has three permanent **primary user-state keys**:
 | `forge:data` | All logged data (object) |
 | `forge:program` | Loaded training program (object) |
 
-v46–v64 add permanent **internal, device-only keys**:
+v46–v66 add permanent **internal, device-only keys**:
 
 | Key | Contents |
 |---|---|
@@ -21,7 +21,7 @@ v46–v64 add permanent **internal, device-only keys**:
 | `forge:lkg:older` | Older validated whole-state snapshot |
 | `forge:quarantine` | One exact pre-recovery copy of unsafe primary strings plus diagnosis |
 | `forge:install` | Established-install marker used to distinguish data loss from a true first run |
-| `forge:rest-timer` | Temporary running/paused rest-timer state that survives suspension and restart |
+| `forge:rest-timer` | Temporary running/paused/ready rest-timer state that survives suspension and restart |
 
 All nine primary/internal names are load-bearing once shipped and must not be renamed casually. The `forge:`
 prefix predates the BlackPyre rebrand and is intentionally preserved. The legacy read-only
@@ -33,7 +33,7 @@ removes, or modifies that legacy key.
 `schemaVersion` is physically stored in `forge:cfg`, but versions the complete **primary**
 state and normal backup envelope: settings, logged data, and program.
 
-| Raw value | Meaning / behavior in v64 |
+| Raw value | Meaning / behavior in v66 |
 |---|---|
 | property absent or integer `0` | Pre-versioning legacy state; run numbered migrations from step 0 |
 | integer `1` | v45–v55 state; migrate 1 → 2 by adding an empty active-workout draft field |
@@ -180,14 +180,15 @@ The marker is written only after a healthy validated snapshot exists. It contain
 or API keys. Together with existing settings, snapshots, or quarantine, it proves that missing
 `forge:data` or `forge:cfg` is a recovery incident rather than a first run. A marker with a newer
 format is treated as established evidence and is never overwritten by this version. A true fresh
-install has no primary/internal evidence; v64 writes a complete three-key default primary state
+install has no primary/internal evidence; v65 writes a complete three-key default primary state
 before creating the first snapshot and marker.
 
 ## forge:rest-timer
 
-This is temporary device-only runtime state, separate from primary user data and recovery snapshots.
-It is written only when the manual Train rest timer starts, pauses, resumes, or gains time, and is
-removed when the timer ends or the user taps End.
+This is device-only runtime state, separate from primary user data and recovery snapshots.
+It is written when the manual Train rest timer starts, pauses, resumes, gains time, or completes.
+After completion it keeps only the last started duration in a ready record; tapping End or choosing
+another idle duration removes that temporary record.
 
 Running record:
 
@@ -197,6 +198,7 @@ Running record:
   "status": "running",
   "endAt": 2000000090000,
   "remainingSec": 90,
+  "durationSec": 90,
   "savedAt": 2000000000000
 }
 ```
@@ -208,7 +210,19 @@ Paused record:
   "formatVersion": 1,
   "status": "paused",
   "remainingSec": 45,
+  "durationSec": 90,
   "savedAt": 2000000045000
+}
+```
+
+Completed/ready record:
+
+```json
+{
+  "formatVersion": 1,
+  "status": "ready",
+  "durationSec": 90,
+  "savedAt": 2000000090000
 }
 ```
 
@@ -216,8 +230,9 @@ Rules:
 - A running timer is calculated from `endAt - Date.now()`, not from the number of interval callbacks.
   Background suspension therefore cannot freeze elapsed time.
 - A paused timer preserves the exact rounded-up seconds remaining and resumes from a new finish time.
-- The record survives a full app or phone restart. If its finish time has already passed, the app shows
-  `GO!` once and removes the temporary record.
+- `durationSec` is the exact duration used to start that countdown; adding time does not replace it.
+- The record survives a full app or phone restart. If its finish time has already passed, the app stops,
+  clears `endAt`, and stores a ready record so the display resets to `durationSec` without auto-restarting.
 - It is excluded from primary schemaVersion, normal backups, LKG snapshots, quarantine, and migrations.
 - A newer format is never overwritten or removed by an older app.
 
@@ -319,6 +334,8 @@ fallback. The app cannot verify a browser download and states that limit honestl
 | v62 | No primary schema migration | Adds a static 120-food USDA Standard Reference suggestion catalog outside localStorage; cfg fields and stored food/log shapes remain unchanged |
 | v63 | No primary schema migration; recovery protections expanded | Adds established-install marker, missing-primary protected boot/runtime detection, three rolling LKG generations, populated-snapshot retention, manual snapshot restore, and exact storage diagnostic export |
 | v64 | No primary schema migration; device-only timer format 1 added | Stores running rest timers by absolute finish time and paused timers by remaining seconds so suspension and restart cannot freeze them |
+| v65 | No primary schema migration; timer format 1 extended compatibly | Adds `durationSec` plus a deadline-free `ready` status so expiration resets to the exact last started duration instead of showing a completion word |
+| v66 | No primary schema migration | Adds `cfg.autoProgressionOn` (fresh-install default `false`; missing legacy values migrate to `true`) so automatic progression can be disabled; assisted exercise names reduce assistance by 5 lb when progression is enabled |
 
 Old backups from any era must continue restoring correctly; the permanent suite proves the
 range-era path.
@@ -329,3 +346,7 @@ The coach may embed JSON blocks: `{"bpTargets":{calTarget,proTarget,carbGoal,fat
 (legacy ranges tolerated via averaging) for an **Apply targets** action; a `program` object
 for **Load**; and food estimates `{"foods":[{name,cal,pro,carb,fat}]}` with all four macros.
 Parsing normalizes smart quotes, fences, and zero-width junk. Raw AI responses are never persisted.
+
+
+### Training progression setting
+`cfg.autoProgressionOn` is a boolean stored with normal settings. A fresh install starts at `false`; a pre-v66 settings record missing the field migrates to `true`; explicit `true` or `false` choices are preserved.

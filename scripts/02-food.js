@@ -370,6 +370,12 @@ async function runSearch(){
 }
 
 // --- camera barcode scanning (lazy-loads scanner library on first use) ---
+// A square scan box keeps both horizontal and 90-degree barcodes inside the decoded crop.
+function barcodeScanBox(viewfinderWidth, viewfinderHeight){
+  const minSide = Math.min(Number(viewfinderWidth)||0, Number(viewfinderHeight)||0);
+  const side = Math.max(120, Math.min(380, Math.floor(minSide*0.9)));
+  return {width:side, height:side};
+}
 let scanner = null, scannerLibLoading = null;
 function loadScannerLib(){
   if (window.Html5Qrcode) return Promise.resolve();
@@ -397,14 +403,17 @@ document.getElementById("scanBtn").addEventListener("click", async ()=>{
   }
   try {
     await loadScannerLib();
-    scanner = new window.Html5Qrcode("scanRegion");
     const formats = [
       window.Html5QrcodeSupportedFormats.EAN_13, window.Html5QrcodeSupportedFormats.EAN_8,
       window.Html5QrcodeSupportedFormats.UPC_A, window.Html5QrcodeSupportedFormats.UPC_E,
     ];
+    scanner = new window.Html5Qrcode("scanRegion", {
+      formatsToSupport: formats,
+      experimentalFeatures: { useBarCodeDetectorIfSupported: true }
+    });
     await scanner.start(
       { facingMode: "environment" },
-      { fps: 10, qrbox: { width: 260, height: 140 }, formatsToSupport: formats },
+      { fps: 20, qrbox: barcodeScanBox },
       async (decoded)=>{
         await stopScanner();
         document.getElementById("barcodeInput").value = decoded;

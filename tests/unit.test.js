@@ -33,6 +33,8 @@ check("reps > 30 rejected (formula breaks down)", E(`parseBestSet([{w:100,r:31}]
 check("zero/missing values rejected", E(`parseBestSet([{w:0,r:5},{r:5},{w:100}])`)===null);
 
 // ---------- workout auto-progression ----------
+check("fresh-install configuration defaults automatic progression off", E(`DEFAULT_CFG.autoProgressionOn===false`));
+check("legacy settings keep automatic progression enabled", E(`cfg.autoProgressionOn===true`));
 r = E(`parseScheme("4×5")`);
 check("fixed-rep scheme exposes one progression target", r.sets===4 && r.reps===5 && r.topReps===5);
 r = E(`parseScheme("3x8-12")`);
@@ -49,6 +51,15 @@ r = E(`prefillRows({scheme:"4×5"}, [{w:100,r:5},{w:100,r:5},{w:95,r:5},{w:100,r
 check("mixed weights never auto-progress", r.auto===false);
 r = E(`prefillRows({scheme:"4×5"}, [{w:0,r:5},{w:0,r:5},{w:0,r:5},{w:0,r:5}])`);
 check("zero weight never auto-progresses", r.auto===false);
+E(`cfg.autoProgressionOn=false`);
+r = E(`prefillRows({name:"Bench Press",scheme:"4×5"}, [{w:100,r:5},{w:100,r:5},{w:100,r:5},{w:100,r:5}])`);
+check("automatic progression toggle off preserves the last logged weight", r.auto===false && r.rows.every(x=>x.w===100 && x.r===5));
+E(`cfg.autoProgressionOn=true`);
+r = E(`prefillRows({name:"Assisted Wide Grip Pull Ups",scheme:"3×8"}, [{w:100,r:8},{w:100,r:8},{w:100,r:8}])`);
+check("assisted exercises progress by reducing assistance", r.auto===true && r.autoDelta===-5 && r.rows.every(x=>x.w===95 && x.r===8));
+r = E(`prefillRows({name:"Assisted Pull-Up",scheme:"3×5"}, [{w:5,r:5},{w:5,r:5},{w:5,r:5}])`);
+check("assisted progression never suggests zero assistance as a saved load", r.auto===false && r.rows.every(x=>x.w===5));
+check("barcode scan box is square for either barcode orientation", E(`JSON.stringify(barcodeScanBox(400,300))`)==='{"width":270,"height":270}');
 
 // ---------- workout completion integrity (v51 exercise-level engine) ----------
 r = E(`validateExerciseEntry({mode:"rows",rows:[{w:105,r:5,touched:false},{w:105,r:5,touched:false}],text:"",textTouched:false})`);
@@ -146,6 +157,7 @@ check("primary schema 2 and recovery format 1 remain separate contracts", E(`SCH
 // ---------- v64 device-only rest timer record ----------
 check("v64 running rest timer record validates", E(`inspectRestTimerRaw('${JSON.stringify({formatVersion:1,status:"running",endAt:2000000000000,remainingSec:90,savedAt:1999999990000})}').ok`)===true);
 check("v64 paused rest timer record validates", E(`inspectRestTimerRaw('${JSON.stringify({formatVersion:1,status:"paused",remainingSec:47,savedAt:1999999990000})}').ok`)===true);
+check("v65 completed rest timer record preserves its ready duration without a deadline", E(`inspectRestTimerRaw('${JSON.stringify({formatVersion:1,status:"ready",durationSec:75,savedAt:2000000000000})}').ok`)===true);
 check("v64 malformed rest timer record is rejected", E(`inspectRestTimerRaw('${JSON.stringify({formatVersion:1,status:"running",endAt:"later"})}').code`)==="shape");
 check("v64 newer rest timer record receives version protection", E(`inspectRestTimerRaw('${JSON.stringify({formatVersion:2,status:"running",endAt:2000000000000})}').newer`)===true);
 
