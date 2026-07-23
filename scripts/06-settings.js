@@ -61,6 +61,10 @@ function captureSetupStep(){
     const sel=document.getElementById("suSched"); if(sel) setupChoice.schedMode=sel.value;
     if(setupChoice.schedMode==="custom") setupChoice.schedDays=[0,1,2,3,4,5,6].map(i=>Number(document.getElementById("suSched"+i).value)||0);
   }
+  if (setupStep===6){
+    const usda=document.getElementById("suUsda");
+    if(usda){ cfg.usdaKey=usda.value.trim(); saveCfg(); }
+  }
 }
 function validateSetupStep(){
   captureSetupStep();
