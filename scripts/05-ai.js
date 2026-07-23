@@ -325,7 +325,7 @@ function foodKudos(entry){
 
 // ================== AI ENGINE (bring-your-own-key) ==================
 const AI_DEFAULT_MODELS = { anthropic:"claude-sonnet-4-6", openai:"gpt-4o" };
-function aiProvider(){ return cfg.aiProvider || "anthropic"; }
+function aiProvider(){ return cfg.aiProvider || "handoff"; }
 function aiModelFor(p){
   const override = p==="openai" ? cfg.aiModelOai : cfg.aiModelAnth;
   return (override && override.trim()) ? override.trim() : AI_DEFAULT_MODELS[p];
