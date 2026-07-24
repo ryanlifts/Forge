@@ -638,6 +638,7 @@
         = <b class="ember-text" id="calcCal">0</b> kcal · <b class="ember-text" id="calcPro">0</b>g P · <b id="calcCarb">0</b>g C · <b id="calcFat">0</b>g F
       </div>
       <button class="btn mt14" id="addSelBtn">Add to log</button>
+      <button class="xbtn mt10 hidden" id="cancelSelEditBtn" style="width:100%;">Cancel edit</button>
     </div>
 
     <div class="card">
@@ -984,6 +985,9 @@
     <div class="card">
       <div class="label" style="margin-bottom:10px;">Data</div>
       <button class="btn ghost small" id="exportDataBtn">Back up all data (.json)</button>
+      <div style="height:10px;"></div>
+      <button class="btn ghost small" id="shareDataBtn">Share a backup</button>
+      <div class="note" style="margin-top:8px;">Back up saves automatically to Files → On My iPhone → BlackPyre. Share creates a fresh backup and opens the share sheet.</div>
       <div class="note" id="storageUseNote" style="margin-top:8px;"></div>
       <div style="height:10px;"></div>
       <button class="btn ghost small" id="importDataBtn">Restore from backup</button>

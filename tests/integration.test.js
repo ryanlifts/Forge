@@ -872,6 +872,81 @@ dF51.getElementById("addSelBtn").dispatchEvent(new F51.window.Event("click",{bub
 check("v51 logging from search returns to the search box for the next entry", F51.window.eval("window.__f51 && window.__f51.id")==="foodQuery" && F51.window.eval("data.food[todayStr()].length")===4);
 check("v51 handoff behavior untouched by food changes", !!dF51.getElementById("hfPasteBtn"));
 
+
+// ================= editable slider portions + stable usual-meal identity =================
+const FoodEdit = boot(V2_CFG, EMPTY_DATA);
+const dFoodEdit = FoodEdit.window.document;
+const clickFoodEdit = id=>dFoodEdit.getElementById(id).dispatchEvent(new FoodEdit.window.Event("click",{bubbles:true}));
+FoodEdit.window.eval(`
+  currentMeal="breakfast"; renderMealSeg();
+  selectFood({name:"Greek yogurt",brand:"Test brand",cal100:60,pro100:10,carb100:4,fat100:0.5,servingG:170,servingLabel:"170g cup"});
+  qtyUnitEl.value="g"; qtyAmountEl.value=150; syncSliderToUnit(); updateCalc();
+`);
+clickFoodEdit("addSelBtn");
+check("slider-added foods preserve the source nutrition and original amount needed for editing",
+  FoodEdit.window.eval(`
+    (function(){
+      const f=data.food[todayStr()][0];
+      return f.amount===150 && f.unit==="g" && f.grams===150
+        && f.foodKey==="food:greek yogurt|test brand"
+        && f.sourceFood && f.sourceFood.name==="Greek yogurt"
+        && f.sourceFood.cal100===60 && f.sourceFood.servingG===170;
+    })()
+  `));
+FoodEdit.window.eval(`startEditEntry(0)`);
+check("editing a slider-added food reopens the amount slider instead of the manual form",
+  !dFoodEdit.getElementById("calcCard").classList.contains("hidden")
+  && dFoodEdit.getElementById("addSelBtn").textContent==="Update entry"
+  && dFoodEdit.getElementById("qtyUnit").value==="g"
+  && Number(dFoodEdit.getElementById("qtyAmount").value)===150
+  && dFoodEdit.getElementById("mName").value==="");
+dFoodEdit.getElementById("qtyAmount").value="200";
+dFoodEdit.getElementById("qtyAmount").dispatchEvent(new FoodEdit.window.Event("input",{bubbles:true}));
+clickFoodEdit("addSelBtn");
+check("slider editing updates the existing row and recalculates nutrition without adding another log",
+  FoodEdit.window.eval(`
+    (function(){
+      const f=data.food[todayStr()][0];
+      return data.food[todayStr()].length===1 && f.name==="200g Greek yogurt"
+        && f.cal===120 && f.pro===20 && f.meal==="breakfast"
+        && data.foodCounts["Greek yogurt|Test brand"]===1
+        && data.recents[0].lastAmt==="200" && data.recents[0].lastUnit==="g";
+    })()
+  `));
+FoodEdit.window.eval(`_lastAddT=0; addEntry({name:"125g Greek yogurt",cal:75,pro:13,carb:5,fat:1,meal:"breakfast"}); startEditEntry(1);`);
+check("pre-update slider logs can be reconstructed from Recent foods and reopen in the slider",
+  dFoodEdit.getElementById("addSelBtn").textContent==="Update entry"
+  && dFoodEdit.getElementById("qtyUnit").value==="g"
+  && Number(dFoodEdit.getElementById("qtyAmount").value)===125);
+clickFoodEdit("cancelSelEditBtn");
+FoodEdit.window.eval(`_lastAddT=0; addEntry({name:"Homemade casserole",cal:400,pro:25,carb:35,fat:18,meal:"breakfast"}); startEditEntry(2);`);
+check("legacy and manually entered foods still open the manual editor",
+  dFoodEdit.getElementById("mName").value==="Homemade casserole"
+  && dFoodEdit.getElementById("addManualBtn").textContent==="Update entry"
+  && dFoodEdit.getElementById("cancelSelEditBtn").classList.contains("hidden"));
+
+const usualFood = {};
+for(let i=1;i<=5;i++){
+  usualFood[dstr(-i)] = [
+    {name:(i%2?"150g Greek yogurt":"200g Greek yogurt"),cal:90,pro:15,carb:6,fat:1,meal:"breakfast"},
+    {name:"1 serving · Granola",cal:180,pro:5,carb:30,fat:5,meal:"breakfast"},
+    {name:(i%2?"4oz Blueberries":"5oz Blueberries"),cal:70,pro:1,carb:17,fat:0,meal:"breakfast"},
+    {name:"2 Eggs",cal:140,pro:12,carb:1,fat:10,meal:"breakfast"},
+    {name:"12oz Coffee",cal:5,pro:0,carb:1,fat:0,meal:"breakfast"}
+  ];
+}
+const UsualIdentity = boot(V2_CFG,Object.assign({},EMPTY_DATA,{food:usualFood}));
+UsualIdentity.window.eval(`currentMeal="breakfast"; renderMealSeg(); renderFood();`);
+check("usual breakfast recognizes all five recurring foods even when slider amounts changed",
+  UsualIdentity.window.eval(`usualFor("breakfast").length`)===5
+  && /Greek yogurt/.test(UsualIdentity.window.document.getElementById("usualItems").textContent)
+  && /Blueberries/.test(UsualIdentity.window.document.getElementById("usualItems").textContent)
+  && /Coffee/.test(UsualIdentity.window.document.getElementById("usualItems").textContent));
+UsualIdentity.window.eval(`addEntry({name:"175g Greek yogurt",cal:105,pro:18,carb:7,fat:1,meal:"breakfast"}); renderUsual();`);
+check("usual breakfast removes an already-logged food by stable identity rather than exact amount text",
+  /\(4 items\)/.test(UsualIdentity.window.document.getElementById("usualLogBtn").textContent)
+  && !/Greek yogurt/.test(UsualIdentity.window.document.getElementById("usualItems").textContent));
+
 // ================= v68: default ChatGPT handoff provider =================
 const H68Cfg = Object.assign({},V2_CFG);
 delete H68Cfg.aiProvider;
@@ -2380,6 +2455,104 @@ check("Stage 2 exact restore survives the next healthy native boot without metad
   )===Stage2RestartPreservationBefore
   && nativeVaultField(Stage2Restart,"restoreState")==="not-needed");
 
+
+
+// ================= native verified backup sharing =================
+const NativeBackupFiles = new Map();
+const NativeBackupShares = [];
+const NativeBackup = boot(
+  V2_CFG,
+  Object.assign({},EMPTY_DATA,{meta:{lastBackup:null,logsSince:7}}),
+  w=>{
+    w.Capacitor = {
+      getPlatform:()=>"ios",
+      isNativePlatform:()=>true,
+      isPluginAvailable:name=>name==="Filesystem" || name==="Share",
+      Plugins:{
+        Filesystem:{
+          writeFile:async options=>{
+            NativeBackupFiles.set(options.path,options.data);
+            return {uri:"file:///Documents/"+options.path};
+          },
+          readFile:async options=>({data:NativeBackupFiles.get(options.path)})
+        },
+        Share:{
+          share:async options=>{
+            NativeBackupShares.push(options);
+            return {activityType:"com.apple.UIKit.activity.SaveToFiles"};
+          }
+        }
+      }
+    };
+  }
+);
+NativeBackup.window.eval(`
+  cfg.anthropicKey="native-secret-a";
+  cfg.openaiKey="native-secret-o";
+  data.meta.logsSince=7;
+`);
+NativeBackup.__storageCalls.length=0;
+const nativeBackupPromise = NativeBackup.window.eval(`doBackup("exportDataBtn")`);
+check("native backup returns an asynchronous verified export",
+  nativeBackupPromise && typeof nativeBackupPromise.then==="function");
+const nativeBackupOk = await nativeBackupPromise;
+const nativeBackupName = [...NativeBackupFiles.keys()].find(name=>/^blackpyre-backup-.*\.json$/.test(name));
+const nativeBackupText = NativeBackupFiles.get(nativeBackupName);
+const nativeBackupPayload = JSON.parse(nativeBackupText);
+check("native backup writes a verified JSON file without opening the share sheet",
+  nativeBackupOk===true
+  && !!nativeBackupName
+  && NativeBackupShares.length===0);
+check("native backup strips both API keys",
+  !nativeBackupText.includes("native-secret-a")
+  && !nativeBackupText.includes("native-secret-o"));
+check("native backup records completion only after verified file creation",
+  NativeBackup.window.eval(`
+    data.meta.lastBackup===todayStr() && data.meta.logsSince===0
+  `)
+  && nativeBackupPayload.data.meta.lastBackup!==null
+  && nativeBackupPayload.data.meta.logsSince===0);
+
+const nativeShareOk =
+  await NativeBackup.window.eval(`doBackup("shareDataBtn",true)`);
+check("separate Share Backup action opens the iOS share sheet",
+  nativeShareOk===true
+  && NativeBackupShares.length===1
+  && NativeBackupShares[0].files[0]==="file:///Documents/"+nativeBackupName);
+
+const NativeBackupFailure = boot(
+  V2_CFG,
+  Object.assign({},EMPTY_DATA,{meta:{lastBackup:null,logsSince:4}}),
+  w=>{
+    w.Capacitor = {
+      getPlatform:()=>"ios",
+      isNativePlatform:()=>true,
+      isPluginAvailable:name=>name==="Filesystem" || name==="Share",
+      Plugins:{
+        Filesystem:{
+          writeFile:async()=>{ throw new Error("disk denied"); },
+          readFile:async()=>({data:""})
+        },
+        Share:{share:async()=>({})}
+      }
+    };
+  }
+);
+NativeBackupFailure.window.eval(`
+  window.__backupFailure=null;
+  flashSave=(message,isError)=>{window.__backupFailure={message,isError};};
+`);
+NativeBackupFailure.__storageCalls.length=0;
+const nativeBackupFailureResult =
+  await NativeBackupFailure.window.eval(`doBackup("exportDataBtn")`);
+check("failed native backup does not falsely record success",
+  nativeBackupFailureResult===false
+  && NativeBackupFailure.window.eval(`
+    data.meta.lastBackup===null
+    && data.meta.logsSince===4
+    && window.__backupFailure.isError===true
+  `)
+  && sacredCalls(NativeBackupFailure).length===0);
 
 // ================= v44: update toast =================
 function bootSW(hasController){

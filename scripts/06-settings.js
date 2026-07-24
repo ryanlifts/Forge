@@ -551,7 +551,70 @@ document.getElementById("saveSettingsBtn").addEventListener("click", ()=>{
   saveCfg(); renderAll(); flashSave(schedSaveMsg || "Settings saved ✓");
   ackBtn("saveSettingsBtn", "✓ Saved");
 });
-function doBackup(btnId){
+function nativeJsonExportCapability(){
+  const c = typeof window!=="undefined" ? window.Capacitor : null;
+  let native=false, fsAvailable=false, shareAvailable=false, fs=null, share=null;
+  try { native = !!(c && typeof c.isNativePlatform==="function" && c.isNativePlatform()); } catch(e){}
+  try { fsAvailable = !!(c && typeof c.isPluginAvailable==="function" && c.isPluginAvailable("Filesystem")); } catch(e){}
+  try { shareAvailable = !!(c && typeof c.isPluginAvailable==="function" && c.isPluginAvailable("Share")); } catch(e){}
+  try {
+    fs = c && c.Plugins ? c.Plugins.Filesystem : null;
+    share = c && c.Plugins ? c.Plugins.Share : null;
+  } catch(e){}
+  const saveAvailable = !!(native && fsAvailable && fs
+    && typeof fs.writeFile==="function"
+    && typeof fs.readFile==="function");
+  const canShare = !!(saveAvailable && shareAvailable && share
+    && typeof share.share==="function");
+  return {available:saveAvailable,shareAvailable:canShare,fs:fs,share:share};
+}
+async function writeNativeJson(capability,filename,text){
+  const written = await capability.fs.writeFile({
+    path:filename,
+    data:text,
+    directory:"DOCUMENTS",
+    encoding:"utf8"
+  });
+  const verified = await capability.fs.readFile({
+    path:filename,
+    directory:"DOCUMENTS",
+    encoding:"utf8"
+  });
+  if (!verified || verified.data!==text){
+    throw new Error("Native backup verification failed.");
+  }
+  const uri = written && written.uri;
+  if (!uri) throw new Error("Native backup did not return a file location.");
+  return {ok:true,uri:uri};
+}
+async function shareNativeJson(capability,nativeFile,title){
+  if (!capability.shareAvailable){
+    throw new Error("Native sharing is unavailable.");
+  }
+  await capability.share.share({
+    title:title || "BlackPyre backup",
+    files:[nativeFile.uri]
+  });
+  return nativeFile;
+}
+function exportJsonFile(filename,text,title,shareAfterSave){
+  const capability = nativeJsonExportCapability();
+  if (!capability.available){
+    download(filename,text);
+    return null;
+  }
+  return writeNativeJson(capability,filename,text)
+    .then(file=>shareAfterSave
+      ? shareNativeJson(capability,file,title)
+      : file);
+}
+function reportBackupFailure(btnId,error){
+  console.error("BlackPyre backup failed:",error);
+  flashSave("Backup failed — no backup was recorded",true);
+  ackBtn(btnId,"✕ Backup failed");
+  return false;
+}
+function doBackup(btnId,shareAfterSave){
   if (protectedMode){
     const ok = confirm("This export contains only what BlackPyre could read — it may be incomplete and is NOT a normal backup. Your original data remains preserved on this device. Export anyway?");
     if (!ok) return false;
@@ -560,21 +623,60 @@ function doBackup(btnId){
       data:JSON.parse(protectedSnapshotStrings.data),
       program:JSON.parse(protectedSnapshotStrings.program)
     } : {cfg:cfg, data:data, program:program};
-    const cfgPartial = Object.assign({}, snap.cfg); delete cfgPartial.anthropicKey; delete cfgPartial.openaiKey;
-    download("blackpyre-PARTIAL-"+todayStr()+".json", JSON.stringify({cfg:cfgPartial, program:snap.program, data:snap.data}, null, 2));
-    ackBtn(btnId, "✓ Partial export");
+    const cfgPartial = Object.assign({}, snap.cfg);
+    delete cfgPartial.anthropicKey;
+    delete cfgPartial.openaiKey;
+    const filename = "blackpyre-PARTIAL-"+todayStr()+".json";
+    const text = JSON.stringify({cfg:cfgPartial,program:snap.program,data:snap.data},null,2);
+    const nativeExport = exportJsonFile(filename,text,"BlackPyre partial export",!!shareAfterSave);
+    if (nativeExport){
+      return nativeExport
+        .then(()=>{ ackBtn(btnId,shareAfterSave?"✓ Share opened":"✓ Partial saved"); return true; })
+        .catch(error=>reportBackupFailure(btnId,error));
+    }
+    ackBtn(btnId,"✓ Partial export");
     return true;
   }
-  data.meta.lastBackup = todayStr();
-  data.meta.logsSince = 0;
-  const cfgSafe = Object.assign({}, cfg); delete cfgSafe.anthropicKey; delete cfgSafe.openaiKey;
-  download("blackpyre-backup-"+todayStr()+".json", JSON.stringify({cfg:cfgSafe, program:program, data:data}, null, 2));
-  save(); renderBackup();
-  ackBtn(btnId, "✓ Backup downloaded");
-  return true;
+
+  const cfgSafe = Object.assign({},cfg);
+  delete cfgSafe.anthropicKey;
+  delete cfgSafe.openaiKey;
+
+  const backupData = JSON.parse(JSON.stringify(data));
+  backupData.meta = Object.assign({},backupData.meta||{},{
+    lastBackup:todayStr(),
+    logsSince:0
+  });
+
+  const filename = "blackpyre-backup-"+todayStr()+".json";
+  const text = JSON.stringify({
+    cfg:cfgSafe,
+    program:program,
+    data:backupData
+  },null,2);
+
+  const completeBackup = message=>{
+    data.meta = data.meta || {};
+    data.meta.lastBackup = todayStr();
+    data.meta.logsSince = 0;
+    save();
+    renderBackup();
+    ackBtn(btnId,message);
+    return true;
+  };
+
+  const nativeExport = exportJsonFile(filename,text,"BlackPyre backup",!!shareAfterSave);
+  if (nativeExport){
+    return nativeExport
+      .then(()=>completeBackup(shareAfterSave?"✓ Share opened":"✓ Saved to BlackPyre"))
+      .catch(error=>reportBackupFailure(btnId,error));
+  }
+
+  return completeBackup("✓ Backup downloaded");
 }
-document.getElementById("exportDataBtn").addEventListener("click", ()=>doBackup("exportDataBtn"));
-document.getElementById("backupNowBtn").addEventListener("click", ()=>doBackup("backupNowBtn"));
+document.getElementById("exportDataBtn").addEventListener("click",()=>doBackup("exportDataBtn",false));
+document.getElementById("shareDataBtn").addEventListener("click",()=>doBackup("shareDataBtn",true));
+document.getElementById("backupNowBtn").addEventListener("click",()=>doBackup("backupNowBtn",false));
 function exportRawRecoveryOriginals(){
   const payload = makeRawRecoveryEnvelope();
   if (!payload.ok){ flashSave("Raw recovery export unavailable", true); return false; }

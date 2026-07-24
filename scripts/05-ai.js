@@ -186,30 +186,48 @@ function renderJourneyMsg(){
 }
 
 // ================== USUAL MEAL PATTERN DETECTION ==================
+function legacyLoggedFoodBaseName(name){
+  let value = String(name||"").trim();
+  value = value.replace(/^\d+(?:\.\d+)?\s+servings?\s*[·•-]\s*/i,"");
+  value = value.replace(/^\d+(?:\.\d+)?\s*(?:g|oz|lb|ml|floz)\s+/i,"");
+  return value.trim();
+}
+function loggedFoodIdentity(entry){
+  if (!entry) return "";
+  if (entry.sourceFood && entry.sourceFood.name){
+    const sourceName = normalizedFoodIdentityPart(entry.sourceFood.name);
+    if (sourceName) return "usual:"+sourceName;
+  }
+  const name = normalizedFoodIdentityPart(legacyLoggedFoodBaseName(entry.name));
+  if (name) return "usual:"+name;
+  return entry.foodKey ? String(entry.foodKey) : "";
+}
 function usualFor(meal){
-  // look back 14 days (excluding today): items logged for this meal on most of those days
-  const dayNames = []; // array of Set(name) per day that has this meal
+  // Look back 14 days (excluding today): stable food identities logged for this meal
+  // on most of those days. Slider amounts are intentionally excluded from identity,
+  // so 150g yogurt and 200g yogurt remain the same recurring food.
+  const dayKeys = [];
   for(let i=1;i<=14;i++){
     const d = new Date(); d.setDate(d.getDate()-i);
     const ds = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
     const entries = (data.food[ds]||[]).filter(f=>(f.meal||"other")===meal);
-    if (entries.length) dayNames.push(new Set(entries.map(f=>f.name)));
+    if (entries.length) dayKeys.push(new Set(entries.map(loggedFoodIdentity).filter(Boolean)));
   }
-  if (dayNames.length < 4) return null;
+  if (dayKeys.length < 4) return null;
   const counts = {};
-  dayNames.forEach(set=>set.forEach(n=>{ counts[n] = (counts[n]||0)+1; }));
-  const threshold = Math.max(3, Math.ceil(dayNames.length*0.5));
-  const names = Object.keys(counts).filter(n=>counts[n]>=threshold)
+  dayKeys.forEach(set=>set.forEach(key=>{ counts[key] = (counts[key]||0)+1; }));
+  const threshold = Math.max(3, Math.ceil(dayKeys.length*0.5));
+  const keys = Object.keys(counts).filter(key=>counts[key]>=threshold)
     .sort((a,b)=>counts[b]-counts[a]).slice(0,6);
-  if (names.length < 2) return null;
+  if (keys.length < 2) return null;
   // template each from its most recent logged instance (any date, this meal)
   const items = [];
-  names.forEach(n=>{
+  keys.forEach(key=>{
     for(let i=0;i<=14;i++){
       const d = new Date(); d.setDate(d.getDate()-i);
       const ds = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
-      const hit = (data.food[ds]||[]).slice().reverse().find(f=>f.name===n && (f.meal||"other")===meal);
-      if (hit){ items.push({name:hit.name, cal:hit.cal, pro:hit.pro, carb:hit.carb||0, fat:hit.fat||0, meal:meal}); break; }
+      const hit = (data.food[ds]||[]).slice().reverse().find(f=>loggedFoodIdentity(f)===key && (f.meal||"other")===meal);
+      if (hit){ items.push(Object.assign({},hit,{meal:meal})); break; }
     }
   });
   if (items.length < 2) return null;
@@ -221,8 +239,8 @@ function renderUsual(){
   if (foodDateEl.value !== todayStr()){ card.classList.add("hidden"); return; }
   const items = usualFor(currentMeal);
   if (!items){ card.classList.add("hidden"); return; }
-  const todayNames = new Set((data.food[todayStr()]||[]).filter(f=>(f.meal||"other")===currentMeal).map(f=>f.name));
-  const remaining = items.filter(it=>!todayNames.has(it.name));
+  const todayKeys = new Set((data.food[todayStr()]||[]).filter(f=>(f.meal||"other")===currentMeal).map(loggedFoodIdentity).filter(Boolean));
+  const remaining = items.filter(it=>!todayKeys.has(loggedFoodIdentity(it)));
   if (remaining.length===0 || remaining.length < Math.ceil(items.length/2)){ card.classList.add("hidden"); return; }
   card.classList.remove("hidden");
   document.getElementById("usualMealName").textContent = currentMeal;
