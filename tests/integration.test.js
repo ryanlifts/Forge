@@ -928,24 +928,141 @@ check("legacy and manually entered foods still open the manual editor",
 const usualFood = {};
 for(let i=1;i<=5;i++){
   usualFood[dstr(-i)] = [
-    {name:(i%2?"150g Greek yogurt":"200g Greek yogurt"),cal:90,pro:15,carb:6,fat:1,meal:"breakfast"},
-    {name:"1 serving · Granola",cal:180,pro:5,carb:30,fat:5,meal:"breakfast"},
-    {name:(i%2?"4oz Blueberries":"5oz Blueberries"),cal:70,pro:1,carb:17,fat:0,meal:"breakfast"},
-    {name:"2 Eggs",cal:140,pro:12,carb:1,fat:10,meal:"breakfast"},
-    {name:"12oz Coffee",cal:5,pro:0,carb:1,fat:0,meal:"breakfast"}
+    {
+      name:i===1
+        ? "Friendly Farms Plain Non Fat Greek Yogurt"
+        : "NONFAT GREEK YOGURT",
+      cal:i===1?110:90, pro:i===1?19:15, carb:7, fat:1, meal:"breakfast"
+    },
+    {
+      name:i%2 ? "2 Eggs" : "3 Eggs",
+      cal:140, pro:12, carb:1, fat:10, meal:"breakfast"
+    },
+    {
+      name:i===1 ? "8oz Grilled Chicken Breast" : "6oz Chicken Breast",
+      cal:i===1?360:280, pro:i===1?62:50, carb:0, fat:8, meal:"lunch"
+    },
+    {
+      name:i%2 ? "1 serving · Brown Rice" : "200g Brown Rice",
+      cal:i===1?220:210, pro:5, carb:45, fat:2, meal:"dinner"
+    },
+    {
+      name:i===1 ? "Vanilla Protein Shake" : "Chocolate Protein Shake",
+      cal:i===1?230:210, pro:i===1?32:30, carb:12, fat:5, meal:"snacks"
+    }
   ];
 }
+
 const UsualIdentity = boot(V2_CFG,Object.assign({},EMPTY_DATA,{food:usualFood}));
+const dUsualIdentity = UsualIdentity.window.document;
+
 UsualIdentity.window.eval(`currentMeal="breakfast"; renderMealSeg(); renderFood();`);
-check("usual breakfast recognizes all five recurring foods even when slider amounts changed",
-  UsualIdentity.window.eval(`usualFor("breakfast").length`)===5
-  && /Greek yogurt/.test(UsualIdentity.window.document.getElementById("usualItems").textContent)
-  && /Blueberries/.test(UsualIdentity.window.document.getElementById("usualItems").textContent)
-  && /Coffee/.test(UsualIdentity.window.document.getElementById("usualItems").textContent));
-UsualIdentity.window.eval(`addEntry({name:"175g Greek yogurt",cal:105,pro:18,carb:7,fat:1,meal:"breakfast"}); renderUsual();`);
-check("usual breakfast removes an already-logged food by stable identity rather than exact amount text",
-  /\(4 items\)/.test(UsualIdentity.window.document.getElementById("usualLogBtn").textContent)
-  && !/Greek yogurt/.test(UsualIdentity.window.document.getElementById("usualItems").textContent));
+check("usual breakfast groups quantity, capitalization, and product-name variants while preserving the latest exact yogurt",
+  UsualIdentity.window.eval(`
+    (function(){
+      const items=usualFor("breakfast");
+      const yogurt=items.find(x=>/Friendly Farms/.test(x.name));
+      return items.length===2 && yogurt
+        && yogurt.name==="Friendly Farms Plain Non Fat Greek Yogurt"
+        && yogurt.cal===110 && yogurt.pro===19;
+    })()
+  `));
+
+UsualIdentity.window.eval(`
+  _lastAddT=0;
+  addEntry({name:"175g Greek yogurt",cal:105,pro:18,carb:7,fat:1,meal:"breakfast"});
+  renderUsual();
+`);
+check("usual breakfast removes the matching category but keeps the card visible for one remaining recurring food",
+  !dUsualIdentity.getElementById("usualCard").classList.contains("hidden")
+  && /\(1 item\)/.test(dUsualIdentity.getElementById("usualLogBtn").textContent)
+  && !/Greek yogurt/i.test(dUsualIdentity.getElementById("usualItems").textContent)
+  && /Eggs/.test(dUsualIdentity.getElementById("usualItems").textContent));
+
+UsualIdentity.window.eval(`
+  _lastAddT=0;
+  addEntry({name:"4 Eggs",cal:280,pro:24,carb:2,fat:20,meal:"breakfast"});
+  renderUsual();
+`);
+check("usual breakfast hides only when no qualifying recurring foods remain",
+  dUsualIdentity.getElementById("usualCard").classList.contains("hidden"));
+
+UsualIdentity.window.eval(`currentMeal="lunch"; renderMealSeg(); renderFood();`);
+check("usual lunch is independent and preserves the latest exact chicken portion and nutrition",
+  UsualIdentity.window.eval(`
+    (function(){
+      const items=usualFor("lunch");
+      return items.length===1
+        && items[0].name==="8oz Grilled Chicken Breast"
+        && items[0].cal===360 && items[0].pro===62;
+    })()
+  `)
+  && !dUsualIdentity.getElementById("usualCard").classList.contains("hidden"));
+
+UsualIdentity.window.eval(`
+  _lastAddT=0;
+  addEntry({name:"7oz Chicken Breast",cal:320,pro:56,carb:0,fat:7,meal:"lunch"});
+  renderUsual();
+`);
+check("usual lunch removes a food type already logged for lunch today",
+  dUsualIdentity.getElementById("usualCard").classList.contains("hidden"));
+
+UsualIdentity.window.eval(`currentMeal="dinner"; renderMealSeg(); renderFood();`);
+check("usual dinner independently recognizes changed quantity prefixes and keeps the latest exact portion",
+  UsualIdentity.window.eval(`
+    (function(){
+      const items=usualFor("dinner");
+      return items.length===1
+        && items[0].name==="1 serving · Brown Rice"
+        && items[0].cal===220;
+    })()
+  `)
+  && !dUsualIdentity.getElementById("usualCard").classList.contains("hidden"));
+
+UsualIdentity.window.eval(`
+  _lastAddT=0;
+  addEntry({name:"250g Brown Rice",cal:270,pro:6,carb:56,fat:2,meal:"dinner"});
+  renderUsual();
+`);
+check("usual dinner removes a food type already logged for dinner today",
+  dUsualIdentity.getElementById("usualCard").classList.contains("hidden"));
+
+UsualIdentity.window.eval(`currentMeal="snacks"; renderMealSeg(); renderFood();`);
+check("usual snacks independently groups clear flavor variants and preserves the latest exact product nutrition",
+  UsualIdentity.window.eval(`
+    (function(){
+      const items=usualFor("snacks");
+      return items.length===1
+        && items[0].name==="Vanilla Protein Shake"
+        && items[0].cal===230 && items[0].pro===32;
+    })()
+  `)
+  && !dUsualIdentity.getElementById("usualCard").classList.contains("hidden"));
+
+UsualIdentity.window.eval(`
+  _lastAddT=0;
+  addEntry({name:"Strawberry Protein Shake",cal:225,pro:31,carb:13,fat:5,meal:"snacks"});
+  renderUsual();
+`);
+check("usual snacks removes a food type already logged for snacks today",
+  dUsualIdentity.getElementById("usualCard").classList.contains("hidden"));
+
+const distinctRecurringFood = {};
+const distinctNames = [
+  "Chicken Fried Rice","Shrimp Fried Rice","Vegetable Fried Rice",
+  "Chicken Fried Rice","Shrimp Fried Rice","Vegetable Fried Rice"
+];
+for(let i=1;i<=6;i++){
+  distinctRecurringFood[dstr(-i)] = [{
+    name:distinctNames[i-1], cal:400, pro:20, carb:55, fat:10, meal:"lunch"
+  }];
+}
+const DistinctRecurring = boot(
+  V2_CFG,
+  Object.assign({},EMPTY_DATA,{food:distinctRecurringFood})
+);
+check("usual foods do not merge unrelated products merely because they share a vague phrase",
+  DistinctRecurring.window.eval(`usualFor("lunch")`)===null);
 
 // ================= v68: default ChatGPT handoff provider =================
 const H68Cfg = Object.assign({},V2_CFG);
