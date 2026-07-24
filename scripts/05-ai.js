@@ -186,62 +186,128 @@ function renderJourneyMsg(){
 }
 
 // ================== USUAL MEAL PATTERN DETECTION ==================
+const USUAL_FOOD_DESCRIPTORS = new Set([
+  "plain","original","classic","traditional","natural","organic",
+  "unsweetened","sweetened","light","lite","low","reduced",
+  "nonfat","non","fat","free","zero","percent",
+  "small","medium","large","xl",
+  "vanilla","chocolate","strawberry","flavored","flavour","flavor",
+  "grilled","baked","roasted"
+]);
 function legacyLoggedFoodBaseName(name){
   let value = String(name||"").trim();
-  value = value.replace(/^\d+(?:\.\d+)?\s+servings?\s*[·•-]\s*/i,"");
-  value = value.replace(/^\d+(?:\.\d+)?\s*(?:g|oz|lb|ml|floz)\s+/i,"");
+  value = value.replace(/^(?:\d+(?:\.\d+)?|\d+\s*\/\s*\d+)\s+servings?\s*[·•-]\s*/i,"");
+  value = value.replace(/^(?:\d+(?:\.\d+)?|\d+\s*\/\s*\d+)\s*(?:g|oz|lb|ml|floz)\b\s*/i,"");
+  value = value.replace(/^(?:\d+(?:\.\d+)?|\d+\s*\/\s*\d+)\s+(?:(?:extra\s+large|small|medium|large|xl)\s+)?(?:pieces?|slices?|cups?|tbsp|tablespoons?|tsp|teaspoons?|scoops?|packets?|cans?|bottles?|bars?|bowls?|plates?)\b\s*(?:[·•-]\s*)?/i,"");
+  value = value.replace(/^(?:\d+(?:\.\d+)?|\d+\s*\/\s*\d+)\s+(?=[a-z])/i,"");
   return value.trim();
 }
+function recurringFoodTokens(entry){
+  if (!entry) return [];
+  const sourceName = entry.sourceFood && entry.sourceFood.name
+    ? entry.sourceFood.name
+    : entry.name;
+  const normalized = normalizedFoodIdentityPart(legacyLoggedFoodBaseName(sourceName));
+  if (!normalized) return [];
+  const tokens = normalized.split(" ").filter(token=>token && !USUAL_FOOD_DESCRIPTORS.has(token));
+  return tokens.length ? tokens : normalized.split(" ").filter(Boolean);
+}
+function recurringFoodCategoryMatch(a,b){
+  const aTokens = recurringFoodTokens(a);
+  const bTokens = recurringFoodTokens(b);
+  if (!aTokens.length || !bTokens.length) return false;
+
+  const aKey = aTokens.join(" ");
+  const bKey = bTokens.join(" ");
+  if (aKey === bKey) return true;
+
+  const aSet = new Set(aTokens);
+  const bSet = new Set(bTokens);
+  const shorter = aSet.size <= bSet.size ? aSet : bSet;
+  const longer = shorter === aSet ? bSet : aSet;
+
+  // Require at least two meaningful shared words. This permits product or
+  // brand prefixes around a clear food type without merging vague one-word foods.
+  return shorter.size >= 2 && Array.from(shorter).every(token=>longer.has(token));
+}
 function loggedFoodIdentity(entry){
-  if (!entry) return "";
-  if (entry.sourceFood && entry.sourceFood.name){
-    const sourceName = normalizedFoodIdentityPart(entry.sourceFood.name);
-    if (sourceName) return "usual:"+sourceName;
-  }
-  const name = normalizedFoodIdentityPart(legacyLoggedFoodBaseName(entry.name));
-  if (name) return "usual:"+name;
-  return entry.foodKey ? String(entry.foodKey) : "";
+  const tokens = recurringFoodTokens(entry);
+  if (tokens.length) return "usual:"+tokens.join(" ");
+  return entry && entry.foodKey ? String(entry.foodKey) : "";
 }
 function usualFor(meal){
-  // Look back 14 days (excluding today): stable food identities logged for this meal
-  // on most of those days. Slider amounts are intentionally excluded from identity,
-  // so 150g yogurt and 200g yogurt remain the same recurring food.
-  const dayKeys = [];
+  // Look back 14 days, excluding today. Similar product names may share one
+  // recurring category, but the offered item is always the exact latest log.
+  const groups = [];
+  let mealDayCount = 0;
+
   for(let i=1;i<=14;i++){
     const d = new Date(); d.setDate(d.getDate()-i);
     const ds = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
     const entries = (data.food[ds]||[]).filter(f=>(f.meal||"other")===meal);
-    if (entries.length) dayKeys.push(new Set(entries.map(loggedFoodIdentity).filter(Boolean)));
+    if (!entries.length) continue;
+
+    mealDayCount++;
+    const seenToday = new Set();
+
+    entries.forEach(entry=>{
+      let group = groups.find(g=>g.variants.some(v=>recurringFoodCategoryMatch(entry,v)));
+      if (!group){
+        group = {count:0, variants:[]};
+        groups.push(group);
+      }
+      if (!group.variants.some(v=>loggedFoodIdentity(v)===loggedFoodIdentity(entry))){
+        group.variants.push(entry);
+      }
+      seenToday.add(group);
+    });
+
+    seenToday.forEach(group=>{ group.count++; });
   }
-  if (dayKeys.length < 4) return null;
-  const counts = {};
-  dayKeys.forEach(set=>set.forEach(key=>{ counts[key] = (counts[key]||0)+1; }));
-  const threshold = Math.max(3, Math.ceil(dayKeys.length*0.5));
-  const keys = Object.keys(counts).filter(key=>counts[key]>=threshold)
-    .sort((a,b)=>counts[b]-counts[a]).slice(0,6);
-  if (keys.length < 2) return null;
-  // template each from its most recent logged instance (any date, this meal)
+
+  if (mealDayCount < 4) return null;
+
+  const threshold = Math.max(3, Math.ceil(mealDayCount*0.5));
+  const qualifying = groups.filter(group=>group.count>=threshold)
+    .sort((a,b)=>b.count-a.count)
+    .slice(0,6);
+
+  if (!qualifying.length) return null;
+
   const items = [];
-  keys.forEach(key=>{
+  qualifying.forEach(group=>{
     for(let i=0;i<=14;i++){
       const d = new Date(); d.setDate(d.getDate()-i);
       const ds = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
-      const hit = (data.food[ds]||[]).slice().reverse().find(f=>loggedFoodIdentity(f)===key && (f.meal||"other")===meal);
-      if (hit){ items.push(Object.assign({},hit,{meal:meal})); break; }
+      const hit = (data.food[ds]||[]).slice().reverse().find(f=>
+        (f.meal||"other")===meal
+        && group.variants.some(v=>recurringFoodCategoryMatch(f,v))
+      );
+      if (hit){
+        items.push(Object.assign({},hit,{meal:meal}));
+        break;
+      }
     }
   });
-  if (items.length < 2) return null;
-  return items;
+
+  return items.length ? items : null;
 }
 function renderUsual(){
   const card = document.getElementById("usualCard");
-  // only for today, only when a pattern exists, only when not already mostly logged
   if (foodDateEl.value !== todayStr()){ card.classList.add("hidden"); return; }
+
   const items = usualFor(currentMeal);
   if (!items){ card.classList.add("hidden"); return; }
-  const todayKeys = new Set((data.food[todayStr()]||[]).filter(f=>(f.meal||"other")===currentMeal).map(loggedFoodIdentity).filter(Boolean));
-  const remaining = items.filter(it=>!todayKeys.has(loggedFoodIdentity(it)));
-  if (remaining.length===0 || remaining.length < Math.ceil(items.length/2)){ card.classList.add("hidden"); return; }
+
+  const todayEntries = (data.food[todayStr()]||[])
+    .filter(f=>(f.meal||"other")===currentMeal);
+
+  const remaining = items.filter(item=>
+    !todayEntries.some(todayEntry=>recurringFoodCategoryMatch(item,todayEntry))
+  );
+
+  if (!remaining.length){ card.classList.add("hidden"); return; }
+
   card.classList.remove("hidden");
   document.getElementById("usualMealName").textContent = currentMeal;
   const total = Math.round(remaining.reduce((a,x)=>a+Number(x.cal||0),0));
