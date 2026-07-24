@@ -726,19 +726,82 @@ function updateCalc(){
   document.getElementById("calcFat").textContent = Math.round(scaleMacro(selected.fat100,g));
 }
 
+function normalizedFoodIdentityPart(value){
+  return String(value||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+}
+function sourceFoodKey(food){
+  if (!food) return "";
+  const barcode = String(food.barcode||food.code||"").replace(/\D/g,"");
+  if (barcode) return "barcode:"+barcode;
+  if (food.suggestionNdb) return "usda:"+String(food.suggestionNdb);
+  const name = normalizedFoodIdentityPart(food.name);
+  if (!name) return "";
+  return "food:"+name+"|"+normalizedFoodIdentityPart(food.brand);
+}
+function compactSourceFood(food){
+  if (!food || !food.name) return null;
+  const out = {
+    name:String(food.name), brand:String(food.brand||""),
+    cal100:Number(food.cal100)||0, pro100:Number(food.pro100)||0,
+    carb100:Number(food.carb100)||0, fat100:Number(food.fat100)||0
+  };
+  if (Number(food.servingG)>0) out.servingG = Number(food.servingG);
+  if (food.servingLabel) out.servingLabel = String(food.servingLabel);
+  if (food.barcode||food.code) out.barcode = String(food.barcode||food.code);
+  if (food.suggestionNdb) out.suggestionNdb = String(food.suggestionNdb);
+  if (food.suggestionUsdaDescription) out.suggestionUsdaDescription = String(food.suggestionUsdaDescription);
+  return out;
+}
+function sliderEntryFromSelection(){
+  if (!selected) return null;
+  const g = currentGrams();
+  const amount = Number(qtyAmountEl.value);
+  const unit = qtyUnitEl.value;
+  if (!Number.isFinite(amount) || amount<=0 || !Number.isFinite(g) || g<=0) return null;
+  const amountLabel = String(qtyAmountEl.value);
+  const label = unit==="serving"
+    ? amountLabel+" serving"+(amount===1?"":"s")+" · "+selected.name
+    : amountLabel+unit+" "+selected.name;
+  const sourceFood = compactSourceFood(selected);
+  return {
+    name:label,
+    cal:Math.round(scaleMacro(selected.cal100,g)),
+    pro:Math.round(scaleMacro(selected.pro100,g)),
+    carb:Math.round(scaleMacro(selected.carb100,g)),
+    fat:Math.round(scaleMacro(selected.fat100,g)),
+    amount:amount,
+    unit:unit,
+    grams:g,
+    foodKey:sourceFoodKey(selected),
+    sourceFood:sourceFood
+  };
+}
+function updateRecentPortion(item, amount, unit){
+  if (!item) return;
+  const list = data.recents||[];
+  const idx = list.findIndex(r=>r.name===item.name && (r.brand||"")===(item.brand||""));
+  const recent = Object.assign({}, idx>=0 ? list[idx] : item, item, {lastAmt:amount,lastUnit:unit});
+  if (idx>=0) list.splice(idx,1);
+  list.unshift(recent);
+  data.recents = list.slice(0,20);
+}
+
 document.getElementById("addSelBtn").addEventListener("click", ()=>{
   if(!selected) return;
-  const g = currentGrams();
+  const entry = sliderEntryFromSelection();
+  if (!entry){ flashSave("Enter an amount greater than 0", true); return; }
   const amt = qtyAmountEl.value, unit = qtyUnitEl.value;
-  const label = unit==="serving" ? amt+" serving · "+selected.name : amt+unit+" "+selected.name;
-  addEntry({
-    name: label,
-    cal: Math.round(scaleMacro(selected.cal100,g)),
-    pro: Math.round(scaleMacro(selected.pro100,g)),
-    carb: Math.round(scaleMacro(selected.carb100,g)),
-    fat: Math.round(scaleMacro(selected.fat100,g)),
-  });
-  pushRecent(Object.assign({}, selected, {lastAmt:amt, lastUnit:unit}));
+  if (editFoodIdx!=null && editFoodMode==="slider" && (data.food[foodDateEl.value]||[])[editFoodIdx]){
+    entry.meal = data.food[foodDateEl.value][editFoodIdx].meal || currentMeal;
+    data.food[foodDateEl.value][editFoodIdx] = entry;
+    updateRecentPortion(selected,amt,unit);
+    save(); renderFood(); renderDash();
+    ackBtn("addSelBtn", "✓ Updated");
+    cancelEditFood();
+  } else {
+    addEntry(entry);
+    pushRecent(Object.assign({}, selected, {lastAmt:amt, lastUnit:unit}));
+  }
   document.getElementById("calcCard").classList.add("hidden");
   document.getElementById("resultsCard").classList.add("hidden");
   document.getElementById("foodQuery").value = "";
@@ -798,29 +861,114 @@ function renderRecents(){
 
 // --- manual + entries ---
 let editFoodIdx = null;
+let editFoodMode = null;
 function cancelEditFood(){
   editFoodIdx = null;
+  editFoodMode = null;
   document.getElementById("addManualBtn").textContent = "Add entry";
   document.getElementById("cancelEditFoodBtn").classList.add("hidden");
+  document.getElementById("addSelBtn").textContent = "Add to log";
+  document.getElementById("cancelSelEditBtn").classList.add("hidden");
+}
+function sourceFoodFromEntry(entry){
+  const source = entry && entry.sourceFood;
+  if (!source || !source.name || !(Number(source.cal100)>0)) return null;
+  return Object.assign({},source);
+}
+function parseLoggedPortionName(name){
+  const value = String(name||"").trim();
+  let match = value.match(/^(\d+(?:\.\d+)?)\s+servings?\s*[·•-]\s*(.+)$/i);
+  if (match) return {amount:Number(match[1]),unit:"serving",baseName:match[2].trim()};
+  match = value.match(/^(\d+(?:\.\d+)?)\s*(g|oz|lb|ml|floz)\s+(.+)$/i);
+  if (match) return {amount:Number(match[1]),unit:match[2].toLowerCase(),baseName:match[3].trim()};
+  return null;
+}
+function legacySliderEditSource(entry){
+  const parsed = parseLoggedPortionName(entry&&entry.name);
+  if (!parsed || !(parsed.amount>0)) return null;
+  const wantedName = normalizedFoodIdentityPart(parsed.baseName);
+  if (!wantedName) return null;
+  const candidates = [];
+  (data.recents||[]).forEach(food=>{
+    if (normalizedFoodIdentityPart(food&&food.name)===wantedName) candidates.push(food);
+  });
+  Object.keys(data.myFoods||{}).forEach(key=>{
+    const food = data.myFoods[key];
+    if (normalizedFoodIdentityPart(food&&food.name)===wantedName) candidates.push(food);
+  });
+  const usable = candidates.filter(food=>{
+    if (!food || !(Number(food.cal100)>0)) return false;
+    if (parsed.unit==="serving" && !(Number(food.servingG)>0)) return false;
+    return toGrams(parsed.amount,parsed.unit,food.servingG)>0;
+  });
+  if (!usable.length) return null;
+  usable.sort((a,b)=>{
+    const score = food=>{
+      const grams = toGrams(parsed.amount,parsed.unit,food.servingG);
+      return Math.abs(Math.round(scaleMacro(food.cal100,grams))-Number(entry.cal||0))
+        + Math.abs(Math.round(scaleMacro(food.pro100,grams))-Number(entry.pro||0))*2
+        + Math.abs(Math.round(scaleMacro(food.carb100,grams))-Number(entry.carb||0))
+        + Math.abs(Math.round(scaleMacro(food.fat100,grams))-Number(entry.fat||0))*2;
+    };
+    return score(a)-score(b);
+  });
+  return {source:Object.assign({},usable[0]),amount:parsed.amount,unit:parsed.unit};
+}
+function sliderEditDetails(entry){
+  const source = sourceFoodFromEntry(entry);
+  if (source){
+    return {
+      source:source,
+      amount:Number(entry.amount)>0 ? Number(entry.amount) : null,
+      unit:String(entry.unit||"")
+    };
+  }
+  return legacySliderEditSource(entry);
+}
+function clearManualFoodInputs(){
+  ["mName","mCal","mPro","mCarb","mFat"].forEach(id=>document.getElementById(id).value="");
 }
 function startEditEntry(i){
   const f = (data.food[foodDateEl.value]||[])[i];
   if(!f) return;
+  const sliderDetails = sliderEditDetails(f);
+  cancelEditFood();
+  clearManualFoodInputs();
+  if (f.meal){ currentMeal = f.meal; renderMealSeg(); renderFood(); }
+  if (sliderDetails && sliderDetails.source){
+    editFoodIdx = i;
+    editFoodMode = "slider";
+    selectFood(sliderDetails.source);
+    const unit = String(sliderDetails.unit||"");
+    if ([...qtyUnitEl.options].some(o=>o.value===unit)) qtyUnitEl.value = unit;
+    qtyAmountEl.value = Number(sliderDetails.amount)>0
+      ? sliderDetails.amount
+      : (unit==="g" && Number(f.grams)>0 ? f.grams : qtyAmountEl.value);
+    syncSliderToUnit(); updateCalc();
+    document.getElementById("addSelBtn").textContent = "Update entry";
+    document.getElementById("cancelSelEditBtn").classList.remove("hidden");
+    return;
+  }
   document.getElementById("mName").value = f.name;
   document.getElementById("mCal").value = f.cal;
   document.getElementById("mPro").value = f.pro||"";
   document.getElementById("mCarb").value = f.carb||"";
   document.getElementById("mFat").value = f.fat||"";
-  if (f.meal){ currentMeal = f.meal; renderMealSeg(); renderFood(); }
   editFoodIdx = i;
+  editFoodMode = "manual";
   const btn = document.getElementById("addManualBtn");
   btn.textContent = "Update entry";
   document.getElementById("cancelEditFoodBtn").classList.remove("hidden");
   if (btn.scrollIntoView) btn.scrollIntoView({behavior:"smooth", block:"center"});
 }
 document.getElementById("cancelEditFoodBtn").addEventListener("click", ()=>{
-  ["mName","mCal","mPro","mCarb","mFat"].forEach(id=>document.getElementById(id).value="");
+  clearManualFoodInputs();
   cancelEditFood();
+});
+document.getElementById("cancelSelEditBtn").addEventListener("click", ()=>{
+  cancelEditFood();
+  document.getElementById("calcCard").classList.add("hidden");
+  selected = null;
 });
 document.getElementById("addManualBtn").addEventListener("click", ()=>{
   const nameInput = document.getElementById("mName");
@@ -845,7 +993,7 @@ document.getElementById("addManualBtn").addEventListener("click", ()=>{
     carb:Number(document.getElementById("mCarb").value||0),
     fat:Number(document.getElementById("mFat").value||0),
   };
-  if (editFoodIdx!=null && (data.food[foodDateEl.value]||[])[editFoodIdx]){
+  if (editFoodIdx!=null && editFoodMode==="manual" && (data.food[foodDateEl.value]||[])[editFoodIdx]){
     entry.meal = data.food[foodDateEl.value][editFoodIdx].meal || currentMeal;
     data.food[foodDateEl.value][editFoodIdx] = entry;
     save(); renderFood(); renderDash();
@@ -855,7 +1003,7 @@ document.getElementById("addManualBtn").addEventListener("click", ()=>{
     addEntry(entry);
     ackBtn("addManualBtn", "✓ Added");
   }
-  ["mName","mCal","mPro","mCarb","mFat"].forEach(id=>document.getElementById(id).value="");
+  clearManualFoodInputs();
 });
 
 function bumpLog(){
