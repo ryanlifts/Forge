@@ -1506,7 +1506,7 @@ check("v62 a catalog suggestion opens its exact listed serving for review", dC62
 check("v62 review shows the USDA per-100g values and correctly scaled serving", /USDA reference · SR28/.test(dC62.getElementById("selName").textContent) && /165 kcal/.test(dC62.getElementById("selPer100").textContent) && dC62.getElementById("calcCal").textContent==="186" && dC62.getElementById("calcPro").textContent==="35");
 check("v62 reviewing a broad-catalog suggestion never auto-logs it", C62.window.eval(`(data.food[todayStr()]||[]).length`)===beforeReview62);
 check("v62 FAQ explains USDA sourcing, exact servings, and real-world variation", C62.window.eval(`FAQ.some(x=>x.q==="How accurate are suggested-food calories and macros?"&&/per 100 grams/.test(x.a)&&/exact gram weight/.test(x.a)&&/NDB number/.test(x.a)&&/brand/.test(x.a)) && FAQ.some(x=>x.q==="How do food suggestions work?"&&/120 common foods/.test(x.a)&&/familiar foods receive a bonus but are not required/.test(x.a)&&/does not call USDA or an AI/.test(x.a))`));
-check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v74"'); })());
+check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v75"'); })());
 check("v62 keeps primary schemaVersion 2", C62.window.eval("SCHEMA_VERSION")===2);
 
 // ================= ChatGPT handoff paste flow =================
@@ -1757,7 +1757,7 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the four data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+"/.test(sw));
-check("v74 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v74"'));
+check("v75 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v75"'));
 const rawIndex = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 check("data scripts load before the app scripts (raw file order)",
   ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js"].every(f=>
@@ -2135,6 +2135,115 @@ check("dismissal is session-only (no persistent storage written)", V.window.eval
 let W2 = bootSW(false); await wait(30);
 W2.__fire("controllerchange");
 check("first service-worker installation never shows the toast", toastEl(W2).classList.contains("hidden"));
+
+
+// ================= native parity: slider-editor movement and Undo spacing =================
+const parityDay = dstr(0);
+const parityData = Object.assign({}, EMPTY_DATA, {
+  food:{
+    [parityDay]:[{
+      name:"1.5 servings · Test Greek Yogurt",
+      cal:153,pro:25.5,carb:12.75,fat:0,
+      amount:1.5,unit:"serving",grams:255,
+      meal:"breakfast",
+      foodKey:"food:test greek yogurt|test dairy",
+      sourceFood:{
+        name:"Test Greek Yogurt",
+        brand:"Test Dairy",
+        cal100:60,pro100:10,carb100:5,fat100:0,
+        servingG:170,
+        servingLabel:"1 container"
+      }
+    }]
+  }
+});
+const FoodEditorParity = boot(V2_CFG, parityData);
+const dFoodEditorParity = FoodEditorParity.window.document;
+FoodEditorParity.window.HTMLElement.prototype.scrollIntoView = function(opts){
+  FoodEditorParity.window.__editorScrolls =
+    FoodEditorParity.window.__editorScrolls || [];
+  FoodEditorParity.window.__editorScrolls.push({
+    id:this.id,
+    behavior:opts && opts.behavior,
+    block:opts && opts.block
+  });
+};
+FoodEditorParity.window.eval("startEditEntry(0)");
+const immediateEditorScrolls =
+  FoodEditorParity.window.eval(
+    `(window.__editorScrolls||[]).filter(x=>x.id==="calcCard").length`
+  );
+await wait(10);
+const completedEditorScrolls =
+  FoodEditorParity.window.eval(
+    `(window.__editorScrolls||[]).filter(x=>x.id==="calcCard").length`
+  );
+
+check("slider food editing opens and immediately moves to the serving editor",
+  !dFoodEditorParity.getElementById("calcCard").classList.contains("hidden")
+  && immediateEditorScrolls>=2
+  && dFoodEditorParity.getElementById("addSelBtn").textContent==="Update entry");
+
+check("slider food editor repeats its smooth centered movement after layout settles",
+  completedEditorScrolls>=4
+  && FoodEditorParity.window.eval(
+    `(window.__editorScrolls||[]).filter(x=>
+      x.id==="calcCard"
+      && x.behavior==="smooth"
+      && x.block==="center"
+    ).length`
+  )>=4);
+
+check("slider food editing preserves the existing amount and unit",
+  dFoodEditorParity.getElementById("qtyAmount").value==="1.5"
+  && dFoodEditorParity.getElementById("qtyUnit").value==="serving");
+
+dFoodEditorParity.getElementById("qtyAmount").value="2";
+dFoodEditorParity.getElementById("qtyAmount").dispatchEvent(
+  new FoodEditorParity.window.Event("input",{bubbles:true})
+);
+dFoodEditorParity.getElementById("addSelBtn").dispatchEvent(
+  new FoodEditorParity.window.Event("click",{bubbles:true})
+);
+check("updating from the moved slider editor replaces the row instead of duplicating it",
+  FoodEditorParity.window.eval(
+    `data.food[todayStr()].length===1
+      && data.food[todayStr()][0].amount===2
+      && data.food[todayStr()][0].unit==="serving"
+      && data.food[todayStr()][0].foodKey==="food:test greek yogurt|test dairy"`
+  ));
+
+const UndoParity = boot(V2_CFG, EMPTY_DATA);
+const dUndoParity = UndoParity.window.document;
+UndoParity.window.eval(`offerUndo("Deleted test entry",()=>{window.__undoParity=true;})`);
+check("showing Undo reserves bottom page space",
+  dUndoParity.body.classList.contains("undo-toast-visible")
+  && !dUndoParity.getElementById("undoToast").classList.contains("hidden"));
+
+UndoParity.window.eval("dismissUndo()");
+check("allowing or requesting Undo dismissal releases reserved bottom space",
+  !dUndoParity.body.classList.contains("undo-toast-visible")
+  && dUndoParity.getElementById("undoToast").classList.contains("hidden"));
+
+UndoParity.window.eval(`offerUndo("Deleted test entry",()=>{window.__undoParity=true;})`);
+dUndoParity.getElementById("undoBtn").dispatchEvent(
+  new UndoParity.window.Event("click",{bubbles:true})
+);
+check("using Undo releases reserved bottom space",
+  UndoParity.window.eval("window.__undoParity===true")
+  && !dUndoParity.body.classList.contains("undo-toast-visible")
+  && dUndoParity.getElementById("undoToast").classList.contains("hidden"));
+
+const parityCss = fs.readFileSync(
+  path.join(__dirname,"..","index.html"),
+  "utf8"
+);
+check("Undo spacing covers ordinary pages and collapsed and expanded Train layouts",
+  /body\.undo-toast-visible\s*\{[^}]*padding-bottom/.test(parityCss)
+  && /body\.rest-dock-visible\s+#undoToast\s*\{[^}]*bottom/.test(parityCss)
+  && /body\.rest-dock-visible\.undo-toast-visible\s*\{[^}]*padding-bottom/.test(parityCss)
+  && /body\.rest-dock-visible\.rest-options-open\s+#undoToast\s*\{[^}]*bottom/.test(parityCss)
+  && /body\.rest-dock-visible\.rest-options-open\.undo-toast-visible\s*\{[^}]*padding-bottom/.test(parityCss));
 
 summary("INTEGRATION");
 })().catch(e=>{ console.error(e); process.exit(1); });

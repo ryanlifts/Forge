@@ -1126,9 +1126,13 @@ function flashSave(msg, bad){
 
 // One six-second Undo service for routine log/library deletions.
 let pendingUndoAction = null, pendingUndoTimer = null;
-function dismissUndo(){
+function setUndoVisible(visible){
   const toast = document.getElementById("undoToast");
-  if (toast) toast.classList.add("hidden");
+  if (toast) toast.classList.toggle("hidden", !visible);
+  document.body.classList.toggle("undo-toast-visible", !!visible);
+}
+function dismissUndo(){
+  setUndoVisible(false);
   if (pendingUndoTimer) clearTimeout(pendingUndoTimer);
   pendingUndoTimer = null;
   pendingUndoAction = null;
@@ -1140,7 +1144,7 @@ function offerUndo(message, action){
   if (pendingUndoTimer) clearTimeout(pendingUndoTimer);
   pendingUndoAction = action;
   msg.textContent = message;
-  toast.classList.remove("hidden");
+  setUndoVisible(true);
   pendingUndoTimer = setTimeout(dismissUndo, 6000);
 }
 document.getElementById("undoBtn").addEventListener("click", ()=>{
@@ -1149,7 +1153,7 @@ document.getElementById("undoBtn").addEventListener("click", ()=>{
   pendingUndoAction = null;
   if (pendingUndoTimer) clearTimeout(pendingUndoTimer);
   pendingUndoTimer = null;
-  document.getElementById("undoToast").classList.add("hidden");
+  setUndoVisible(false);
   action();
 });
 function isOffline(){ return navigator.onLine===false; }
