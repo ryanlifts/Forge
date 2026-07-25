@@ -2656,9 +2656,56 @@ check("healthy upgraded device backfills completed proof after user data evolved
   && typeof Stage2LegacyAfter.completedAt==="string"
   && Date.parse(Stage2LegacyAfter.completedAt)>=Date.parse(Stage2LegacyAfter.quarantinedAt));
 
-// ================= native verified backup sharing =================
+// ================= native verified backup sharing + elapsed reminder =================
+const reminderNow = Date.parse("2026-07-25T12:00:00.000Z");
+const reminderLogic = boot(V2_CFG, Object.assign({},EMPTY_DATA,{meta:{lastBackup:"2026-07-25",logsSince:0}}));
+const reminderCases = reminderLogic.window.eval(`(()=>{
+  const now=${reminderNow};
+  return {
+    noShareHistory:offsiteShareReminderDue({},now),
+    localOnly:offsiteShareReminderDue({lastBackup:"2026-07-25",logsSince:0},now),
+    completed13:offsiteShareReminderDue({lastShareCompletedAt:new Date(now-13*BACKUP_DAY_MS).toISOString()},now),
+    completed14:offsiteShareReminderDue({lastShareCompletedAt:new Date(now-14*BACKUP_DAY_MS).toISOString()},now),
+    attempt6:offsiteShareReminderDue({lastShareAttemptAt:new Date(now-6*BACKUP_DAY_MS).toISOString()},now),
+    attempt7:offsiteShareReminderDue({lastShareAttemptAt:new Date(now-7*BACKUP_DAY_MS).toISOString()},now),
+    snoozed:offsiteShareReminderDue({offsiteReminderSnoozedUntil:new Date(now+BACKUP_DAY_MS).toISOString()},now)
+  };
+})()`);
+check("backup-share reminder is immediately due without share history and otherwise uses elapsed share activity",
+  reminderCases.noShareHistory===true
+  && reminderCases.localOnly===true
+  && reminderCases.completed13===false
+  && reminderCases.completed14===true
+  && reminderCases.attempt6===false
+  && reminderCases.attempt7===true
+  && reminderCases.snoozed===false);
+const platformNeutralBackupGuidance = reminderLogic.window.eval(`([
+  document.getElementById("backupMetaLine").textContent,
+  document.getElementById("backupText").textContent,
+  document.getElementById("shareDataBtn").nextElementSibling.textContent
+]).join(" ")`);
+check("backup-share guidance is platform-neutral and still directs a separate copy",
+  platformNeutralBackupGuidance.includes("outside BlackPyre")
+  && !/(iCloud|\bMac\b|email)/i.test(platformNeutralBackupGuidance));
+const approvedBackupReminderCopy = reminderLogic.window.eval(`({
+  title:document.querySelector("#backupCard .label").textContent,
+  titleStyle:document.querySelector("#backupCard .label").getAttribute("style"),
+  cardStyle:document.getElementById("backupCard").getAttribute("style"),
+  text:document.getElementById("backupText").textContent,
+  primary:document.getElementById("backupNowBtn").textContent,
+  secondary:document.getElementById("backupSnoozeBtn").textContent
+})`);
+check("backup reminder uses approved red card copy and controls",
+  approvedBackupReminderCopy.title==="BACK UP YOUR DATA"
+  && /color\s*:\s*var\(--warn\)/.test(approvedBackupReminderCopy.titleStyle)
+  && /border-color\s*:\s*var\(--warn\)/.test(approvedBackupReminderCopy.cardStyle)
+  && approvedBackupReminderCopy.text==="Create a backup so your BlackPyre data can be recovered if your device is lost, replaced, or damaged."
+  && approvedBackupReminderCopy.primary==="Backup"
+  && approvedBackupReminderCopy.secondary==="Remind me later");
+
 const NativeBackupFiles = new Map();
 const NativeBackupShares = [];
+let resolveNativeBackupShare = null;
 const NativeBackup = boot(
   V2_CFG,
   Object.assign({},EMPTY_DATA,{meta:{lastBackup:null,logsSince:7}}),
@@ -2676,9 +2723,9 @@ const NativeBackup = boot(
           readFile:async options=>({data:NativeBackupFiles.get(options.path)})
         },
         Share:{
-          share:async options=>{
+          share:options=>{
             NativeBackupShares.push(options);
-            return {activityType:"com.apple.UIKit.activity.SaveToFiles"};
+            return new Promise(resolve=>{ resolveNativeBackupShare=resolve; });
           }
         }
       }
@@ -2688,7 +2735,10 @@ const NativeBackup = boot(
 NativeBackup.window.eval(`
   cfg.anthropicKey="native-secret-a";
   cfg.openaiKey="native-secret-o";
+  cfg.usdaKey="native-usda-key";
   data.meta.logsSince=7;
+  window.__backupNotice=null;
+  flashSave=(message,isError)=>{window.__backupNotice={message,isError:!!isError};};
 `);
 NativeBackup.__storageCalls.length=0;
 const nativeBackupPromise = NativeBackup.window.eval(`doBackup("exportDataBtn")`);
@@ -2702,22 +2752,101 @@ check("native backup writes a verified JSON file without opening the share sheet
   nativeBackupOk===true
   && !!nativeBackupName
   && NativeBackupShares.length===0);
-check("native backup strips both API keys",
+check("native backup strips private AI keys but intentionally retains the USDA key",
   !nativeBackupText.includes("native-secret-a")
-  && !nativeBackupText.includes("native-secret-o"));
-check("native backup records completion only after verified file creation",
+  && !nativeBackupText.includes("native-secret-o")
+  && nativeBackupPayload.cfg.usdaKey==="native-usda-key");
+check("native backup records local completion only after verified file creation",
   NativeBackup.window.eval(`
-    data.meta.lastBackup===todayStr() && data.meta.logsSince===0
+    data.meta.lastBackup===todayStr()
+    && data.meta.logsSince===0
+    && !Object.prototype.hasOwnProperty.call(data.meta,"lastShareAttemptAt")
+    && !Object.prototype.hasOwnProperty.call(data.meta,"lastShareCompletedAt")
+    && offsiteShareReminderDue(data.meta,${reminderNow},${reminderNow}-14*BACKUP_DAY_MS)===true
   `)
   && nativeBackupPayload.data.meta.lastBackup!==null
   && nativeBackupPayload.data.meta.logsSince===0);
 
-const nativeShareOk =
-  await NativeBackup.window.eval(`doBackup("shareDataBtn",true)`);
-check("separate Share Backup action opens the iOS share sheet",
+const nativeSharePromise = NativeBackup.window.eval(`doBackup("shareDataBtn",true)`);
+await wait(5);
+check("share attempt is persisted after the verified Documents backup and before completion",
+  NativeBackupShares.length===1
+  && NativeBackupShares[0].files[0]==="file:///Documents/"+nativeBackupName
+  && NativeBackup.window.eval(`
+    typeof data.meta.lastShareAttemptAt==="string"
+    && !Object.prototype.hasOwnProperty.call(data.meta,"lastShareCompletedAt")
+    && data.meta.lastBackup===todayStr()
+    && data.meta.logsSince===0
+  `));
+resolveNativeBackupShare({activityType:"com.apple.UIKit.activity.Mail"});
+const nativeShareOk = await nativeSharePromise;
+check("completed native share records honest completion metadata and activity type",
   nativeShareOk===true
-  && NativeBackupShares.length===1
-  && NativeBackupShares[0].files[0]==="file:///Documents/"+nativeBackupName);
+  && NativeBackup.window.eval(`
+    typeof data.meta.lastShareCompletedAt==="string"
+    && Date.parse(data.meta.lastShareCompletedAt)>=Date.parse(data.meta.lastShareAttemptAt)
+    && data.meta.lastShareActivityType==="com.apple.UIKit.activity.Mail"
+    && offsiteShareReminderDue(data.meta)===false
+    && window.__backupNotice.message==="Backup ready. Save the file somewhere you can access later."
+    && window.__backupNotice.isError===false
+  `));
+
+const NativeCancelFiles = new Map();
+const NativeShareCancel = boot(
+  V2_CFG,
+  Object.assign({},EMPTY_DATA,{meta:{lastBackup:null,logsSince:4}}),
+  w=>{
+    w.Capacitor = {
+      getPlatform:()=>"ios",
+      isNativePlatform:()=>true,
+      isPluginAvailable:name=>name==="Filesystem" || name==="Share",
+      Plugins:{
+        Filesystem:{
+          writeFile:async options=>{
+            NativeCancelFiles.set(options.path,options.data);
+            return {uri:"file:///Documents/"+options.path};
+          },
+          readFile:async options=>({data:NativeCancelFiles.get(options.path)})
+        },
+        Share:{share:async()=>{ throw new Error("Share canceled"); }}
+      }
+    };
+  }
+);
+NativeShareCancel.window.eval(`
+  window.__shareCancelNotice=null;
+  flashSave=(message,isError)=>{window.__shareCancelNotice={message,isError:!!isError};};
+`);
+const nativeCancelResult = await NativeShareCancel.window.eval(`doBackup("shareDataBtn",true)`);
+check("cancelled share preserves the local backup and records only the attempt",
+  nativeCancelResult===false
+  && NativeCancelFiles.size===1
+  && NativeShareCancel.window.eval(`
+    data.meta.lastBackup===todayStr()
+    && data.meta.logsSince===0
+    && typeof data.meta.lastShareAttemptAt==="string"
+    && !Object.prototype.hasOwnProperty.call(data.meta,"lastShareCompletedAt")
+    && window.__shareCancelNotice.message==="Backup canceled. Your existing data is unchanged."
+    && window.__shareCancelNotice.isError===false
+    && offsiteShareReminderDue(data.meta)===false
+  `));
+
+const staleCompletedAt = new Date(Date.now()-15*86400000).toISOString();
+const ReminderSnooze = boot(
+  V2_CFG,
+  Object.assign({},EMPTY_DATA,{meta:{lastBackup:dstr(0),logsSince:0,lastShareCompletedAt:staleCompletedAt}})
+);
+check("elapsed completed-share age shows the offsite reminder without requiring new logs",
+  !ReminderSnooze.window.document.getElementById("backupCard").classList.contains("hidden"));
+ReminderSnooze.window.document.getElementById("backupSnoozeBtn")
+  .dispatchEvent(new ReminderSnooze.window.Event("click",{bubbles:true}));
+check("remind-me-later persists a seven-day snooze and hides the reminder",
+  ReminderSnooze.window.document.getElementById("backupCard").classList.contains("hidden")
+  && ReminderSnooze.window.eval(`
+    typeof data.meta.offsiteReminderSnoozedUntil==="string"
+    && Date.parse(data.meta.offsiteReminderSnoozedUntil)>Date.now()+6*BACKUP_DAY_MS
+    && offsiteShareReminderDue(data.meta)===false
+  `));
 
 const NativeBackupFailure = boot(
   V2_CFG,
@@ -2744,11 +2873,14 @@ NativeBackupFailure.window.eval(`
 NativeBackupFailure.__storageCalls.length=0;
 const nativeBackupFailureResult =
   await NativeBackupFailure.window.eval(`doBackup("exportDataBtn")`);
-check("failed native backup does not falsely record success",
+check("failed native backup does not falsely record local or share success",
   nativeBackupFailureResult===false
   && NativeBackupFailure.window.eval(`
     data.meta.lastBackup===null
     && data.meta.logsSince===4
+    && !Object.prototype.hasOwnProperty.call(data.meta,"lastShareAttemptAt")
+    && !Object.prototype.hasOwnProperty.call(data.meta,"lastShareCompletedAt")
+    && window.__backupFailure.message==="Backup failed — no backup was recorded"
     && window.__backupFailure.isError===true
   `)
   && sacredCalls(NativeBackupFailure).length===0);

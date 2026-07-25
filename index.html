@@ -338,9 +338,12 @@
     <div id="streakLine" class="note hidden" style="margin:0 0 10px; font-size:12px;"></div>
     <button class="btn hidden" id="nextWorkoutBtn" aria-label="Start the next suggested workout" style="margin-bottom:12px;"></button>
     <div class="card hidden" id="backupCard" style="border-color:var(--warn);">
-      <div class="label" style="color:var(--warn);">Backup recommended</div>
+      <div class="label" style="color:var(--warn);">BACK UP YOUR DATA</div>
       <div id="backupText" style="font-size:13px; line-height:1.7; margin:6px 0 12px;"></div>
-      <button class="btn ghost small" id="backupNowBtn">Back up now</button>
+      <div class="row">
+        <button class="btn ghost small" id="backupNowBtn">Backup</button>
+        <button class="xbtn" id="backupSnoozeBtn">Remind me later</button>
+      </div>
     </div>
     <div class="card hidden" id="waterCard">
       <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -987,7 +990,7 @@
       <button class="btn ghost small" id="exportDataBtn">Back up all data (.json)</button>
       <div style="height:10px;"></div>
       <button class="btn ghost small" id="shareDataBtn">Share a backup</button>
-      <div class="note" style="margin-top:8px;">Back up saves automatically to Files → On My iPhone → BlackPyre. Share creates a fresh backup and opens the share sheet.</div>
+      <div class="note" style="margin-top:8px;">Back up saves automatically to BlackPyre’s local Documents folder. Share writes a fresh local backup, then opens the system share sheet. “Backup share completed” means the share activity finished; keep a separate copy outside BlackPyre.</div>
       <div class="note" id="storageUseNote" style="margin-top:8px;"></div>
       <div style="height:10px;"></div>
       <button class="btn ghost small" id="importDataBtn">Restore from backup</button>
