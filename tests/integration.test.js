@@ -1951,6 +1951,14 @@ function stage2VaultRaw(options){
     strings:strings
   });
 }
+function stage2SeedFromContracted(strings,preservation){
+  return {
+    cfg:strings["forge:cfg"], data:strings["forge:data"], program:strings["forge:program"],
+    lkg:strings["forge:lkg"], lkgPrevious:strings["forge:lkg:previous"], lkgOlder:strings["forge:lkg:older"],
+    quarantine:strings["forge:quarantine"], install:strings["forge:install"], legacyData:strings["ryan-cut:data"],
+    nativeRestorePreservation:preservation
+  };
+}
 function stage2StorageSnapshot(dom){
   const out={};
   const storage=dom.window.localStorage;
@@ -2120,6 +2128,10 @@ check("successful Stage 2 restore is reported as verified",
   && !Stage2MissingStatus.restoreError);
 check("Stage 2 restoration leaves the verified native vault byte-identical",
   Stage2MissingFs.files.get(STAGE2_VAULT_PATH)===Stage2MissingVaultRaw);
+const Stage2CompletedQuarantine=parseNativeVault(Stage2MissingFs.files.get(STAGE2_RESTORE_QUARANTINE_PATH));
+check("successful Stage 2 restore marks its exact native quarantine completed",
+  !!Stage2CompletedQuarantine && typeof Stage2CompletedQuarantine.completedAt==="string"
+  && !Number.isNaN(Date.parse(Stage2CompletedQuarantine.completedAt)));
 
 
 // Invalid primary localStorage must also restore from a valid vault while preserving
@@ -2327,6 +2339,32 @@ check("Stage 2 quarantine verification mismatch prevents every restore mutation"
   && Stage2QuarantineMismatchStatus.quarantineVerified===false
   && Stage2QuarantineMismatchFs.files.get(STAGE2_VAULT_PATH)===Stage2QuarantineMismatchVaultRaw);
 
+
+// Completion-proof failure rolls browser storage back and leaves the exact incident reusable.
+const Stage2CompletionFailFs=makeNativeFilesystem({files:{[STAGE2_VAULT_PATH]:stage2VaultRaw()}});
+Stage2CompletionFailFs.control.failWrite=args=>{
+  if (args.path!==STAGE2_RESTORE_QUARANTINE_PATH) return false;
+  try { return typeof JSON.parse(args.data).completedAt==="string"; } catch(error){ return false; }
+};
+const Stage2CompletionFail=bootRaw({},w=>Stage2CompletionFailFs.install(w));
+await settleNativeVault(Stage2CompletionFail);
+const Stage2CompletionFailStatus=stage2RestoreStatus(Stage2CompletionFail);
+const Stage2CompletionFailQuarantine=parseNativeVault(Stage2CompletionFailFs.files.get(STAGE2_RESTORE_QUARANTINE_PATH));
+check("completion-proof failure rolls back and leaves the same incident retryable",
+  stage2AllContractedAbsent(Stage2CompletionFail)
+  && Stage2CompletionFail.window.eval(`protectedMode===true`)
+  && Stage2CompletionFailStatus.restoreState==="failed"
+  && Stage2CompletionFailStatus.rollbackVerified===true
+  && !!Stage2CompletionFailQuarantine
+  && !Object.prototype.hasOwnProperty.call(Stage2CompletionFailQuarantine,"completedAt"));
+Stage2CompletionFailFs.control.failWrite=null;
+const Stage2CompletionRetry=bootRaw({},w=>Stage2CompletionFailFs.install(w));
+await settleNativeVault(Stage2CompletionRetry);
+check("an exact retry reuses uncompleted evidence and finishes restoration",
+  nativeVaultField(Stage2CompletionRetry,"restoreState")==="restored"
+  && Stage2CompletionRetry.window.eval(`protectedMode===false`)
+  && stage2StorageMatchesVault(Stage2CompletionRetry,stage2VaultStrings())
+  && typeof parseNativeVault(Stage2CompletionFailFs.files.get(STAGE2_RESTORE_QUARANTINE_PATH)).completedAt==="string");
 
 // Existing verified recovery evidence must never be silently replaced.
 const Stage2ExistingQuarantineRaw=stage2VerifiedRestoreQuarantineRaw();
@@ -2573,6 +2611,50 @@ check("Stage 2 exact restore survives the next healthy native boot without metad
   && nativeVaultField(Stage2Restart,"restoreState")==="not-needed");
 
 
+
+// Dominant path: restore, save real data, restart, then lose browser storage again.
+Stage2Missing.window.eval(`data.weights.push({date:"2026-07-25",lbs:218}); save();`);
+await settleNativeVault(Stage2Missing);
+const Stage2RepeatPreservation=Stage2Missing.window.localStorage.getItem("blackpyre:native-restore-preservation");
+const Stage2RepeatSavedStrings=stage2ContractedSnapshot(Stage2Missing);
+const Stage2RepeatRestart=bootRaw(
+  stage2SeedFromContracted(Stage2RepeatSavedStrings,Stage2RepeatPreservation),
+  w=>Stage2MissingFs.install(w)
+);
+await settleNativeVault(Stage2RepeatRestart);
+const Stage2RepeatLatestVault=parseNativeVault(Stage2MissingFs.files.get(STAGE2_VAULT_PATH));
+check("completed quarantine proof survives normal saves and a healthy restart",
+  Stage2RepeatRestart.window.eval(`protectedMode===false && data.weights.some(item=>item.date==="2026-07-25"&&item.lbs===218)`)
+  && typeof parseNativeVault(Stage2MissingFs.files.get(STAGE2_RESTORE_QUARANTINE_PATH)).completedAt==="string"
+  && Stage2RepeatLatestVault.strings["forge:data"]===Stage2RepeatRestart.window.localStorage.getItem("forge:data"));
+const Stage2FirstCompletedQuarantineRaw=Stage2MissingFs.files.get(STAGE2_RESTORE_QUARANTINE_PATH);
+const Stage2RepeatSecond=bootRaw({},w=>Stage2MissingFs.install(w));
+await settleNativeVault(Stage2RepeatSecond);
+const Stage2SecondCompletedQuarantineRaw=Stage2MissingFs.files.get(STAGE2_RESTORE_QUARANTINE_PATH);
+const Stage2SecondCompletedQuarantine=parseNativeVault(Stage2SecondCompletedQuarantineRaw);
+check("a later data-loss incident replaces completed evidence and restores the latest vault",
+  nativeVaultField(Stage2RepeatSecond,"restoreState")==="restored"
+  && Stage2RepeatSecond.window.eval(`protectedMode===false && data.weights.some(item=>item.date==="2026-07-25"&&item.lbs===218)`)
+  && Stage2SecondCompletedQuarantineRaw!==Stage2FirstCompletedQuarantineRaw
+  && typeof Stage2SecondCompletedQuarantine.completedAt==="string");
+
+// Upgrade path: old completed restore, evolved user data, old preservation, unmarked quarantine.
+const Stage2LegacyQuarantineRecord=Object.assign({},Stage2CompletedQuarantine);
+delete Stage2LegacyQuarantineRecord.completedAt;
+const Stage2LegacyFs=makeNativeFilesystem({files:{
+  [STAGE2_VAULT_PATH]:JSON.stringify(Stage2RepeatLatestVault),
+  [STAGE2_RESTORE_QUARANTINE_PATH]:JSON.stringify(Stage2LegacyQuarantineRecord)
+}});
+const Stage2Legacy=bootRaw(
+  stage2SeedFromContracted(Stage2RepeatLatestVault.strings,Stage2RepeatPreservation),
+  w=>Stage2LegacyFs.install(w)
+);
+await settleNativeVault(Stage2Legacy);
+const Stage2LegacyAfter=parseNativeVault(Stage2LegacyFs.files.get(STAGE2_RESTORE_QUARANTINE_PATH));
+check("healthy upgraded device backfills completed proof after user data evolved",
+  Stage2Legacy.window.eval(`protectedMode===false`)
+  && typeof Stage2LegacyAfter.completedAt==="string"
+  && Date.parse(Stage2LegacyAfter.completedAt)>=Date.parse(Stage2LegacyAfter.quarantinedAt));
 
 // ================= native verified backup sharing =================
 const NativeBackupFiles = new Map();

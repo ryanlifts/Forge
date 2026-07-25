@@ -791,6 +791,10 @@ function nativeVaultFailure(capability,source,message,existing,retained){
 async function refreshNativeVaultNow(source){
   const capability=nativeVaultCapability();
   const attemptedAt=new Date().toISOString();
+  if (source==="boot" && capability.available){
+    try { await backfillNativeRestoreQuarantineCompletion(capability); }
+    catch(error){}
+  }
   if (!capability.available){
     updateNativeVaultDiagnostic({
       state:"unavailable",available:false,native:capability.native,platform:capability.platform,verified:false,
@@ -972,15 +976,56 @@ function inspectNativeRestoreQuarantineRaw(raw){
       return {ok:false,code:"shape",reason:"The native restore quarantine does not describe every contracted key exactly once."};
     }
   }
+  if (hasOwn(record,"completedAt")
+      && (typeof record.completedAt!=="string" || Number.isNaN(Date.parse(record.completedAt)))){
+    return {ok:false,code:"shape",reason:"The native restore quarantine completion proof is invalid."};
+  }
   return {ok:true,record:record};
+}
+function nativeRestoreQuarantineCompleted(record){
+  return !!(record && typeof record.completedAt==="string" && !Number.isNaN(Date.parse(record.completedAt)));
+}
+function sameNativeRestoreIncident(left,right){
+  if (!left || !right || !isPlainObject(left.strings) || !isPlainObject(right.strings)) return false;
+  const leftKeys=Object.keys(left.strings).sort(), rightKeys=Object.keys(right.strings).sort();
+  if (leftKeys.length!==rightKeys.length || leftKeys.some((key,index)=>key!==rightKeys[index] || left.strings[key]!==right.strings[key])) return false;
+  const leftAbsent=(left.absentContractedKeys||[]).slice().sort();
+  const rightAbsent=(right.absentContractedKeys||[]).slice().sort();
+  return leftAbsent.length===rightAbsent.length && leftAbsent.every((key,index)=>key===rightAbsent[index]);
+}
+async function writeVerifiedNativeRestoreQuarantineRaw(fs,raw){
+  if (!inspectNativeRestoreQuarantineRaw(raw).ok){
+    return {ok:false,code:"quarantine-invalid",reason:"Native restore quarantine bytes were invalid before writing."};
+  }
+  try {
+    await fs.writeFile({path:NATIVE_RESTORE_QUARANTINE_PATH,data:raw,directory:NATIVE_VAULT_DIRECTORY,encoding:NATIVE_VAULT_ENCODING});
+  } catch(error){
+    return {ok:false,code:"quarantine-write",reason:"Native restore quarantine write failed: "+nativeVaultErrorText(error),error:error};
+  }
+  const read=await readNativeVaultFile(fs,NATIVE_RESTORE_QUARANTINE_PATH);
+  const inspected=read.ok ? inspectNativeRestoreQuarantineRaw(read.raw) : {ok:false};
+  return read.ok && read.raw===raw && inspected.ok
+    ? {ok:true,verified:true,raw:raw,record:inspected.record}
+    : {ok:false,code:"quarantine-verify",reason:"Native restore quarantine read-back did not match."};
+}
+async function markNativeRestoreQuarantineCompleted(fs,raw,completedAt){
+  const current=await readNativeVaultFile(fs,NATIVE_RESTORE_QUARANTINE_PATH);
+  if (!current.ok || current.raw!==raw){
+    return {ok:false,code:"quarantine-completion-conflict",reason:"Native restore quarantine changed before completion could be recorded."};
+  }
+  const inspected=inspectNativeRestoreQuarantineRaw(raw);
+  if (!inspected.ok) return {ok:false,code:"quarantine-completion-invalid",reason:"Native restore quarantine could not accept completion proof."};
+  let completedRaw;
+  try { completedRaw=JSON.stringify(Object.assign({},inspected.record,{completedAt:completedAt||new Date().toISOString()})); }
+  catch(error){ return {ok:false,code:"quarantine-completion-serialize",reason:"Native restore completion proof could not be serialized."}; }
+  const completed=await writeVerifiedNativeRestoreQuarantineRaw(fs,completedRaw);
+  if (completed.ok) return completed;
+  const rollback=await writeVerifiedNativeRestoreQuarantineRaw(fs,raw);
+  return {ok:false,code:completed.code,reason:completed.reason+(rollback.ok ? " The prior verified quarantine was restored." : " The prior quarantine also could not be restored.")};
 }
 async function writeNativeRestoreQuarantine(fs,capture){
   if (!capture || !capture.ok){
-    return {
-      ok:false,
-      code:"quarantine-capture",
-      reason:capture&&capture.reason ? capture.reason : "Native restore quarantine could not be captured."
-    };
+    return {ok:false,code:"quarantine-capture",reason:capture&&capture.reason ? capture.reason : "Native restore quarantine could not be captured."};
   }
   const existingRead=await readNativeVaultFile(fs,NATIVE_RESTORE_QUARANTINE_PATH);
   if (!existingRead.ok && !existingRead.missing){
@@ -988,39 +1033,23 @@ async function writeNativeRestoreQuarantine(fs,capture){
   }
   if (existingRead.ok){
     const existing=inspectNativeRestoreQuarantineRaw(existingRead.raw);
-    return {
-      ok:false,
-      code:"quarantine-conflict",
-      reason:existing.ok
-        ? "A verified native restore quarantine already exists and was preserved."
-        : "An existing native restore quarantine could not be safely replaced."
-    };
+    if (!existing.ok){
+      return {ok:false,code:"quarantine-conflict",reason:"An existing native restore quarantine could not be safely replaced."};
+    }
+    if (!nativeRestoreQuarantineCompleted(existing.record)){
+      return sameNativeRestoreIncident(existing.record,capture.record)
+        ? {ok:true,verified:true,reused:true,raw:existingRead.raw,capture:capture,record:existing.record}
+        : {ok:false,code:"quarantine-conflict",reason:"A verified native restore quarantine already exists and was preserved."};
+    }
+    const replacement=await writeVerifiedNativeRestoreQuarantineRaw(fs,capture.raw);
+    if (replacement.ok) return {ok:true,verified:true,replaced:true,raw:replacement.raw,capture:capture,record:replacement.record};
+    const rollback=await writeVerifiedNativeRestoreQuarantineRaw(fs,existingRead.raw);
+    return {ok:false,code:replacement.code,reason:replacement.reason+(rollback.ok ? " The previous completed quarantine was restored." : " The previous quarantine also could not be restored.")};
   }
-  try {
-    await fs.writeFile({
-      path:NATIVE_RESTORE_QUARANTINE_PATH,
-      data:capture.raw,
-      directory:NATIVE_VAULT_DIRECTORY,
-      encoding:NATIVE_VAULT_ENCODING
-    });
-  } catch(error){
-    return {
-      ok:false,
-      code:"quarantine-write",
-      reason:"Native restore quarantine write failed: "+nativeVaultErrorText(error),
-      error:error
-    };
-  }
-  const verifiedRead=await readNativeVaultFile(fs,NATIVE_RESTORE_QUARANTINE_PATH);
-  const inspected=verifiedRead.ok ? inspectNativeRestoreQuarantineRaw(verifiedRead.raw) : {ok:false};
-  if (!verifiedRead.ok || verifiedRead.raw!==capture.raw || !inspected.ok){
-    return {
-      ok:false,
-      code:"quarantine-verify",
-      reason:"Native restore quarantine read-back did not match."
-    };
-  }
-  return {ok:true,verified:true,capture:capture,record:inspected.record};
+  const written=await writeVerifiedNativeRestoreQuarantineRaw(fs,capture.raw);
+  return written.ok
+    ? {ok:true,verified:true,raw:written.raw,capture:capture,record:written.record}
+    : written;
 }
 function writeExactNativeVaultStrings(strings){
   for (const key of NATIVE_VAULT_KEYS){
@@ -1111,6 +1140,31 @@ function nativeRestorePreservationMatchesCurrent(){
     return false;
   }
 }
+async function backfillNativeRestoreQuarantineCompletion(capability){
+  let preservationRaw=null;
+  try { preservationRaw=localStorage.getItem(NATIVE_RESTORE_PRESERVATION_KEY); }
+  catch(error){ return {ok:false,code:"preservation-read"}; }
+  const preservation=inspectNativeRestorePreservationRaw(preservationRaw);
+  if (!preservation.ok) return {ok:true,skipped:true};
+  const preserved=prepareState(
+    preservation.record.strings[CFG_KEY],
+    preservation.record.strings[DATA_KEY],
+    preservation.record.strings[PROG_KEY]
+  );
+  if (!preserved.ok) return {ok:false,code:"invalid-preservation"};
+  const read=await readNativeVaultFile(capability.fs,NATIVE_RESTORE_QUARANTINE_PATH);
+  if (!read.ok) return read.missing ? {ok:true,skipped:true} : {ok:false,code:"quarantine-read"};
+  const quarantine=inspectNativeRestoreQuarantineRaw(read.raw);
+  if (!quarantine.ok || nativeRestoreQuarantineCompleted(quarantine.record)){
+    return quarantine.ok ? {ok:true,unchanged:true} : {ok:false,code:"invalid-quarantine"};
+  }
+  const quarantinedAt=Date.parse(quarantine.record.quarantinedAt);
+  const restoredAt=Date.parse(preservation.record.restoredAt);
+  if (!Number.isFinite(quarantinedAt) || !Number.isFinite(restoredAt) || restoredAt<quarantinedAt){
+    return {ok:false,code:"proof-order"};
+  }
+  return markNativeRestoreQuarantineCompleted(capability.fs,read.raw,preservation.record.restoredAt);
+}
 function adoptPreservedNativeLkgStatus(){
   try {
     const current=inspectLkgRaw(localStorage.getItem(LKG_KEY));
@@ -1191,7 +1245,7 @@ function completeNativeRestore(prepared,capability,vaultRecord){
     rollbackFailed:false,
     rollbackError:null
   });
-  notifyNativeRestoreUi();
+  try { notifyNativeRestoreUi(); } catch(error){}
 }
 async function continueNativeFirstInstall(capability,context){
   if (!context.prepared || !context.prepared.ok){
@@ -1352,6 +1406,14 @@ async function restoreNativeVaultAtBoot(context){
     const preservation=writeNativeRestorePreservation(inspected.record.strings);
     if (!preservation.ok){
       throw new Error("The restored state could not record exact restart-preservation proof.");
+    }
+    const completion=await markNativeRestoreQuarantineCompleted(
+      capability.fs,
+      quarantined.raw,
+      preservation.record.restoredAt
+    );
+    if (!completion.ok){
+      throw new Error("The restored state could not record durable completion proof: "+completion.reason);
     }
 
     completeNativeRestore(verified,capability,inspected.record);
