@@ -248,8 +248,29 @@
   #restPresets { display:flex; gap:6px; flex-wrap:wrap; flex:1; }
   #restPresets .xbtn { min-height:40px; }
   #restCustomRow { margin-top:8px; }
+  /* Fixed bottom controls must reserve real document space so the
+     newest row remains reachable instead of sitting underneath them. */
+  body.undo-toast-visible { padding-bottom:164px; }
   body.rest-dock-visible { padding-bottom:164px; }
-  body.rest-dock-visible.rest-options-open { padding-bottom:258px; }
+
+  /* When Undo and the Train timer coexist, stack Undo above the timer and
+     reserve space for both controls. */
+  body.rest-dock-visible #undoToast {
+    bottom:calc(132px + env(safe-area-inset-bottom, 0px));
+  }
+  body.rest-dock-visible.undo-toast-visible {
+    padding-bottom:232px;
+  }
+
+  body.rest-dock-visible.rest-options-open {
+    padding-bottom:258px;
+  }
+  body.rest-dock-visible.rest-options-open #undoToast {
+    bottom:calc(226px + env(safe-area-inset-bottom, 0px));
+  }
+  body.rest-dock-visible.rest-options-open.undo-toast-visible {
+    padding-bottom:326px;
+  }
   #offlineBanner { margin:10px 0 12px; padding:10px 12px; border:1px solid var(--amber); border-radius:12px; background:rgba(232,176,75,.10); color:var(--text); font-size:11px; line-height:1.55; }
   .disclosure { margin-bottom:12px; }
   .disclosure > summary { list-style:none; cursor:pointer; min-height:52px; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 15px; border:1px solid var(--border); border-radius:14px; background:var(--panel); }
@@ -529,7 +550,7 @@
     <div class="card hidden" id="usualCard" style="border-color:var(--ember);">
       <div class="label">Your usual <span id="usualMealName">breakfast</span></div>
       <div id="usualItems" style="font-size:13px; line-height:1.7; margin:6px 0 12px;"></div>
-      <button class="btn ghost small" id="usualLogBtn" aria-label="Log usual meal" style="width:100%;"></button>
+      <button class="btn ghost small" id="usualLogBtn" aria-label="Add all usual meal foods" style="width:100%;"></button>
     </div>
     <div class="card hidden" id="aiFoodCard">
       <div class="label">AI quick log</div>

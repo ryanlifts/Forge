@@ -292,34 +292,141 @@ function usualFor(meal){
 
   return items.length ? items : null;
 }
+function usualFoodLoggedToday(item,meal){
+  return (data.food[todayStr()]||[]).some(entry=>
+    (entry.meal||"other")===meal
+    && recurringFoodCategoryMatch(item,entry)
+  );
+}
+function cloneUsualFoodForLog(item,meal){
+  const copy = Object.assign({},item,{meal:meal});
+  if (item && item.sourceFood) copy.sourceFood = Object.assign({},item.sourceFood);
+  return copy;
+}
+function addUsualFood(item,meal){
+  if (foodDateEl.value!==todayStr() || currentMeal!==meal) return false;
+  if (usualFoodLoggedToday(item,meal)){
+    renderUsual();
+    flashSave("Already added — not logging it twice",true);
+    return false;
+  }
+
+  const day = todayStr();
+  const before = (data.food[day]||[]).length;
+  addEntry(cloneUsualFoodForLog(item,meal));
+  return (data.food[day]||[]).length===before+1;
+}
 function renderUsual(){
   const card = document.getElementById("usualCard");
   if (foodDateEl.value !== todayStr()){ card.classList.add("hidden"); return; }
 
-  const items = usualFor(currentMeal);
+  const meal = currentMeal;
+  const items = usualFor(meal);
   if (!items){ card.classList.add("hidden"); return; }
 
-  const todayEntries = (data.food[todayStr()]||[])
-    .filter(f=>(f.meal||"other")===currentMeal);
-
-  const remaining = items.filter(item=>
-    !todayEntries.some(todayEntry=>recurringFoodCategoryMatch(item,todayEntry))
-  );
-
-  if (!remaining.length){ card.classList.add("hidden"); return; }
+  const states = items.map(item=>({
+    item:item,
+    added:usualFoodLoggedToday(item,meal)
+  }));
+  const remaining = states.filter(state=>!state.added);
 
   card.classList.remove("hidden");
-  document.getElementById("usualMealName").textContent = currentMeal;
-  const total = Math.round(remaining.reduce((a,x)=>a+Number(x.cal||0),0));
-  const pro = Math.round(remaining.reduce((a,x)=>a+Number(x.pro||0),0));
-  document.getElementById("usualItems").innerHTML = remaining.map(it=>esc(it.name)).join(" · ")
-    + '<div style="color:var(--dim); font-size:11px; margin-top:4px;">'+total+' kcal · '+pro+'g protein · your typical portions</div>';
+  document.getElementById("usualMealName").textContent = meal;
+
+  const itemsEl = document.getElementById("usualItems");
+  itemsEl.innerHTML = "";
+
+  states.forEach((state,index)=>{
+    const item = state.item;
+    const row = document.createElement("div");
+    row.className = "usual-food-row";
+    row.dataset.usualIndex = String(index);
+    row.style.cssText = "display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--line);";
+
+    const details = document.createElement("div");
+    details.style.cssText = "flex:1; min-width:0;";
+
+    const name = document.createElement("div");
+    name.className = "usual-food-name";
+    name.style.cssText = "font-weight:500; overflow:hidden; text-overflow:ellipsis;";
+    name.textContent = item.name;
+
+    const macros = document.createElement("div");
+    macros.style.cssText = "color:var(--dim); font-size:11px; line-height:1.4;";
+    macros.textContent = Math.round(Number(item.cal||0))+" kcal · "
+      +Math.round(Number(item.pro||0))+"P / "
+      +Math.round(Number(item.carb||0))+"C / "
+      +Math.round(Number(item.fat||0))+"F";
+
+    details.appendChild(name);
+    details.appendChild(macros);
+
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.className = "xbtn usual-item-add";
+    addBtn.dataset.usualIndex = String(index);
+    addBtn.style.cssText = "flex:0 0 auto; min-width:62px;";
+    addBtn.textContent = state.added ? "Added" : "Add";
+    addBtn.disabled = state.added;
+    addBtn.setAttribute(
+      "aria-label",
+      (state.added ? "Already added: " : "Add usual food: ")+item.name
+    );
+    addBtn.addEventListener("click",()=>{
+      addBtn.disabled = true;
+      if (addUsualFood(item,meal)){
+        flashSave(item.name+" added ✓");
+      } else {
+        renderUsual();
+      }
+    });
+
+    row.appendChild(details);
+    row.appendChild(addBtn);
+    itemsEl.appendChild(row);
+  });
+
+  const total = Math.round(items.reduce((sum,item)=>sum+Number(item.cal||0),0));
+  const pro = Math.round(items.reduce((sum,item)=>sum+Number(item.pro||0),0));
+  const summary = document.createElement("div");
+  summary.className = "usual-meal-summary";
+  summary.style.cssText = "color:var(--dim); font-size:11px; margin-top:7px;";
+  summary.textContent = total+" kcal · "+pro+"g protein · your typical portions";
+  itemsEl.appendChild(summary);
+
   const btn = document.getElementById("usualLogBtn");
-  btn.textContent = "Log usual "+currentMeal+" ("+remaining.length+" item"+(remaining.length===1?"":"s")+")";
+
+  if (!remaining.length){
+    btn.textContent = "All added";
+    btn.disabled = true;
+    btn.setAttribute("aria-label","All usual "+meal+" foods added");
+    btn.onclick = null;
+    return;
+  }
+
+  const itemWord = remaining.length===1 ? "item" : "items";
+  btn.disabled = false;
+  btn.textContent = remaining.length===items.length
+    ? "Add all ("+remaining.length+" "+itemWord+")"
+    : "Add all remaining ("+remaining.length+" "+itemWord+")";
+  btn.setAttribute(
+    "aria-label",
+    remaining.length===items.length
+      ? "Add all usual "+meal+" foods"
+      : "Add all remaining usual "+meal+" foods"
+  );
   btn.onclick = ()=>{
-    remaining.forEach(it=>addEntry(Object.assign({}, it)));
-    ackBtn("usualLogBtn", "✓ Logged "+remaining.length);
-    flashSave("Usual "+currentMeal+" logged ✓");
+    const freshItems = usualFor(meal)||[];
+    const toAdd = freshItems.filter(item=>!usualFoodLoggedToday(item,meal));
+    let added = 0;
+    toAdd.forEach(item=>{
+      if (addUsualFood(item,meal)) added++;
+    });
+    if (added){
+      flashSave("Usual "+meal+" logged ✓");
+    } else {
+      renderUsual();
+    }
   };
 }
 

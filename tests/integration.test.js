@@ -860,9 +860,20 @@ check("v51 duplicate guard: the same food later is honest logging, not a duplica
 check("v51 meal selection preserved through adds", F51.window.eval("currentMeal")==="lunch");
 // deletion with Undo
 F51.window.eval(`removeEntry(0)`);
-check("v51 undo: deletion removes the entry and offers Undo", F51.window.eval("data.food[todayStr()].length")===2 && !dF51.getElementById("undoToast").classList.contains("hidden") && /Deleted "Chicken"/.test(dF51.getElementById("undoMsg").textContent));
-dF51.getElementById("undoBtn").dispatchEvent(new F51.window.Event("click",{bubbles:true}));
-check("v51 undo: tapping Undo restores the entry at its original position", F51.window.eval(`data.food[todayStr()].length===3 && data.food[todayStr()][0].name==="Chicken"`) && dF51.getElementById("undoToast").classList.contains("hidden"));
+check("v51 undo: deletion removes the entry, offers Undo, and reserves bottom interaction space",
+  F51.window.eval("data.food[todayStr()].length")===2
+  && !dF51.getElementById("undoToast").classList.contains("hidden")
+  && dF51.body.classList.contains("undo-toast-visible")
+  && /Deleted "Chicken"/.test(dF51.getElementById("undoMsg").textContent));
+
+dF51.getElementById("undoBtn").dispatchEvent(
+  new F51.window.Event("click",{bubbles:true})
+);
+
+check("v51 undo: tapping Undo restores the entry and releases its reserved space",
+  F51.window.eval(`data.food[todayStr()].length===3 && data.food[todayStr()][0].name==="Chicken"`)
+  && dF51.getElementById("undoToast").classList.contains("hidden")
+  && !dF51.body.classList.contains("undo-toast-visible"));
 // search results into view + post-log return
 F51.window.HTMLElement.prototype.scrollIntoView = function(opts){ F51.window.__f51 = {id:this.id, block:opts&&opts.block}; };
 F51.window.eval(`renderResults([{name:"Test Food", brand:"B", cal100:100, pro100:10, carb100:5, fat100:2}]);`);
@@ -952,6 +963,22 @@ for(let i=1;i<=5;i++){
     }
   ];
 }
+Object.assign(usualFood[dstr(-1)][0],{
+  amount:1.5,
+  unit:"serving",
+  grams:255,
+  foodKey:"food:friendly farms plain non fat greek yogurt|friendly farms",
+  sourceFood:{
+    name:"Friendly Farms Plain Non Fat Greek Yogurt",
+    brand:"Friendly Farms",
+    cal100:43.137,
+    pro100:7.451,
+    carb100:2.745,
+    fat100:0.392,
+    servingG:170,
+    servingLabel:"170g cup"
+  }
+});
 
 const UsualIdentity = boot(V2_CFG,Object.assign({},EMPTY_DATA,{food:usualFood}));
 const dUsualIdentity = UsualIdentity.window.document;
@@ -968,24 +995,111 @@ check("usual breakfast groups quantity, capitalization, and product-name variant
     })()
   `));
 
-UsualIdentity.window.eval(`
-  _lastAddT=0;
-  addEntry({name:"175g Greek yogurt",cal:105,pro:18,carb:7,fat:1,meal:"breakfast"});
-  renderUsual();
-`);
-check("usual breakfast removes the matching category but keeps the card visible for one remaining recurring food",
-  !dUsualIdentity.getElementById("usualCard").classList.contains("hidden")
-  && /\(1 item\)/.test(dUsualIdentity.getElementById("usualLogBtn").textContent)
-  && !/Greek yogurt/i.test(dUsualIdentity.getElementById("usualItems").textContent)
-  && /Eggs/.test(dUsualIdentity.getElementById("usualItems").textContent));
+const usualBreakfastButtons = [...dUsualIdentity.querySelectorAll("#usualItems .usual-item-add")];
+const usualYogurtButton = usualBreakfastButtons.find(button=>/Friendly Farms/.test(button.getAttribute("aria-label")||""));
+const usualEggButton = usualBreakfastButtons.find(button=>/Eggs/.test(button.getAttribute("aria-label")||""));
+check("usual breakfast keeps foods grouped while exposing an Add action for each item and Add all",
+  usualBreakfastButtons.length===2
+  && usualYogurtButton && usualEggButton
+  && usualYogurtButton.textContent==="Add"
+  && usualEggButton.textContent==="Add"
+  && /^Add all \(2 items\)$/.test(dUsualIdentity.getElementById("usualLogBtn").textContent));
+
+UsualIdentity.window.eval(`_lastAddT=0;`);
+usualYogurtButton.dispatchEvent(new UsualIdentity.window.Event("click",{bubbles:true}));
+check("usual breakfast individual Add logs only the selected food and marks it Added",
+  UsualIdentity.window.eval(`(data.food[todayStr()]||[]).length`)===1
+  && !dUsualIdentity.getElementById("usualCard").classList.contains("hidden")
+  && [...dUsualIdentity.querySelectorAll("#usualItems .usual-item-add")].some(button=>
+    /Friendly Farms/.test(button.getAttribute("aria-label")||"")
+    && button.textContent==="Added"
+    && button.disabled
+  )
+  && [...dUsualIdentity.querySelectorAll("#usualItems .usual-item-add")].some(button=>
+    /Eggs/.test(button.getAttribute("aria-label")||"")
+    && button.textContent==="Add"
+    && !button.disabled
+  )
+  && /^Add all remaining \(1 item\)$/.test(dUsualIdentity.getElementById("usualLogBtn").textContent));
+
+check("usual breakfast individual Add preserves nutrition, portion, grams, source metadata, and slider identity",
+  UsualIdentity.window.eval(`
+    (function(){
+      const f=(data.food[todayStr()]||[])[0];
+      const edit=sliderEditDetails(f);
+      return f.name==="Friendly Farms Plain Non Fat Greek Yogurt"
+        && f.cal===110 && f.pro===19 && f.carb===7 && f.fat===1
+        && f.amount===1.5 && f.unit==="serving" && f.grams===255
+        && f.foodKey==="food:friendly farms plain non fat greek yogurt|friendly farms"
+        && f.sourceFood
+        && f.sourceFood.name==="Friendly Farms Plain Non Fat Greek Yogurt"
+        && f.sourceFood.brand==="Friendly Farms"
+        && f.sourceFood.servingG===170
+        && f.sourceFood.servingLabel==="170g cup"
+        && edit
+        && edit.source
+        && edit.source.name==="Friendly Farms Plain Non Fat Greek Yogurt"
+        && edit.amount===1.5
+        && edit.unit==="serving";
+    })()
+  `));
 
 UsualIdentity.window.eval(`
-  _lastAddT=0;
-  addEntry({name:"4 Eggs",cal:280,pro:24,carb:2,fat:20,meal:"breakfast"});
-  renderUsual();
+  window.__usualEditScrollCalls=0;
+  document.getElementById("calcCard").scrollIntoView=()=>{
+    window.__usualEditScrollCalls++;
+  };
 `);
-check("usual breakfast hides only when no qualifying recurring foods remain",
-  dUsualIdentity.getElementById("usualCard").classList.contains("hidden"));
+
+dUsualIdentity.querySelector("#foodList .edt").dispatchEvent(
+  new UsualIdentity.window.Event("click",{bubbles:true})
+);
+
+await wait(10);
+
+check("usual slider-food pencil visibly moves the screen to the slider editor",
+  UsualIdentity.window.eval(`window.__usualEditScrollCalls`)>=2
+  && !dUsualIdentity.getElementById("calcCard").classList.contains("hidden")
+  && dUsualIdentity.getElementById("addSelBtn").textContent==="Update entry"
+  && Number(dUsualIdentity.getElementById("qtyAmount").value)===1.5
+  && dUsualIdentity.getElementById("qtyUnit").value==="serving");
+
+dUsualIdentity.getElementById("cancelSelEditBtn").dispatchEvent(
+  new UsualIdentity.window.Event("click",{bubbles:true})
+);
+
+check("usual breakfast duplicate prevention rejects an already-added recurring food",
+  UsualIdentity.window.eval(`
+    (function(){
+      const yogurt=usualFor("breakfast").find(
+        item=>/Friendly Farms/.test(item.name)
+      );
+      const before=(data.food[todayStr()]||[]).length;
+      const result=addUsualFood(yogurt,"breakfast");
+      return result===false
+        && (data.food[todayStr()]||[]).length===before;
+    })()
+  `));
+
+dUsualIdentity.getElementById("usualLogBtn")
+  .dispatchEvent(new UsualIdentity.window.Event("click",{bubbles:true}));
+check("usual breakfast Add all after a partial addition logs only the remaining item",
+  UsualIdentity.window.eval(`
+    (function(){
+      const foods=data.food[todayStr()]||[];
+      return foods.length===2
+        && foods.filter(f=>/Friendly Farms/.test(f.name)).length===1
+        && foods.filter(f=>/Eggs/.test(f.name)).length===1;
+    })()
+  `));
+check("usual breakfast shows every food Added and disables Add all when complete",
+  !dUsualIdentity.getElementById("usualCard").classList.contains("hidden")
+  && [...dUsualIdentity.querySelectorAll("#usualItems .usual-item-add")].length===2
+  && [...dUsualIdentity.querySelectorAll("#usualItems .usual-item-add")].every(
+    button=>button.textContent==="Added" && button.disabled
+  )
+  && dUsualIdentity.getElementById("usualLogBtn").textContent==="All added"
+  && dUsualIdentity.getElementById("usualLogBtn").disabled);
 
 UsualIdentity.window.eval(`currentMeal="lunch"; renderMealSeg(); renderFood();`);
 check("usual lunch is independent and preserves the latest exact chicken portion and nutrition",
@@ -999,13 +1113,23 @@ check("usual lunch is independent and preserves the latest exact chicken portion
   `)
   && !dUsualIdentity.getElementById("usualCard").classList.contains("hidden"));
 
-UsualIdentity.window.eval(`
-  _lastAddT=0;
-  addEntry({name:"7oz Chicken Breast",cal:320,pro:56,carb:0,fat:7,meal:"lunch"});
-  renderUsual();
-`);
-check("usual lunch removes a food type already logged for lunch today",
-  dUsualIdentity.getElementById("usualCard").classList.contains("hidden"));
+UsualIdentity.window.eval(`_lastAddT=0;`);
+dUsualIdentity.querySelector("#usualItems .usual-item-add")
+  .dispatchEvent(new UsualIdentity.window.Event("click",{bubbles:true}));
+check("usual lunch individual Add preserves its latest exact portion and Added state",
+  UsualIdentity.window.eval(`
+    (function(){
+      const foods=(data.food[todayStr()]||[]).filter(f=>f.meal==="lunch");
+      return foods.length===1
+        && foods[0].name==="8oz Grilled Chicken Breast"
+        && foods[0].cal===360 && foods[0].pro===62;
+    })()
+  `)
+  && !dUsualIdentity.getElementById("usualCard").classList.contains("hidden")
+  && dUsualIdentity.querySelector("#usualItems .usual-item-add").textContent==="Added"
+  && dUsualIdentity.querySelector("#usualItems .usual-item-add").disabled
+  && dUsualIdentity.getElementById("usualLogBtn").textContent==="All added"
+  && dUsualIdentity.getElementById("usualLogBtn").disabled);
 
 UsualIdentity.window.eval(`currentMeal="dinner"; renderMealSeg(); renderFood();`);
 check("usual dinner independently recognizes changed quantity prefixes and keeps the latest exact portion",
@@ -1019,13 +1143,23 @@ check("usual dinner independently recognizes changed quantity prefixes and keeps
   `)
   && !dUsualIdentity.getElementById("usualCard").classList.contains("hidden"));
 
-UsualIdentity.window.eval(`
-  _lastAddT=0;
-  addEntry({name:"250g Brown Rice",cal:270,pro:6,carb:56,fat:2,meal:"dinner"});
-  renderUsual();
-`);
-check("usual dinner removes a food type already logged for dinner today",
-  dUsualIdentity.getElementById("usualCard").classList.contains("hidden"));
+UsualIdentity.window.eval(`_lastAddT=0;`);
+dUsualIdentity.querySelector("#usualItems .usual-item-add")
+  .dispatchEvent(new UsualIdentity.window.Event("click",{bubbles:true}));
+check("usual dinner individual Add preserves its latest exact portion and Added state",
+  UsualIdentity.window.eval(`
+    (function(){
+      const foods=(data.food[todayStr()]||[]).filter(f=>f.meal==="dinner");
+      return foods.length===1
+        && foods[0].name==="1 serving · Brown Rice"
+        && foods[0].cal===220;
+    })()
+  `)
+  && !dUsualIdentity.getElementById("usualCard").classList.contains("hidden")
+  && dUsualIdentity.querySelector("#usualItems .usual-item-add").textContent==="Added"
+  && dUsualIdentity.querySelector("#usualItems .usual-item-add").disabled
+  && dUsualIdentity.getElementById("usualLogBtn").textContent==="All added"
+  && dUsualIdentity.getElementById("usualLogBtn").disabled);
 
 UsualIdentity.window.eval(`currentMeal="snacks"; renderMealSeg(); renderFood();`);
 check("usual snacks independently groups clear flavor variants and preserves the latest exact product nutrition",
@@ -1039,13 +1173,23 @@ check("usual snacks independently groups clear flavor variants and preserves the
   `)
   && !dUsualIdentity.getElementById("usualCard").classList.contains("hidden"));
 
-UsualIdentity.window.eval(`
-  _lastAddT=0;
-  addEntry({name:"Strawberry Protein Shake",cal:225,pro:31,carb:13,fat:5,meal:"snacks"});
-  renderUsual();
-`);
-check("usual snacks removes a food type already logged for snacks today",
-  dUsualIdentity.getElementById("usualCard").classList.contains("hidden"));
+UsualIdentity.window.eval(`_lastAddT=0;`);
+dUsualIdentity.querySelector("#usualItems .usual-item-add")
+  .dispatchEvent(new UsualIdentity.window.Event("click",{bubbles:true}));
+check("usual snacks individual Add preserves its latest exact product and Added state",
+  UsualIdentity.window.eval(`
+    (function(){
+      const foods=(data.food[todayStr()]||[]).filter(f=>f.meal==="snacks");
+      return foods.length===1
+        && foods[0].name==="Vanilla Protein Shake"
+        && foods[0].cal===230 && foods[0].pro===32;
+    })()
+  `)
+  && !dUsualIdentity.getElementById("usualCard").classList.contains("hidden")
+  && dUsualIdentity.querySelector("#usualItems .usual-item-add").textContent==="Added"
+  && dUsualIdentity.querySelector("#usualItems .usual-item-add").disabled
+  && dUsualIdentity.getElementById("usualLogBtn").textContent==="All added"
+  && dUsualIdentity.getElementById("usualLogBtn").disabled);
 
 const distinctRecurringFood = {};
 const distinctNames = [
@@ -1536,6 +1680,14 @@ check("SW precaches the four data files", ["data-quotes.js","data-foods.js","dat
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+"/.test(sw));
 check("v67 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v67"'));
 const rawIndex = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+
+check("Undo reserves bottom space and stacks above both collapsed and expanded Train timer controls",
+  /body\.undo-toast-visible\s*\{\s*padding-bottom:164px;\s*\}/.test(rawIndex)
+  && /body\.rest-dock-visible\.undo-toast-visible\s*\{\s*padding-bottom:232px;\s*\}/.test(rawIndex)
+  && /body\.rest-dock-visible\.rest-options-open\.undo-toast-visible\s*\{\s*padding-bottom:326px;\s*\}/.test(rawIndex)
+  && /body\.rest-dock-visible #undoToast\s*\{[^}]*bottom:calc\(132px \+ env\(safe-area-inset-bottom, 0px\)\);[^}]*\}/s.test(rawIndex)
+  && /body\.rest-dock-visible\.rest-options-open #undoToast\s*\{[^}]*bottom:calc\(226px \+ env\(safe-area-inset-bottom, 0px\)\);[^}]*\}/s.test(rawIndex));
+
 check("data scripts load before the app scripts (raw file order)",
   ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js"].every(f=>
     rawIndex.indexOf('src="'+f+'"') > -1 &&

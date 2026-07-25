@@ -683,6 +683,24 @@ function sliderConfigFor(unit){
   return {max:500, step:5};
 }
 
+function revealFoodSliderEditor(){
+  const card = document.getElementById("calcCard");
+  if (!card || !card.scrollIntoView) return;
+
+  const reveal = ()=>{
+    try {
+      card.scrollIntoView({behavior:"smooth",block:"center"});
+    } catch(e){
+      try { card.scrollIntoView(); } catch(ignore){}
+    }
+  };
+
+  // WKWebView can finish layout after the tap handler completes. Reveal once
+  // now and once after that layout cycle so Edit visibly moves to the slider.
+  reveal();
+  setTimeout(reveal,0);
+}
+
 function selectFood(h){
   selected = h;
   document.getElementById("selName").textContent = h.name + (h.brand && h.brand!=="Generic" && !String(h.brand).startsWith("Built-in") ? " — "+h.brand : "");
@@ -696,8 +714,7 @@ function selectFood(h){
   syncSliderToUnit();
   document.getElementById("calcCard").classList.remove("hidden");
   updateCalc();
-  const cc = document.getElementById("calcCard");
-  if (cc.scrollIntoView) cc.scrollIntoView({behavior:"smooth", block:"center"});
+  revealFoodSliderEditor();
 }
 
 function syncSliderToUnit(){
@@ -947,6 +964,7 @@ function startEditEntry(i){
     syncSliderToUnit(); updateCalc();
     document.getElementById("addSelBtn").textContent = "Update entry";
     document.getElementById("cancelSelEditBtn").classList.remove("hidden");
+    revealFoodSliderEditor();
     return;
   }
   document.getElementById("mName").value = f.name;
