@@ -1,5 +1,5 @@
 // BlackPyre permanent integration suite — boots the shipped app and exercises whole flows.
-const { boot, bootRaw, assembleHTML, sacredCalls, allBlackPyreCalls, makeNativeFilesystem, check, summary, dstr, wait, EXISTING_CFG, EMPTY_DATA } = require("./harness");
+const { boot, bootRaw, assembleHTML, sacredCalls, allBlackPyreCalls, makeNativeFilesystem, makeLocalNotifications, check, summary, dstr, wait, EXISTING_CFG, EMPTY_DATA } = require("./harness");
 const fs = require("fs");
 const path = require("path");
 
@@ -1313,6 +1313,116 @@ const timerSource65 = fs.readFileSync(path.join(__dirname,"..","scripts","04-wei
 const timerSection65 = timerSource65.slice(timerSource65.indexOf("// ================== PLATE MATH & REST TIMER"), timerSource65.indexOf("// ================== SHARE PROGRAM"));
 check("v65 completed timer display no longer uses GO", !timerSection65.includes("GO!") && T65VisibleExpired.window.document.getElementById("restDisplay").textContent!=="GO!");
 check("v65 expiration clears the active deadline without restarting", T65VisibleExpired.window.eval("restEndsAt===0 && restInterval===null && !restRunning") && visibleReady65.status==="ready" && !Object.prototype.hasOwnProperty.call(visibleReady65,"endAt"));
+
+// ================= native rest-timer local notifications =================
+const notificationPackage = JSON.parse(fs.readFileSync(path.join(__dirname,"..","package.json"),"utf8"));
+const notificationConfig = JSON.parse(fs.readFileSync(path.join(__dirname,"..","capacitor.config.json"),"utf8"));
+const notificationSwiftPackage = fs.readFileSync(path.join(__dirname,"..","ios","App","CapApp-SPM","Package.swift"),"utf8");
+check("native timer declares the Capacitor 8 Local Notifications dependency", /^\^?8\./.test(notificationPackage.dependencies["@capacitor/local-notifications"]||"") && /CapacitorLocalNotifications/.test(notificationSwiftPackage));
+check("native timer enables sound, banner, and notification-list presentation on iOS", ["sound","banner","list"].every(v=>notificationConfig.plugins.LocalNotifications.presentationOptions.includes(v)));
+
+const CLOCK_NOTIFY = 2100000000000;
+const NotifyGranted = makeLocalNotifications({permission:"granted"});
+const TN = boot(Object.assign({},V2_CFG,{restSec:60}), EMPTY_DATA, w=>{
+  w.Date.now=()=>CLOCK_NOTIFY;
+  NotifyGranted.install(w);
+}, TEST_PROGRAM);
+TN.window.eval(`activateView("work",null,false)`);
+TN.window.document.getElementById("restStartBtn").dispatchEvent(new TN.window.Event("click",{bubbles:true}));
+await TN.window.eval("restNotificationWork");
+const scheduledNotify = NotifyGranted.calls.find(c=>c.method==="schedule");
+check("native timer schedules one notification at the persisted endAt", TN.window.eval("restRunning && restEndsAt===2100000060000") && !!scheduledNotify && scheduledNotify.args.notifications.length===1 && scheduledNotify.args.notifications[0].id===TN.window.eval("REST_NOTIFICATION_ID") && scheduledNotify.args.notifications[0].schedule.at.getTime()===CLOCK_NOTIFY+60000 && scheduledNotify.args.notifications[0].sound==="default");
+const notificationTimerRecord = JSON.parse(TN.window.localStorage.getItem("forge:rest-timer"));
+check("native notification support leaves rest-timer format version 1 and record shape unchanged", notificationTimerRecord.formatVersion===1 && notificationTimerRecord.status==="running" && notificationTimerRecord.endAt===CLOCK_NOTIFY+60000 && !Object.keys(notificationTimerRecord).some(k=>/notif/i.test(k)));
+check("native timer checks permission without prompting when it is already granted", NotifyGranted.calls.filter(c=>c.method==="checkPermissions").length===1 && NotifyGranted.calls.every(c=>c.method!=="requestPermissions"));
+
+TN.window.Date.now=()=>CLOCK_NOTIFY+10000;
+TN.window.document.getElementById("restAddBtn").dispatchEvent(new TN.window.Event("click",{bubbles:true}));
+await TN.window.eval("restNotificationWork");
+const notifySchedulesAfterAdd = NotifyGranted.calls.filter(c=>c.method==="schedule");
+check("adding time replaces the pending notification with the extended endAt", notifySchedulesAfterAdd.length===2 && notifySchedulesAfterAdd[1].args.notifications[0].schedule.at.getTime()===CLOCK_NOTIFY+90000 && NotifyGranted.calls.some(c=>c.method==="cancel"));
+
+TN.window.document.getElementById("restPauseBtn").dispatchEvent(new TN.window.Event("click",{bubbles:true}));
+await TN.window.eval("restNotificationWork");
+check("pausing cancels the pending rest notification", TN.window.eval("restPaused && !restRunning") && NotifyGranted.pending.size===0);
+TN.window.document.getElementById("restPauseBtn").dispatchEvent(new TN.window.Event("click",{bubbles:true}));
+await TN.window.eval("restNotificationWork");
+check("resuming schedules a new notification from the restored remainder", TN.window.eval("restRunning") && NotifyGranted.pending.has(TN.window.eval("REST_NOTIFICATION_ID")) && NotifyGranted.calls.filter(c=>c.method==="schedule").length===3);
+TN.window.document.getElementById("restEndBtn").dispatchEvent(new TN.window.Event("click",{bubbles:true}));
+await TN.window.eval("restNotificationWork");
+check("ending early cancels the pending notification and clears the timer", !TN.window.eval("restRunning||restPaused") && NotifyGranted.pending.size===0 && TN.window.localStorage.getItem("forge:rest-timer")===null);
+
+const NotifyPrompt = makeLocalNotifications({permission:"prompt",requestResult:"granted"});
+const TNPrompt = boot(Object.assign({},V2_CFG,{restSec:30}), EMPTY_DATA, w=>{
+  w.Date.now=()=>CLOCK_NOTIFY;
+  NotifyPrompt.install(w);
+}, TEST_PROGRAM);
+TNPrompt.window.eval(`activateView("work",null,false)`);
+await TNPrompt.window.eval("restNotificationWork");
+const notifyPromptCallsBeforeStart = NotifyPrompt.calls.length;
+const notifyPromptRequestsBeforeStart = NotifyPrompt.calls.filter(c=>c.method==="requestPermissions").length;
+const notifyPromptSchedulesBeforeStart = NotifyPrompt.calls.filter(c=>c.method==="schedule").length;
+TNPrompt.window.document.getElementById("restStartBtn").dispatchEvent(new TNPrompt.window.Event("click",{bubbles:true}));
+await TNPrompt.window.eval("restNotificationWork");
+const notifyPromptStartMethods = NotifyPrompt.calls.slice(notifyPromptCallsBeforeStart).map(c=>c.method).join(",");
+check("starting the timer is the user action that requests notification permission", notifyPromptRequestsBeforeStart===0 && notifyPromptSchedulesBeforeStart===0 && notifyPromptStartMethods==="checkPermissions,requestPermissions,getPending,schedule" && NotifyPrompt.pending.size===1);
+
+const NotifyDenied = makeLocalNotifications({permission:"denied"});
+const TNDenied = boot(Object.assign({},V2_CFG,{restSec:30}), EMPTY_DATA, w=>{
+  w.Date.now=()=>CLOCK_NOTIFY;
+  NotifyDenied.install(w);
+}, TEST_PROGRAM);
+TNDenied.window.eval(`activateView("work",null,false)`);
+TNDenied.window.document.getElementById("restStartBtn").dispatchEvent(new TNDenied.window.Event("click",{bubbles:true}));
+await TNDenied.window.eval("restNotificationWork");
+check("denied permission never breaks or delays the manual timer", TNDenied.window.eval("restRunning && restRemaining===30") && NotifyDenied.calls.every(c=>c.method!=="schedule") && NotifyDenied.calls.every(c=>c.method!=="requestPermissions"));
+
+const NotifyRestore = makeLocalNotifications({permission:"granted",pending:[{id:64065,title:"Old",body:"Old",schedule:{at:new Date(CLOCK_NOTIFY+999999)}}]});
+const TNRestore = bootRaw({
+  cfg:JSON.stringify(Object.assign({},V2_CFG,{restSec:45})),
+  data:JSON.stringify(EMPTY_DATA),
+  program:JSON.stringify(TEST_PROGRAM),
+  restTimer:JSON.stringify({formatVersion:1,status:"running",endAt:CLOCK_NOTIFY+45000,remainingSec:45,durationSec:45,savedAt:CLOCK_NOTIFY})
+}, w=>{
+  w.Date.now=()=>CLOCK_NOTIFY;
+  NotifyRestore.install(w);
+});
+await TNRestore.window.eval("restNotificationWork");
+const restoredSchedule = NotifyRestore.calls.filter(c=>c.method==="schedule").pop();
+check("relaunch replaces a stale pending notification with the persisted timer deadline", NotifyRestore.calls.some(c=>c.method==="getPending") && NotifyRestore.calls.some(c=>c.method==="cancel") && !!restoredSchedule && restoredSchedule.args.notifications[0].schedule.at.getTime()===CLOCK_NOTIFY+45000 && NotifyRestore.pending.size===1);
+
+const NotifyRestorePrompt = makeLocalNotifications({permission:"prompt"});
+const TNRestorePrompt = bootRaw({
+  cfg:JSON.stringify(V2_CFG),
+  data:JSON.stringify(EMPTY_DATA),
+  program:JSON.stringify(TEST_PROGRAM),
+  restTimer:JSON.stringify({formatVersion:1,status:"running",endAt:CLOCK_NOTIFY+45000,remainingSec:45,durationSec:45,savedAt:CLOCK_NOTIFY})
+}, w=>{
+  w.Date.now=()=>CLOCK_NOTIFY;
+  NotifyRestorePrompt.install(w);
+});
+await TNRestorePrompt.window.eval("restNotificationWork");
+check("relaunch never opens the notification permission prompt without a timer action", TNRestorePrompt.window.eval("restRunning") && NotifyRestorePrompt.calls.every(c=>c.method!=="requestPermissions") && NotifyRestorePrompt.calls.every(c=>c.method!=="schedule"));
+
+const NotifyPausedRestore = makeLocalNotifications({permission:"granted",pending:[{id:64065,title:"Old",body:"Old"}]});
+const TNPausedRestore = bootRaw({
+  cfg:JSON.stringify(V2_CFG),
+  data:JSON.stringify(EMPTY_DATA),
+  program:JSON.stringify(TEST_PROGRAM),
+  restTimer:JSON.stringify({formatVersion:1,status:"paused",remainingSec:20,durationSec:30,savedAt:CLOCK_NOTIFY})
+}, w=>{
+  w.Date.now=()=>CLOCK_NOTIFY;
+  NotifyPausedRestore.install(w);
+});
+await TNPausedRestore.window.eval("restNotificationWork");
+check("relaunch cancels stale pending notifications for paused timers", TNPausedRestore.window.eval("restPaused && !restRunning") && NotifyPausedRestore.pending.size===0 && NotifyPausedRestore.calls.some(c=>c.method==="cancel"));
+
+const TNWeb = boot(Object.assign({},V2_CFG,{restSec:30}), EMPTY_DATA, w=>{ w.Date.now=()=>CLOCK_NOTIFY; }, TEST_PROGRAM);
+TNWeb.window.eval(`activateView("work",null,false)`);
+TNWeb.window.document.getElementById("restStartBtn").dispatchEvent(new TNWeb.window.Event("click",{bubbles:true}));
+await TNWeb.window.eval("restNotificationWork");
+check("web timer behavior remains unchanged when the native plugin is absent", TNWeb.window.eval("restRunning && restRemaining===30"));
+TNWeb.window.eval("cancelRest()");
 
 // ================= v59: audit-recommended structural protections =================
 check("v59 storage-use line renders an honest approximation", (()=>{ const B = boot(EXISTING_CFG, EMPTY_DATA); const t = B.window.document.getElementById("storageUseNote").textContent; return /~\d+ (KB|MB)/.test(t) && /approximate/.test(t); })());

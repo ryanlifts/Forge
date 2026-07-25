@@ -340,7 +340,87 @@ document.getElementById("plateBar").addEventListener("change", updatePlates);
 
 let restInterval = null, restRunning = false, restPaused = false;
 let restRemaining = 0, restEndsAt = 0, restDurationSec = 0, restReadySec = 0, restStateRestored = false;
+const REST_NOTIFICATION_ID = 64065;
+let restNotificationWork = Promise.resolve();
 function fmtRest(sec){ return Math.floor(sec/60)+":"+String(sec%60).padStart(2,"0"); }
+function restNotificationCapability(){
+  const c = window.Capacitor;
+  let native = false, available = false, plugin = null;
+  try { native = !!(c && typeof c.isNativePlatform==="function" && c.isNativePlatform()); } catch(e){}
+  try { available = !!(c && typeof c.isPluginAvailable==="function" && c.isPluginAvailable("LocalNotifications")); } catch(e){}
+  try { plugin = c && c.Plugins ? c.Plugins.LocalNotifications : null; } catch(e){}
+  return {available:!!(native && available && plugin), plugin:plugin};
+}
+function queueRestNotification(task){
+  restNotificationWork = restNotificationWork.catch(()=>{}).then(task);
+  return restNotificationWork;
+}
+async function clearPendingRestNotification(plugin){
+  const pending = await plugin.getPending();
+  const matches = pending && Array.isArray(pending.notifications)
+    ? pending.notifications.filter(n=>Number(n && n.id)===REST_NOTIFICATION_ID)
+    : [];
+  if (matches.length){
+    await plugin.cancel({notifications:[{id:REST_NOTIFICATION_ID}]});
+  }
+  return matches.length;
+}
+async function restNotificationPermission(plugin, allowRequest){
+  let status = await plugin.checkPermissions();
+  let state = status && status.display;
+  if (allowRequest && (state==="prompt" || state==="prompt-with-rationale")){
+    status = await plugin.requestPermissions();
+    state = status && status.display;
+  }
+  return state==="granted";
+}
+function cancelRestNotification(){
+  return queueRestNotification(async ()=>{
+    const capability = restNotificationCapability();
+    if (!capability.available) return {available:false, cancelled:false};
+    try {
+      const cancelled = await clearPendingRestNotification(capability.plugin);
+      return {available:true, cancelled:!!cancelled};
+    } catch(e){
+      console.warn("BlackPyre could not cancel the rest notification:", e);
+      return {available:true, cancelled:false, error:true};
+    }
+  });
+}
+function scheduleRestNotification(endAt, allowPermissionRequest){
+  const expectedEndAt = Number(endAt);
+  return queueRestNotification(async ()=>{
+    const capability = restNotificationCapability();
+    if (!capability.available) return {available:false, granted:false, scheduled:false};
+    try {
+      const granted = await restNotificationPermission(capability.plugin, !!allowPermissionRequest);
+      if (!granted){
+        await clearPendingRestNotification(capability.plugin);
+        return {available:true, granted:false, scheduled:false};
+      }
+      await clearPendingRestNotification(capability.plugin);
+      if (!restRunning || restEndsAt!==expectedEndAt || expectedEndAt<=Date.now()){
+        return {available:true, granted:true, scheduled:false};
+      }
+      await capability.plugin.schedule({notifications:[{
+        id:REST_NOTIFICATION_ID,
+        title:"Rest complete",
+        body:"Your rest timer is finished.",
+        schedule:{at:new Date(expectedEndAt)},
+        sound:"default",
+        extra:{blackpyreType:"rest-timer"}
+      }]});
+      return {available:true, granted:true, scheduled:true};
+    } catch(e){
+      console.warn("BlackPyre could not schedule the rest notification:", e);
+      return {available:true, granted:false, scheduled:false, error:true};
+    }
+  });
+}
+function reconcileRestNotification(){
+  if (restRunning && restEndsAt>Date.now()) return scheduleRestNotification(restEndsAt, false);
+  return cancelRestNotification();
+}
 function selectedRestSeconds(){ return Math.max(10, Math.round(Number(cfg.restSec)||90)); }
 function normalizedRestSeconds(value, fallback){
   const seconds = Math.round(Number(value));
@@ -430,6 +510,11 @@ function runRestCountdown(){
   persistRestTimer();
   paintRestDock();
   armRestInterval();
+  scheduleRestNotification(restEndsAt, true).then(result=>{
+    if (result && result.available && !result.granted && !result.error){
+      flashSave("Rest timer started — notifications are off", true);
+    }
+  });
 }
 function startRest(seconds){
   restDurationSec = normalizedRestSeconds(seconds, selectedRestSeconds());
@@ -446,6 +531,7 @@ function pauseRest(){
     restEndsAt = 0;
     persistRestTimer();
     paintRestDock();
+    cancelRestNotification();
     return;
   }
   if (restPaused) runRestCountdown();
@@ -462,6 +548,7 @@ function addRest(seconds){
   }
   persistRestTimer();
   paintRestDock();
+  if (restRunning) scheduleRestNotification(restEndsAt, false);
 }
 function cancelRest(){
   stopRestInterval();
@@ -473,20 +560,28 @@ function cancelRest(){
   restReadySec = selectedRestSeconds();
   clearRestTimerState();
   paintRestDock();
+  cancelRestNotification();
 }
 function restoreRestTimerState(){
   if (restStateRestored) return;
   restStateRestored = true;
   const saved = readRestTimerState();
-  if (!saved.ok) return;
+  if (!saved.ok){
+    cancelRestNotification();
+    return;
+  }
   restDurationSec = savedRestDuration(saved.record);
   restReadySec = restDurationSec;
   if (saved.record.status==="running"){
     restEndsAt = saved.record.endAt;
     restRunning = true;
     restPaused = false;
-    if (!syncRestFromClock()) return;
+    if (!syncRestFromClock()){
+      cancelRestNotification();
+      return;
+    }
     armRestInterval();
+    reconcileRestNotification();
   } else if (saved.record.status==="paused") {
     restRemaining = Math.max(1, Math.round(saved.record.remainingSec));
     restRunning = false;
@@ -498,6 +593,7 @@ function restoreRestTimerState(){
     restPaused = false;
     restEndsAt = 0;
   }
+  if (!restRunning) cancelRestNotification();
 }
 function reconcileRestTimer(){
   if (restRunning) tickRestCountdown();
@@ -534,6 +630,7 @@ function renderRestPresets(){
         restReadySec = p;
         restDurationSec = 0;
         clearRestTimerState();
+        cancelRestNotification();
       }
       renderRestPresets();
       if (!(restRunning||restPaused)) paintRestDock();
@@ -553,6 +650,7 @@ function renderRestPresets(){
           restReadySec = selectedRestSeconds();
           restDurationSec = 0;
           clearRestTimerState();
+          cancelRestNotification();
         }
         renderRestPresets();
         if (!(restRunning||restPaused)) paintRestDock();
@@ -589,6 +687,7 @@ document.getElementById("restCustomSet").addEventListener("click", ()=>{
     restReadySec = v;
     restDurationSec = 0;
     clearRestTimerState();
+    cancelRestNotification();
   }
   document.getElementById("restCustomRow").classList.add("hidden");
   document.getElementById("restCustomInput").value = "";

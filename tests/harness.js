@@ -114,6 +114,63 @@ const sacredCalls = dom=>dom.__storageCalls.filter(c=>c.key===null || ["forge:cf
 const allBlackPyreCalls = dom=>dom.__storageCalls.filter(c=>c.key===null || ["forge:cfg","forge:data","forge:program","forge:lkg","forge:quarantine"].includes(c.key));
 
 
+// Capacitor Local Notifications test double for native rest-timer coverage.
+function makeLocalNotifications(options){
+  const opts = options || {};
+  const calls = [];
+  const pending = new Map();
+  let permission = opts.permission || "prompt";
+  (opts.pending || []).forEach(n=>pending.set(Number(n.id),n));
+  const control = {
+    requestResult:opts.requestResult || "granted",
+    failSchedule:false,
+    failCancel:false,
+    failPending:false
+  };
+  const LocalNotifications = {
+    async checkPermissions(){
+      calls.push({method:"checkPermissions"});
+      return {display:permission};
+    },
+    async requestPermissions(){
+      calls.push({method:"requestPermissions"});
+      permission = control.requestResult;
+      return {display:permission};
+    },
+    async getPending(){
+      calls.push({method:"getPending"});
+      if (control.failPending) throw new Error("Mock pending failure");
+      return {notifications:Array.from(pending.values())};
+    },
+    async cancel(args){
+      calls.push({method:"cancel",args:args});
+      if (control.failCancel) throw new Error("Mock cancel failure");
+      (args.notifications||[]).forEach(n=>pending.delete(Number(n.id)));
+    },
+    async schedule(args){
+      calls.push({method:"schedule",args:args});
+      if (control.failSchedule) throw new Error("Mock schedule failure");
+      (args.notifications||[]).forEach(n=>pending.set(Number(n.id),n));
+      return {notifications:(args.notifications||[]).map(n=>({id:Number(n.id)}))};
+    }
+  };
+  function install(w){
+    const prior = w.Capacitor || {};
+    const priorAvailable = typeof prior.isPluginAvailable==="function" ? prior.isPluginAvailable.bind(prior) : null;
+    w.Capacitor = Object.assign({}, prior, {
+      getPlatform:typeof prior.getPlatform==="function" ? prior.getPlatform.bind(prior) : (()=>opts.platform || "ios"),
+      isNativePlatform:typeof prior.isNativePlatform==="function" ? prior.isNativePlatform.bind(prior) : (()=>opts.native!==false),
+      isPluginAvailable:name=>name==="LocalNotifications" ? opts.available!==false : !!(priorAvailable && priorAvailable(name)),
+      Plugins:Object.assign({}, prior.Plugins||{}, {LocalNotifications:LocalNotifications})
+    });
+  }
+  return {
+    install, LocalNotifications, calls, pending, control,
+    permission:()=>permission,
+    setPermission:value=>{ permission=value; }
+  };
+}
+
 // Capacitor Filesystem test double for native-only storage coverage.
 // It intentionally models only the small API surface BlackPyre uses and keeps
 // exact file bytes in memory so tests can prove read-back equality and retention.
@@ -198,4 +255,4 @@ function makeNativeFilesystem(options){
   };
 }
 
-module.exports = { boot, bootRaw, assembleHTML, check, summary, dstr, nextDow, wait, sacredCalls, allBlackPyreCalls, makeNativeFilesystem, EXISTING_CFG, EMPTY_DATA };
+module.exports = { boot, bootRaw, assembleHTML, check, summary, dstr, nextDow, wait, sacredCalls, allBlackPyreCalls, makeNativeFilesystem, makeLocalNotifications, EXISTING_CFG, EMPTY_DATA };

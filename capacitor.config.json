@@ -5,5 +5,14 @@
   "server": {
     "hostname": "localhost",
     "iosScheme": "capacitor"
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "presentationOptions": [
+        "sound",
+        "banner",
+        "list"
+      ]
+    }
   }
 }
