@@ -1,10 +1,29 @@
 // BlackPyre permanent unit suite — pure calculations & parsers, run against the shipped app.
 const { boot, check, summary, dstr, nextDow, EXISTING_CFG, EMPTY_DATA } = require("./harness");
+const fs = require("fs");
+const path = require("path");
 
 (async ()=>{
 const dom = boot(EXISTING_CFG, EMPTY_DATA);
 const W = dom.window;
 const E = (code)=>W.eval(code);
+// ---------- pinned Capacitor origin ----------
+const capacitorConfig = JSON.parse(
+  fs.readFileSync(path.join(__dirname, "..", "capacitor.config.json"), "utf8")
+);
+check(
+  "Capacitor origin hostname is explicitly pinned",
+  capacitorConfig.server && capacitorConfig.server.hostname==="localhost"
+);
+check(
+  "Capacitor iOS scheme is explicitly pinned",
+  capacitorConfig.server && capacitorConfig.server.iosScheme==="capacitor"
+);
+check(
+  "Capacitor production config has no external server URL",
+  capacitorConfig.server &&
+    !Object.prototype.hasOwnProperty.call(capacitorConfig.server, "url")
+);
 
 // ---------- Mifflin-St Jeor (calcMacros) ----------
 // male, 42y, 5'11", 225 lb, activity 1.55, cut -500
