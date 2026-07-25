@@ -340,7 +340,10 @@
     <div class="card hidden" id="backupCard" style="border-color:var(--warn);">
       <div class="label" style="color:var(--warn);">Backup recommended</div>
       <div id="backupText" style="font-size:13px; line-height:1.7; margin:6px 0 12px;"></div>
-      <button class="btn ghost small" id="backupNowBtn">Back up now</button>
+      <div class="row">
+        <button class="btn ghost small" id="backupNowBtn">Back up now</button>
+        <button class="btn ghost small" id="backupLaterBtn">Remind me later</button>
+      </div>
     </div>
     <div class="card hidden" id="waterCard">
       <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -526,7 +529,7 @@
     <div class="card hidden" id="usualCard" style="border-color:var(--ember);">
       <div class="label">Your usual <span id="usualMealName">breakfast</span></div>
       <div id="usualItems" style="font-size:13px; line-height:1.7; margin:6px 0 12px;"></div>
-      <button class="btn ghost small" id="usualLogBtn" aria-label="Log usual meal" style="width:100%;"></button>
+      <button class="btn ghost small" id="usualLogBtn" aria-label="Add all remaining usual meal foods" style="width:100%;"></button>
     </div>
     <div class="card hidden" id="aiFoodCard">
       <div class="label">AI quick log</div>

@@ -551,7 +551,59 @@ document.getElementById("saveSettingsBtn").addEventListener("click", ()=>{
   saveCfg(); renderAll(); flashSave(schedSaveMsg || "Settings saved ✓");
   ackBtn("saveSettingsBtn", "✓ Saved");
 });
-function doBackup(btnId){
+const BACKUP_REMINDER_DAYS = 14;
+const BACKUP_REMINDER_SNOOZE_DAYS = 3;
+const BACKUP_DAY_MS = 86400000;
+
+function currentBackupMeta(){
+  if (!data.meta || typeof data.meta!=="object"){
+    data.meta = {lastBackup:null,logsSince:0};
+  }
+  return data.meta;
+}
+function backupSafeCfg(){
+  const safe = Object.assign({},cfg);
+  delete safe.anthropicKey;
+  delete safe.openaiKey;
+  return safe;
+}
+function normalBackupText(){
+  return JSON.stringify({cfg:backupSafeCfg(),program:program,data:data},null,2);
+}
+function recordBackupAttempt(kind){
+  const meta = currentBackupMeta();
+  meta.lastBackupAttemptAt = new Date().toISOString();
+  meta.lastBackupAttemptKind = kind;
+  delete meta.backupReminderSnoozedUntil;
+  return meta;
+}
+function recordBackupActivity(kind){
+  const meta = currentBackupMeta();
+  meta.lastBackup = todayStr(); // retained for older BlackPyre versions
+  meta.logsSince = 0;           // retained as backward-compatible metadata only
+  if (kind==="share"){
+    meta.lastBackupCompletedAt = new Date().toISOString();
+    meta.lastBackupCompletedKind = "share";
+  }
+  return meta;
+}
+function backupCanShareFile(file){
+  try {
+    return !!(
+      file
+      && navigator.share
+      && navigator.canShare
+      && navigator.canShare({files:[file]})
+    );
+  } catch(e){
+    return false;
+  }
+}
+function backupReadyMessage(btnId){
+  ackBtn(btnId,"✓ Backup ready");
+  flashSave("Backup ready. Save the file somewhere you can access later.");
+}
+async function doBackup(btnId){
   if (protectedMode){
     const ok = confirm("This export contains only what BlackPyre could read — it may be incomplete and is NOT a normal backup. Your original data remains preserved on this device. Export anyway?");
     if (!ok) return false;
@@ -565,16 +617,61 @@ function doBackup(btnId){
     ackBtn(btnId, "✓ Partial export");
     return true;
   }
-  data.meta.lastBackup = todayStr();
-  data.meta.logsSince = 0;
-  const cfgSafe = Object.assign({}, cfg); delete cfgSafe.anthropicKey; delete cfgSafe.openaiKey;
-  download("blackpyre-backup-"+todayStr()+".json", JSON.stringify({cfg:cfgSafe, program:program, data:data}, null, 2));
-  save(); renderBackup();
-  ackBtn(btnId, "✓ Backup downloaded");
+
+  const filename = "blackpyre-backup-"+todayStr()+".json";
+  recordBackupAttempt("share");
+  save();
+
+  let file = null;
+  if (typeof File==="function"){
+    try {
+      file = new File([normalBackupText()],filename,{type:"application/json"});
+    } catch(e){}
+  }
+
+  if (backupCanShareFile(file)){
+    try {
+      await navigator.share({
+        files:[file],
+        title:"BlackPyre backup",
+        text:"BlackPyre backup file"
+      });
+      recordBackupActivity("share");
+      save();
+      renderBackup();
+      backupReadyMessage(btnId);
+      return true;
+    } catch(error){
+      if (error && error.name==="AbortError"){
+        renderBackup();
+        flashSave("Backup sharing canceled. Your existing logs and settings are unchanged.");
+        return false;
+      }
+      // A browser share failure falls back to a normal browser download.
+    }
+  }
+
+  recordBackupAttempt("download");
+  recordBackupActivity("download");
+  save();
+  download(filename,normalBackupText());
+  renderBackup();
+  backupReadyMessage(btnId);
+  return true;
+}
+function remindBackupLater(){
+  if (protectedMode) return false;
+  const meta = currentBackupMeta();
+  meta.backupReminderSnoozedUntil =
+    new Date(Date.now()+BACKUP_REMINDER_SNOOZE_DAYS*BACKUP_DAY_MS).toISOString();
+  save();
+  renderBackup();
+  flashSave("Backup reminder postponed for "+BACKUP_REMINDER_SNOOZE_DAYS+" days.");
   return true;
 }
 document.getElementById("exportDataBtn").addEventListener("click", ()=>doBackup("exportDataBtn"));
 document.getElementById("backupNowBtn").addEventListener("click", ()=>doBackup("backupNowBtn"));
+document.getElementById("backupLaterBtn").addEventListener("click", remindBackupLater);
 function exportRawRecoveryOriginals(){
   const payload = makeRawRecoveryEnvelope();
   if (!payload.ok){ flashSave("Raw recovery export unavailable", true); return false; }
@@ -683,25 +780,92 @@ function renderStorageUse(){
     el.textContent = "Browser storage used: ~"+(kb<1024 ? Math.round(kb)+" KB" : (kb/1024).toFixed(1)+" MB")+" (approximate; browsers typically allow 5\u201310 MB)";
   } catch(e){ el.textContent = ""; }
 }
+function validBackupTime(value, dateOnly){
+  if (typeof value!=="string" || !value) return 0;
+  const parsed = Date.parse(dateOnly ? value+"T12:00:00" : value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+function elapsedBackupDays(time){
+  return time>0 ? Math.max(0,Math.floor((Date.now()-time)/BACKUP_DAY_MS)) : 0;
+}
+function recordedBackupActivity(meta){
+  const candidates = [];
+  const completed = validBackupTime(meta.lastBackupCompletedAt,false);
+  if (completed) candidates.push({time:completed,kind:"share-completed"});
+
+  const attempt = validBackupTime(meta.lastBackupAttemptAt,false);
+  if (attempt && meta.lastBackupAttemptKind==="download"){
+    candidates.push({time:attempt,kind:"download-started"});
+  }
+
+  const legacy = validBackupTime(meta.lastBackup,true);
+  if (legacy) candidates.push({time:legacy,kind:"legacy"});
+
+  candidates.sort((a,b)=>b.time-a.time);
+  return candidates[0] || null;
+}
+function backupReminderAnchor(meta){
+  const activity = recordedBackupActivity(meta);
+  if (activity) return {time:activity.time,source:"backup"};
+
+  const marker = installMarkerStatus();
+  const established = marker.ok
+    ? validBackupTime(marker.record.establishedAt,false)
+    : 0;
+  return established ? {time:established,source:"install"} : null;
+}
 function renderBackup(){
   renderStorageUse();
-  const m = data.meta || {lastBackup:null, logsSince:0};
+
+  const meta = currentBackupMeta();
   const line = document.getElementById("backupMetaLine");
-  if (m.lastBackup){
-    const days = Math.floor((new Date(todayStr()) - new Date(m.lastBackup))/86400000);
-    line.textContent = "Last backup: "+(days===0?"today":days+" day"+(days===1?"":"s")+" ago")+" · "+(m.logsSince||0)+" new logs since. Keep the file somewhere safe (email, cloud drive).";
+  const activity = recordedBackupActivity(meta);
+
+  if (activity){
+    const days = elapsedBackupDays(activity.time);
+    const age = days===0 ? "today" : days+" day"+(days===1?"":"s")+" ago";
+
+    if (activity.kind==="share-completed"){
+      line.textContent =
+        "Last browser share completed: "+age+
+        ". A resolved share does not guarantee durable or offsite storage; keep the file somewhere you can access later.";
+    } else if (activity.kind==="download-started"){
+      line.textContent =
+        "Last backup download started: "+age+
+        ". The browser cannot confirm where the file was saved; keep a copy somewhere you can access later.";
+    } else {
+      line.textContent =
+        "Last recorded backup activity: "+age+
+        ". Keep the backup file somewhere you can access later.";
+    }
   } else {
-    line.textContent = "Last backup: never. Your data lives only on this device — back it up occasionally.";
+    line.textContent =
+      "No backup export is recorded. BlackPyre data remains on this device until you save a backup copy somewhere else.";
   }
+
   renderRecoveryStatus();
+
   const card = document.getElementById("backupCard");
-  const due = (!m.lastBackup && (m.logsSince||0)>=10)
-    || (m.lastBackup && Math.floor((new Date(todayStr()) - new Date(m.lastBackup))/86400000)>=14 && (m.logsSince||0)>=10);
-  if (!due){ card.classList.add("hidden"); return; }
+  const anchor = backupReminderAnchor(meta);
+  const snoozedUntil = validBackupTime(meta.backupReminderSnoozedUntil,false);
+  const snoozed = snoozedUntil>Date.now();
+  const due = !!(
+    anchor
+    && !snoozed
+    && Date.now()-anchor.time >= BACKUP_REMINDER_DAYS*BACKUP_DAY_MS
+  );
+
+  if (!due){
+    card.classList.add("hidden");
+    return;
+  }
+
   card.classList.remove("hidden");
-  document.getElementById("backupText").innerHTML = m.lastBackup
-    ? "It's been a while since your last backup and you've logged <b>"+m.logsSince+"</b> entries since. Your data lives only on this device — one tap protects it."
-    : "You've logged <b>"+m.logsSince+"</b> entries and never backed up. Your data lives only on this device — one tap protects it.";
+  const days = elapsedBackupDays(anchor.time);
+  document.getElementById("backupText").textContent =
+    anchor.source==="backup"
+      ? "It has been "+days+" days since your last recorded backup activity. Export a fresh copy and save it somewhere you can access later."
+      : "It has been "+days+" days since BlackPyre was established on this device and no backup activity is recorded. Export a copy and save it somewhere you can access later.";
 }
 function restoreBackupEnvelope(b){
   if (protectedMode){

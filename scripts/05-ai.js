@@ -292,34 +292,83 @@ function usualFor(meal){
 
   return items.length ? items : null;
 }
+function usualItemAlreadyAdded(item, meal){
+  return (data.food[todayStr()]||[]).some(todayEntry=>
+    (todayEntry.meal||"other")===meal
+    && recurringFoodCategoryMatch(item,todayEntry)
+  );
+}
+function addUsualItem(item, meal){
+  if (!item || usualItemAlreadyAdded(item,meal)) return false;
+  const copy = cloneJSON(item);
+  copy.meal = meal;
+  addEntry(copy);
+  return true;
+}
 function renderUsual(){
   const card = document.getElementById("usualCard");
   if (foodDateEl.value !== todayStr()){ card.classList.add("hidden"); return; }
 
-  const items = usualFor(currentMeal);
+  const meal = currentMeal;
+  const items = usualFor(meal);
   if (!items){ card.classList.add("hidden"); return; }
 
-  const todayEntries = (data.food[todayStr()]||[])
-    .filter(f=>(f.meal||"other")===currentMeal);
+  card.classList.remove("hidden");
+  document.getElementById("usualMealName").textContent = meal;
 
-  const remaining = items.filter(item=>
-    !todayEntries.some(todayEntry=>recurringFoodCategoryMatch(item,todayEntry))
+  const itemBox = document.getElementById("usualItems");
+  itemBox.innerHTML = items.map((item,index)=>{
+    const added = usualItemAlreadyAdded(item,meal);
+    return '<div class="usualItemRow" style="display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">'
+      +'<div style="flex:1;min-width:0;">'
+      +'<div style="color:var(--text);font-weight:600;">'+esc(item.name)+'</div>'
+      +'<div style="color:var(--dim);font-size:11px;margin-top:2px;">'
+      +Math.round(Number(item.cal)||0)+' kcal · '
+      +Math.round(Number(item.pro)||0)+'g protein'
+      +(Number(item.grams)>0 ? ' · '+Math.round(Number(item.grams))+'g' : '')
+      +'</div></div>'
+      +'<button type="button" class="btn ghost small usualAddBtn" data-index="'+index+'"'
+      +' aria-label="'+(added ? 'Already added ' : 'Add ')+esc(item.name)+'"'
+      +(added ? ' disabled' : '')+' style="flex:0 0 auto;">'
+      +(added ? 'Added' : 'Add')+'</button>'
+      +'</div>';
+  }).join("");
+
+  const total = Math.round(items.reduce((sum,item)=>sum+Number(item.cal||0),0));
+  const protein = Math.round(items.reduce((sum,item)=>sum+Number(item.pro||0),0));
+  const remainingCount = items.filter(item=>!usualItemAlreadyAdded(item,meal)).length;
+
+  itemBox.insertAdjacentHTML(
+    "beforeend",
+    '<div style="color:var(--dim);font-size:11px;margin-top:8px;">'
+      +total+' kcal · '+protein+'g protein · your typical portions'
+      +(remainingCount ? ' · '+remainingCount+' remaining' : ' · all added')
+      +'</div>'
   );
 
-  if (!remaining.length){ card.classList.add("hidden"); return; }
+  itemBox.querySelectorAll(".usualAddBtn").forEach(button=>{
+    button.addEventListener("click",()=>{
+      const item = items[Number(button.dataset.index)];
+      if (addUsualItem(item,meal)){
+        flashSave(item.name+" added ✓");
+      }
+      renderUsual();
+    });
+  });
 
-  card.classList.remove("hidden");
-  document.getElementById("usualMealName").textContent = currentMeal;
-  const total = Math.round(remaining.reduce((a,x)=>a+Number(x.cal||0),0));
-  const pro = Math.round(remaining.reduce((a,x)=>a+Number(x.pro||0),0));
-  document.getElementById("usualItems").innerHTML = remaining.map(it=>esc(it.name)).join(" · ")
-    + '<div style="color:var(--dim); font-size:11px; margin-top:4px;">'+total+' kcal · '+pro+'g protein · your typical portions</div>';
-  const btn = document.getElementById("usualLogBtn");
-  btn.textContent = "Log usual "+currentMeal+" ("+remaining.length+" item"+(remaining.length===1?"":"s")+")";
-  btn.onclick = ()=>{
-    remaining.forEach(it=>addEntry(Object.assign({}, it)));
-    ackBtn("usualLogBtn", "✓ Logged "+remaining.length);
-    flashSave("Usual "+currentMeal+" logged ✓");
+  const addAll = document.getElementById("usualLogBtn");
+  addAll.disabled = remainingCount===0;
+  addAll.textContent = remainingCount
+    ? "Add all ("+remainingCount+" item"+(remainingCount===1?"":"s")+")"
+    : "All added";
+
+  addAll.onclick = ()=>{
+    let added = 0;
+    items.forEach(item=>{
+      if (addUsualItem(item,meal)) added++;
+    });
+    if (added) flashSave(added+" usual "+meal+" item"+(added===1?"":"s")+" added ✓");
+    renderUsual();
   };
 }
 

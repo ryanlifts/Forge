@@ -57,9 +57,12 @@ check("saved accent (steel) preserved", B.window.document.documentElement.style.
 check("weight page trend + goal line render", B.window.document.getElementById("chartLabel").textContent==="Trend · 225 → 175" && B.window.document.getElementById("chart").innerHTML.includes("GOAL 175"));
 
 // backup / restore round-trip
-B.window.eval(`cfg.anthropicKey="sk-test-A"; cfg.aiProvider="anthropic"; saveCfg();
+B.window.eval(`cfg.anthropicKey="sk-test-A"; cfg.openaiKey="sk-test-O"; cfg.usdaKey="usda-keep"; cfg.aiProvider="anthropic"; saveCfg();
 window.__dl=null; download=(n,c)=>{window.__dl=c;}; doBackup("exportDataBtn");`);
-check("export excludes API keys", !B.window.eval("window.__dl").includes("sk-test-A"));
+check("normal backup excludes Anthropic and OpenAI keys but retains the USDA key",
+  !B.window.eval("window.__dl").includes("sk-test-A")
+  && !B.window.eval("window.__dl").includes("sk-test-O")
+  && B.window.eval("window.__dl").includes("usda-keep"));
 B.window.eval(`
   const b = JSON.parse(window.__dl);
   delete b.cfg.calTarget; delete b.cfg.proTarget; b.cfg.calLo=1500; b.cfg.calHi=1700; b.cfg.proLo=160; b.cfg.proHi=180;
@@ -80,6 +83,148 @@ const RAW_V2_CFG = JSON.stringify(V2_CFG);
 const RAW_DATA = JSON.stringify(EMPTY_DATA);
 const RAW_V2_DATA = JSON.stringify(V2_DATA);
 const RAW_PROGRAM = JSON.stringify(TEST_PROGRAM);
+
+// ================= elapsed-time web backup reminder =================
+const backupOldEstablishedAt =
+  new Date(Date.now()-15*86400000).toISOString();
+const backupOldInstall = JSON.stringify({
+  formatVersion:1,
+  establishedAt:backupOldEstablishedAt,
+  lastHealthyAt:backupOldEstablishedAt,
+  schemaVersion:2
+});
+const backupReminderSeed = Object.assign({},V2_DATA,{
+  meta:{lastBackup:null,logsSince:0}
+});
+
+const BackupReminder = bootRaw({
+  cfg:RAW_V2_CFG,
+  data:JSON.stringify(backupReminderSeed),
+  program:RAW_PROGRAM,
+  install:backupOldInstall
+});
+const dBackupReminder = BackupReminder.window.document;
+
+check("web backup reminder is due from elapsed time even with zero new logs",
+  !dBackupReminder.getElementById("backupCard").classList.contains("hidden")
+  && BackupReminder.window.eval("data.meta.logsSince")===0);
+
+dBackupReminder.getElementById("backupLaterBtn").dispatchEvent(
+  new BackupReminder.window.Event("click",{bubbles:true})
+);
+check("Remind me later stores a future snooze and hides the reminder",
+  Date.parse(BackupReminder.window.eval("data.meta.backupReminderSnoozedUntil"))>Date.now()
+  && dBackupReminder.getElementById("backupCard").classList.contains("hidden"));
+
+BackupReminder.window.eval(`
+  data.meta.backupReminderSnoozedUntil =
+    new Date(Date.now()-1000).toISOString();
+  save();
+  renderBackup();
+`);
+check("expired backup snooze allows the elapsed-time reminder to return",
+  !dBackupReminder.getElementById("backupCard").classList.contains("hidden"));
+
+BackupReminder.window.eval(`
+  cfg.anthropicKey="secret-anthropic";
+  cfg.openaiKey="secret-openai";
+  cfg.usdaKey="keep-usda";
+  saveCfg();
+  window.__backupDownload=null;
+  window.__backupMessage=null;
+  download=(name,text)=>{window.__backupDownload={name,text};};
+  flashSave=(message,bad)=>{window.__backupMessage={message,bad};};
+  doBackup("backupNowBtn");
+`);
+const browserDownloadBackup =
+  JSON.parse(BackupReminder.window.eval("window.__backupDownload.text"));
+
+check("browser download records an attempt without inventing a completed browser action",
+  !!BackupReminder.window.eval("data.meta.lastBackupAttemptAt")
+  && BackupReminder.window.eval("data.meta.lastBackupAttemptKind")==="download"
+  && !BackupReminder.window.eval("data.meta.lastBackupCompletedAt"));
+
+check("browser backup download keeps USDA, strips private AI keys, and uses honest ready language",
+  browserDownloadBackup.cfg.usdaKey==="keep-usda"
+  && browserDownloadBackup.cfg.anthropicKey===undefined
+  && browserDownloadBackup.cfg.openaiKey===undefined
+  && BackupReminder.window.eval("window.__backupMessage.message")==="Backup ready. Save the file somewhere you can access later.");
+
+const ShareBackup = bootRaw({
+  cfg:RAW_V2_CFG,
+  data:JSON.stringify(backupReminderSeed),
+  program:RAW_PROGRAM,
+  install:backupOldInstall
+},w=>{
+  Object.defineProperty(w.navigator,"canShare",{
+    configurable:true,
+    value:payload=>!!(payload&&payload.files&&payload.files.length===1)
+  });
+  Object.defineProperty(w.navigator,"share",{
+    configurable:true,
+    value:async payload=>{w.__sharedBackup=payload;}
+  });
+});
+ShareBackup.window.eval(`
+  window.__backupMessage=null;
+  flashSave=(message,bad)=>{window.__backupMessage={message,bad};};
+`);
+await ShareBackup.window.eval(`doBackup("backupNowBtn")`);
+
+check("resolved Web Share records attempt and completed browser activity separately",
+  ShareBackup.window.eval("data.meta.lastBackupAttemptKind")==="share"
+  && !!ShareBackup.window.eval("data.meta.lastBackupAttemptAt")
+  && ShareBackup.window.eval("data.meta.lastBackupCompletedKind")==="share"
+  && !!ShareBackup.window.eval("data.meta.lastBackupCompletedAt")
+  && /blackpyre-backup-/.test(ShareBackup.window.__sharedBackup.files[0].name));
+
+check("resolved Web Share still uses non-durability backup language",
+  ShareBackup.window.eval("window.__backupMessage.message")==="Backup ready. Save the file somewhere you can access later."
+  && /does not guarantee durable or offsite storage/.test(
+    ShareBackup.window.document.getElementById("backupMetaLine").textContent
+  ));
+
+const CancelBackup = bootRaw({
+  cfg:RAW_V2_CFG,
+  data:JSON.stringify(Object.assign({},backupReminderSeed,{
+    food:{[dstr(0)]:[{name:"Existing food",cal:100,pro:10,carb:10,fat:2,meal:"lunch"}]}
+  })),
+  program:RAW_PROGRAM,
+  install:backupOldInstall
+},w=>{
+  Object.defineProperty(w.navigator,"canShare",{
+    configurable:true,
+    value:()=>true
+  });
+  Object.defineProperty(w.navigator,"share",{
+    configurable:true,
+    value:async ()=>{
+      const error=new Error("Canceled");
+      error.name="AbortError";
+      throw error;
+    }
+  });
+});
+CancelBackup.window.eval(`
+  window.__backupMessage=null;
+  flashSave=(message,bad)=>{window.__backupMessage={message,bad};};
+`);
+const cancelFoodBefore =
+  CancelBackup.window.eval("JSON.stringify(data.food)");
+await CancelBackup.window.eval(`doBackup("backupNowBtn")`);
+
+check("canceled Web Share records only the attempt and does not imply data loss",
+  CancelBackup.window.eval("data.meta.lastBackupAttemptKind")==="share"
+  && !!CancelBackup.window.eval("data.meta.lastBackupAttemptAt")
+  && !CancelBackup.window.eval("data.meta.lastBackupCompletedAt")
+  && CancelBackup.window.eval("JSON.stringify(data.food)")===cancelFoodBefore
+  && /canceled/.test(CancelBackup.window.eval("window.__backupMessage.message"))
+  && /existing logs and settings are unchanged/.test(
+    CancelBackup.window.eval("window.__backupMessage.message")
+  )
+  && !CancelBackup.window.document
+    .getElementById("backupCard").classList.contains("hidden"));
+
 const sacredBytes = dom=>({
   cfg:dom.window.localStorage.getItem("forge:cfg"),
   data:dom.window.localStorage.getItem("forge:data"),
@@ -972,19 +1117,33 @@ UsualIdentity.window.eval(`
   addEntry({name:"175g Greek yogurt",cal:105,pro:18,carb:7,fat:1,meal:"breakfast"});
   renderUsual();
 `);
-check("usual breakfast removes the matching category but keeps the card visible for one remaining recurring food",
+check("usual breakfast marks the matching category Added while leaving the other item available",
   !dUsualIdentity.getElementById("usualCard").classList.contains("hidden")
-  && /\(1 item\)/.test(dUsualIdentity.getElementById("usualLogBtn").textContent)
-  && !/Greek yogurt/i.test(dUsualIdentity.getElementById("usualItems").textContent)
-  && /Eggs/.test(dUsualIdentity.getElementById("usualItems").textContent));
+  && dUsualIdentity.querySelectorAll("#usualItems .usualAddBtn").length===2
+  && [...dUsualIdentity.querySelectorAll("#usualItems .usualItemRow")].some(row=>
+    /Greek yogurt/i.test(row.textContent)
+    && row.querySelector(".usualAddBtn").disabled
+    && row.querySelector(".usualAddBtn").textContent==="Added"
+  )
+  && [...dUsualIdentity.querySelectorAll("#usualItems .usualItemRow")].some(row=>
+    /Eggs/i.test(row.textContent)
+    && !row.querySelector(".usualAddBtn").disabled
+    && row.querySelector(".usualAddBtn").textContent==="Add"
+  )
+  && /Add all \(1 item\)/.test(dUsualIdentity.getElementById("usualLogBtn").textContent));
 
 UsualIdentity.window.eval(`
   _lastAddT=0;
   addEntry({name:"4 Eggs",cal:280,pro:24,carb:2,fat:20,meal:"breakfast"});
   renderUsual();
 `);
-check("usual breakfast hides only when no qualifying recurring foods remain",
-  dUsualIdentity.getElementById("usualCard").classList.contains("hidden"));
+check("usual breakfast keeps the grouped recommendation visible with every item marked Added",
+  !dUsualIdentity.getElementById("usualCard").classList.contains("hidden")
+  && [...dUsualIdentity.querySelectorAll("#usualItems .usualAddBtn")].every(button=>
+    button.disabled && button.textContent==="Added"
+  )
+  && dUsualIdentity.getElementById("usualLogBtn").disabled
+  && dUsualIdentity.getElementById("usualLogBtn").textContent==="All added");
 
 UsualIdentity.window.eval(`currentMeal="lunch"; renderMealSeg(); renderFood();`);
 check("usual lunch is independent and preserves the latest exact chicken portion and nutrition",
@@ -1003,8 +1162,11 @@ UsualIdentity.window.eval(`
   addEntry({name:"7oz Chicken Breast",cal:320,pro:56,carb:0,fat:7,meal:"lunch"});
   renderUsual();
 `);
-check("usual lunch removes a food type already logged for lunch today",
-  dUsualIdentity.getElementById("usualCard").classList.contains("hidden"));
+check("usual lunch marks its logged food Added without offering a duplicate",
+  !dUsualIdentity.getElementById("usualCard").classList.contains("hidden")
+  && dUsualIdentity.querySelector("#usualItems .usualAddBtn").disabled
+  && dUsualIdentity.querySelector("#usualItems .usualAddBtn").textContent==="Added"
+  && dUsualIdentity.getElementById("usualLogBtn").disabled);
 
 UsualIdentity.window.eval(`currentMeal="dinner"; renderMealSeg(); renderFood();`);
 check("usual dinner independently recognizes changed quantity prefixes and keeps the latest exact portion",
@@ -1023,8 +1185,11 @@ UsualIdentity.window.eval(`
   addEntry({name:"250g Brown Rice",cal:270,pro:6,carb:56,fat:2,meal:"dinner"});
   renderUsual();
 `);
-check("usual dinner removes a food type already logged for dinner today",
-  dUsualIdentity.getElementById("usualCard").classList.contains("hidden"));
+check("usual dinner marks its logged food Added without offering a duplicate",
+  !dUsualIdentity.getElementById("usualCard").classList.contains("hidden")
+  && dUsualIdentity.querySelector("#usualItems .usualAddBtn").disabled
+  && dUsualIdentity.querySelector("#usualItems .usualAddBtn").textContent==="Added"
+  && dUsualIdentity.getElementById("usualLogBtn").disabled);
 
 UsualIdentity.window.eval(`currentMeal="snacks"; renderMealSeg(); renderFood();`);
 check("usual snacks independently groups clear flavor variants and preserves the latest exact product nutrition",
@@ -1043,8 +1208,177 @@ UsualIdentity.window.eval(`
   addEntry({name:"Strawberry Protein Shake",cal:225,pro:31,carb:13,fat:5,meal:"snacks"});
   renderUsual();
 `);
-check("usual snacks removes a food type already logged for snacks today",
-  dUsualIdentity.getElementById("usualCard").classList.contains("hidden"));
+check("usual snacks marks its logged food Added without offering a duplicate",
+  !dUsualIdentity.getElementById("usualCard").classList.contains("hidden")
+  && dUsualIdentity.querySelector("#usualItems .usualAddBtn").disabled
+  && dUsualIdentity.querySelector("#usualItems .usualAddBtn").textContent==="Added"
+  && dUsualIdentity.getElementById("usualLogBtn").disabled);
+
+// ================= individual recurring-meal Quick Log controls =================
+const usualControlFood = {};
+for(let i=1;i<=4;i++){
+  usualControlFood[dstr(-i)] = [
+    {
+      name:"1 serving · Test Greek Yogurt",
+      cal:102,pro:18,carb:7,fat:1,meal:"breakfast",
+      amount:1,unit:"serving",grams:170,
+      foodKey:"food:test greek yogurt|test dairy",
+      sourceFood:{
+        name:"Test Greek Yogurt",brand:"Test Dairy",
+        cal100:60,pro100:10.5882352941,carb100:4.1176470588,
+        fat100:0.5882352941,servingG:170,servingLabel:"170g cup"
+      }
+    },
+    {
+      name:"2 Eggs",cal:140,pro:12,carb:1,fat:10,
+      meal:"breakfast"
+    },
+    {
+      name:"150g Test Chicken Breast",
+      cal:248,pro:47,carb:0,fat:5,meal:"lunch",
+      amount:150,unit:"g",grams:150,
+      foodKey:"food:test chicken breast|test kitchen",
+      sourceFood:{
+        name:"Test Chicken Breast",brand:"Test Kitchen",
+        cal100:165,pro100:31,carb100:0,fat100:3.3
+      }
+    },
+    {
+      name:"200g Test Brown Rice",
+      cal:222,pro:5,carb:46,fat:2,meal:"dinner",
+      amount:200,unit:"g",grams:200,
+      foodKey:"food:test brown rice|test kitchen",
+      sourceFood:{
+        name:"Test Brown Rice",brand:"Test Kitchen",
+        cal100:111,pro100:2.5,carb100:23,fat100:1
+      }
+    },
+    {
+      name:"1 serving · Test Protein Shake",
+      cal:230,pro:32,carb:12,fat:5,meal:"snacks",
+      amount:1,unit:"serving",grams:330,
+      foodKey:"food:test protein shake|test nutrition",
+      sourceFood:{
+        name:"Test Protein Shake",brand:"Test Nutrition",
+        cal100:69.696969697,pro100:9.696969697,
+        carb100:3.636363636,fat100:1.515151515,
+        servingG:330,servingLabel:"1 bottle"
+      }
+    }
+  ];
+}
+
+const UsualControls = boot(
+  V2_CFG,
+  Object.assign({},EMPTY_DATA,{food:usualControlFood})
+);
+const dUsualControls = UsualControls.window.document;
+UsualControls.window.eval(`currentMeal="breakfast"; renderMealSeg(); renderFood();`);
+
+const firstUsualAdd =
+  dUsualControls.querySelector("#usualItems .usualAddBtn:not([disabled])");
+firstUsualAdd.dispatchEvent(
+  new UsualControls.window.Event("click",{bubbles:true})
+);
+
+check("usual meal allows one recommended food to be added independently",
+  UsualControls.window.eval(`data.food[todayStr()].length`)===1
+  && [...dUsualControls.querySelectorAll("#usualItems .usualItemRow")].some(row=>
+    /Test Greek Yogurt/.test(row.textContent)
+    && row.querySelector(".usualAddBtn").disabled
+    && row.querySelector(".usualAddBtn").textContent==="Added"
+  )
+  && [...dUsualControls.querySelectorAll("#usualItems .usualAddBtn")].some(button=>!button.disabled));
+
+check("individual usual-food add preserves nutrition, grams, source identity, and serving amount",
+  UsualControls.window.eval(`
+    (function(){
+      const food=data.food[todayStr()][0];
+      return food.name==="1 serving · Test Greek Yogurt"
+        && food.cal===102 && food.pro===18
+        && food.grams===170
+        && food.amount===1 && food.unit==="serving"
+        && food.foodKey==="food:test greek yogurt|test dairy"
+        && food.sourceFood
+        && food.sourceFood.name==="Test Greek Yogurt"
+        && food.sourceFood.servingG===170;
+    })()
+  `));
+
+UsualControls.window.eval(`startEditEntry(0)`);
+check("individually added usual food retains slider-edit behavior",
+  !dUsualControls.getElementById("calcCard").classList.contains("hidden")
+  && dUsualControls.getElementById("addSelBtn").textContent==="Update entry"
+  && dUsualControls.getElementById("qtyUnit").value==="serving"
+  && Number(dUsualControls.getElementById("qtyAmount").value)===1);
+dUsualControls.getElementById("cancelSelEditBtn").dispatchEvent(
+  new UsualControls.window.Event("click",{bubbles:true})
+);
+
+dUsualControls
+  .querySelector("#usualItems .usualAddBtn:not([disabled])")
+  .dispatchEvent(new UsualControls.window.Event("click",{bubbles:true}));
+
+check("usual meal allows multiple recommended foods to be added individually",
+  UsualControls.window.eval(`data.food[todayStr()].length`)===2
+  && [...dUsualControls.querySelectorAll("#usualItems .usualAddBtn")].every(button=>
+    button.disabled && button.textContent==="Added"
+  ));
+
+const completedUsualCount =
+  UsualControls.window.eval(`data.food[todayStr()].length`);
+dUsualControls.getElementById("usualLogBtn").dispatchEvent(
+  new UsualControls.window.Event("click",{bubbles:true})
+);
+check("disabled Add all cannot duplicate individually added usual foods",
+  UsualControls.window.eval(`data.food[todayStr()].length`)===completedUsualCount);
+
+const UsualPartial = boot(
+  V2_CFG,
+  Object.assign({},EMPTY_DATA,{food:usualControlFood})
+);
+const dUsualPartial = UsualPartial.window.document;
+UsualPartial.window.eval(`currentMeal="breakfast"; renderMealSeg(); renderFood();`);
+dUsualPartial
+  .querySelector("#usualItems .usualAddBtn:not([disabled])")
+  .dispatchEvent(new UsualPartial.window.Event("click",{bubbles:true}));
+dUsualPartial.getElementById("usualLogBtn").dispatchEvent(
+  new UsualPartial.window.Event("click",{bubbles:true})
+);
+
+check("Add all after a partial individual add adds only the remaining food",
+  UsualPartial.window.eval(`
+    (function(){
+      const foods=data.food[todayStr()];
+      return foods.length===2
+        && foods.filter(food=>/Greek Yogurt/.test(food.name)).length===1
+        && foods.filter(food=>/Eggs/.test(food.name)).length===1;
+    })()
+  `));
+
+const UsualAllMeals = boot(
+  V2_CFG,
+  Object.assign({},EMPTY_DATA,{food:usualControlFood})
+);
+const dUsualAllMeals = UsualAllMeals.window.document;
+["breakfast","lunch","dinner","snacks"].forEach(meal=>{
+  UsualAllMeals.window.eval(`currentMeal=${JSON.stringify(meal)}; renderMealSeg(); renderFood();`);
+  const button =
+    dUsualAllMeals.querySelector("#usualItems .usualAddBtn:not([disabled])");
+  button.dispatchEvent(
+    new UsualAllMeals.window.Event("click",{bubbles:true})
+  );
+});
+
+check("individual usual-food actions work independently for all four meal categories",
+  UsualAllMeals.window.eval(`
+    (function(){
+      const foods=data.food[todayStr()];
+      const meals=new Set(foods.map(food=>food.meal));
+      return foods.length===4
+        && ["breakfast","lunch","dinner","snacks"].every(meal=>meals.has(meal));
+    })()
+  `));
 
 const distinctRecurringFood = {};
 const distinctNames = [
@@ -1172,7 +1506,7 @@ check("v62 a catalog suggestion opens its exact listed serving for review", dC62
 check("v62 review shows the USDA per-100g values and correctly scaled serving", /USDA reference · SR28/.test(dC62.getElementById("selName").textContent) && /165 kcal/.test(dC62.getElementById("selPer100").textContent) && dC62.getElementById("calcCal").textContent==="186" && dC62.getElementById("calcPro").textContent==="35");
 check("v62 reviewing a broad-catalog suggestion never auto-logs it", C62.window.eval(`(data.food[todayStr()]||[]).length`)===beforeReview62);
 check("v62 FAQ explains USDA sourcing, exact servings, and real-world variation", C62.window.eval(`FAQ.some(x=>x.q==="How accurate are suggested-food calories and macros?"&&/per 100 grams/.test(x.a)&&/exact gram weight/.test(x.a)&&/NDB number/.test(x.a)&&/brand/.test(x.a)) && FAQ.some(x=>x.q==="How do food suggestions work?"&&/120 common foods/.test(x.a)&&/familiar foods receive a bonus but are not required/.test(x.a)&&/does not call USDA or an AI/.test(x.a))`));
-check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v72"'); })());
+check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v74"'); })());
 check("v62 keeps primary schemaVersion 2", C62.window.eval("SCHEMA_VERSION")===2);
 
 // ================= ChatGPT handoff paste flow =================
@@ -1423,7 +1757,7 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the four data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+"/.test(sw));
-check("v72 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v72"'));
+check("v74 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v74"'));
 const rawIndex = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 check("data scripts load before the app scripts (raw file order)",
   ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js"].every(f=>
