@@ -282,6 +282,35 @@
     .srow > .step, .srow > .snum, .srow > .sx { order:2; }
     .snum { flex:1 1 44px; min-width:44px; width:auto; height:44px; }
   }
+  .shapeChip { display:inline-flex; align-items:center; min-height:22px; margin-left:5px; padding:2px 7px; border:1px solid rgba(var(--ember-rgb),.42); border-radius:999px; color:var(--ember); font-size:9px; letter-spacing:.04em; text-transform:uppercase; vertical-align:middle; }
+  .shape-grid { display:grid; gap:8px; margin:8px 0; }
+  .time-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .distance-grid { grid-template-columns:minmax(0,2fr) minmax(88px,1fr); }
+  .carry-grid, .rounds-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .shape-grid input, .shape-grid select { width:100%; }
+  .shape-note, .lastLine { margin:6px 0 9px; }
+  .savedLine { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:10px 0; color:var(--text); }
+  .savedChip, .unsavedChip { display:inline-flex; align-items:center; min-height:24px; padding:3px 8px; border-radius:999px; font-size:10px; font-weight:600; }
+  .savedChip { color:var(--ok); border:1px solid rgba(74,222,128,.45); background:rgba(74,222,128,.08); }
+  .unsavedChip { color:var(--amber); border:1px solid rgba(232,176,75,.45); background:rgba(232,176,75,.08); }
+  .exFoot { display:flex; align-items:center; gap:9px; margin-top:10px; }
+  .newer-shape-notice, .newer-inline { border:1px solid var(--amber); border-radius:10px; background:rgba(232,176,75,.08); color:var(--text); }
+  .newer-shape-notice { padding:11px 12px; font-size:12px; line-height:1.5; overflow-wrap:anywhere; }
+  .newer-inline { margin-top:4px; padding:5px 7px; font-size:10px; }
+  .exercise-library-tools { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:end; margin-bottom:14px; }
+  .exercise-library-tools .library-fields { min-width:0; }
+  #exerciseSearch { margin-bottom:8px; }
+  #customExerciseFields { display:grid; grid-template-columns:minmax(0,2fr) minmax(120px,1fr); gap:8px; margin-top:8px; }
+  .my-exercise-row { display:flex; align-items:center; gap:8px; padding:10px 0; border-bottom:1px solid var(--border); }
+  .my-exercise-row:last-child { border-bottom:0; }
+  .builder-add-exercise { flex-wrap:wrap; align-items:end; }
+  .builder-add-exercise > select, .builder-add-exercise > input { min-width:130px; }
+  @media (max-width:520px) {
+    .shape-grid, .time-grid, .distance-grid, .carry-grid, .rounds-grid, #customExerciseFields { grid-template-columns:1fr; }
+    .exercise-library-tools { grid-template-columns:1fr; }
+    .exercise-library-tools > .btn { width:100%; }
+    .my-exercise-row { align-items:flex-start; flex-wrap:wrap; }
+  }
   /* celebration overlay */
   #celebrate { position:fixed; inset:0; z-index:60; background:rgba(16,18,21,.97); display:flex; align-items:center; justify-content:center; padding:24px; }
   .cel-box { max-width:440px; width:100%; text-align:center; }
@@ -739,10 +768,32 @@
 
       <div id="strengthBlock">
         <div id="exerciseInputs"></div>
-        <div class="row" style="align-items:flex-end; margin-bottom:14px;">
-          <div style="flex:2;"><div class="label">Add exercise to this session</div><select id="addExSel" aria-label="Exercise to add"></select>
-          <input id="addExCustom" aria-label="Custom exercise name" class="hidden" placeholder="Type your exercise" style="margin-top:8px;"></div>
-          <div style="flex:0 0 auto;"><button class="btn ghost small" id="addExBtn">+ Add</button></div>
+        <div class="exercise-library-tools">
+          <div class="library-fields">
+            <div class="label">Add exercise to this session</div>
+            <input id="exerciseSearch" aria-label="Search exercise library" placeholder="Search name, alias, tag, muscle, or equipment">
+            <select id="addExSel" aria-label="Exercise to add"></select>
+            <div id="customExerciseFields" class="hidden">
+              <input id="addExCustom" aria-label="New exercise name" placeholder="New exercise name">
+              <select id="addExShape" aria-label="Tracking shape for new exercise">
+                <option value="lift">Weight × reps</option>
+                <option value="reps">Reps (weight optional)</option>
+                <option value="timeDist">Time / distance</option>
+                <option value="carry">Weight + distance</option>
+                <option value="rounds">Rounds / intervals</option>
+                <option value="text">Free text</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn ghost small" id="addExBtn">+ Add</button>
+        </div>
+        <button class="xbtn" id="myExercisesManageBtn" style="width:100%; margin-bottom:14px;">Manage my exercises</button>
+        <div class="card hidden" id="myExercisesCard" style="margin-bottom:14px;">
+          <div class="row" style="align-items:center; justify-content:space-between; margin-bottom:8px;">
+            <div><div class="label" style="margin:0;">My exercise library</div><div class="note" style="margin:3px 0 0;">Referenced exercises are archived instead of deleted.</div></div>
+            <button class="xbtn" id="myExercisesCloseBtn">Close</button>
+          </div>
+          <div id="myExercisesList"></div>
         </div>
       </div>
 
@@ -779,7 +830,7 @@
     </div>
 
     <div class="card flush hidden" id="prCard">
-      <div style="padding:12px 16px; border-bottom:1px solid var(--border);"><span class="label" style="margin:0;">Personal records (est. 1RM)</span></div>
+      <div style="padding:12px 16px; border-bottom:1px solid var(--border);"><span class="label" style="margin:0;">Personal records</span></div>
       <div id="prList"></div>
     </div>
 
@@ -1212,6 +1263,7 @@
 <script src="data-foods.js"></script>
 <script src="data-suggestions.js"></script>
 <script src="data-faq.js"></script>
+<script src="data-exercises.js"></script>
 <script src="scripts/01-storage.js"></script>
 <script src="scripts/02-food.js"></script>
 <script src="scripts/03-train.js"></script>

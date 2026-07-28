@@ -110,32 +110,58 @@ check("old range cfg migrates to midpoint", (()=>{ E(`var o={calLo:1500,calHi:17
 check("proLo/proHi migrate too", (()=>{ E(`var o2={proLo:160,proHi:180}; migrateTargets(o2);`); return E("o2.proTarget")===170; })());
 check("existing exact targets never overwritten", (()=>{ E(`var o3={calTarget:1750,calLo:1000,calHi:1200}; migrateTargets(o3);`); return E("o3.calTarget")===1750; })());
 
+// ---------- unified exercise library and shape engine ----------
+check("exercise library launches with 150–300 curated entries", E(`Array.isArray(EXERCISE_LIBRARY)&&EXERCISE_LIBRARY.length>=150&&EXERCISE_LIBRARY.length<=300`)===true);
+check("exercise library has unique permanent ids", E(`new Set(EXERCISE_LIBRARY.map(x=>x.id)).size===EXERCISE_LIBRARY.length`)===true);
+check("exercise library lint enforces shapes, closed vocabularies, collision-free names, and data-only entries", E(`validateBuiltInExerciseLibrary()`)===true);
+check("normalization trims, collapses whitespace, and lowercases identically", E(`normalizeExerciseName("  Bench   Press ")==="bench press"`)===true);
+check("library search uses names, aliases, tags, muscles, and equipment", E(`searchExercises("chest press",20).some(x=>x.name==="Bench Press")&&searchExercises("hamstrings",40).some(x=>x.muscles.primary.includes("hamstrings")||x.muscles.secondary.includes("hamstrings"))`)===true);
+check("lift validator requires positive weight and reps", E(`validateLiftShape({rows:[{w:135,r:5,touched:true}]}).value[0].w===135&&validateLiftShape({rows:[{w:0,r:5,touched:true}]}).ok===false`)===true);
+check("reps validator stores unweighted and weighted rows in the shared array form", E(`(()=>{const a=validateRepsShape({rows:[{w:"",r:8,touched:true}]});const b=validateRepsShape({rows:[{w:25,r:6,touched:true}]});return a.ok&&!Object.prototype.hasOwnProperty.call(a.value[0],"w")&&b.value[0].w===25;})()`)===true);
+check("time-distance validator stores primitives without unit conversion", E(`(()=>{const x=validateTimeDistShape({touched:true,fields:{hours:0,mins:20,secs:0,dist:2,distUnit:"mi"}});return x.ok&&x.value.secs===1200&&x.value.dist===2&&x.value.distUnit==="mi";})()`)===true);
+check("carry and rounds validators emit their exact discriminated forms", E(`(()=>{const c=validateCarryShape({touched:true,fields:{lbs:80,dist:100,distUnit:"ft"}});const r=validateRoundsShape({touched:true,fields:{rounds:8,workSecs:20,recSecs:100,note:"hard"}});return c.value.t==="carry"&&c.value.distUnit==="ft"&&r.value.t==="rounds"&&r.value.note==="hard";})()`)===true);
+check("text validator remains the permanent escape hatch", E(`validateTextShape({textTouched:true,text:"  anything forever  "}).value==="anything forever"`)===true);
+check("lift and weighted reps use Epley while reps over 30 are excluded", E(`deriveLiftValue([{w:100,r:5}]).e1rm===100*(1+5/30)&&deriveRepsValue([{w:25,r:8}]).kind==="e1rm"&&deriveRepsValue([{w:25,r:31}])===null`)===true);
+check("unweighted reps derive maximum repetitions", E(`deriveRepsValue([{r:8},{r:12}]).reps===12`)===true);
+check("time-distance derives pace and distance without changing stored units", E(`(()=>{const x=deriveTimeDistValue({t:"timeDist",secs:1200,dist:2,distUnit:"mi"});return x.pace===600&&x.bucket==="2 mi"&&Math.round(x.meters)===3219;})()`)===true);
+check("carry derivation exposes weight and comparable read-time distance", E(`(()=>{const x=deriveCarryValue({t:"carry",lbs:100,dist:50,distUnit:"ft"});return x.lbs===100&&Math.abs(x.meters-15.24)<0.001;})()`)===true);
+check("rounds and text intentionally derive no PR metric", E(`deriveRoundsValue({t:"rounds"})===null&&deriveTextValue("done")===null`)===true);
+
 // ---------- schemaVersion prepareState pipeline ----------
 const schemaDataRaw = JSON.stringify({food:{},workouts:[],weights:[]});
 const schemaProgramRaw = JSON.stringify({name:"Test",days:[{id:"D1",title:"Day 1",exercises:[{name:"Squat"}]}]});
 let prep = E(`prepareState(${JSON.stringify(JSON.stringify({calLo:1500,calHi:1700,proLo:160,proHi:180}))}, ${JSON.stringify(schemaDataRaw)}, ${JSON.stringify(schemaProgramRaw)})`);
-check("prepareState migrates legacy whole-state to schema 2", prep.ok && prep.state.cfg.schemaVersion===2 && prep.state.data.activeWorkoutDraft===null);
+check("prepareState migrates legacy whole-state to schema 3", prep.ok && prep.state.cfg.schemaVersion===3 && prep.state.data.activeWorkoutDraft===null && typeof prep.state.data.myExercises==="object");
 check("prepareState preserves migrateTargets-before-defaults ordering", prep.state.cfg.calTarget===1600 && prep.state.cfg.proTarget===170);
-check("legacy migration marks settings and adds the v56 draft field", prep.changed.cfg===true && prep.changed.data===true && prep.changed.program===false);
-prep = E(`prepareState(${JSON.stringify(JSON.stringify(Object.assign({}, EXISTING_CFG,{schemaVersion:2, futureField:"keep-me"})))}, ${JSON.stringify(schemaDataRaw)}, ${JSON.stringify(schemaProgramRaw)})`);
+check("legacy migration marks settings and adds draft plus exercise-library state", prep.changed.cfg===true && prep.changed.data===true && prep.changed.program===false);
+prep = E(`prepareState(${JSON.stringify(JSON.stringify(Object.assign({}, EXISTING_CFG,{schemaVersion:3, futureField:"keep-me"})))}, ${JSON.stringify(JSON.stringify({food:{},workouts:[],weights:[],myExercises:{},activeWorkoutDraft:null}))}, ${JSON.stringify(schemaProgramRaw)})`);
 check("current schema short-circuits without migration writes", prep.ok && !prep.changed.cfg && !prep.changed.data && !prep.changed.program);
+const emptyDraftData = JSON.stringify({food:{},workouts:[],weights:[],myExercises:{},activeWorkoutDraft:{date:"2026-07-15",day:"D1",title:"Day 1",sets:{},notes:"",updatedAt:"2026-07-15T12:00:00.000Z"}});
+const emptyDraftPrep = E(`prepareState(${JSON.stringify(JSON.stringify(Object.assign({}, EXISTING_CFG,{schemaVersion:3})))}, ${JSON.stringify(emptyDraftData)}, ${JSON.stringify(schemaProgramRaw)})`);
+check("empty persisted workout drafts normalize away instead of offering a zero-exercise Resume", emptyDraftPrep.ok && emptyDraftPrep.state.data.activeWorkoutDraft===null);
 const v1Prep = E(`prepareState(${JSON.stringify(JSON.stringify(Object.assign({}, EXISTING_CFG,{schemaVersion:1})))}, ${JSON.stringify(schemaDataRaw)}, ${JSON.stringify(schemaProgramRaw)})`);
-check("schema 1 migrates to schema 2 with an empty workout draft", v1Prep.ok && v1Prep.state.cfg.schemaVersion===2 && v1Prep.state.data.activeWorkoutDraft===null && v1Prep.changed.cfg && v1Prep.changed.data);
+check("schema 1 migrates through schema 3", v1Prep.ok && v1Prep.state.cfg.schemaVersion===3 && v1Prep.state.data.activeWorkoutDraft===null && typeof v1Prep.state.data.myExercises==="object" && v1Prep.changed.cfg && v1Prep.changed.data);
+const v2Prep = E(`prepareState(${JSON.stringify(JSON.stringify(Object.assign({}, EXISTING_CFG,{schemaVersion:2})))}, ${JSON.stringify(JSON.stringify({food:{},workouts:[],weights:[],activeWorkoutDraft:null}))}, ${JSON.stringify(schemaProgramRaw)})`);
+check("schema 2 migrates additively to schema 3 without rewriting history", v2Prep.ok && v2Prep.state.cfg.schemaVersion===3 && typeof v2Prep.state.data.myExercises==="object" && v2Prep.state.data.workouts.length===0);
 const v1Fail = E(`prepareState(${JSON.stringify(JSON.stringify(Object.assign({}, EXISTING_CFG,{schemaVersion:1})))}, ${JSON.stringify(schemaDataRaw)}, ${JSON.stringify(schemaProgramRaw)}, {forceMigrationFailureAt:2})`);
 check("schema 1→2 migration failure returns no prepared state for commit", !v1Fail.ok && /1→2 failed/.test(v1Fail.reason));
-const validDraftData = JSON.stringify({food:{},workouts:[],weights:[],activeWorkoutDraft:{date:"2026-07-15",day:"D1",title:"Day 1",sets:{Squat:[{w:225,r:5}]},notes:"",updatedAt:"2026-07-15T12:00:00.000Z"}});
-check("valid persisted workout drafts pass whole-state validation", E(`prepareState(${JSON.stringify(JSON.stringify(Object.assign({}, EXISTING_CFG,{schemaVersion:2})))}, ${JSON.stringify(validDraftData)}, ${JSON.stringify(schemaProgramRaw)}).ok`)===true);
-const badDraftData = JSON.stringify({food:{},workouts:[],weights:[],activeWorkoutDraft:{date:"2026-07-15",day:"D1",sets:{Squat:[{w:0,r:5}]}}});
-check("invalid persisted workout draft sets are rejected", E(`prepareState(${JSON.stringify(JSON.stringify(Object.assign({}, EXISTING_CFG,{schemaVersion:2})))}, ${JSON.stringify(badDraftData)}, ${JSON.stringify(schemaProgramRaw)}).ok`)===false);
+const v2Fail = E(`prepareState(${JSON.stringify(JSON.stringify(Object.assign({}, EXISTING_CFG,{schemaVersion:2})))}, ${JSON.stringify(schemaDataRaw)}, ${JSON.stringify(schemaProgramRaw)}, {forceMigrationFailureAt:3})`);
+check("schema 2→3 migration failure returns no prepared state for commit", !v2Fail.ok && /2→3 failed/.test(v2Fail.reason));
+const validDraftData = JSON.stringify({food:{},workouts:[],weights:[],myExercises:{},activeWorkoutDraft:{date:"2026-07-15",day:"D1",title:"Day 1",sets:{Squat:[{w:225,r:5}],"Pull-Up":[{r:8}],Running:{t:"timeDist",secs:1200,dist:2,distUnit:"mi"},"Farmer Carry":{t:"carry",lbs:80,dist:100,distUnit:"ft"},Sprints:{t:"rounds",rounds:8,workSecs:20,recSecs:100,note:"hard"},Mobility:"hips felt good"},notes:"",updatedAt:"2026-07-15T12:00:00.000Z"}});
+check("every exercise history form passes persisted-draft validation", E(`prepareState(${JSON.stringify(JSON.stringify(Object.assign({}, EXISTING_CFG,{schemaVersion:3})))}, ${JSON.stringify(validDraftData)}, ${JSON.stringify(schemaProgramRaw)}).ok`)===true);
+const badDraftData = JSON.stringify({food:{},workouts:[],weights:[],myExercises:{},activeWorkoutDraft:{date:"2026-07-15",day:"D1",sets:{Squat:[{w:225,r:0}]}}});
+check("invalid persisted workout draft sets are rejected", E(`prepareState(${JSON.stringify(JSON.stringify(Object.assign({}, EXISTING_CFG,{schemaVersion:3})))}, ${JSON.stringify(badDraftData)}, ${JSON.stringify(schemaProgramRaw)}).ok`)===false);
+const unknownDraftData = JSON.stringify({food:{},workouts:[],weights:[],myExercises:{},activeWorkoutDraft:{date:"2026-07-15",day:"D1",sets:{Future:{t:"futureShape",payload:{keep:true}}}}});
+check("unknown typed draft values are preserved for newer-version read-only handling", (()=>{const x=E(`prepareState(${JSON.stringify(JSON.stringify(Object.assign({}, EXISTING_CFG,{schemaVersion:3})))}, ${JSON.stringify(unknownDraftData)}, ${JSON.stringify(schemaProgramRaw)})`);return x.ok&&x.state.data.activeWorkoutDraft.sets.Future.t==="futureShape"&&x.state.data.activeWorkoutDraft.sets.Future.payload.keep===true;})());
 check("unknown settings fields survive preparation", prep.state.cfg.futureField==="keep-me");
-check("current custom rest arrays remain valid", E(`prepareState(${JSON.stringify(JSON.stringify(Object.assign({}, EXISTING_CFG,{schemaVersion:2,customRests:[75,120]})))}, ${JSON.stringify(schemaDataRaw)}, ${JSON.stringify(schemaProgramRaw)}).ok`)===true);
+check("current custom rest arrays remain valid", E(`prepareState(${JSON.stringify(JSON.stringify(Object.assign({}, EXISTING_CFG,{schemaVersion:3,customRests:[75,120]})))}, ${JSON.stringify(schemaDataRaw)}, ${JSON.stringify(schemaProgramRaw)}).ok`)===true);
 check("newer schema is refused", E(`prepareState('${JSON.stringify({schemaVersion:99})}', ${JSON.stringify(schemaDataRaw)}, ${JSON.stringify(schemaProgramRaw)}).kind`)==="newer");
 check("malformed schema type is refused", E(`prepareState('${JSON.stringify({schemaVersion:"1"})}', ${JSON.stringify(schemaDataRaw)}, ${JSON.stringify(schemaProgramRaw)}).ok`)===false);
-check("unusable log structures fail validation", E(`prepareState('${JSON.stringify({schemaVersion:2})}', '${JSON.stringify({food:{},workouts:{},weights:[]})}', ${JSON.stringify(schemaProgramRaw)}).ok`)===false);
-check("legacy null optional log fields normalize instead of quarantining", (()=>{ const q=E(`prepareState('${JSON.stringify({schemaVersion:2})}', '${JSON.stringify({food:{},workouts:[],weights:[],recents:null,myFoods:null,meta:null})}', ${JSON.stringify(schemaProgramRaw)})`); return q.ok && Array.isArray(q.state.data.recents) && q.state.data.meta && typeof q.state.data.myFoods==="object"; })());
+check("unusable log structures fail validation", E(`prepareState('${JSON.stringify({schemaVersion:3})}', '${JSON.stringify({food:{},workouts:{},weights:[]})}', ${JSON.stringify(schemaProgramRaw)}).ok`)===false);
+check("legacy null optional log fields normalize instead of quarantining", (()=>{ const q=E(`prepareState('${JSON.stringify({schemaVersion:3})}', '${JSON.stringify({food:{},workouts:[],weights:[],recents:null,myFoods:null,myExercises:null,meta:null})}', ${JSON.stringify(schemaProgramRaw)})`); return q.ok && Array.isArray(q.state.data.recents) && q.state.data.meta && typeof q.state.data.myFoods==="object" && typeof q.state.data.myExercises==="object"; })());
 
 // ---------- v46 recovery record parsers & diagnostics ----------
-const v46CfgRaw = JSON.stringify(Object.assign({}, EXISTING_CFG, {schemaVersion:2}));
+const v46CfgRaw = JSON.stringify(Object.assign({}, EXISTING_CFG, {schemaVersion:3}));
 const v46LkgObj = {recoveryFormatVersion:1,savedAt:"2026-07-14T12:00:00.000Z",strings:{cfg:v46CfgRaw,data:schemaDataRaw,program:schemaProgramRaw},legacyData:null};
 check("structured diagnostics identify parse stage and area", (()=>{ const x=E(`prepareState("{bad",${JSON.stringify(schemaDataRaw)},${JSON.stringify(schemaProgramRaw)})`); return !x.ok && x.diagnostic.stage==="parse" && x.diagnostic.part==="cfg" && x.diagnostic.code==="json-parse"; })());
 check("structured diagnostics identify validation area", (()=>{ const x=E(`prepareState(${JSON.stringify(v46CfgRaw)},'${JSON.stringify({food:{},workouts:{},weights:[]})}',${JSON.stringify(schemaProgramRaw)})`); return !x.ok && x.diagnostic.stage==="validation" && x.diagnostic.part==="data"; })());
@@ -152,7 +178,7 @@ check("recovery original equality treats omitted and null consistently", E(`same
 check("readable recovery summary names every keep/reset decision", E(`recoverySummary({cfg:{usable:true},data:{usable:false},program:{usable:true}})`)==="Keep settings · Reset logs · Keep training program");
 check("recovery records are not accepted as backup envelopes", E(`prepareRecoveryBackupEnvelope(${JSON.stringify(v46LkgObj)}).code`)==="recovery-record");
 check("recovery record marker is rejected even when primary-looking members are added", E(`prepareRecoveryBackupEnvelope(${JSON.stringify(Object.assign({},v46LkgObj,{cfg:JSON.parse(v46CfgRaw)}))}).code`)==="recovery-record");
-check("primary schema 2 and recovery format 1 remain separate contracts", E(`SCHEMA_VERSION===2 && RECOVERY_FORMAT_VERSION===1 && !Object.prototype.hasOwnProperty.call(DEFAULT_CFG,"schemaVersion")`)===true);
+check("primary schema 3 and recovery format 1 remain separate contracts", E(`SCHEMA_VERSION===3 && RECOVERY_FORMAT_VERSION===1 && !Object.prototype.hasOwnProperty.call(DEFAULT_CFG,"schemaVersion")`)===true);
 
 // ---------- v64 device-only rest timer record ----------
 check("v64 running rest timer record validates", E(`inspectRestTimerRaw('${JSON.stringify({formatVersion:1,status:"running",endAt:2000000000000,remainingSec:90,savedAt:1999999990000})}').ok`)===true);

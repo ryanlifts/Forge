@@ -75,8 +75,8 @@ check("restore preserves AI key + provider", B.window.eval("cfg.anthropicKey")==
 
 // ================= v45: schemaVersion & protected migrations =================
 const V1_CFG = Object.assign({}, EXISTING_CFG, {schemaVersion:1});
-const V2_CFG = Object.assign({}, EXISTING_CFG, {schemaVersion:2});
-const V2_DATA = Object.assign({}, EMPTY_DATA, {activeWorkoutDraft:null});
+const V2_CFG = Object.assign({}, EXISTING_CFG, {schemaVersion:3});
+const V2_DATA = Object.assign({}, EMPTY_DATA, {myExercises:{},activeWorkoutDraft:null});
 const TEST_PROGRAM = {name:"Test Program",author:"Suite",days:[{id:"D1",title:"Day 1",exercises:[{name:"Bench Press",scheme:"3×5"}]}]};
 const RAW_V1_CFG = JSON.stringify(V1_CFG);
 const RAW_V2_CFG = JSON.stringify(V2_CFG);
@@ -91,7 +91,7 @@ const backupOldInstall = JSON.stringify({
   formatVersion:1,
   establishedAt:backupOldEstablishedAt,
   lastHealthyAt:backupOldEstablishedAt,
-  schemaVersion:2
+  schemaVersion:3
 });
 const backupReminderSeed = Object.assign({},V2_DATA,{
   meta:{lastBackup:null,logsSince:0}
@@ -305,12 +305,12 @@ check("protected export does not mutate backup metadata", PC.window.eval("JSON.s
 // Healthy boot paths: one-time cfg stamp only, then no-op forever.
 let Fresh45 = bootRaw({});
 const freshCalls = sacredCalls(Fresh45);
-check("fresh install stamps schemaVersion 2", JSON.parse(Fresh45.window.localStorage.getItem("forge:cfg")).schemaVersion===2);
+check("fresh install stamps schemaVersion 3", JSON.parse(Fresh45.window.localStorage.getItem("forge:cfg")).schemaVersion===3);
 check("fresh install writes a complete primary state", freshCalls.length===3 && freshCalls.map(c=>c.key).join(",")==="forge:data,forge:program,forge:cfg");
 const rawV44Cfg = JSON.stringify(Object.assign({},EXISTING_CFG,{futureField:"survives"}));
 let H45 = bootRaw({cfg:rawV44Cfg,data:RAW_DATA,program:RAW_PROGRAM});
 const h45Calls = sacredCalls(H45);
-check("legacy-shaped install adds the draft field then stamps schema 2", h45Calls.length===2 && h45Calls.map(c=>c.key).join(",")==="forge:data,forge:cfg" && JSON.parse(h45Calls[1].value).schemaVersion===2 && JSON.parse(H45.window.localStorage.getItem("forge:data")).activeWorkoutDraft===null);
+check("legacy-shaped install adds draft and exercise state then stamps schema 3", h45Calls.length===2 && h45Calls.map(c=>c.key).join(",")==="forge:data,forge:cfg" && JSON.parse(h45Calls[1].value).schemaVersion===3 && JSON.parse(H45.window.localStorage.getItem("forge:data")).activeWorkoutDraft===null);
 check("healthy migration leaves program byte-identical", H45.window.localStorage.getItem("forge:program")===RAW_PROGRAM);
 check("unknown settings fields survive migration", H45.window.eval("cfg.futureField")==="survives");
 let H45b = bootRaw(sacredBytes(H45));
@@ -373,7 +373,7 @@ tProto.setItem = tSpySet;
 check("commit order writes data and program before settings stamp", sacredCalls(T45).slice(0,2).map(c=>c.key).join(",")==="forge:data,forge:program");
 check("simulated interrupted commit reports failed rollback", tornCommit.ok===false && tornCommit.rollbackFailed===true && JSON.parse(tStore.getItem("forge:cfg")).schemaVersion===undefined);
 let Healed45 = bootRaw({cfg:tStore.getItem("forge:cfg"),data:tStore.getItem("forge:data"),program:tStore.getItem("forge:program")});
-check("next boot heals an unstamped interrupted commit", Healed45.window.eval("protectedMode")===false && Healed45.window.eval("cfg.schemaVersion")===2 && Healed45.window.eval("cfg.calTarget")===1600 && Healed45.window.eval("data.activeWorkoutDraft")===null);
+check("next boot heals an unstamped interrupted commit", Healed45.window.eval("protectedMode")===false && Healed45.window.eval("cfg.schemaVersion")===3 && Healed45.window.eval("cfg.calTarget")===1600 && Healed45.window.eval("data.activeWorkoutDraft")===null && typeof Healed45.window.eval("data.myExercises")==="object");
 
 // ================= v46: recovery vault, quarantine, and LKG =================
 const fiveBytes = dom=>({
@@ -391,7 +391,7 @@ const validQuarantineRaw = originals=>JSON.stringify({recoveryFormatVersion:1,qu
 let H46 = bootRaw({cfg:RAW_V2_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM});
 let h46LkgRaw = H46.window.localStorage.getItem("forge:lkg");
 let h46Lkg = JSON.parse(h46LkgRaw);
-check("v46 recovery behavior keeps current primary schemaVersion 2", H46.window.eval("cfg.schemaVersion")===2 && JSON.parse(H46.window.localStorage.getItem("forge:cfg")).schemaVersion===2);
+check("v46 recovery behavior keeps current primary schemaVersion 3", H46.window.eval("cfg.schemaVersion")===3 && JSON.parse(H46.window.localStorage.getItem("forge:cfg")).schemaVersion===3);
 check("v46 healthy boot creates a format-1 whole-state LKG", h46Lkg.recoveryFormatVersion===1 && ["cfg","data","program"].every(k=>typeof h46Lkg.strings[k]==="string"));
 check("creating LKG does not rewrite unchanged primary keys", sacredCalls(H46).length===0 && callsFor(H46,"forge:lkg").length===1);
 check("LKG final strings pass the shared prepare pipeline", H46.window.eval(`inspectLkgRaw(${JSON.stringify(h46LkgRaw)}).ok`)===true);
@@ -1430,7 +1430,7 @@ check("v60 a configured live API key keeps the live food flow", H60Api.window.do
 const H60Off = boot(Object.assign({},V2_CFG,{aiProvider:"handoff",foodHandoffOn:false}),EMPTY_DATA);
 check("v60 disabling food handoff also hides it in handoff provider mode", H60Off.window.document.getElementById("aiFoodCard").classList.contains("hidden"));
 check("v60 FAQ explains the default-on toggle", H60.window.eval(`FAQ.some(x=>x.q==="What is ChatGPT handoff mode?"&&/on by default/i.test(x.a)&&/Settings/.test(x.a))`));
-check("v60 keeps primary schemaVersion 2", H60.window.eval("SCHEMA_VERSION")===2);
+check("v60 keeps primary schemaVersion 3", H60.window.eval("SCHEMA_VERSION")===3);
 
 // ================= v61: local food suggestions =================
 const S61 = boot(V2_CFG, EMPTY_DATA);
@@ -1476,7 +1476,7 @@ S61Familiar.window.eval(`currentMeal="lunch"; foodSuggestionPage=0; renderMealSe
 check("v61 familiar meal history is represented in suggestions", /Ryan's lunch yogurt/.test(S61Familiar.window.document.getElementById("foodSuggestionsList").textContent) && /Familiar lunch choice/.test(S61Familiar.window.document.getElementById("foodSuggestionsList").textContent));
 check("v61 suggestion buttons remain keyboard-accessible native controls", [...S61Familiar.window.document.querySelectorAll("#foodSuggestionsList button")].every(b=>b.tagName==="BUTTON" && /Review suggestion:/.test(b.getAttribute("aria-label")||"")));
 check("v61 FAQ fully explains local suggestions, review-before-log, visibility limits, and allergy limits", S61.window.eval(`FAQ.some(x=>x.q==="How do food suggestions work?"&&/one food at a time/.test(x.a)&&/works offline/.test(x.a)&&/does not call USDA or an AI/.test(x.a)&&/nothing logs until/.test(x.a)&&/allergy/i.test(x.a)) && FAQ.some(x=>x.q==="Why aren't food suggestions showing?"&&/today's date/.test(x.a)&&/calorie and macro targets/.test(x.a)&&/individual foods/.test(x.a))`));
-check("v61 keeps primary schemaVersion 2", S61.window.eval("SCHEMA_VERSION")===2);
+check("v61 keeps primary schemaVersion 3", S61.window.eval("SCHEMA_VERSION")===3);
 
 
 // ================= v62: expanded USDA-anchored suggestion catalog =================
@@ -1506,8 +1506,8 @@ check("v62 a catalog suggestion opens its exact listed serving for review", dC62
 check("v62 review shows the USDA per-100g values and correctly scaled serving", /USDA reference · SR28/.test(dC62.getElementById("selName").textContent) && /165 kcal/.test(dC62.getElementById("selPer100").textContent) && dC62.getElementById("calcCal").textContent==="186" && dC62.getElementById("calcPro").textContent==="35");
 check("v62 reviewing a broad-catalog suggestion never auto-logs it", C62.window.eval(`(data.food[todayStr()]||[]).length`)===beforeReview62);
 check("v62 FAQ explains USDA sourcing, exact servings, and real-world variation", C62.window.eval(`FAQ.some(x=>x.q==="How accurate are suggested-food calories and macros?"&&/per 100 grams/.test(x.a)&&/exact gram weight/.test(x.a)&&/NDB number/.test(x.a)&&/brand/.test(x.a)) && FAQ.some(x=>x.q==="How do food suggestions work?"&&/120 common foods/.test(x.a)&&/familiar foods receive a bonus but are not required/.test(x.a)&&/does not call USDA or an AI/.test(x.a))`));
-check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v75"'); })());
-check("v62 keeps primary schemaVersion 2", C62.window.eval("SCHEMA_VERSION")===2);
+check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v76"'); })());
+check("v62 keeps primary schemaVersion 3", C62.window.eval("SCHEMA_VERSION")===3);
 
 // ================= ChatGPT handoff paste flow =================
 const H = boot(Object.assign({}, EXISTING_CFG, {aiProvider:"handoff"}), EMPTY_DATA);
@@ -1755,12 +1755,12 @@ check("FAQ no longer sends users to the retired Program tools label", P.window.e
 check("FAQ privacy and storage copy distinguish local data, network requests, and approximate usage", P.window.eval(`FAQ.some(x=>x.q==="Where is my data stored? Is it private?"&&/on this device/.test(x.a)&&/Local food suggestions/.test(x.a)&&/Online food searches/.test(x.a)&&/Optional AI features/.test(x.a)) && FAQ.some(x=>x.q==="How much storage is BlackPyre using?"&&/Settings → Data &amp; recovery/.test(x.a)&&/approximate browser-storage/.test(x.a)&&/Back up before clearing/.test(x.a))`));
 check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.some(f=>/chicken breast/i.test(f.n))`));
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
-check("SW precaches the four data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js"].every(f=>sw.includes('"./'+f+'"')));
+check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+"/.test(sw));
-check("v75 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v75"'));
+check("v76 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v76"'));
 const rawIndex = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 check("data scripts load before the app scripts (raw file order)",
-  ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js"].every(f=>
+  ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>
     rawIndex.indexOf('src="'+f+'"') > -1 &&
     rawIndex.indexOf('src="'+f+'"') < rawIndex.indexOf('src="scripts/01-storage.js"')));
 
@@ -1775,14 +1775,14 @@ check("no inline app script remains in index.html", !/<script>(?!\s*<)/.test(raw
 check("SW precaches all 7 slices", SLICES.every(f=>sw.includes('"./scripts/'+f+'"')));
 
 // ================= Phase 2 corrections: strict mode, exact order, migration identity =================
-const LOCAL_SCRIPTS = ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js"].concat(SLICES.map(f=>"scripts/"+f));
+const LOCAL_SCRIPTS = ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].concat(SLICES.map(f=>"scripts/"+f));
 check("every local classic script begins with the strict-mode directive",
   LOCAL_SCRIPTS.every(f=>fs.readFileSync(path.join(__dirname, "..", f), "utf8").startsWith('"use strict";')));
 
 const APPROVED_ORDER = LOCAL_SCRIPTS; // data files, then slices 01..07 — this order is load-bearing
 const scriptTags = [...rawIndex.matchAll(/<script\b[^>]*\bsrc="([^"]+)"[^>]*><\/script>/g)];
-check("exactly the 11 approved scripts, each exactly once, in the approved order",
-  scriptTags.length===11 && scriptTags.every((t,i)=>t[1]===APPROVED_ORDER[i]));
+check("exactly the 12 approved scripts, each exactly once, in the approved order",
+  scriptTags.length===12 && scriptTags.every((t,i)=>t[1]===APPROVED_ORDER[i]));
 check("no local script tag uses async, defer, or type=module",
   scriptTags.every(t=>!/\basync\b|\bdefer\b|type="module"/.test(t[0])));
 
@@ -2136,6 +2136,2476 @@ let W2 = bootSW(false); await wait(30);
 W2.__fire("controllerchange");
 check("first service-worker installation never shows the toast", toastEl(W2).classList.contains("hidden"));
 
+
+// ================= v76: unified exercise library + exercise-defined tracking =================
+const exerciseFixture76 = JSON.parse(fs.readFileSync(
+  path.join(__dirname,"fixtures","exercise-model-cross-platform.json"),
+  "utf8"
+));
+const exerciseBackup76 = exerciseFixture76.backup;
+const exerciseProgram76 = {
+  name:"Six Shapes",
+  days:[{id:"D1",title:"All shapes",exercises:[
+    {name:"Bench Press",scheme:"3×5"},
+    {name:"Pull-Up",scheme:"3×8"},
+    {name:"Run",scheme:""},
+    {name:"Farmer Carry",scheme:""},
+    {name:"Sprint Intervals",scheme:""},
+    {name:"Mobility Flow",scheme:""}
+  ]}]
+};
+const Exercise76 = boot(V2_CFG,Object.assign({},V2_DATA,{myExercises:{},activeWorkoutDraft:null}),null,exerciseProgram76);
+const dExercise76 = Exercise76.window.document;
+
+check("v76 canonical exercise payload loads before the app slices",
+  Exercise76.window.eval(`Array.isArray(EXERCISE_LIBRARY) && EXERCISE_LIBRARY.length>=150 && EXERCISE_LIBRARY.length<=300`)
+  && Exercise76.window.eval(`validateBuiltInExerciseLibrary()===true`));
+
+check("v76 one program day renders all six closed tracking shapes",
+  ["lift","reps","timeDist","carry","rounds","text"].every(shape=>
+    dExercise76.querySelector('#exerciseInputs .exercise[data-shape="'+shape+'"]')
+  ));
+
+check("v76 new exercise programs use shapes without the retired Cardio prefix",
+  !exerciseProgram76.days[0].exercises.some(ex=>/^\[Cardio\]/.test(ex.name))
+  && Exercise76.window.eval(`exerciseDescriptor("Run",null).shape`)==="timeDist");
+
+Exercise76.window.eval(`
+  sessionState["Bench Press"].rows=[{w:135,r:5,touched:true}];
+  sessionState["Pull-Up"].rows=[{w:"",r:8,touched:true},{w:25,r:5,touched:true}];
+  sessionState["Run"].fields={hours:0,mins:20,secs:0,dist:2,distUnit:"mi"}; sessionState["Run"].touched=true;
+  sessionState["Farmer Carry"].fields={lbs:80,dist:100,distUnit:"ft"}; sessionState["Farmer Carry"].touched=true;
+  sessionState["Sprint Intervals"].fields={rounds:8,workSecs:20,recSecs:100,note:"hard"}; sessionState["Sprint Intervals"].touched=true;
+  sessionState["Mobility Flow"].text="hips felt good"; sessionState["Mobility Flow"].textTouched=true;
+`);
+const saveResults76 = ["Bench Press","Pull-Up","Run","Farmer Carry","Sprint Intervals","Mobility Flow"]
+  .map(name=>Exercise76.window.eval(`saveExercise(${JSON.stringify(name)}).ok`));
+const draftForms76 = Exercise76.window.eval(`cloneJSON(data.activeWorkoutDraft.sets)`);
+check("v76 every shape uses the unchanged Save Exercise lifecycle", saveResults76.every(Boolean)
+  && dExercise76.querySelectorAll("#exerciseInputs .savedChip").length===6);
+check("v76 lift and reps share the array storage form while bodyweight weight stays optional",
+  Array.isArray(draftForms76["Bench Press"])
+  && draftForms76["Bench Press"][0].w===135
+  && Array.isArray(draftForms76["Pull-Up"])
+  && !Object.prototype.hasOwnProperty.call(draftForms76["Pull-Up"][0],"w")
+  && draftForms76["Pull-Up"][1].w===25);
+check("v76 typed shapes store only their contract primitives",
+  JSON.stringify(draftForms76["Run"])===JSON.stringify({t:"timeDist",secs:1200,dist:2,distUnit:"mi"})
+  && JSON.stringify(draftForms76["Farmer Carry"])===JSON.stringify({t:"carry",lbs:80,dist:100,distUnit:"ft"})
+  && JSON.stringify(draftForms76["Sprint Intervals"])===JSON.stringify({t:"rounds",rounds:8,workSecs:20,recSecs:100,note:"hard"})
+  && draftForms76["Mobility Flow"]==="hips felt good");
+
+const SaveFailure76 = boot(V2_CFG,Object.assign({},V2_DATA,{myExercises:{},activeWorkoutDraft:null}),null,TEST_PROGRAM);
+SaveFailure76.window.eval(`sessionState["Bench Press"].saved=[{w:100,r:5}];sessionState["Bench Press"].status="unsaved";sessionState["Bench Press"].historyKey="Bench Press";sessionState["Bench Press"].rows=[{w:135,r:5,touched:true}];`);
+const saveFailureProto76=Object.getPrototypeOf(SaveFailure76.window.localStorage),saveFailureSet76=saveFailureProto76.setItem;
+saveFailureProto76.setItem=function(k,v){if(k==="forge:data")throw new Error("blocked");return saveFailureSet76.call(this,k,v);};
+const saveFailureResult76=SaveFailure76.window.eval(`saveExercise("Bench Press")`);
+saveFailureProto76.setItem=saveFailureSet76;
+check("v76 failed draft persistence restores the prior saved exercise state",
+  saveFailureResult76.ok===false
+  && SaveFailure76.window.eval(`sessionState["Bench Press"].status`)==="unsaved"
+  && SaveFailure76.window.eval(`sessionState["Bench Press"].saved[0].w`)===100
+  && SaveFailure76.window.eval(`sessionState["Bench Press"].historyKey`)==="Bench Press"
+  && SaveFailure76.window.eval(`data.activeWorkoutDraft===null`));
+
+const Create76 = boot(V2_CFG,Object.assign({},V2_DATA,{myExercises:{},activeWorkoutDraft:null}),null,TEST_PROGRAM);
+const createCollision76 = Create76.window.eval(`createUserExercise("chest press","lift")`);
+const createMine76 = Create76.window.eval(`createUserExercise("Tempo Step Intervals","rounds")`);
+const createdId76 = createMine76.entry && createMine76.entry.id;
+const renameMine76 = Create76.window.eval(`renameUserExercise(${JSON.stringify(createdId76)},"Tempo Step Pattern")`);
+check("v76 user creation rejects the global built-in name and alias union",
+  createCollision76.ok===false && /conflicts/i.test(createCollision76.reason));
+check("v76 user exercises persist beside built-ins with a permanent u id",
+  createMine76.ok && /^u:/.test(createdId76)
+  && Create76.window.eval(`data.myExercises[${JSON.stringify(createdId76)}].shape`)==="rounds");
+check("v76 rename appends an immutable normalized former name and resolves old history",
+  renameMine76.ok
+  && renameMine76.entry.formerNames.includes("tempo step intervals")
+  && Create76.window.eval(`resolveExerciseByName("Tempo Step Intervals").id`)===createdId76);
+check("v76 library search covers aliases and tags and hides archived user exercises",
+  Create76.window.eval(`searchExercises("chest press",20).some(x=>x.name==="Bench Press")`)
+  && Create76.window.eval(`searchExercises("conditioning",80).some(x=>x.id===${JSON.stringify(createdId76)})`));
+
+Create76.window.eval(`program.days[0].exercises.push({name:"Tempo Step Intervals",scheme:""})`);
+const archived76 = Create76.window.eval(`archiveOrDeleteUserExercise(${JSON.stringify(createdId76)})`);
+check("v76 referenced user exercises archive instead of hard deleting",
+  archived76.ok && archived76.archived
+  && Create76.window.eval(`data.myExercises[${JSON.stringify(createdId76)}].deprecated===true`)
+  && !Create76.window.eval(`searchExercises("Tempo Step Pattern",80).some(x=>x.id===${JSON.stringify(createdId76)})`)
+  && Create76.window.eval(`resolveExerciseByName("Tempo Step Intervals").id`)===createdId76);
+const unused76 = Create76.window.eval(`createUserExercise("Disposable Test Movement","text")`);
+const deleted76 = Create76.window.eval(`archiveOrDeleteUserExercise(${JSON.stringify(unused76.entry && unused76.entry.id)})`);
+check("v76 unreferenced user exercises may be hard deleted", unused76.ok && deleted76.ok && deleted76.deleted);
+
+const futureUser76 = Create76.window.eval(`createUserExercise("Future Collision","text")`);
+Create76.window.eval(`renameUserExercise(${JSON.stringify(futureUser76.entry && futureUser76.entry.id)},"User-Owned Movement")`);
+const futureTie76 = Create76.window.eval(`(()=>{
+  const synthetic={id:"bp:future-collision-test",name:"Future Collision",shape:"text",tags:[],aliases:[],formerNames:[],muscles:{primary:["full-body"],secondary:[]},equipment:["other"],unilateral:false,bodyweight:false,deprecated:false};
+  EXERCISE_LIBRARY.push(synthetic);
+  const found=resolveExerciseByName("Future Collision");
+  const results=searchExercises("Future Collision",20);
+  const byId=exerciseById(synthetic.id);
+  EXERCISE_LIBRARY.pop();
+  return {
+    resolvedId:found&&found.id,
+    userSearch:results.some(entry=>entry.id===${JSON.stringify(futureUser76.entry && futureUser76.entry.id)}),
+    builtInSearch:results.some(entry=>entry.id===synthetic.id),
+    builtInById:byId&&byId.id
+  };
+})()`);
+check("v76 future built-in naming collisions keep user resolution and safe name-based selection while retaining id access",
+  futureTie76.resolvedId===futureUser76.entry.id
+  && futureTie76.userSearch===true
+  && futureTie76.builtInSearch===false
+  && futureTie76.builtInById==="bp:future-collision-test");
+
+check("v76 swaps only offer alternatives using the same tracking shape",
+  Create76.window.eval(`swapOptionsForExercise("Bench Press","Bench Press").length>0
+    && swapOptionsForExercise("Bench Press","Bench Press").every(name=>resolveExerciseByName(name).shape==="lift")`));
+check("v76 legacy Cardio program names remain readable without being written for new entries",
+  Create76.window.eval(`exerciseDescriptor("[Cardio] Run","20 min").shape`)==="timeDist"
+  && Create76.window.eval(`findHistoryValue({"[Cardio] Run":"20 min"},exerciseDescriptor("Run",null)).value`)==="20 min"
+  && [...dExercise76.getElementById("wDay").options].some(o=>o.value==="__CARDIO__"));
+
+const alphabeticalSelect76=dExercise76.getElementById("addExSel");
+dExercise76.getElementById("exerciseSearch").value="";
+Exercise76.window.eval("renderLibraryOptions()");
+
+check("v76 exercise picker keeps shape sections alphabetical and complete",
+  Exercise76.window.eval(`(()=>{
+    const select=document.getElementById("addExSel");
+    const groups=[...select.querySelectorAll("optgroup")]
+      .filter(group=>group.label!=="My library");
+
+    const ids=groups.flatMap(group=>
+      [...group.querySelectorAll("option")].map(option=>option.value)
+    );
+
+    const expectedIds=allExerciseEntries(false).map(entry=>entry.id);
+
+    const alphabetical=groups.every(group=>{
+      const names=[...group.querySelectorAll("option")]
+        .map(option=>exerciseById(option.value).name);
+      const sorted=names.slice().sort((a,b)=>a.localeCompare(b));
+      return JSON.stringify(names)===JSON.stringify(sorted);
+    });
+
+    return alphabetical
+      && ids.length===expectedIds.length
+      && new Set(ids).size===expectedIds.length
+      && ids.includes("bp:pull-up")
+      && ids.includes("bp:chin-up");
+  })()`));
+
+dExercise76.getElementById("exerciseSearch").value="pull";
+Exercise76.window.eval("renderLibraryOptions()");
+const firstPull76=dExercise76.getElementById("addExSel").options[0];
+
+dExercise76.getElementById("exerciseSearch").value="chin";
+Exercise76.window.eval("renderLibraryOptions()");
+const firstChin76=dExercise76.getElementById("addExSel").options[0];
+
+check("v76 search surfaces Pull-Up and Chin-Up ahead of weaker matches",
+  firstPull76.value==="bp:pull-up"
+  && firstChin76.value==="bp:chin-up");
+
+check("v76 legacy cardio selector is alphabetical with Other last",
+  Exercise76.window.eval(`(()=>{
+    const names=[...document.getElementById("cardioType").options]
+      .map(o=>o.textContent);
+    const exercises=names.filter(name=>name!=="Other");
+    const sorted=exercises.slice().sort((a,b)=>a.localeCompare(b));
+    return JSON.stringify(exercises)===JSON.stringify(sorted)
+      && names[names.length-1]==="Other";
+  })()`));
+
+dExercise76.getElementById("exerciseSearch").value="";
+Exercise76.window.eval("renderLibraryOptions()");
+
+const Unknown76 = boot(V2_CFG,Object.assign({},V2_DATA,{
+  myExercises:{},
+  activeWorkoutDraft:{date:dstr(0),day:"D1",title:"Future draft",sets:{"Future Shape":{t:"futureShape",payload:{keep:true}}},notes:"",updatedAt:new Date().toISOString()}
+}),null,{name:"Future",days:[{id:"D1",title:"Future",exercises:[{name:"Future Shape",scheme:""}]}]});
+Unknown76.window.eval(`resumeWorkoutDraft()`);
+const unknownBefore76 = Unknown76.window.eval(`JSON.stringify(data.activeWorkoutDraft.sets["Future Shape"])`);
+check("v76 unknown typed values render read-only with newer-version notice",
+  Unknown76.window.document.querySelectorAll(".newer-shape-notice").length===1
+  && /newer BlackPyre version/i.test(Unknown76.window.document.querySelector(".newer-shape-notice").textContent)
+  && !Unknown76.window.document.querySelector('#exerciseInputs .exercise[data-shape="unknown"] .saveExBtn'));
+check("v76 unknown typed values survive resume and render byte-for-byte",
+  Unknown76.window.eval(`JSON.stringify(data.activeWorkoutDraft.sets["Future Shape"])`)===unknownBefore76);
+
+const Draft76 = boot(exerciseBackup76.cfg,exerciseBackup76.data,null,exerciseBackup76.program);
+const draftBefore76 = Draft76.window.eval(`JSON.stringify(data.activeWorkoutDraft.sets)`);
+Draft76.window.eval(`resumeWorkoutDraft(); persistWorkoutDraft();`);
+check("v76 drafts round-trip every supplied form through resume and re-persist",
+  Draft76.window.eval(`JSON.stringify(data.activeWorkoutDraft.sets)`)===draftBefore76);
+
+const PrepareFixture76 = boot(V2_CFG,V2_DATA,null,TEST_PROGRAM);
+const preparedFixture76 = PrepareFixture76.window.eval(`prepareRecoveryBackupEnvelope(${JSON.stringify(exerciseBackup76)})`);
+check("v76 the shared cross-platform fixture passes the real backup preparation pipeline",
+  preparedFixture76.ok && preparedFixture76.prepared.state.cfg.schemaVersion===3
+  && preparedFixture76.prepared.state.data.workouts[0].sets["Future Shape"].payload.keep===true);
+
+const RestoreFixture76 = boot(V2_CFG,V2_DATA,null,TEST_PROGRAM);
+const restoredFixture76 = RestoreFixture76.window.eval(`restoreBackupEnvelope(${JSON.stringify(exerciseBackup76)})`);
+check("v76 web restore accepts mixed old and new history forms",
+  restoredFixture76.ok
+  && RestoreFixture76.window.eval(`data.workouts[0].sets["Pull-Up"][0].r`)===8
+  && RestoreFixture76.window.eval(`data.workouts[0].sets["Run"].t`)==="timeDist"
+  && RestoreFixture76.window.eval(`data.workouts[0].sets["Future Shape"].payload.keep===true`));
+check("v76 restore preserves user exercise former-name identity",
+  RestoreFixture76.window.eval(`resolveExerciseByName("Tempo Step Intervals").id`)==="u:cross-platform-tempo-step");
+
+RestoreFixture76.window.eval(`window.__exerciseBackup=null; download=(name,text)=>{window.__exerciseBackup={name,text};}; doBackup("exportDataBtn");`);
+const reexport76 = JSON.parse(RestoreFixture76.window.eval(`window.__exerciseBackup.text`));
+check("v76 restored exercise forms export again without loss",
+  JSON.stringify(reexport76.data.workouts[0].sets)===JSON.stringify(exerciseBackup76.data.workouts[0].sets)
+  && JSON.stringify(reexport76.data.activeWorkoutDraft.sets)===JSON.stringify(exerciseBackup76.data.activeWorkoutDraft.sets)
+  && JSON.stringify(reexport76.data.myExercises)===JSON.stringify(exerciseBackup76.data.myExercises));
+
+const rangeMixed76 = JSON.parse(JSON.stringify(exerciseBackup76));
+delete rangeMixed76.cfg.schemaVersion;
+delete rangeMixed76.cfg.calTarget;
+delete rangeMixed76.cfg.proTarget;
+rangeMixed76.cfg.calLo=1500; rangeMixed76.cfg.calHi=1700;
+rangeMixed76.cfg.proLo=160; rangeMixed76.cfg.proHi=180;
+const RangeMixed76 = boot(V2_CFG,V2_DATA,null,TEST_PROGRAM);
+const restoredRangeMixed76 = RangeMixed76.window.eval(`restoreBackupEnvelope(${JSON.stringify(rangeMixed76)})`);
+check("v76 range-era backups migrate while retaining every new exercise form",
+  restoredRangeMixed76.ok
+  && RangeMixed76.window.eval(`cfg.schemaVersion`)===3
+  && RangeMixed76.window.eval(`cfg.calTarget`)===1600
+  && RangeMixed76.window.eval(`data.workouts[0].sets["Farmer Carry"].t`)==="carry"
+  && RangeMixed76.window.eval(`data.activeWorkoutDraft.sets["Tempo Step Intervals"].t`)==="rounds");
+
+const NewerForms76 = boot(V2_CFG,V2_DATA,null,TEST_PROGRAM);
+const newerExerciseBackup76 = JSON.parse(JSON.stringify(exerciseBackup76));
+newerExerciseBackup76.cfg.schemaVersion=99;
+const newerRefusal76 = NewerForms76.window.eval(`restoreBackupEnvelope(${JSON.stringify(newerExerciseBackup76)})`);
+check("v76 newer-version refusal protects backups containing the new exercise forms",
+  !newerRefusal76.ok && NewerForms76.window.eval(`protectedMode===false`)
+  && NewerForms76.window.eval(`data.workouts.length===0`));
+
+check("v76 FAQ documents shapes, user exercises, renames, and same-shape swaps",
+  RestoreFixture76.window.eval(`FAQ.some(x=>/exercise types/i.test(x.q)&&/six tracking shapes|weight × reps/i.test(x.a))
+    && FAQ.some(x=>/create my own exercise/i.test(x.q)&&/My exercise library/i.test(x.a))
+    && FAQ.some(x=>/rename an exercise/i.test(x.q)&&/former-name/i.test(x.a))
+    && FAQ.some(x=>/different one/i.test(x.q)&&/same-shape/i.test(x.a))`));
+
+
+
+const ManagerLabelsData76 = JSON.parse(JSON.stringify(V2_DATA));
+ManagerLabelsData76.workouts = [{
+  date:"2026-07-27",
+  day:"__FREE__",
+  title:"Freestyle",
+  sets:{
+    "Garage Tire Flip":{
+      t:"carry",
+      lbs:100,
+      dist:20,
+      distUnit:"ft"
+    }
+  },
+  notes:""
+}];
+ManagerLabelsData76.myExercises = {
+  "u:tire":{
+    id:"u:tire",
+    name:"Garage Tire Carry",
+    shape:"carry",
+    tags:["strength","carry"],
+    aliases:[],
+    formerNames:["garage tire flip"],
+    muscles:{primary:["full-body"],secondary:[]},
+    equipment:["other"],
+    unilateral:false,
+    bodyweight:false,
+    deprecated:true
+  },
+  "u:unused":{
+    id:"u:unused",
+    name:"Unused Custom",
+    shape:"text",
+    tags:[],
+    aliases:[],
+    formerNames:[],
+    muscles:{primary:["full-body"],secondary:[]},
+    equipment:["other"],
+    unilateral:false,
+    bodyweight:false,
+    deprecated:true
+  }
+};
+ManagerLabelsData76.activeWorkoutDraft = null;
+
+const ManagerLabels76 = boot(
+  V2_CFG,
+  ManagerLabelsData76,
+  null,
+  TEST_PROGRAM
+);
+const dManagerLabels76 = ManagerLabels76.window.document;
+
+ManagerLabels76.window.eval(`renderMyExercisesManager()`);
+
+let managerRows76 = [
+  ...dManagerLabels76.querySelectorAll(
+    "#myExercisesList .my-exercise-row"
+  )
+];
+
+let referencedArchivedRow76 = managerRows76.find(
+  row=>row.querySelector("b").textContent==="Garage Tire Carry"
+);
+const unusedArchivedRow76 = managerRows76.find(
+  row=>row.querySelector("b").textContent==="Unused Custom"
+);
+
+let referencedArchivedButtons76 = [
+  ...referencedArchivedRow76.querySelectorAll("button")
+];
+const unusedArchivedButtons76 = [
+  ...unusedArchivedRow76.querySelectorAll("button")
+];
+
+check(
+  "v76 archived referenced exercise offers Restore and history protection",
+  ManagerLabels76.window.eval(
+    `userExerciseReferenceCount(data.myExercises["u:tire"])===1`
+  )
+  && referencedArchivedButtons76.some(
+    button=>button.textContent==="Restore" && !button.disabled
+  )
+  && referencedArchivedButtons76.some(
+    button=>
+      button.textContent==="Protected by history"
+      && button.disabled
+  )
+  && !referencedArchivedButtons76.some(
+    button=>button.textContent==="Delete"
+  )
+);
+
+check(
+  "v76 archived unused exercise offers both Restore and Delete",
+  unusedArchivedButtons76.some(
+    button=>button.textContent==="Restore" && !button.disabled
+  )
+  && unusedArchivedButtons76.some(
+    button=>button.textContent==="Delete" && !button.disabled
+  )
+);
+
+const restoreReferenced76 = referencedArchivedButtons76.find(
+  button=>button.textContent==="Restore"
+);
+restoreReferenced76.dispatchEvent(
+  new ManagerLabels76.window.Event("click",{bubbles:true})
+);
+
+managerRows76 = [
+  ...dManagerLabels76.querySelectorAll(
+    "#myExercisesList .my-exercise-row"
+  )
+];
+
+referencedArchivedRow76 = managerRows76.find(
+  row=>row.querySelector("b").textContent==="Garage Tire Carry"
+);
+
+referencedArchivedButtons76 = [
+  ...referencedArchivedRow76.querySelectorAll("button")
+];
+
+check(
+  "v76 restoring a referenced exercise makes it active and searchable again",
+  ManagerLabels76.window.eval(
+    `data.myExercises["u:tire"].deprecated===false`
+  )
+  && ManagerLabels76.window.eval(
+    `searchExercises("Garage Tire",202).some(
+      entry=>entry.id==="u:tire" && !entry.deprecated
+    )`
+  )
+  && referencedArchivedButtons76.some(
+    button=>button.textContent==="Archive" && !button.disabled
+  )
+  && !referencedArchivedButtons76.some(
+    button=>button.textContent==="Restore"
+  )
+);
+
+
+const LiveRenameData76 = JSON.parse(JSON.stringify(V2_DATA));
+LiveRenameData76.myExercises = {
+  "u:live-rename":{
+    id:"u:live-rename",
+    name:"Garage Tire Flip",
+    shape:"carry",
+    tags:["strength","carry"],
+    aliases:[],
+    formerNames:[],
+    muscles:{
+      primary:["full-body"],
+      secondary:[]
+    },
+    equipment:["other"],
+    unilateral:false,
+    bodyweight:false,
+    deprecated:false
+  }
+};
+LiveRenameData76.activeWorkoutDraft = {
+  date:"2026-07-27",
+  day:"__FREE__",
+  title:"Freestyle",
+  sets:{
+    "Garage Tire Flip":{
+      t:"carry",
+      lbs:100,
+      dist:20,
+      distUnit:"ft"
+    }
+  },
+  notes:"",
+  updatedAt:"2026-07-27T12:00:00.000Z"
+};
+
+const LiveRename76 = boot(
+  V2_CFG,
+  LiveRenameData76,
+  null,
+  TEST_PROGRAM
+);
+
+LiveRename76.window.eval(`
+  wDaySel.value="__FREE__";
+  activeSessionType="__FREE__";
+  workoutDraftLoaded=true;
+
+  extraExercises=[{
+    id:"u:live-rename",
+    name:"Garage Tire Flip",
+    shape:"carry",
+    scheme:""
+  }];
+
+  const liveEntry=data.myExercises["u:live-rename"];
+
+  sessionState={
+    "Garage Tire Flip":stateFromStoredValue(
+      liveEntry,
+      {
+        t:"carry",
+        lbs:100,
+        dist:20,
+        distUnit:"ft"
+      },
+      "saved",
+      "Garage Tire Flip",
+      false
+    )
+  };
+
+  const renamed=renameUserExercise(
+    "u:live-rename",
+    "Garage Tire Carry"
+  );
+
+  rekeyOpenSessionExercise(
+    renamed.previousName,
+    renamed.entry
+  );
+
+  renderSessionInputs();
+`);
+
+check(
+  "v76 renaming an exercise in an open workout preserves visible state and rekeys its draft",
+  LiveRename76.window.eval(`
+    !Object.prototype.hasOwnProperty.call(
+      sessionState,
+      "Garage Tire Flip"
+    )
+    && sessionState["Garage Tire Carry"].saved.lbs===100
+    && sessionState["Garage Tire Carry"].saved.dist===20
+    && sessionState["Garage Tire Carry"].historyKey
+      ==="Garage Tire Carry"
+    && extraExercises.length===1
+    && extraExercises[0].name==="Garage Tire Carry"
+    && !Object.prototype.hasOwnProperty.call(
+      data.activeWorkoutDraft.sets,
+      "Garage Tire Flip"
+    )
+    && data.activeWorkoutDraft.sets[
+      "Garage Tire Carry"
+    ].lbs===100
+    && Object.keys(
+      collectSavedSessionSets(sessionState).sets
+    ).join(",")==="Garage Tire Carry"
+  `)
+  && LiveRename76.window.document
+    .querySelectorAll(
+      '#exerciseInputs .exercise[data-shape="carry"]'
+    ).length===1
+  && /100 lb · 20 ft/.test(
+    LiveRename76.window.document
+      .getElementById("exerciseInputs")
+      .textContent
+  )
+);
+
+
+const SwappedBaseRenameData76 =
+  JSON.parse(JSON.stringify(V2_DATA));
+
+SwappedBaseRenameData76.myExercises = {
+  "u:swapped-base":{
+    id:"u:swapped-base",
+    name:"Garage Sled Drag",
+    shape:"carry",
+    tags:["strength","carry"],
+    aliases:[],
+    formerNames:[],
+    muscles:{
+      primary:["full-body"],
+      secondary:[]
+    },
+    equipment:["other"],
+    unilateral:false,
+    bodyweight:false,
+    deprecated:false
+  }
+};
+SwappedBaseRenameData76.activeWorkoutDraft=null;
+
+const SwappedBaseRename76=boot(
+  V2_CFG,
+  SwappedBaseRenameData76,
+  null,
+  TEST_PROGRAM
+);
+
+SwappedBaseRename76.window.eval(`
+  wDaySel.value="__FREE__";
+  activeSessionType="__FREE__";
+  workoutDraftLoaded=true;
+
+  extraExercises=[{
+    id:"u:swapped-base",
+    name:"Garage Sled Drag",
+    shape:"carry",
+    scheme:""
+  }];
+
+  sessionSwaps={
+    "Garage Sled Drag":"Farmer Carry"
+  };
+
+  const farmer=exerciseDescriptor(
+    "Farmer Carry",
+    null
+  );
+
+  sessionState={
+    "Farmer Carry":stateFromStoredValue(
+      farmer,
+      {
+        t:"carry",
+        lbs:90,
+        dist:30,
+        distUnit:"ft"
+      },
+      "saved",
+      "Farmer Carry",
+      false
+    )
+  };
+
+  const renamed=renameUserExercise(
+    "u:swapped-base",
+    "Garage Sled Pull"
+  );
+
+  rekeyOpenSessionExercise(
+    renamed.previousName,
+    renamed.entry
+  );
+
+  renderSessionInputs();
+`);
+
+check(
+  "v76 renaming a swapped-out extra exercise preserves the active swap and completed state",
+  SwappedBaseRename76.window.eval(`
+    extraExercises.length===1
+    && extraExercises[0].name==="Garage Sled Pull"
+    && !Object.prototype.hasOwnProperty.call(
+      sessionSwaps,
+      "Garage Sled Drag"
+    )
+    && sessionSwaps["Garage Sled Pull"]
+      ==="Farmer Carry"
+    && sessionList().length===1
+    && sessionList()[0].name==="Farmer Carry"
+    && sessionState["Farmer Carry"].saved.lbs===90
+    && sessionState["Farmer Carry"].saved.dist===30
+  `)
+  && /Farmer Carry/.test(
+    SwappedBaseRename76.window.document
+      .getElementById("exerciseInputs")
+      .textContent
+  )
+  && /90 lb · 30 ft/.test(
+    SwappedBaseRename76.window.document
+      .getElementById("exerciseInputs")
+      .textContent
+  )
+);
+
+const DeleteOpenData76 =
+  JSON.parse(JSON.stringify(V2_DATA));
+
+DeleteOpenData76.myExercises = {
+  "u:delete-open":{
+    id:"u:delete-open",
+    name:"Disposable Open Carry",
+    shape:"carry",
+    tags:["strength","carry"],
+    aliases:[],
+    formerNames:[],
+    muscles:{
+      primary:["full-body"],
+      secondary:[]
+    },
+    equipment:["other"],
+    unilateral:false,
+    bodyweight:false,
+    deprecated:false
+  }
+};
+DeleteOpenData76.activeWorkoutDraft=null;
+
+const DeleteOpen76=boot(
+  V2_CFG,
+  DeleteOpenData76,
+  null,
+  TEST_PROGRAM
+);
+
+DeleteOpen76.window.eval(`
+  wDaySel.value="__FREE__";
+  activeSessionType="__FREE__";
+  workoutDraftLoaded=true;
+
+  const entry=data.myExercises["u:delete-open"];
+
+  extraExercises=[{
+    id:entry.id,
+    name:entry.name,
+    shape:entry.shape,
+    scheme:""
+  }];
+
+  sessionSwaps={
+    "Disposable Open Carry":"Farmer Carry"
+  };
+
+  const farmer=exerciseDescriptor(
+    "Farmer Carry",
+    null
+  );
+
+  sessionState={
+    "Farmer Carry":stateFromStoredValue(
+      farmer,
+      {
+        t:"carry",
+        lbs:70,
+        dist:20,
+        distUnit:"ft"
+      },
+      "saved",
+      "Farmer Carry",
+      false
+    )
+  };
+
+  const deleted=archiveOrDeleteUserExercise(
+    entry.id
+  );
+
+  renderLibraryOptions();
+  renderSessionInputs();
+`);
+
+check(
+  "v76 deleting an unused open custom exercise removes its transient card, swap, and state",
+  DeleteOpen76.window.eval(`
+    !data.myExercises["u:delete-open"]
+    && extraExercises.length===0
+    && Object.keys(sessionSwaps).length===0
+    && Object.keys(sessionState).length===0
+    && sessionList().length===0
+    && !searchExercises(
+      "Disposable Open Carry",
+      20
+    ).some(
+      entry=>entry.id==="u:delete-open"
+    )
+  `)
+  && /No exercises yet/.test(
+    DeleteOpen76.window.document
+      .getElementById("exerciseInputs")
+      .textContent
+  )
+);
+
+// ================= v76: complete custom-exercise lifecycle hardening =================
+function customCarryEntry76(id,name,formerNames){
+  return {
+    id:id,
+    name:name,
+    shape:"carry",
+    tags:["strength","carry"],
+    aliases:[],
+    formerNames:formerNames||[],
+    muscles:{primary:["full-body"],secondary:[]},
+    equipment:["other"],
+    unilateral:false,
+    bodyweight:false,
+    deprecated:false
+  };
+}
+function carryValue76(lbs,dist){
+  return {
+    t:"carry",
+    lbs:lbs,
+    dist:dist,
+    distUnit:"ft"
+  };
+}
+function benchValue76(weight,reps){
+  return [{w:weight,r:reps}];
+}
+
+const DeleteSwappedDraftData76=
+  JSON.parse(JSON.stringify(V2_DATA));
+DeleteSwappedDraftData76.myExercises={
+  "u:delete-swapped":customCarryEntry76(
+    "u:delete-swapped",
+    "Disposable Sled Drag"
+  )
+};
+DeleteSwappedDraftData76.activeWorkoutDraft={
+  date:dstr(0),
+  day:"__FREE__",
+  title:"Freestyle",
+  sets:{
+    "Farmer Carry":carryValue76(90,30),
+    "Bench Press":benchValue76(135,8)
+  },
+  notes:"",
+  updatedAt:"2026-07-27T12:00:00.000Z"
+};
+const DeleteSwappedDraft76=boot(
+  V2_CFG,
+  DeleteSwappedDraftData76,
+  null,
+  TEST_PROGRAM
+);
+DeleteSwappedDraft76.window.eval(`
+  wDaySel.value="__FREE__";
+  activeSessionType="__FREE__";
+  workoutDraftLoaded=true;
+
+  const custom=data.myExercises["u:delete-swapped"];
+  const farmer=exerciseDescriptor("Farmer Carry",null);
+  const bench=exerciseDescriptor("Bench Press",null);
+
+  extraExercises=[
+    {
+      id:custom.id,
+      name:custom.name,
+      shape:custom.shape,
+      scheme:""
+    },
+    {
+      id:bench.id,
+      name:bench.name,
+      shape:bench.shape,
+      scheme:""
+    }
+  ];
+
+  sessionSwaps={
+    "Disposable Sled Drag":"Farmer Carry"
+  };
+
+  sessionState={
+    "Farmer Carry":stateFromStoredValue(
+      farmer,
+      ${JSON.stringify(carryValue76(90,30))},
+      "saved",
+      "Farmer Carry",
+      false
+    ),
+    "Bench Press":stateFromStoredValue(
+      bench,
+      ${JSON.stringify(benchValue76(135,8))},
+      "saved",
+      "Bench Press",
+      false
+    )
+  };
+
+  window.__deleteSwappedDraft=
+    archiveOrDeleteUserExercise(custom.id);
+
+  renderLibraryOptions();
+  renderSessionInputs();
+`);
+check(
+  "v76 deleting a swapped custom base rebuilds the loaded draft and preserves unrelated saved exercises",
+  DeleteSwappedDraft76.window.eval(`
+    window.__deleteSwappedDraft.deleted===true
+    && !data.myExercises["u:delete-swapped"]
+    && extraExercises.length===1
+    && extraExercises[0].name==="Bench Press"
+    && Object.keys(sessionSwaps).length===0
+    && !sessionState["Farmer Carry"]
+    && sessionState["Bench Press"].saved[0].w===135
+    && data.activeWorkoutDraft!==null
+    && Object.keys(data.activeWorkoutDraft.sets).join(",")
+      ==="Bench Press"
+    && data.activeWorkoutDraft.sets["Bench Press"][0].r===8
+  `)
+  && !/Farmer Carry/.test(
+    DeleteSwappedDraft76.window.document
+      .getElementById("exerciseInputs")
+      .textContent
+  )
+  && /135×8/.test(
+    DeleteSwappedDraft76.window.document
+      .getElementById("exerciseInputs")
+      .textContent
+  )
+);
+
+const DeleteLastDraftData76=
+  JSON.parse(JSON.stringify(V2_DATA));
+DeleteLastDraftData76.myExercises={
+  "u:delete-last":customCarryEntry76(
+    "u:delete-last",
+    "Disposable Last Drag"
+  )
+};
+DeleteLastDraftData76.activeWorkoutDraft={
+  date:dstr(0),
+  day:"__FREE__",
+  title:"Freestyle",
+  sets:{"Farmer Carry":carryValue76(80,20)},
+  notes:"",
+  updatedAt:"2026-07-27T12:00:00.000Z"
+};
+const DeleteLastDraft76=boot(
+  V2_CFG,
+  DeleteLastDraftData76,
+  null,
+  TEST_PROGRAM
+);
+DeleteLastDraft76.window.eval(`
+  wDaySel.value="__FREE__";
+  activeSessionType="__FREE__";
+  workoutDraftLoaded=true;
+
+  const custom=data.myExercises["u:delete-last"];
+  const farmer=exerciseDescriptor("Farmer Carry",null);
+
+  extraExercises=[{
+    id:custom.id,
+    name:custom.name,
+    shape:custom.shape,
+    scheme:""
+  }];
+  sessionSwaps={
+    "Disposable Last Drag":"Farmer Carry"
+  };
+  sessionState={
+    "Farmer Carry":stateFromStoredValue(
+      farmer,
+      ${JSON.stringify(carryValue76(80,20))},
+      "saved",
+      "Farmer Carry",
+      false
+    )
+  };
+
+  window.__deleteLast=
+    archiveOrDeleteUserExercise(custom.id);
+  renderSessionInputs();
+  renderWorkoutDraftCard();
+`);
+const DeleteLastReloadData76=JSON.parse(
+  DeleteLastDraft76.window.eval(`JSON.stringify(data)`)
+);
+const DeleteLastReload76=boot(
+  V2_CFG,
+  DeleteLastReloadData76,
+  null,
+  TEST_PROGRAM
+);
+check(
+  "v76 deleting the last swapped custom slot clears the saved draft so Resume cannot resurrect it",
+  DeleteLastDraft76.window.eval(`
+    window.__deleteLast.deleted===true
+    && data.activeWorkoutDraft===null
+    && sessionList().length===0
+  `)
+  && DeleteLastDraft76.window.document
+    .getElementById("workoutDraftCard")
+    .classList.contains("hidden")
+  && DeleteLastReload76.window.eval(`
+    data.activeWorkoutDraft===null
+    && resumeWorkoutDraft()===false
+  `)
+);
+
+const DeleteRollbackData76=
+  JSON.parse(JSON.stringify(DeleteLastDraftData76));
+DeleteRollbackData76.myExercises={
+  "u:delete-rollback":customCarryEntry76(
+    "u:delete-rollback",
+    "Rollback Sled Drag"
+  )
+};
+const DeleteRollback76=boot(
+  V2_CFG,
+  DeleteRollbackData76,
+  null,
+  TEST_PROGRAM
+);
+DeleteRollback76.window.eval(`
+  wDaySel.value="__FREE__";
+  activeSessionType="__FREE__";
+  workoutDraftLoaded=true;
+
+  const custom=data.myExercises["u:delete-rollback"];
+  const farmer=exerciseDescriptor("Farmer Carry",null);
+
+  extraExercises=[{
+    id:custom.id,
+    name:custom.name,
+    shape:custom.shape,
+    scheme:""
+  }];
+  sessionSwaps={
+    "Rollback Sled Drag":"Farmer Carry"
+  };
+  sessionState={
+    "Farmer Carry":stateFromStoredValue(
+      farmer,
+      ${JSON.stringify(carryValue76(80,20))},
+      "saved",
+      "Farmer Carry",
+      false
+    )
+  };
+
+  const realSave=save;
+  save=()=>false;
+  window.__deleteRollback=
+    archiveOrDeleteUserExercise(custom.id);
+  save=realSave;
+`);
+check(
+  "v76 failed hard deletion rolls back the custom exercise, open session, and loaded draft",
+  DeleteRollback76.window.eval(`
+    window.__deleteRollback.ok===false
+    && !!data.myExercises["u:delete-rollback"]
+    && extraExercises.length===1
+    && extraExercises[0].name==="Rollback Sled Drag"
+    && sessionSwaps["Rollback Sled Drag"]==="Farmer Carry"
+    && sessionState["Farmer Carry"].saved.lbs===80
+    && data.activeWorkoutDraft.sets["Farmer Carry"].dist===20
+  `)
+);
+
+const ArchiveOpenData76=
+  JSON.parse(JSON.stringify(V2_DATA));
+ArchiveOpenData76.myExercises={
+  "u:archive-open":customCarryEntry76(
+    "u:archive-open",
+    "Archive Open Carry"
+  )
+};
+ArchiveOpenData76.activeWorkoutDraft={
+  date:dstr(0),
+  day:"__FREE__",
+  title:"Freestyle",
+  sets:{"Archive Open Carry":carryValue76(60,15)},
+  notes:"",
+  updatedAt:"2026-07-27T12:00:00.000Z"
+};
+const ArchiveOpen76=boot(
+  V2_CFG,
+  ArchiveOpenData76,
+  null,
+  TEST_PROGRAM
+);
+ArchiveOpen76.window.eval(`
+  wDaySel.value="__FREE__";
+  activeSessionType="__FREE__";
+  workoutDraftLoaded=true;
+
+  const custom=data.myExercises["u:archive-open"];
+  extraExercises=[{
+    id:custom.id,
+    name:custom.name,
+    shape:custom.shape,
+    scheme:""
+  }];
+  sessionState={
+    "Archive Open Carry":stateFromStoredValue(
+      custom,
+      ${JSON.stringify(carryValue76(60,15))},
+      "saved",
+      "Archive Open Carry",
+      false
+    )
+  };
+  sessionSwaps={};
+
+  window.__archiveOpen=
+    archiveOrDeleteUserExercise(custom.id);
+`);
+check(
+  "v76 archiving a referenced open custom exercise preserves its completed state and draft",
+  ArchiveOpen76.window.eval(`
+    window.__archiveOpen.archived===true
+    && data.myExercises["u:archive-open"].deprecated===true
+    && extraExercises.length===1
+    && sessionState["Archive Open Carry"].saved.lbs===60
+    && data.activeWorkoutDraft.sets["Archive Open Carry"].dist===15
+  `)
+);
+
+const DeleteSwapTargetData76=
+  JSON.parse(JSON.stringify(V2_DATA));
+DeleteSwapTargetData76.myExercises={
+  "u:delete-target":customCarryEntry76(
+    "u:delete-target",
+    "Temporary Carry Target"
+  )
+};
+DeleteSwapTargetData76.activeWorkoutDraft=null;
+const DeleteSwapTarget76=boot(
+  V2_CFG,
+  DeleteSwapTargetData76,
+  null,
+  TEST_PROGRAM
+);
+DeleteSwapTarget76.window.eval(`
+  wDaySel.value="__FREE__";
+  activeSessionType="__FREE__";
+  workoutDraftLoaded=false;
+
+  const custom=data.myExercises["u:delete-target"];
+  const farmer=exerciseDescriptor("Farmer Carry",null);
+
+  extraExercises=[{
+    id:farmer.id,
+    name:farmer.name,
+    shape:farmer.shape,
+    scheme:""
+  }];
+  sessionSwaps={
+    "Farmer Carry":"Temporary Carry Target"
+  };
+  sessionState={
+    "Temporary Carry Target":blankShapeState(custom)
+  };
+
+  window.__deleteTarget=
+    archiveOrDeleteUserExercise(custom.id);
+  renderSessionInputs();
+`);
+check(
+  "v76 deleting an unsaved custom swap target restores the original base exercise",
+  DeleteSwapTarget76.window.eval(`
+    window.__deleteTarget.deleted===true
+    && !data.myExercises["u:delete-target"]
+    && extraExercises.length===1
+    && extraExercises[0].name==="Farmer Carry"
+    && Object.keys(sessionSwaps).length===0
+    && sessionList()[0].name==="Farmer Carry"
+    && !!sessionState["Farmer Carry"]
+  `)
+  && /Farmer Carry/.test(
+    DeleteSwapTarget76.window.document
+      .getElementById("exerciseInputs")
+      .textContent
+  )
+);
+
+const RenameSwapTargetData76=
+  JSON.parse(JSON.stringify(V2_DATA));
+RenameSwapTargetData76.myExercises={
+  "u:rename-target":customCarryEntry76(
+    "u:rename-target",
+    "Custom Carry Target"
+  )
+};
+RenameSwapTargetData76.activeWorkoutDraft={
+  date:dstr(0),
+  day:"__FREE__",
+  title:"Freestyle",
+  sets:{"Custom Carry Target":carryValue76(75,25)},
+  notes:"",
+  updatedAt:"2026-07-27T12:00:00.000Z"
+};
+const RenameSwapTarget76=boot(
+  V2_CFG,
+  RenameSwapTargetData76,
+  null,
+  TEST_PROGRAM
+);
+RenameSwapTarget76.window.eval(`
+  wDaySel.value="__FREE__";
+  activeSessionType="__FREE__";
+  workoutDraftLoaded=true;
+
+  const custom=data.myExercises["u:rename-target"];
+  const farmer=exerciseDescriptor("Farmer Carry",null);
+
+  extraExercises=[{
+    id:farmer.id,
+    name:farmer.name,
+    shape:farmer.shape,
+    scheme:""
+  }];
+  sessionSwaps={
+    "Farmer Carry":"Custom Carry Target"
+  };
+  sessionState={
+    "Custom Carry Target":stateFromStoredValue(
+      custom,
+      ${JSON.stringify(carryValue76(75,25))},
+      "saved",
+      "Custom Carry Target",
+      false
+    )
+  };
+
+  const renamed=renameUserExercise(
+    custom.id,
+    "Custom Carry Pull"
+  );
+  rekeyOpenSessionExercise(
+    renamed.previousName,
+    renamed.entry
+  );
+  renderSessionInputs();
+`);
+check(
+  "v76 renaming a swapped-in custom target rekeys the swap, state, and loaded draft",
+  RenameSwapTarget76.window.eval(`
+    sessionSwaps["Farmer Carry"]==="Custom Carry Pull"
+    && !sessionState["Custom Carry Target"]
+    && sessionState["Custom Carry Pull"].saved.lbs===75
+    && !data.activeWorkoutDraft.sets["Custom Carry Target"]
+    && data.activeWorkoutDraft.sets["Custom Carry Pull"].dist===25
+    && sessionList()[0].name==="Custom Carry Pull"
+  `)
+);
+
+const SwapSavedData76=
+  JSON.parse(JSON.stringify(V2_DATA));
+SwapSavedData76.activeWorkoutDraft={
+  date:dstr(0),
+  day:"__FREE__",
+  title:"Freestyle",
+  sets:{
+    "Farmer Carry":carryValue76(90,30),
+    "Bench Press":benchValue76(145,6)
+  },
+  notes:"",
+  updatedAt:"2026-07-27T12:00:00.000Z"
+};
+const SwapSaved76=boot(
+  V2_CFG,
+  SwapSavedData76,
+  null,
+  TEST_PROGRAM
+);
+SwapSaved76.window.eval(`
+  wDaySel.value="__FREE__";
+  activeSessionType="__FREE__";
+  workoutDraftLoaded=true;
+  confirm=()=>true;
+
+  const farmer=exerciseDescriptor("Farmer Carry",null);
+  const bench=exerciseDescriptor("Bench Press",null);
+
+  extraExercises=[
+    {id:farmer.id,name:farmer.name,shape:farmer.shape,scheme:""},
+    {id:bench.id,name:bench.name,shape:bench.shape,scheme:""}
+  ];
+  sessionSwaps={};
+  sessionState={
+    "Farmer Carry":stateFromStoredValue(
+      farmer,
+      ${JSON.stringify(carryValue76(90,30))},
+      "saved",
+      "Farmer Carry",
+      false
+    ),
+    "Bench Press":stateFromStoredValue(
+      bench,
+      ${JSON.stringify(benchValue76(145,6))},
+      "saved",
+      "Bench Press",
+      false
+    )
+  };
+
+  window.__swapSaved=applySwap(
+    "Farmer Carry",
+    "Farmer Carry",
+    "Suitcase Carry"
+  );
+`);
+check(
+  "v76 swapping a completed exercise removes the old result from the loaded draft and preserves unrelated results",
+  SwapSaved76.window.eval(`
+    window.__swapSaved===true
+    && sessionSwaps["Farmer Carry"]==="Suitcase Carry"
+    && !sessionState["Farmer Carry"]
+    && sessionState["Suitcase Carry"].saved===null
+    && !data.activeWorkoutDraft.sets["Farmer Carry"]
+    && data.activeWorkoutDraft.sets["Bench Press"][0].w===145
+  `)
+);
+
+const SwapLastData76=JSON.parse(
+  JSON.stringify(SwapSavedData76)
+);
+SwapLastData76.activeWorkoutDraft.sets={
+  "Farmer Carry":carryValue76(90,30)
+};
+const SwapLast76=boot(
+  V2_CFG,
+  SwapLastData76,
+  null,
+  TEST_PROGRAM
+);
+SwapLast76.window.eval(`
+  wDaySel.value="__FREE__";
+  activeSessionType="__FREE__";
+  workoutDraftLoaded=true;
+  confirm=()=>true;
+
+  const farmer=exerciseDescriptor("Farmer Carry",null);
+  extraExercises=[{
+    id:farmer.id,
+    name:farmer.name,
+    shape:farmer.shape,
+    scheme:""
+  }];
+  sessionSwaps={};
+  sessionState={
+    "Farmer Carry":stateFromStoredValue(
+      farmer,
+      ${JSON.stringify(carryValue76(90,30))},
+      "saved",
+      "Farmer Carry",
+      false
+    )
+  };
+
+  window.__swapLast=applySwap(
+    "Farmer Carry",
+    "Farmer Carry",
+    "Suitcase Carry"
+  );
+`);
+const SwapLastReloadData76=JSON.parse(
+  SwapLast76.window.eval(`JSON.stringify(data)`)
+);
+const SwapLastReload76=boot(
+  V2_CFG,
+  SwapLastReloadData76,
+  null,
+  TEST_PROGRAM
+);
+check(
+  "v76 swapping the last completed exercise clears the saved draft and Resume card",
+  SwapLast76.window.eval(`
+    window.__swapLast===true
+    && data.activeWorkoutDraft===null
+  `)
+  && SwapLast76.window.document
+    .getElementById("workoutDraftCard")
+    .classList.contains("hidden")
+  && SwapLastReload76.window.eval(`
+    data.activeWorkoutDraft===null
+    && resumeWorkoutDraft()===false
+  `)
+);
+
+const SwapRollback76=boot(
+  V2_CFG,
+  SwapLastData76,
+  null,
+  TEST_PROGRAM
+);
+SwapRollback76.window.eval(`
+  wDaySel.value="__FREE__";
+  activeSessionType="__FREE__";
+  workoutDraftLoaded=true;
+  confirm=()=>true;
+
+  const farmer=exerciseDescriptor("Farmer Carry",null);
+  extraExercises=[{
+    id:farmer.id,
+    name:farmer.name,
+    shape:farmer.shape,
+    scheme:""
+  }];
+  sessionSwaps={};
+  sessionState={
+    "Farmer Carry":stateFromStoredValue(
+      farmer,
+      ${JSON.stringify(carryValue76(90,30))},
+      "saved",
+      "Farmer Carry",
+      false
+    )
+  };
+
+  const realSave=save;
+  save=()=>false;
+  window.__swapRollback=applySwap(
+    "Farmer Carry",
+    "Farmer Carry",
+    "Suitcase Carry"
+  );
+  save=realSave;
+`);
+check(
+  "v76 failed swap persistence rolls back the swap, completed state, and draft",
+  SwapRollback76.window.eval(`
+    window.__swapRollback===false
+    && Object.keys(sessionSwaps).length===0
+    && sessionState["Farmer Carry"].saved.lbs===90
+    && !sessionState["Suitcase Carry"]
+    && data.activeWorkoutDraft.sets["Farmer Carry"].dist===30
+  `)
+);
+
+const SwapCancelData76=
+  JSON.parse(JSON.stringify(V2_DATA));
+SwapCancelData76.activeWorkoutDraft=null;
+const SwapCancel76=boot(
+  V2_CFG,
+  SwapCancelData76,
+  null,
+  TEST_PROGRAM
+);
+SwapCancel76.window.eval(`
+  wDaySel.value="__FREE__";
+  activeSessionType="__FREE__";
+  workoutDraftLoaded=false;
+  confirm=()=>false;
+
+  const farmer=exerciseDescriptor("Farmer Carry",null);
+  const entered=blankShapeState(farmer);
+  entered.fields={lbs:90,dist:30,distUnit:"ft"};
+  entered.touched=true;
+  entered.status="unsaved";
+
+  extraExercises=[{
+    id:farmer.id,
+    name:farmer.name,
+    shape:farmer.shape,
+    scheme:""
+  }];
+  sessionSwaps={};
+  sessionState={"Farmer Carry":entered};
+
+  window.__swapCancel=applySwap(
+    "Farmer Carry",
+    "Farmer Carry",
+    "Suitcase Carry"
+  );
+`);
+check(
+  "v76 cancelling a swap with entered data preserves the current exercise",
+  SwapCancel76.window.eval(`
+    window.__swapCancel===false
+    && Object.keys(sessionSwaps).length===0
+    && sessionState["Farmer Carry"].fields.lbs===90
+    && sessionState["Farmer Carry"].fields.dist===30
+    && !sessionState["Suitcase Carry"]
+  `)
+);
+
+const SwapShapeGuard76=boot(
+  V2_CFG,
+  V2_DATA,
+  null,
+  TEST_PROGRAM
+);
+SwapShapeGuard76.window.eval(`
+  wDaySel.value="__FREE__";
+  activeSessionType="__FREE__";
+  workoutDraftLoaded=false;
+
+  const farmer=exerciseDescriptor("Farmer Carry",null);
+  extraExercises=[{
+    id:farmer.id,
+    name:farmer.name,
+    shape:farmer.shape,
+    scheme:""
+  }];
+  sessionSwaps={};
+  sessionState={
+    "Farmer Carry":blankShapeState(farmer)
+  };
+
+  window.__swapShapeGuard=applySwap(
+    "Farmer Carry",
+    "Farmer Carry",
+    "Bench Press"
+  );
+`);
+check(
+  "v76 swap application itself refuses cross-shape replacements even outside the menu",
+  SwapShapeGuard76.window.eval(`
+    window.__swapShapeGuard===false
+    && Object.keys(sessionSwaps).length===0
+    && !!sessionState["Farmer Carry"]
+    && !sessionState["Bench Press"]
+    && /same tracking shape/i.test(
+      document.getElementById("workoutErr").textContent
+    )
+  `)
+);
+
+const SwapCollision76=boot(
+  V2_CFG,
+  V2_DATA,
+  null,
+  TEST_PROGRAM
+);
+SwapCollision76.window.eval(`
+  wDaySel.value="__FREE__";
+  activeSessionType="__FREE__";
+  workoutDraftLoaded=false;
+
+  const farmer=exerciseDescriptor("Farmer Carry",null);
+  const suitcase=exerciseDescriptor("Suitcase Carry",null);
+
+  extraExercises=[
+    {id:farmer.id,name:farmer.name,shape:farmer.shape,scheme:""},
+    {id:suitcase.id,name:suitcase.name,shape:suitcase.shape,scheme:""}
+  ];
+  sessionSwaps={};
+  sessionState={
+    "Farmer Carry":blankShapeState(farmer),
+    "Suitcase Carry":blankShapeState(suitcase)
+  };
+
+  window.__swapCollision=applySwap(
+    "Farmer Carry",
+    "Farmer Carry",
+    "Suitcase Carry"
+  );
+`);
+check(
+  "v76 swap collisions are rejected before two session slots can share one identity",
+  SwapCollision76.window.eval(`
+    window.__swapCollision===false
+    && Object.keys(sessionSwaps).length===0
+    && !!sessionState["Farmer Carry"]
+    && !!sessionState["Suitcase Carry"]
+    && /already in this session/i.test(
+      document.getElementById("workoutErr").textContent
+    )
+  `)
+);
+
+const SwapOptionsData76=
+  JSON.parse(JSON.stringify(V2_DATA));
+SwapOptionsData76.myExercises={
+  "u:options-base":customCarryEntry76(
+    "u:options-base",
+    "Options Base Carry"
+  )
+};
+SwapOptionsData76.activeWorkoutDraft=null;
+const SwapOptions76=boot(
+  V2_CFG,
+  SwapOptionsData76,
+  null,
+  TEST_PROGRAM
+);
+SwapOptions76.window.eval(`
+  wDaySel.value="__FREE__";
+  activeSessionType="__FREE__";
+
+  const custom=data.myExercises["u:options-base"];
+  const suitcase=exerciseDescriptor("Suitcase Carry",null);
+
+  extraExercises=[
+    {id:custom.id,name:custom.name,shape:custom.shape,scheme:""},
+    {id:suitcase.id,name:suitcase.name,shape:suitcase.shape,scheme:""}
+  ];
+  sessionSwaps={
+    "Options Base Carry":"Farmer Carry"
+  };
+  sessionState={};
+
+  window.__swapOptions=swapOptionsForExercise(
+    "Options Base Carry",
+    "Farmer Carry"
+  );
+`);
+check(
+  "v76 swap alternatives omit the original duplicate and exercises already used by other slots",
+  SwapOptions76.window.eval(`
+    !window.__swapOptions.includes("Options Base Carry")
+    && !window.__swapOptions.includes("Suitcase Carry")
+  `)
+);
+
+const DuplicateBaseData76=
+  JSON.parse(JSON.stringify(V2_DATA));
+DuplicateBaseData76.myExercises={
+  "u:duplicate-base":customCarryEntry76(
+    "u:duplicate-base",
+    "Duplicate Base Carry"
+  )
+};
+DuplicateBaseData76.activeWorkoutDraft=null;
+const DuplicateBase76=boot(
+  V2_CFG,
+  DuplicateBaseData76,
+  null,
+  TEST_PROGRAM
+);
+DuplicateBase76.window.eval(`
+  wDaySel.value="__FREE__";
+  activeSessionType="__FREE__";
+
+  const custom=data.myExercises["u:duplicate-base"];
+  const farmer=exerciseDescriptor("Farmer Carry",null);
+
+  extraExercises=[{
+    id:custom.id,
+    name:custom.name,
+    shape:custom.shape,
+    scheme:""
+  }];
+  sessionSwaps={
+    "Duplicate Base Carry":"Farmer Carry"
+  };
+  sessionState={
+    "Farmer Carry":blankShapeState(farmer)
+  };
+
+  renderLibraryOptions();
+  addExSel.value=custom.id;
+  document.getElementById("addExBtn").click();
+`);
+check(
+  "v76 a swapped-away base cannot be added to the same session twice",
+  DuplicateBase76.window.eval(`
+    extraExercises.length===1
+    && sessionContainsExerciseIdentity(
+      data.myExercises["u:duplicate-base"],
+      null
+    )
+    && /already in this session/i.test(
+      document.getElementById("workoutErr").textContent
+    )
+  `)
+);
+
+const ProgramIdentityData76=
+  JSON.parse(JSON.stringify(V2_DATA));
+ProgramIdentityData76.myExercises={
+  "u:program-identity":customCarryEntry76(
+    "u:program-identity",
+    "Current Program Carry",
+    ["former program carry"]
+  )
+};
+ProgramIdentityData76.activeWorkoutDraft=null;
+const ProgramIdentity76=boot(
+  V2_CFG,
+  ProgramIdentityData76,
+  null,
+  TEST_PROGRAM
+);
+check(
+  "v76 program identity validation rejects duplicate current/former-name references in one day",
+  ProgramIdentity76.window.eval(`
+    (()=>{
+      try{
+        validateProgramExerciseIdentities({
+          name:"Duplicate identities",
+          days:[{
+            id:"D1",
+            title:"Day 1",
+            exercises:[
+              {name:"Current Program Carry",scheme:""},
+              {name:"Former Program Carry",scheme:""}
+            ]
+          }]
+        });
+        return false;
+      }catch(error){
+        return /duplicates another exercise/i.test(error.message);
+      }
+    })()
+  `)
+);
+
+const BuilderReferenceData76=
+  JSON.parse(JSON.stringify(V2_DATA));
+BuilderReferenceData76.myExercises={
+  "u:builder-reference":customCarryEntry76(
+    "u:builder-reference",
+    "Builder Reference Carry"
+  )
+};
+BuilderReferenceData76.activeWorkoutDraft=null;
+const BuilderReference76=boot(
+  V2_CFG,
+  BuilderReferenceData76,
+  null,
+  TEST_PROGRAM
+);
+check(
+  "v76 an unsaved program-builder reference protects a custom exercise from hard deletion",
+  BuilderReference76.window.eval(`
+    builderProg={
+      name:"Builder draft",
+      days:[{
+        id:"D1",
+        title:"Day 1",
+        exercises:[{
+          name:"Builder Reference Carry",
+          scheme:""
+        }]
+      }]
+    };
+
+    const entry=data.myExercises["u:builder-reference"];
+    const refs=userExerciseReferenceCount(entry);
+    const result=archiveOrDeleteUserExercise(entry.id);
+    builderProg=null;
+
+    refs===1
+    && result.archived===true
+    && !!data.myExercises["u:builder-reference"]
+    && data.myExercises["u:builder-reference"].deprecated===true
+  `)
+);
+
+const BuilderRenameData76=
+  JSON.parse(JSON.stringify(V2_DATA));
+BuilderRenameData76.myExercises={
+  "u:builder-rename":customCarryEntry76(
+    "u:builder-rename",
+    "Builder Old Carry"
+  )
+};
+BuilderRenameData76.activeWorkoutDraft=null;
+const BuilderRename76=boot(
+  V2_CFG,
+  BuilderRenameData76,
+  null,
+  TEST_PROGRAM
+);
+check(
+  "v76 renaming a custom exercise updates an open program builder reference",
+  BuilderRename76.window.eval(`
+    builderProg={
+      name:"Builder draft",
+      days:[{
+        id:"D1",
+        title:"Day 1",
+        exercises:[{
+          name:"Builder Old Carry",
+          scheme:""
+        }]
+      }]
+    };
+
+    const renamed=renameUserExercise(
+      "u:builder-rename",
+      "Builder New Carry"
+    );
+    rekeyOpenSessionExercise(
+      renamed.previousName,
+      renamed.entry
+    );
+
+    const updated=
+      builderProg.days[0].exercises[0].name;
+    builderProg=null;
+
+    renamed.ok===true
+    && updated==="Builder New Carry"
+  `)
+);
+
+
+// ================= v76: final identity and legacy-cardio closure =================
+const RenameProgramCollisionData76=
+  JSON.parse(JSON.stringify(V2_DATA));
+RenameProgramCollisionData76.myExercises={
+  "u:rename-program-collision":customCarryEntry76(
+    "u:rename-program-collision",
+    "Old Program Carry"
+  )
+};
+RenameProgramCollisionData76.activeWorkoutDraft=null;
+const RenameProgramCollision76=boot(
+  V2_CFG,
+  RenameProgramCollisionData76,
+  null,
+  {
+    name:"Rename collision",
+    days:[{
+      id:"D1",
+      title:"Day 1",
+      exercises:[
+        {name:"Old Program Carry",scheme:""},
+        {name:"Legacy Target Carry",scheme:""}
+      ]
+    }]
+  }
+);
+const renameProgramCollisionResult76=
+  RenameProgramCollision76.window.eval(`
+    renameUserExercise(
+      "u:rename-program-collision",
+      "Legacy Target Carry"
+    )
+  `);
+check(
+  "v76 rename refuses a target name already used by an active program or open workout identity",
+  renameProgramCollisionResult76.ok===false
+  && /already used by active program/i.test(
+    renameProgramCollisionResult76.reason
+  )
+  && RenameProgramCollision76.window.eval(`
+    data.myExercises[
+      "u:rename-program-collision"
+    ].name==="Old Program Carry"
+    && data.myExercises[
+      "u:rename-program-collision"
+    ].formerNames.length===0
+    && programExerciseIdentityIssue(program)===null
+  `)
+);
+
+const RenameStoredCollisionData76=
+  JSON.parse(JSON.stringify(V2_DATA));
+RenameStoredCollisionData76.myExercises={
+  "u:rename-stored-collision":customCarryEntry76(
+    "u:rename-stored-collision",
+    "Old Stored Carry"
+  )
+};
+RenameStoredCollisionData76.workouts=[{
+  date:"2026-07-27",
+  day:"__FREE__",
+  title:"Freestyle",
+  sets:{
+    "Legacy Stored Carry":carryValue76(75,20)
+  },
+  notes:""
+}];
+RenameStoredCollisionData76.activeWorkoutDraft={
+  date:"2026-07-28",
+  day:"__FREE__",
+  title:"Freestyle",
+  sets:{
+    "Legacy Draft Carry":carryValue76(80,25)
+  },
+  notes:"",
+  updatedAt:"2026-07-28T12:00:00.000Z"
+};
+const RenameStoredCollision76=boot(
+  Object.assign({},V2_CFG,{
+    liftGoals:{"Legacy Goal Carry":200}
+  }),
+  RenameStoredCollisionData76,
+  null,
+  TEST_PROGRAM
+);
+const renameHistoryCollisionResult76=
+  RenameStoredCollision76.window.eval(`
+    renameUserExercise(
+      "u:rename-stored-collision",
+      "Legacy Stored Carry"
+    )
+  `);
+const renameDraftCollisionResult76=
+  RenameStoredCollision76.window.eval(`
+    renameUserExercise(
+      "u:rename-stored-collision",
+      "Legacy Draft Carry"
+    )
+  `);
+const renameGoalCollisionResult76=
+  RenameStoredCollision76.window.eval(`
+    renameUserExercise(
+      "u:rename-stored-collision",
+      "Legacy Goal Carry"
+    )
+  `);
+check(
+  "v76 rename refuses legacy target names already owned by history, drafts, or goals",
+  [
+    renameHistoryCollisionResult76,
+    renameDraftCollisionResult76,
+    renameGoalCollisionResult76
+  ].every(result=>result.ok===false)
+  && /workout history/i.test(renameHistoryCollisionResult76.reason)
+  && /saved workout draft/i.test(renameDraftCollisionResult76.reason)
+  && /training goal/i.test(renameGoalCollisionResult76.reason)
+  && RenameStoredCollision76.window.eval(`
+    data.myExercises[
+      "u:rename-stored-collision"
+    ].name==="Old Stored Carry"
+    && data.myExercises[
+      "u:rename-stored-collision"
+    ].formerNames.length===0
+  `)
+);
+
+const HistoricalCardioData76=
+  JSON.parse(JSON.stringify(V2_DATA));
+HistoricalCardioData76.myExercises={
+  "u:historical-cardio":{
+    id:"u:historical-cardio",
+    name:"Hill Shuffle New",
+    shape:"timeDist",
+    tags:["cardio"],
+    aliases:[],
+    formerNames:["hill shuffle old"],
+    muscles:{primary:["full-body"],secondary:[]},
+    equipment:["other"],
+    unilateral:false,
+    bodyweight:false,
+    deprecated:true
+  }
+};
+HistoricalCardioData76.workouts=[{
+  date:"2026-07-27",
+  day:"CARDIO",
+  title:"Cardio",
+  sets:{
+    "Hill Shuffle Old":"30 min · Moderate"
+  },
+  notes:""
+}];
+HistoricalCardioData76.activeWorkoutDraft=null;
+const HistoricalCardio76=boot(
+  V2_CFG,
+  HistoricalCardioData76,
+  null,
+  TEST_PROGRAM
+);
+const dHistoricalCardio76=
+  HistoricalCardio76.window.document;
+HistoricalCardio76.window.eval(`startEditWorkout(0)`);
+const historicalCardioOption76=[
+  ...dHistoricalCardio76
+    .getElementById("cardioType")
+    .options
+].find(option=>option.value==="Hill Shuffle Old");
+dHistoricalCardio76.getElementById("cardioMin").value="45";
+dHistoricalCardio76.getElementById("cardioDetail").value="Steady";
+dHistoricalCardio76.getElementById("logWorkoutBtn").click();
+check(
+  "v76 historical Cardio editing preserves an archived or former activity name exactly",
+  !!historicalCardioOption76
+  && historicalCardioOption76.dataset.historyOnly==="true"
+  && HistoricalCardio76.window.eval(`
+    data.workouts.length===1
+    && Object.keys(data.workouts[0].sets).join(",")
+      ==="Hill Shuffle Old"
+    && data.workouts[0].sets["Hill Shuffle Old"]
+      ==="45 min · Steady"
+  `)
+);
+
+const CardioFailureData76=
+  JSON.parse(JSON.stringify(HistoricalCardioData76));
+const CardioFailure76=boot(
+  V2_CFG,
+  CardioFailureData76,
+  null,
+  TEST_PROGRAM
+);
+const dCardioFailure76=CardioFailure76.window.document;
+CardioFailure76.window.eval(`startEditWorkout(0)`);
+dCardioFailure76.getElementById("cardioMin").value="50";
+dCardioFailure76.getElementById("cardioDetail").value="Hard";
+CardioFailure76.window.eval(`
+  window.__realCardioSave=save;
+  save=()=>false;
+`);
+dCardioFailure76.getElementById("logWorkoutBtn").click();
+CardioFailure76.window.eval(`save=window.__realCardioSave`);
+check(
+  "v76 failed Cardio history persistence keeps the entered fields and original history intact",
+  dCardioFailure76.getElementById("cardioMin").value==="50"
+  && dCardioFailure76.getElementById("cardioDetail").value==="Hard"
+  && CardioFailure76.window.eval(`
+    editingWorkoutIdx===0
+    && data.workouts.length===1
+    && data.workouts[0].sets["Hill Shuffle Old"]
+      ==="30 min · Moderate"
+    && /entered cardio details were kept/i.test(
+      document.getElementById("workoutErr").textContent
+    )
+  `)
+);
+
+
+// ================= v76 final integrity seal protects completed edits, draft identity,
+// reserved names, prototype-like names, and unknown prior shapes =================
+const ProtectedCompletedEditProgram76={
+  name:"Protected completed edit",
+  days:[{
+    id:"D1",
+    title:"Protected Day",
+    exercises:[
+      {name:"Bench Press",scheme:""},
+      {name:"Squat",scheme:""}
+    ]
+  }]
+};
+const ProtectedCompletedEditData76=
+  JSON.parse(JSON.stringify(V2_DATA));
+ProtectedCompletedEditData76.activeWorkoutDraft=null;
+const ProtectedCompletedEdit76=boot(
+  V2_CFG,
+  ProtectedCompletedEditData76,
+  null,
+  ProtectedCompletedEditProgram76
+);
+ProtectedCompletedEdit76.window.eval(`
+  wDaySel.value="D1";
+  activeSessionType="D1";
+  workoutDraftLoaded=true;
+
+  const bench=exerciseDescriptor("Bench Press",null);
+  const squat=exerciseDescriptor("Squat",null);
+
+  sessionState=newExerciseNameMap();
+
+  setExerciseNameValue(
+    sessionState,
+    "Bench Press",
+    stateFromStoredValue(
+      bench,
+      [{w:135,r:8}],
+      "unsaved",
+      "Bench Press",
+      true
+    )
+  );
+
+  sessionState["Bench Press"].saved=[
+    {w:135,r:8}
+  ];
+  sessionState["Bench Press"].rows[0].w=140;
+  sessionState["Bench Press"].rows[0].touched=true;
+
+  setExerciseNameValue(
+    sessionState,
+    "Squat",
+    stateFromStoredValue(
+      squat,
+      [{w:225,r:5}],
+      "unsaved",
+      "Squat",
+      true
+    )
+  );
+
+  sessionState["Squat"].saved=[
+    {w:225,r:5}
+  ];
+
+  data.activeWorkoutDraft={
+    date:${JSON.stringify(dstr(0))},
+    day:"D1",
+    title:"Protected Day",
+    programName:"Protected completed edit",
+    sets:{
+      "Bench Press":[{w:135,r:8}],
+      "Squat":[{w:225,r:5}]
+    },
+    notes:"",
+    updatedAt:"2026-07-28T12:00:00.000Z"
+  };
+
+  window.__protectedCompletedEdit=
+    saveExercise("Bench Press");
+`);
+check(
+  "v76 saving another exercise keeps the last completed result of an exercise currently being edited",
+  ProtectedCompletedEdit76.window.eval(`
+    window.__protectedCompletedEdit.ok===true
+    && data.activeWorkoutDraft
+      .sets["Bench Press"][0].w===140
+    && data.activeWorkoutDraft
+      .sets["Squat"][0].w===225
+    && sessionState["Squat"].status==="unsaved"
+    && sessionState["Squat"].saved[0].r===5
+  `)
+);
+
+const SameDayUnloadedDraftData76=
+  JSON.parse(JSON.stringify(V2_DATA));
+SameDayUnloadedDraftData76.activeWorkoutDraft={
+  date:dstr(0),
+  day:"D1",
+  title:"Day 1",
+  programName:TEST_PROGRAM.name,
+  sets:{
+    "Bench Press":[{w:100,r:5}]
+  },
+  notes:"keep this draft",
+  updatedAt:"2026-07-28T12:00:00.000Z"
+};
+const SameDayUnloadedDraft76=boot(
+  V2_CFG,
+  SameDayUnloadedDraftData76,
+  null,
+  TEST_PROGRAM
+);
+SameDayUnloadedDraft76.window.eval(`
+  wDaySel.value="D1";
+  activeSessionType="D1";
+  workoutDraftLoaded=false;
+  window.__sameDayConfirmCount=0;
+  window.confirm=()=>{
+    window.__sameDayConfirmCount++;
+    return false;
+  };
+
+  const bench=exerciseDescriptor("Bench Press",null);
+  sessionState=newExerciseNameMap();
+
+  const state=blankShapeState(bench);
+  state.rows=[
+    {
+      w:150,
+      r:5,
+      done:false,
+      touched:true
+    }
+  ];
+  state.status="unsaved";
+
+  setExerciseNameValue(
+    sessionState,
+    "Bench Press",
+    state
+  );
+
+  window.__sameDayDraftSave=
+    saveExercise("Bench Press");
+`);
+check(
+  "v76 an unloaded draft cannot be silently overwritten by a new screen with the same date and day id",
+  SameDayUnloadedDraft76.window.eval(`
+    window.__sameDayDraftSave.ok===false
+    && window.__sameDayConfirmCount===1
+    && workoutDraftLoaded===false
+    && data.activeWorkoutDraft.notes
+      ==="keep this draft"
+    && data.activeWorkoutDraft
+      .sets["Bench Press"][0].w===100
+    && JSON.parse(
+      localStorage.getItem("forge:data")
+    ).activeWorkoutDraft
+      .sets["Bench Press"][0].w===100
+  `)
+);
+
+const ProgramMismatchDraftData76=
+  JSON.parse(JSON.stringify(V2_DATA));
+ProgramMismatchDraftData76.activeWorkoutDraft={
+  date:dstr(0),
+  day:"D1",
+  title:"Alpha Day",
+  programName:"Program Alpha",
+  sets:{
+    "Bench Press":[{w:100,r:5}]
+  },
+  notes:"alpha draft",
+  updatedAt:"2026-07-28T12:00:00.000Z"
+};
+const ProgramMismatchDraft76=boot(
+  V2_CFG,
+  ProgramMismatchDraftData76,
+  null,
+  {
+    name:"Program Beta",
+    days:[{
+      id:"D1",
+      title:"Beta Day",
+      exercises:[
+        {name:"Squat",scheme:"3×5"}
+      ]
+    }]
+  }
+);
+ProgramMismatchDraft76.window.eval(`
+  window.__programMismatchResumed=
+    resumeWorkoutDraft();
+
+  const bench=exerciseDescriptor(
+    "Bench Press",
+    null
+  );
+
+  sessionState["Bench Press"]=
+    stateFromStoredValue(
+      bench,
+      [{w:105,r:5}],
+      "unsaved",
+      "Bench Press",
+      true
+    );
+
+  sessionState["Bench Press"].saved=[
+    {w:100,r:5}
+  ];
+
+  window.__programMismatchSaved=
+    saveExercise("Bench Press");
+
+  window.__programMismatchIdentity={
+    day:data.activeWorkoutDraft.day,
+    title:data.activeWorkoutDraft.title,
+    programName:data.activeWorkoutDraft.programName
+  };
+`);
+const dProgramMismatchDraft76=
+  ProgramMismatchDraft76.window.document;
+dProgramMismatchDraft76
+  .getElementById("logWorkoutBtn")
+  .click();
+check(
+  "v76 a draft from a replaced program resumes as Freestyle but saves and logs under its original identity",
+  ProgramMismatchDraft76.window.eval(`
+    window.__programMismatchResumed===true
+    && window.__programMismatchSaved.ok===true
+    && window.__programMismatchIdentity.day==="D1"
+    && window.__programMismatchIdentity.title
+      ==="Alpha Day"
+    && window.__programMismatchIdentity.programName
+      ==="Program Alpha"
+    && data.workouts.length===1
+    && data.workouts[0].day==="D1"
+    && data.workouts[0].title==="Alpha Day"
+    && data.workouts[0]
+      .sets["Bench Press"][0].w===105
+    && !Object.prototype.hasOwnProperty.call(
+      data.workouts[0].sets,
+      "Squat"
+    )
+  `)
+  && dProgramMismatchDraft76
+    .getElementById("wDay").value==="__FREE__"
+);
+
+const ReservedExerciseNames76=boot(
+  V2_CFG,
+  JSON.parse(JSON.stringify(V2_DATA)),
+  null,
+  TEST_PROGRAM
+);
+const reservedCreatePrefix76=
+  ReservedExerciseNames76.window.eval(`
+    createUserExercise(
+      "[Cardio]Shadow Run",
+      "timeDist"
+    )
+  `);
+const reservedCreateOther76=
+  ReservedExerciseNames76.window.eval(`
+    createUserExercise(
+      "Other",
+      "text"
+    )
+  `);
+const safeReservedSource76=
+  ReservedExerciseNames76.window.eval(`
+    createUserExercise(
+      "Safe Rename Source",
+      "carry"
+    )
+  `);
+const reservedRenamePrefix76=
+  ReservedExerciseNames76.window.eval(`
+    renameUserExercise(
+      ${JSON.stringify(safeReservedSource76.entry.id)},
+      "[Cardio] Renamed Run"
+    )
+  `);
+const reservedRenameOther76=
+  ReservedExerciseNames76.window.eval(`
+    renameUserExercise(
+      ${JSON.stringify(safeReservedSource76.entry.id)},
+      "Other"
+    )
+  `);
+check(
+  "v76 new user exercises and renames reject the retired Cardio prefix and legacy Other identity",
+  reservedCreatePrefix76.ok===false
+  && reservedCreateOther76.ok===false
+  && reservedRenamePrefix76.ok===false
+  && reservedRenameOther76.ok===false
+  && /reserved/i.test(reservedCreatePrefix76.reason)
+  && /reserved/i.test(reservedCreateOther76.reason)
+  && ReservedExerciseNames76.window.eval(`
+    data.myExercises[
+      ${JSON.stringify(safeReservedSource76.entry.id)}
+    ].name==="Safe Rename Source"
+  `)
+);
+
+const PrototypeExerciseData76=
+  JSON.parse(JSON.stringify(V2_DATA));
+PrototypeExerciseData76.activeWorkoutDraft=null;
+const PrototypeExercise76=boot(
+  V2_CFG,
+  PrototypeExerciseData76,
+  null,
+  TEST_PROGRAM
+);
+PrototypeExercise76.window.eval(`
+  const created=createUserExercise(
+    "__proto__",
+    "lift"
+  );
+
+  window.__prototypeCreated=created;
+  wDaySel.value="__FREE__";
+  activeSessionType="__FREE__";
+  extraExercises=[{
+    id:created.entry.id,
+    name:created.entry.name,
+    shape:created.entry.shape,
+    scheme:""
+  }];
+
+  sessionState=newExerciseNameMap();
+  sessionSwaps=newExerciseNameMap();
+
+  const state=blankShapeState(created.entry);
+  state.rows=[{
+    w:185,
+    r:5,
+    done:false,
+    touched:true
+  }];
+  state.status="unsaved";
+
+  setExerciseNameValue(
+    sessionState,
+    "__proto__",
+    state
+  );
+
+  window.__prototypeSaved=
+    saveExercise("__proto__");
+
+  setLiftGoalForExercise(
+    created.entry,
+    225
+  );
+  saveCfg();
+
+  window.__prototypeRaw={
+    cfg:localStorage.getItem("forge:cfg"),
+    data:localStorage.getItem("forge:data"),
+    program:localStorage.getItem("forge:program")
+  };
+`);
+check(
+  "v76 a prototype-like exercise name remains an own draft and training-goal key",
+  PrototypeExercise76.window.eval(`
+    window.__prototypeCreated.ok===true
+    && window.__prototypeSaved.ok===true
+    && Object.prototype.hasOwnProperty.call(
+      data.activeWorkoutDraft.sets,
+      "__proto__"
+    )
+    && data.activeWorkoutDraft
+      .sets["__proto__"][0].w===185
+    && Object.prototype.hasOwnProperty.call(
+      cfg.liftGoals,
+      "__proto__"
+    )
+    && cfg.liftGoals["__proto__"]===225
+    && Object.prototype.hasOwnProperty.call(
+      JSON.parse(
+        localStorage.getItem("forge:data")
+      ).activeWorkoutDraft.sets,
+      "__proto__"
+    )
+    && Object.prototype.hasOwnProperty.call(
+      JSON.parse(
+        localStorage.getItem("forge:cfg")
+      ).liftGoals,
+      "__proto__"
+    )
+  `)
+);
+
+const PrototypeExerciseReload76=bootRaw({
+  cfg:PrototypeExercise76.window.eval(
+    "window.__prototypeRaw.cfg"
+  ),
+  data:PrototypeExercise76.window.eval(
+    "window.__prototypeRaw.data"
+  ),
+  program:PrototypeExercise76.window.eval(
+    "window.__prototypeRaw.program"
+  )
+});
+PrototypeExerciseReload76.window.eval(`
+  window.__prototypeResumed=
+    resumeWorkoutDraft();
+
+  window.__prototypeResumeState={
+    ownState:Object.prototype.hasOwnProperty.call(
+      sessionState,
+      "__proto__"
+    ),
+    savedWeight:sessionState["__proto__"]
+      .saved[0].w,
+    goal:cfg.liftGoals["__proto__"]
+  };
+`);
+const dPrototypeExerciseReload76=
+  PrototypeExerciseReload76.window.document;
+dPrototypeExerciseReload76
+  .getElementById("logWorkoutBtn")
+  .click();
+PrototypeExerciseReload76.window.eval(`
+  wDaySel.value="__CARDIO__";
+  activeSessionType="__CARDIO__";
+  initSessionState();
+  selectHistoricalCardioType("__proto__");
+`);
+dPrototypeExerciseReload76
+  .getElementById("cardioMin").value="20";
+dPrototypeExerciseReload76
+  .getElementById("cardioDetail").value="steady";
+dPrototypeExerciseReload76
+  .getElementById("logWorkoutBtn")
+  .click();
+check(
+  "v76 prototype-like names survive reload, Resume, general logging, dedicated Cardio logging, and JSON persistence",
+  PrototypeExerciseReload76.window.eval(`
+    window.__prototypeResumed===true
+    && window.__prototypeResumeState.ownState===true
+    && window.__prototypeResumeState.savedWeight===185
+    && window.__prototypeResumeState.goal===225
+    && data.workouts.length===2
+    && Object.prototype.hasOwnProperty.call(
+      data.workouts[0].sets,
+      "__proto__"
+    )
+    && data.workouts[0]
+      .sets["__proto__"][0].r===5
+    && Object.prototype.hasOwnProperty.call(
+      data.workouts[1].sets,
+      "__proto__"
+    )
+    && data.workouts[1]
+      .sets["__proto__"]
+      ==="20 min · steady"
+    && JSON.parse(
+      localStorage.getItem("forge:data")
+    ).workouts.every(workout=>
+      Object.prototype.hasOwnProperty.call(
+        workout.sets,
+        "__proto__"
+      )
+    )
+  `)
+);
+
+const UnknownPriorValueData76=
+  JSON.parse(JSON.stringify(V2_DATA));
+UnknownPriorValueData76.workouts=[{
+  date:"2026-07-27",
+  day:"D1",
+  title:"Future Day",
+  sets:{
+    "Future Shape":{
+      t:"futureShape",
+      payload:{keep:true}
+    }
+  },
+  notes:""
+}];
+UnknownPriorValueData76.activeWorkoutDraft=null;
+const UnknownPriorValue76=boot(
+  V2_CFG,
+  UnknownPriorValueData76,
+  null,
+  {
+    name:"Future program",
+    days:[{
+      id:"D1",
+      title:"Future Day",
+      exercises:[
+        {name:"Future Shape",scheme:""}
+      ]
+    }]
+  }
+);
+const dUnknownPriorValue76=
+  UnknownPriorValue76.window.document;
+const unknownPriorButtons76=[
+  ...dUnknownPriorValue76
+    .querySelectorAll("#exerciseInputs .xbtn")
+].filter(button=>button.textContent.trim()==="= last");
+check(
+  "v76 an unknown newer-shape prior value remains visible without an unusable same-as-last action",
+  unknownPriorButtons76.length===0
+  && /last: Newer version/.test(
+    dUnknownPriorValue76
+      .getElementById("exerciseInputs")
+      .textContent
+  )
+  && UnknownPriorValue76.window.eval(`
+    data.workouts[0]
+      .sets["Future Shape"].t
+      ==="futureShape"
+    && data.workouts[0]
+      .sets["Future Shape"].payload.keep===true
+  `)
+);
 
 // ================= native parity: slider-editor movement and Undo spacing =================
 const parityDay = dstr(0);

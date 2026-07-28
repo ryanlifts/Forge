@@ -789,20 +789,20 @@ function elapsedBackupDays(time){
   return time>0 ? Math.max(0,Math.floor((Date.now()-time)/BACKUP_DAY_MS)) : 0;
 }
 function recordedBackupActivity(meta){
-  const candidates = [];
-  const completed = validBackupTime(meta.lastBackupCompletedAt,false);
-  if (completed) candidates.push({time:completed,kind:"share-completed"});
-
-  const attempt = validBackupTime(meta.lastBackupAttemptAt,false);
-  if (attempt && meta.lastBackupAttemptKind==="download"){
-    candidates.push({time:attempt,kind:"download-started"});
+  // Completed browser activity has stronger meaning than the compatibility-only
+  // date field, so it must win even when today's date parses later than now.
+  const completed=validBackupTime(meta.lastBackupCompletedAt,false);
+  if(completed){
+    return {time:completed,kind:"share-completed"};
   }
 
-  const legacy = validBackupTime(meta.lastBackup,true);
-  if (legacy) candidates.push({time:legacy,kind:"legacy"});
+  const attempt=validBackupTime(meta.lastBackupAttemptAt,false);
+  if(attempt && meta.lastBackupAttemptKind==="download"){
+    return {time:attempt,kind:"download-started"};
+  }
 
-  candidates.sort((a,b)=>b.time-a.time);
-  return candidates[0] || null;
+  const legacy=validBackupTime(meta.lastBackup,true);
+  return legacy ? {time:legacy,kind:"legacy"} : null;
 }
 function backupReminderAnchor(meta){
   const activity = recordedBackupActivity(meta);

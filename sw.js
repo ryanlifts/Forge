@@ -2,7 +2,7 @@
 // NOTE: sw.js deliberately does NOT appear in SHELL. The browser fetches the service
 // worker itself through its own update mechanism (byte-compare on navigation); precaching
 // it would freeze updates and break the cache-bump release ritual. Do not "fix" this.
-const CACHE = "blackpyre-v75";
+const CACHE = "blackpyre-v76";
 const SHELL = [
   "./",
   "./index.html",
@@ -10,6 +10,7 @@ const SHELL = [
   "./data-foods.js",
   "./data-suggestions.js",
   "./data-faq.js",
+  "./data-exercises.js",
   "./scripts/01-storage.js",
   "./scripts/02-food.js",
   "./scripts/03-train.js",

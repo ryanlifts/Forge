@@ -1,0 +1,87 @@
+{
+  "contractRevision": 2,
+  "schemaVersion": 3,
+  "createdBy": "BlackPyre web v76 exercise-model acceptance fixture",
+  "backup": {
+    "cfg": {
+      "setupDone": true,
+      "disclaimerAccepted": "2026-07-01",
+      "startWt": 225,
+      "goalWt": 175,
+      "calTarget": 1800,
+      "proTarget": 170,
+      "carbGoal": 180,
+      "fatGoal": 55,
+      "calSchedMode": "same",
+      "schemaVersion": 3
+    },
+    "data": {
+      "food": {},
+      "workouts": [
+        {
+          "date": "2026-07-20",
+          "day": "D1",
+          "title": "Mixed exercise forms",
+          "sets": {
+            "Bench Press": [{"w": 185, "r": 5}],
+            "Pull-Up": [{"r": 8}, {"w": 25, "r": 5}],
+            "Run": {"t": "timeDist", "secs": 1200, "dist": 2, "distUnit": "mi"},
+            "Farmer Carry": {"t": "carry", "lbs": 80, "dist": 100, "distUnit": "ft"},
+            "Sprint Intervals": {"t": "rounds", "rounds": 8, "workSecs": 20, "recSecs": 100, "note": "hard"},
+            "Mobility Flow": "hips felt good",
+            "Legacy Cardio": "20 min · steady",
+            "Future Shape": {"t": "futureShape", "payload": {"keep": true}}
+          },
+          "notes": "Cross-platform acceptance fixture"
+        }
+      ],
+      "weights": [],
+      "myExercises": {
+        "u:cross-platform-tempo-step": {
+          "id": "u:cross-platform-tempo-step",
+          "name": "Tempo Step Pattern",
+          "shape": "rounds",
+          "tags": ["conditioning"],
+          "aliases": [],
+          "formerNames": ["tempo step intervals"],
+          "muscles": {"primary": ["full-body"], "secondary": []},
+          "equipment": ["other"],
+          "unilateral": false,
+          "bodyweight": false,
+          "deprecated": false
+        }
+      },
+      "activeWorkoutDraft": {
+        "date": "2026-07-21",
+        "day": "D1",
+        "title": "Draft mixed forms",
+        "sets": {
+          "Pull-Up": [{"r": 10}],
+          "Run": {"t": "timeDist", "secs": 900},
+          "Tempo Step Intervals": {"t": "rounds", "rounds": 6, "workSecs": 30, "recSecs": 60}
+        },
+        "notes": "resume unchanged",
+        "updatedAt": "2026-07-21T12:00:00.000Z"
+      },
+      "meta": {"lastBackup": null, "logsSince": 0}
+    },
+    "program": {
+      "name": "Exercise Model Fixture",
+      "days": [
+        {
+          "id": "D1",
+          "title": "Mixed",
+          "exercises": [
+            {"name": "Bench Press", "scheme": "3×5"},
+            {"name": "Pull-Up", "scheme": "3×8"},
+            {"name": "Run", "scheme": ""},
+            {"name": "Farmer Carry", "scheme": ""},
+            {"name": "Sprint Intervals", "scheme": ""},
+            {"name": "Mobility Flow", "scheme": ""},
+            {"name": "Tempo Step Intervals", "scheme": ""}
+          ]
+        }
+      ]
+    }
+  }
+}

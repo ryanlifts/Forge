@@ -97,56 +97,164 @@ function renderAccentRow(){
 }
 
 // ---------- session exercise swaps + form videos ----------
-let sessionSwaps = {}; // original program name -> substituted name
-function sessionList(){
-  return currentDayExercises().concat(extraExercises).map(ex=>
-    sessionSwaps[ex.name] ? {name:sessionSwaps[ex.name], scheme:ex.scheme, __orig:ex.name} : ex);
-}
 function openFormVideo(name){
-  window.open("https://www.youtube.com/results?search_query="+encodeURIComponent(name.replace("[Cardio] ","")+" proper form how to"), "_blank");
+  window.open("https://www.youtube.com/results?search_query="+encodeURIComponent(displayExerciseName(name)+" proper form how to"), "_blank");
 }
-function offerSwap(origName, currentShown, container){
-  const base = origName;
-  const opts = (ALT_MAP[base]||[]).filter(a=>a!==currentShown);
-  if (currentShown!==base) opts.unshift(base+" (original)");
-  const menu = document.createElement("div");
-  menu.style.cssText = "margin:6px 0 10px; display:flex; flex-direction:column; gap:6px;";
-  opts.forEach(o=>{
-    const label = o;
-    const target = o.endsWith(" (original)") ? base : o;
-    const b = document.createElement("button");
-    b.className = "xbtn";
-    b.textContent = "\u21C4 " + label;
-    b.addEventListener("click", ()=>{
-      const shownOld = sessionSwaps[base] || base;
-      delete sessionState[shownOld];
-      if (target===base) delete sessionSwaps[base];
-      else sessionSwaps[base] = target;
-      initSessionStateFor(target===base ? base : target);
-      renderSessionInputs();
-    });
-    menu.appendChild(b);
+function swapOptionsForExercise(origName,currentShown){
+  const current=exerciseDescriptor(currentShown,null);
+  const original=exerciseDescriptor(origName,null);
+
+  if(!current || current.legacy || current.shape==="unknown")return [];
+
+  const currentTags=new Set(current.tags||[]);
+  const currentEquipment=new Set(current.equipment||[]);
+
+  return allExerciseEntries(false)
+    .filter(entry=>
+      entry.id!==current.id
+      && entry.id!==original.id
+      && entry.shape===current.shape
+      && !sessionContainsExerciseIdentity(entry,origName)
+    )
+    .map(entry=>{
+      let score=0;
+      (entry.tags||[]).forEach(tag=>{ if(currentTags.has(tag)) score+=5; });
+      (entry.equipment||[]).forEach(eq=>{ if(currentEquipment.has(eq)) score+=3; });
+      if(entry.bodyweight===current.bodyweight) score+=2;
+      if(entry.unilateral===current.unilateral) score+=1;
+      return {entry:entry,score:score};
+    })
+    .filter(item=>item.score>0)
+    .sort((a,b)=>b.score-a.score || a.entry.name.localeCompare(b.entry.name))
+    .slice(0,8)
+    .map(item=>item.entry.name)
+    .filter(name=>normalizeExerciseName(name)!==normalizeExerciseName(currentShown));
+}
+function latestExerciseHistoryHit(entry){
+  for(let i=data.workouts.length-1;i>=0;i--){
+    const hit=findHistoryValue(data.workouts[i].sets,entry);
+    if(hit) return hit;
+  }
+  return null;
+}
+function offerSwap(origName,currentShown,container){
+  const base=origName;
+  const opts=swapOptionsForExercise(base,currentShown);
+  const menu=document.createElement("div");
+  menu.className="swapmenu";
+  if(normalizeExerciseName(currentShown)!==normalizeExerciseName(base)){
+    const original=document.createElement("button");
+    original.className="xbtn";
+    original.textContent="⇄ "+displayExerciseName(base)+" (original)";
+    original.addEventListener("click",()=>applySwap(base,currentShown,base));
+    menu.appendChild(original);
+  }
+  opts.forEach(target=>{
+    const button=document.createElement("button");
+    button.className="xbtn";
+    button.textContent="⇄ "+target;
+    button.addEventListener("click",()=>applySwap(base,currentShown,target));
+    menu.appendChild(button);
   });
-  const cancel = document.createElement("button");
-  cancel.className = "xbtn";
-  cancel.textContent = "Cancel";
-  cancel.addEventListener("click", ()=>menu.remove());
-  menu.appendChild(cancel);
+  if(!opts.length && normalizeExerciseName(currentShown)===normalizeExerciseName(base)){
+    const note=document.createElement("div");note.className="note";note.textContent="No close alternatives found for this tracking shape.";menu.appendChild(note);
+  }
+  const cancel=document.createElement("button");cancel.className="xbtn";cancel.textContent="Cancel";cancel.addEventListener("click",()=>menu.remove());menu.appendChild(cancel);
   container.appendChild(menu);
 }
-function initSessionStateFor(exName){
-  const v = wDaySel.value;
-  const last = (v!=="__FREE__" && v!=="__CARDIO__") ? lastSessionFor(v) : null;
-  // prefill the swapped-in exercise from ITS OWN history anywhere, not just this day
-  let lastVal = last && last.sets ? last.sets[exName.replace("[Cardio] ","")] : null;
-  if (!lastVal){
-    const hist = data.workouts.slice().reverse().find(w=>w.sets && w.sets[exName.replace("[Cardio] ","")]);
-    if (hist) lastVal = hist.sets[exName.replace("[Cardio] ","")];
+function applySwap(base,currentShown,target){
+  const currentEntry=exerciseDescriptor(currentShown,null);
+  const targetEntry=exerciseDescriptor(target,null);
+
+  if(
+    exerciseIdentityKey(currentEntry)
+    ===exerciseIdentityKey(targetEntry)
+  ){
+    return true;
   }
-  const pf = prefillRows({name:exName, scheme:""}, lastVal);
-  sessionState[exName] = exName.indexOf("[Cardio] ")===0
-    ? {mode:"text", rows:[], text:"", auto:false}
-    : {mode:"rows", rows:pf.rows, text:"", auto:pf.auto};
+
+  if(currentEntry.shape!==targetEntry.shape){
+    showWorkoutError(
+      "Exercise swaps must use the same tracking shape.",
+      null
+    );
+    return false;
+  }
+
+  if(sessionContainsExerciseIdentity(targetEntry,base)){
+    showWorkoutError(
+      targetEntry.name+" is already in this session.",
+      null
+    );
+    return false;
+  }
+
+  const currentKey=Object.keys(sessionState||{}).find(key=>
+    exerciseIdentityKey(key)===exerciseIdentityKey(currentEntry)
+  );
+  const currentState=currentKey
+    ? sessionState[currentKey]
+    : null;
+
+  if(
+    currentState
+    && stateHasInput(currentState)
+    && !confirm(
+      "Discard the entered result for "
+      +displayExerciseName(currentEntry.name)
+      +" and swap to "
+      +displayExerciseName(targetEntry.name)
+      +"?"
+    )
+  ){
+    return false;
+  }
+
+  const previousDraft=data.activeWorkoutDraft
+    ? cloneJSON(data.activeWorkoutDraft)
+    : null;
+  const previousSwaps=cloneExerciseNameMap(sessionSwaps);
+  const previousState=cloneExerciseNameMap(sessionState);
+
+  if(currentKey)delete sessionState[currentKey];
+
+  if(
+    exerciseIdentityKey(targetEntry)
+    ===exerciseIdentityKey(base)
+  ){
+    delete sessionSwaps[base];
+  }else{
+    sessionSwaps[base]=targetEntry.name;
+  }
+
+  initSessionStateFor(targetEntry.name);
+
+  if(workoutDraftLoaded){
+    data.activeWorkoutDraft=buildWorkoutDraft();
+
+    if(!save()){
+      data.activeWorkoutDraft=previousDraft;
+      sessionSwaps=previousSwaps;
+      sessionState=previousState;
+      renderSessionInputs();
+      renderWorkoutDraftCard();
+      showWorkoutError(
+        "The swap could not be saved. Your completed result was kept.",
+        null
+      );
+      return false;
+    }
+  }
+
+  clearWorkoutError();
+  renderSessionInputs();
+  renderWorkoutDraftCard();
+  return true;
+}
+function initSessionStateFor(exName){
+  const entry=exerciseDescriptor(exName,null);
+  const hit=latestExerciseHistoryHit(entry);
+  sessionState[entry.name]=newStateForExercise(entry,hit);
 }
 
 // ---------- recents search ----------
@@ -1020,6 +1128,180 @@ document.getElementById("hfReviewBtn").addEventListener("click", ()=>{
 });
 
 
+// ================== EXERCISE SHAPE DERIVATIONS / PR ENGINE ==================
+const EXERCISE_DISTANCE_METERS = {mi:1609.344,km:1000,m:1,ft:0.3048};
+function distanceToMeters(distance,unit){
+  const factor=EXERCISE_DISTANCE_METERS[unit];
+  return factor ? Number(distance)*factor : null;
+}
+function distanceBucket(distance,unit){
+  const n=Number(distance);
+  if(!(n>0)||!EXERCISE_DISTANCE_UNITS.includes(unit)) return null;
+  return String(Math.round(n*1000000)/1000000)+" "+unit;
+}
+function bestEpleyRows(value){
+  let best=null;
+  const consider=(w,r)=>{
+    w=Number(w);r=Number(r);
+    if(!(w>0)||!(r>0)||r>30)return;
+    const e1rm=w*(1+r/30);
+    if(!best||e1rm>best.e1rm)best={kind:"e1rm",w:w,r:r,e1rm:e1rm};
+  };
+  if(Array.isArray(value)) value.forEach(row=>consider(row&&row.w,row&&row.r));
+  else {
+    const re=/(\d+(?:\.\d+)?)\s*[x×]\s*(\d+)/g;let match;
+    while((match=re.exec(String(value||"")))!==null)consider(match[1],match[2]);
+  }
+  return best;
+}
+function deriveLiftValue(value){ return bestEpleyRows(value); }
+function deriveRepsValue(value){
+  if(!Array.isArray(value))return null;
+  const hasWeighted=value.some(row=>Number(row&&row.w)>0);
+  if(hasWeighted)return bestEpleyRows(value);
+  let maxReps=0;
+  value.forEach(row=>{const reps=Number(row&&row.r);if(reps>maxReps)maxReps=reps;});
+  return maxReps>0?{kind:"maxReps",reps:maxReps}:null;
+}
+function deriveTimeDistValue(value){
+  if(!isPlainObject(value)||value.t!=="timeDist"||!(Number(value.secs)>0))return null;
+  const result={kind:"timeDist",secs:Number(value.secs)};
+  if(Number(value.dist)>0&&EXERCISE_DISTANCE_UNITS.includes(value.distUnit)){
+    result.dist=Number(value.dist);result.distUnit=value.distUnit;
+    result.bucket=distanceBucket(result.dist,result.distUnit);
+    result.meters=distanceToMeters(result.dist,result.distUnit);
+    result.pace=result.secs/result.dist;
+  }
+  return result;
+}
+function deriveCarryValue(value){
+  if(!isPlainObject(value)||value.t!=="carry"||!(Number(value.lbs)>0)||!(Number(value.dist)>0)||!EXERCISE_DISTANCE_UNITS.includes(value.distUnit))return null;
+  return {kind:"carry",lbs:Number(value.lbs),dist:Number(value.dist),distUnit:value.distUnit,meters:distanceToMeters(value.dist,value.distUnit)};
+}
+function deriveRoundsValue(){ return null; }
+function deriveTextValue(){ return null; }
+const SHAPE_DERIVERS={lift:deriveLiftValue,reps:deriveRepsValue,timeDist:deriveTimeDistValue,carry:deriveCarryValue,rounds:deriveRoundsValue,text:deriveTextValue};
+function deriveExerciseValue(entryOrName,value){
+  const entry=typeof entryOrName==="string"?exerciseDescriptor(entryOrName,value):entryOrName;
+  if(!entry)return null;
+  const shape=Array.isArray(value)&&entry.shape!=="reps"?"lift":typeof value==="string"&&entry.legacy?"lift":entry.shape;
+  return (SHAPE_DERIVERS[shape]||(()=>null))(value);
+}
+// Backward-compatible public helper retained for existing charts and tests.
+function parseBestSet(value){ return bestEpleyRows(value); }
+function exerciseHistoryRecords(entryOrName,excludeIdx){
+  const entry=typeof entryOrName==="string"?exerciseDescriptor(entryOrName,null):entryOrName;
+  const records=[];
+  data.workouts.forEach((session,index)=>{
+    if(index===excludeIdx)return;
+    const hit=findHistoryValue(session.sets,entry);
+    if(hit)records.push({date:session.date,value:hit.value,key:hit.key,index:index});
+  });
+  return records;
+}
+function aggregateExerciseMetrics(entry,records){
+  const out={e1rm:null,maxReps:0,longestDistance:null,longestSecs:0,paces:{},carryHeaviest:0,carryAtWeight:{},latestDate:null};
+  records.forEach(record=>{
+    const metric=deriveExerciseValue(entry,record.value);
+    if(!metric)return;
+    if(!out.latestDate||record.date>out.latestDate)out.latestDate=record.date;
+    if(metric.kind==="e1rm"&&(!out.e1rm||metric.e1rm>out.e1rm.e1rm))out.e1rm=Object.assign({date:record.date},metric);
+    if(metric.kind==="maxReps")out.maxReps=Math.max(out.maxReps,metric.reps);
+    if(metric.kind==="timeDist"){
+      if(metric.meters!=null&&(!out.longestDistance||metric.meters>out.longestDistance.meters))out.longestDistance=Object.assign({date:record.date},metric);
+      if(metric.meters==null)out.longestSecs=Math.max(out.longestSecs,metric.secs);
+      if(metric.bucket&&(!out.paces[metric.bucket]||metric.pace<out.paces[metric.bucket].pace))out.paces[metric.bucket]=Object.assign({date:record.date},metric);
+    }
+    if(metric.kind==="carry"){
+      out.carryHeaviest=Math.max(out.carryHeaviest,metric.lbs);
+      const key=String(metric.lbs);
+      if(!out.carryAtWeight[key]||metric.meters>out.carryAtWeight[key].meters)out.carryAtWeight[key]=Object.assign({date:record.date},metric);
+    }
+  });
+  return out;
+}
+function bestHistorical(exName,excludeIdx){
+  const entry=exerciseDescriptor(exName,null),agg=aggregateExerciseMetrics(entry,exerciseHistoryRecords(entry,excludeIdx));
+  return agg.e1rm;
+}
+function exercisePrLine(name,value,excludeIdx){
+  const entry=exerciseDescriptor(name,value),metric=deriveExerciseValue(entry,value);
+  if(!metric)return null;
+  const prior=aggregateExerciseMetrics(entry,exerciseHistoryRecords(entry,excludeIdx));
+  if(metric.kind==="e1rm"&&(!prior.e1rm||metric.e1rm>prior.e1rm.e1rm))return entry.name+" ~"+Math.round(metric.e1rm)+" lb est. 1RM";
+  if(metric.kind==="maxReps"&&metric.reps>prior.maxReps)return entry.name+" "+metric.reps+" reps";
+  if(metric.kind==="timeDist"){
+    const lines=[];
+    if(metric.meters!=null){
+      if(!prior.longestDistance||metric.meters>prior.longestDistance.meters)lines.push("longest "+metric.dist+" "+metric.distUnit);
+      const old=prior.paces[metric.bucket];if(!old||metric.pace<old.pace)lines.push("best pace for "+metric.bucket);
+    }else if(metric.secs>prior.longestSecs)lines.push("longest time "+formatDuration(metric.secs));
+    return lines.length?entry.name+" · "+lines.join(" · "):null;
+  }
+  if(metric.kind==="carry"){
+    const priorAtWeight=prior.carryAtWeight[String(metric.lbs)];
+    if(metric.lbs>prior.carryHeaviest)return entry.name+" · heaviest "+metric.lbs+" lb";
+    if(metric.lbs===prior.carryHeaviest&&(!priorAtWeight||metric.meters>priorAtWeight.meters))return entry.name+" · longest at "+metric.lbs+" lb: "+metric.dist+" "+metric.distUnit;
+  }
+  return null;
+}
+function allPRs(){
+  const groups={};
+  data.workouts.forEach((session,index)=>Object.keys(session.sets||{}).forEach(key=>{
+    const entry=exerciseDescriptor(key,session.sets[key]);
+    const groupKey=entry.id&&entry.id.indexOf("legacy:")!==0?entry.id:"legacy:"+normalizeExerciseName(key);
+    if(!groups[groupKey])groups[groupKey]={entry:entry,records:[]};
+    groups[groupKey].records.push({date:session.date,value:session.sets[key],key:key,index:index});
+  }));
+  const map={};
+  Object.keys(groups).forEach(groupKey=>{
+    const group=groups[groupKey],agg=aggregateExerciseMetrics(group.entry,group.records),item={name:group.entry.name,date:agg.latestDate,chart:false};
+    if(agg.e1rm){item.kind="e1rm";item.display=agg.e1rm.w+"×"+agg.e1rm.r;item.value="~"+Math.round(agg.e1rm.e1rm)+" lb";item.chart=true;}
+    else if(agg.maxReps>0){item.kind="maxReps";item.display="Best set";item.value=agg.maxReps+" reps";}
+    else if(agg.longestDistance){item.kind="timeDist";item.display="Longest";item.value=agg.longestDistance.dist+" "+agg.longestDistance.distUnit;}
+    else if(agg.longestSecs>0){item.kind="timeDist";item.display="Longest";item.value=formatDuration(agg.longestSecs);}
+    else if(agg.carryHeaviest>0){const best=agg.carryAtWeight[String(agg.carryHeaviest)];item.kind="carry";item.display="Heaviest";item.value=agg.carryHeaviest+" lb"+(best?" · "+best.dist+" "+best.distUnit:"");}
+    else return;
+    map[groupKey]=item;
+  });
+  return map;
+}
+function renderPRs(){
+  const map=allPRs(),items=Object.keys(map).map(key=>map[key]).sort((a,b)=>String(b.date||"").localeCompare(String(a.date||""))||a.name.localeCompare(b.name));
+  const card=document.getElementById("prCard"),list=document.getElementById("prList");
+  if(!items.length){card.classList.add("hidden");list.innerHTML="";return;}
+  card.classList.remove("hidden");list.innerHTML="";
+  items.slice(0,10).forEach(item=>{
+    const row=document.createElement("div");row.className="list-item";if(item.chart){row.style.cursor="pointer";row.addEventListener("click",()=>openLiftChart(item.name));}
+    const name=document.createElement("span");name.style.flex="2";name.textContent=item.name;row.appendChild(name);
+    const detail=document.createElement("span");detail.style.cssText="flex:1.4;text-align:right;color:var(--dim);";detail.textContent=item.display;row.appendChild(detail);
+    const value=document.createElement("span");value.style.cssText="flex:1.2;text-align:right;font-weight:600;color:var(--ember);";value.textContent=item.value;row.appendChild(value);list.appendChild(row);
+  });
+}
+function liftGoalMatch(entryOrName){
+  const entry=typeof entryOrName==="string"?exerciseDescriptor(entryOrName,null):entryOrName,goals=cfg.liftGoals||{};
+  const current=normalizeExerciseName(entry.name),former=new Set(entry.formerNames||[]);
+  const exact=Object.keys(goals).find(key=>normalizeExerciseName(key)===current);
+  if(exact)return{key:exact,value:goals[exact]};
+  const old=Object.keys(goals).filter(key=>former.has(normalizeExerciseName(key)));
+  return old.length===1?{key:old[0],value:goals[old[0]]}:null;
+}
+function setLiftGoalForExercise(entryOrName,value){
+  const entry=typeof entryOrName==="string"?exerciseDescriptor(entryOrName,null):entryOrName;
+  if(!isPlainObject(cfg.liftGoals)){
+    cfg.liftGoals=newExerciseNameMap();
+  }
+  const names=new Set([normalizeExerciseName(entry.name)].concat(entry.formerNames||[]));
+  Object.keys(cfg.liftGoals).forEach(key=>{if(names.has(normalizeExerciseName(key)))delete cfg.liftGoals[key];});
+  if(Number(value)>0){
+    setExerciseNameValue(
+      cfg.liftGoals,
+      entry.name,
+      Number(value)
+    );
+  }
+}
+
 // ================== AI COACH REPORT ==================
 function aiReport(){
   const today = todayStr();
@@ -1051,11 +1333,12 @@ function aiReport(){
   // per-lift progression: every program exercise with history
   const liftLines = [];
   program.days.forEach(d=>d.exercises.forEach(ex=>{
-    const name = ex.name.replace("[Cardio] ","");
-    const hist = liftHistory(name);
+    const entry=exerciseDescriptor(ex.name,null);
+    if(!["lift","reps"].includes(entry.shape))return;
+    const name=entry.name,hist=liftHistory(name);
     if (!hist.length) return;
     const last3 = hist.slice(-3).map(p=>fmtDate(p.date)+": ~"+Math.round(p.y));
-    const goal = (cfg.liftGoals||{})[name];
+    const goalMatch=liftGoalMatch(entry),goal=goalMatch?goalMatch.value:null;
     liftLines.push("- **"+name+"** ("+(ex.scheme||"no scheme")+"): est-1RM trend "+last3.join(" → ")
       +(goal ? " · goal "+goal : ""));
   }));
@@ -1089,7 +1372,7 @@ function aiReport(){
   L.push(JSON.stringify(program, null, 2));
   L.push("```");
   L.push("");
-  L.push("Program format rules: top level {name, days:[...]}; each day {id:\"D1\", title, exercises:[{name, scheme}]}; schemes like \"4×5\" or \"3×8-12\" power the app's prefill and auto-progression; cardio entries are named \"[Cardio] Type\" with a duration as the scheme.");
+  L.push("Program format rules: top level {name, days:[...]}; each day {id:\"D1\", title, exercises:[{name, scheme}]}. Use exact exercise names from my library. Tracking shape is defined by the exercise itself; do not add a [Cardio] prefix. Schemes like \"4×5\" or \"3×8-12\" are optional and power lift/reps prefill and auto-progression.");
   return L.join("\n");
 }
 document.getElementById("aiDownloadBtn").addEventListener("click", ()=>{
@@ -1135,19 +1418,18 @@ function lineChartSVG(pts, goal){
 // --- per-lift chart overlay ---
 let liftOverlayEx = null;
 function liftHistory(exName){
-  const byDate = {};
-  data.workouts.forEach(s=>{
-    const v = s.sets[exName];
-    if (!v) return;
-    const b = parseBestSet(v);
-    if (b && (!byDate[s.date] || b.e1rm>byDate[s.date])) byDate[s.date] = b.e1rm;
+  const entry=exerciseDescriptor(exName,null),byDate={};
+  exerciseHistoryRecords(entry,-1).forEach(record=>{
+    const metric=deriveExerciseValue(entry,record.value);
+    if(metric&&metric.kind==="e1rm"&&(!byDate[record.date]||metric.e1rm>byDate[record.date]))byDate[record.date]=metric.e1rm;
   });
-  return Object.keys(byDate).sort().map(d=>({date:d, y:byDate[d]}));
+  return Object.keys(byDate).sort().map(date=>({date:date,y:byDate[date]}));
 }
 function openLiftChart(exName){
   liftOverlayEx = exName;
   document.getElementById("liftTitle").textContent = exName;
-  const goal = (cfg.liftGoals||{})[exName] || null;
+  const goalMatch=liftGoalMatch(exName);
+  const goal=goalMatch?Number(goalMatch.value):null;
   const pts = liftHistory(exName);
   document.getElementById("liftChart").innerHTML = lineChartSVG(pts, goal);
   document.getElementById("liftGoalInput").value = goal || "";
@@ -1167,8 +1449,7 @@ document.getElementById("liftCloseBtn").addEventListener("click", ()=>{
 });
 document.getElementById("liftGoalSave").addEventListener("click", ()=>{
   const v = Number(document.getElementById("liftGoalInput").value);
-  if(!cfg.liftGoals) cfg.liftGoals = {};
-  if (v>0) cfg.liftGoals[liftOverlayEx] = v; else delete cfg.liftGoals[liftOverlayEx];
+  setLiftGoalForExercise(liftOverlayEx,v);
   saveCfg();
   ackBtn("liftGoalSave", "✓ Goal set");
   openLiftChart(liftOverlayEx);
