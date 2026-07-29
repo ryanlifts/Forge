@@ -19,16 +19,1305 @@ function renderCardioOptions(){
   sel.innerHTML = "";
   CARDIO_TYPES.forEach(c=>{ const o=document.createElement("option"); o.value=c; o.textContent=c; sel.appendChild(o); });
 }
-function renderLibraryOptions(){
-  const sel = document.getElementById("addExSel");
+function exercisePickerBuiltIns(){
+  return EXERCISE_LIBRARY
+    .slice()
+    .sort((a,b)=>a.name.localeCompare(b.name));
+}
+
+function exercisePickerUserEntries(){
+  if (!data || !data.myExercises || typeof data.myExercises!=="object") return [];
+  return Object.values(data.myExercises)
+    .filter(entry=>entry && entry.deprecated!==true)
+    .slice()
+    .sort((a,b)=>a.name.localeCompare(b.name));
+}
+
+function appendExerciseModelOption(group, entry, source){
+  const o = document.createElement("option");
+  o.value = entry.name;
+  o.textContent = entry.name;
+  o.dataset.exerciseId = entry.id;
+  o.dataset.exerciseShape = entry.shape;
+  o.dataset.exerciseSource = source;
+  group.appendChild(o);
+  return o;
+}
+
+function populateUnifiedExercisePicker(sel){
   sel.innerHTML = "";
-  const og1 = document.createElement("optgroup"); og1.label="Strength";
-  EXERCISE_LIBRARY.forEach(x=>{ const o=document.createElement("option"); o.value=x; o.textContent=x; og1.appendChild(o); });
-  const og2 = document.createElement("optgroup"); og2.label="Cardio";
-  CARDIO_TYPES.forEach(x=>{ const o=document.createElement("option"); o.value="[Cardio] "+x; o.textContent=x; og2.appendChild(o); });
-  const og3 = document.createElement("optgroup"); og3.label="Custom";
-  const oc = document.createElement("option"); oc.value="__CUSTOM__"; oc.textContent="Type my own…"; og3.appendChild(oc);
-  sel.appendChild(og1); sel.appendChild(og2); sel.appendChild(og3);
+
+  const builtIns = exercisePickerBuiltIns();
+
+  EXERCISE_SHAPES.forEach(shape=>{
+    const entries = builtIns
+      .filter(entry=>entry.shape===shape)
+      .sort((a,b)=>a.name.localeCompare(b.name));
+
+    if (!entries.length) return;
+
+    const group = document.createElement("optgroup");
+    group.label = EXERCISE_SHAPE_LABELS[shape] || shape;
+    group.dataset.exerciseShape = shape;
+    group.dataset.exerciseSource = "builtin";
+
+    entries.forEach(entry=>{
+      appendExerciseModelOption(group,entry,"builtin");
+    });
+
+    sel.appendChild(group);
+  });
+
+  const mine = exercisePickerUserEntries();
+
+  if (mine.length){
+    const userGroup = document.createElement("optgroup");
+    userGroup.label = "My Exercises";
+    userGroup.dataset.exerciseSource = "user";
+
+    mine.forEach(entry=>{
+      appendExerciseModelOption(userGroup,entry,"user");
+    });
+
+    sel.appendChild(userGroup);
+  }
+
+  const customGroup = document.createElement("optgroup");
+  customGroup.label = "Custom";
+
+  const custom = document.createElement("option");
+  custom.value = "__CUSTOM__";
+  custom.textContent = "Type my own…";
+
+  customGroup.appendChild(custom);
+  sel.appendChild(customGroup);
+}
+
+
+const EXERCISE_SHAPE_LABELS = {
+  lift:"Weight × reps",
+  reps:"Reps (weight optional)",
+  timeDist:"Time / distance",
+  carry:"Weight + distance",
+  rounds:"Rounds / intervals",
+  text:"Free text"
+};
+
+function appendExerciseShapeOptions(sel){
+  sel.innerHTML = "";
+  EXERCISE_SHAPES.forEach(shape=>{
+    const o = document.createElement("option");
+    o.value = shape;
+    o.textContent = EXERCISE_SHAPE_LABELS[shape] || shape;
+    sel.appendChild(o);
+  });
+  return sel;
+}
+
+function makeExerciseShapeSelect(label){
+  const sel = document.createElement("select");
+  appendExerciseShapeOptions(sel);
+  sel.value = "lift";
+  sel.setAttribute("aria-label",label || "Custom exercise tracking type");
+  return sel;
+}
+
+function ensureFreestyleCustomShapeSelect(){
+  let sel = document.getElementById("addExCustomShape");
+  if (sel) return sel;
+
+  const nameInput = document.getElementById("addExCustom");
+  sel = makeExerciseShapeSelect("Custom exercise tracking type");
+  sel.id = "addExCustomShape";
+  sel.classList.add("hidden");
+  sel.style.marginTop = "8px";
+
+  nameInput.insertAdjacentElement("afterend",sel);
+  return sel;
+}
+
+function setFreestyleCustomControlsVisible(visible){
+  const nameInput = document.getElementById("addExCustom");
+  const shapeSel = ensureFreestyleCustomShapeSelect();
+
+  nameInput.classList.toggle("hidden",!visible);
+  shapeSel.classList.toggle("hidden",!visible);
+}
+
+function userExerciseIdBase(name){
+  const slug = normalizeExerciseName(name)
+    .replace(/[^a-z0-9]+/g,"-")
+    .replace(/^-+|-+$/g,"")
+    .slice(0,60);
+
+  return "u:"+(slug || "exercise");
+}
+
+function nextUserExerciseId(name){
+  const base = userExerciseIdBase(name);
+  if (!Object.prototype.hasOwnProperty.call(data.myExercises,base)) return base;
+
+  let n = 2;
+  while (Object.prototype.hasOwnProperty.call(data.myExercises,base+"-"+n)) n++;
+  return base+"-"+n;
+}
+
+function createUserExercise(name,shape){
+  const cleanName = String(name||"").trim().replace(/\s+/g," ");
+
+  if (!cleanName){
+    return {ok:false,reason:"Type the exercise name."};
+  }
+
+  if (!EXERCISE_SHAPES.includes(shape)){
+    return {ok:false,reason:"Choose a valid tracking type."};
+  }
+
+  const collision = exerciseModelEntryForName(cleanName);
+  if (collision){
+    return {
+      ok:false,
+      reason:'"'+cleanName+'" already exists in your exercise library.'
+    };
+  }
+
+  const previous = cloneJSON(data.myExercises || {});
+  const id = nextUserExerciseId(cleanName);
+
+  const entry = {
+    id:id,
+    name:cleanName,
+    shape:shape,
+    tags:[],
+    aliases:[],
+    formerNames:[],
+    muscles:{primary:[],secondary:[]},
+    equipment:[],
+    unilateral:false,
+    bodyweight:false,
+    deprecated:false
+  };
+
+  data.myExercises[id] = entry;
+
+  try {
+    validateUserExercisesMap(data.myExercises);
+  } catch(e){
+    data.myExercises = previous;
+    return {
+      ok:false,
+      reason:e && e.message ? e.message : "The custom exercise is invalid."
+    };
+  }
+
+  if (!save()){
+    data.myExercises = previous;
+    return {
+      ok:false,
+      reason:"The custom exercise could not be saved."
+    };
+  }
+
+  return {ok:true,entry:entry};
+}
+
+function userExerciseEntryById(id){
+  if (!data || !data.myExercises || typeof data.myExercises!=="object"){
+    return null;
+  }
+
+  const entry = data.myExercises[id];
+
+  return entry && entry.id===id ? entry : null;
+}
+
+function userExerciseNameCollision(name,excludedId){
+  const normalized = normalizeExerciseName(name);
+
+  if (!normalized) return null;
+
+  const builtIns =
+    typeof EXERCISE_LIBRARY!=="undefined"
+    && Array.isArray(EXERCISE_LIBRARY)
+      ? EXERCISE_LIBRARY
+      : [];
+
+  const users =
+    data
+    && data.myExercises
+    && typeof data.myExercises==="object"
+      ? Object.values(data.myExercises)
+      : [];
+
+  return builtIns.concat(users).find(entry=>
+    entry
+    && entry.id!==excludedId
+    && exerciseEntryNames(entry).indexOf(normalized)!==-1
+  ) || null;
+}
+
+function userExerciseReferenceSummary(id){
+  const entry = userExerciseEntryById(id);
+
+  if (!entry){
+    return {
+      id:id,
+      name:"",
+      counts:{
+        program:0,
+        history:0,
+        draft:0,
+        builder:0,
+        session:0
+      },
+      total:0,
+      protected:false,
+      details:{
+        program:[],
+        history:[],
+        draft:[],
+        builder:[],
+        session:[]
+      }
+    };
+  }
+
+  const accepted = exerciseEntryNames(entry);
+
+  const matches = value=>{
+    const normalized = normalizeExerciseName(
+      String(value||"").replace(/^\[Cardio\]\s*/,"")
+    );
+
+    return !!normalized && accepted.indexOf(normalized)!==-1;
+  };
+
+  const details = {
+    program:[],
+    history:[],
+    draft:[],
+    builder:[],
+    session:[]
+  };
+
+  if (program && Array.isArray(program.days)){
+    program.days.forEach(day=>{
+      (day.exercises||[]).forEach(ex=>{
+        if (ex && matches(ex.name)){
+          details.program.push(
+            (day.title||day.id||"Program day")+" · "+ex.name
+          );
+        }
+      });
+    });
+  }
+
+  if (data && Array.isArray(data.workouts)){
+    data.workouts.forEach(workout=>{
+      Object.keys((workout && workout.sets)||{}).forEach(name=>{
+        if (matches(name)){
+          details.history.push(
+            (workout.date||"Saved workout")+" · "+name
+          );
+        }
+      });
+    });
+  }
+
+  const draft =
+    data
+    && data.activeWorkoutDraft
+    && data.activeWorkoutDraft.sets
+      ? data.activeWorkoutDraft
+      : null;
+
+  if (draft){
+    Object.keys(draft.sets||{}).forEach(name=>{
+      if (matches(name)){
+        details.draft.push(
+          (draft.title||draft.date||"Saved draft")+" · "+name
+        );
+      }
+    });
+  }
+
+  const builderCard = document.getElementById("builderCard");
+
+  if (
+    typeof builderProg!=="undefined"
+    && builderProg
+    && Array.isArray(builderProg.days)
+    && builderCard
+    && !builderCard.classList.contains("hidden")
+  ){
+    builderProg.days.forEach(day=>{
+      (day.exercises||[]).forEach(ex=>{
+        if (ex && matches(ex.name)){
+          details.builder.push(
+            (day.title||day.id||"Program builder")+" · "+ex.name
+          );
+        }
+      });
+    });
+  }
+
+  const transientNames = [];
+
+  if (typeof sessionState!=="undefined" && sessionState){
+    transientNames.push.apply(
+      transientNames,
+      Object.keys(sessionState)
+    );
+  }
+
+  if (typeof extraExercises!=="undefined" && Array.isArray(extraExercises)){
+    extraExercises.forEach(ex=>{
+      if (ex && ex.name) transientNames.push(ex.name);
+    });
+  }
+
+  Array.from(new Set(transientNames)).forEach(name=>{
+    if (matches(name)) details.session.push(name);
+  });
+
+  const counts = {
+    program:details.program.length,
+    history:details.history.length,
+    draft:details.draft.length,
+    builder:details.builder.length,
+    session:details.session.length
+  };
+
+  const total =
+    counts.program
+    + counts.history
+    + counts.draft
+    + counts.builder
+    + counts.session;
+
+  return {
+    id:entry.id,
+    name:entry.name,
+    counts:counts,
+    total:total,
+    protected:total>0,
+    details:details
+  };
+}
+
+function listUserExercisesForManagement(){
+  if (!data || !data.myExercises || typeof data.myExercises!=="object"){
+    return [];
+  }
+
+  return Object.values(data.myExercises)
+    .slice()
+    .sort((a,b)=>a.name.localeCompare(b.name))
+    .map(entry=>({
+      entry:cloneJSON(entry),
+      references:userExerciseReferenceSummary(entry.id)
+    }));
+}
+
+function refreshUserExerciseSurfaces(){
+  if (document.getElementById("addExSel")){
+    renderLibraryOptions();
+  }
+
+  if (typeof renderMyExercisesManager==="function"){
+    renderMyExercisesManager();
+  }
+}
+
+function renameUserExercise(id,newName){
+  const entry = userExerciseEntryById(id);
+
+  if (!entry){
+    return {ok:false,reason:"That custom exercise no longer exists."};
+  }
+
+  const cleanName =
+    String(newName||"")
+      .trim()
+      .replace(/\s+/g," ");
+
+  if (!cleanName){
+    return {ok:false,reason:"Type the new exercise name."};
+  }
+
+  const collision =
+    userExerciseNameCollision(cleanName,id);
+
+  if (collision){
+    return {
+      ok:false,
+      reason:'"'+cleanName+'" already exists in your exercise library.'
+    };
+  }
+
+  const previous = cloneJSON(data.myExercises);
+  const next = cloneJSON(entry);
+  const oldNormalized = normalizeExerciseName(entry.name);
+  const newNormalized = normalizeExerciseName(cleanName);
+
+  next.name = cleanName;
+
+  next.aliases = Array.from(
+    new Set(
+      (next.aliases||[])
+        .map(normalizeExerciseName)
+        .filter(name=>
+          !!name
+          && name!==newNormalized
+          && name!==oldNormalized
+        )
+    )
+  );
+
+  next.formerNames = Array.from(
+    new Set(
+      (next.formerNames||[])
+        .map(normalizeExerciseName)
+        .filter(name=>!!name && name!==newNormalized)
+    )
+  );
+
+  if (
+    oldNormalized
+    && oldNormalized!==newNormalized
+    && next.formerNames.indexOf(oldNormalized)===-1
+  ){
+    next.formerNames.push(oldNormalized);
+  }
+
+  data.myExercises[id] = next;
+
+  try {
+    validateUserExercisesMap(data.myExercises);
+  } catch(error){
+    data.myExercises = previous;
+
+    return {
+      ok:false,
+      reason:
+        error && error.message
+          ? error.message
+          : "The renamed exercise is invalid."
+    };
+  }
+
+  if (!save()){
+    data.myExercises = previous;
+
+    return {
+      ok:false,
+      reason:"The exercise rename could not be saved."
+    };
+  }
+
+  refreshUserExerciseSurfaces();
+
+  return {
+    ok:true,
+    entry:cloneJSON(next),
+    references:userExerciseReferenceSummary(id)
+  };
+}
+
+function setUserExerciseArchived(id,archived){
+  const entry = userExerciseEntryById(id);
+
+  if (!entry){
+    return {ok:false,reason:"That custom exercise no longer exists."};
+  }
+
+  const shouldArchive = archived===true;
+
+  if (entry.deprecated===shouldArchive){
+    return {
+      ok:true,
+      unchanged:true,
+      entry:cloneJSON(entry),
+      references:userExerciseReferenceSummary(id)
+    };
+  }
+
+  const previous = cloneJSON(data.myExercises);
+  const next = cloneJSON(entry);
+
+  next.deprecated = shouldArchive;
+  data.myExercises[id] = next;
+
+  try {
+    validateUserExercisesMap(data.myExercises);
+  } catch(error){
+    data.myExercises = previous;
+
+    return {
+      ok:false,
+      reason:
+        error && error.message
+          ? error.message
+          : "The exercise archive state is invalid."
+    };
+  }
+
+  if (!save()){
+    data.myExercises = previous;
+
+    return {
+      ok:false,
+      reason:
+        shouldArchive
+          ? "The exercise could not be archived."
+          : "The exercise could not be restored."
+    };
+  }
+
+  refreshUserExerciseSurfaces();
+
+  return {
+    ok:true,
+    entry:cloneJSON(next),
+    references:userExerciseReferenceSummary(id)
+  };
+}
+
+function deleteUserExercisePermanently(id){
+  const entry = userExerciseEntryById(id);
+
+  if (!entry){
+    return {ok:false,reason:"That custom exercise no longer exists."};
+  }
+
+  const references = userExerciseReferenceSummary(id);
+
+  if (references.protected){
+    const labels = [];
+
+    if (references.counts.program) labels.push("your program");
+    if (references.counts.history) labels.push("workout history");
+    if (references.counts.draft) labels.push("the saved workout draft");
+    if (references.counts.builder) labels.push("the open program builder");
+    if (references.counts.session) labels.push("the current session");
+
+    return {
+      ok:false,
+      protected:true,
+      references:references,
+      reason:
+        "This exercise is still used by "
+        +labels.join(", ")
+        +". Archive it instead."
+    };
+  }
+
+  const previous = cloneJSON(data.myExercises);
+
+  delete data.myExercises[id];
+
+  try {
+    validateUserExercisesMap(data.myExercises);
+  } catch(error){
+    data.myExercises = previous;
+
+    return {
+      ok:false,
+      reason:
+        error && error.message
+          ? error.message
+          : "The remaining custom exercises are invalid."
+    };
+  }
+
+  if (!save()){
+    data.myExercises = previous;
+
+    return {
+      ok:false,
+      reason:"The exercise could not be permanently deleted."
+    };
+  }
+
+  refreshUserExerciseSurfaces();
+
+  return {
+    ok:true,
+    deletedId:id,
+    deletedName:entry.name
+  };
+}
+
+function myExerciseReferenceText(references){
+  if (!references || !references.protected){
+    return "Unused — permanent deletion is available.";
+  }
+
+  const parts = [];
+
+  if (references.counts.program){
+    parts.push(
+      references.counts.program
+      +" program reference"
+      +(references.counts.program===1 ? "" : "s")
+    );
+  }
+
+  if (references.counts.history){
+    parts.push(
+      references.counts.history
+      +" history reference"
+      +(references.counts.history===1 ? "" : "s")
+    );
+  }
+
+  if (references.counts.draft){
+    parts.push(
+      references.counts.draft
+      +" saved-draft reference"
+      +(references.counts.draft===1 ? "" : "s")
+    );
+  }
+
+  if (references.counts.builder){
+    parts.push(
+      references.counts.builder
+      +" open-builder reference"
+      +(references.counts.builder===1 ? "" : "s")
+    );
+  }
+
+  if (references.counts.session){
+    parts.push(
+      references.counts.session
+      +" current-session reference"
+      +(references.counts.session===1 ? "" : "s")
+    );
+  }
+
+  return "Protected by "+parts.join(", ")+".";
+}
+
+function ensureMyExercisesManagerStyles(){
+  let style =
+    document.querySelector("#myExercisesManagerStyles");
+
+  if (style) return style;
+
+  style = document.createElement("style");
+  style.id = "myExercisesManagerStyles";
+
+  style.textContent = [
+    "#myExercisesOverlay{",
+    "position:fixed;",
+    "inset:0;",
+    "z-index:260;",
+    "overflow:auto;",
+    "padding:calc(14px + env(safe-area-inset-top,0px))",
+    " 12px calc(20px + env(safe-area-inset-bottom,0px));",
+    "background:rgba(16,18,21,.97);",
+    "}",
+    "#myExercisesOverlay.hidden{display:none!important;}",
+    ".myex-shell{",
+    "width:100%;",
+    "max-width:720px;",
+    "margin:0 auto;",
+    "}",
+    ".myex-head{",
+    "position:sticky;",
+    "top:0;",
+    "z-index:2;",
+    "display:flex;",
+    "align-items:center;",
+    "justify-content:space-between;",
+    "gap:12px;",
+    "padding:10px 0 12px;",
+    "background:rgba(16,18,21,.97);",
+    "}",
+    ".myex-title{",
+    "font-family:'Oswald',sans-serif;",
+    "font-size:16px;",
+    "font-weight:700;",
+    "line-height:1.1;",
+    "}",
+    ".myex-list{",
+    "display:grid;",
+    "gap:12px;",
+    "margin-top:14px;",
+    "}",
+    ".myex-card{",
+    "padding:14px;",
+    "border:1px solid var(--border);",
+    "border-radius:12px;",
+    "background:var(--panel);",
+    "}",
+    ".myex-card.archived{opacity:.82;}",
+    ".myex-name{",
+    "font-family:'Oswald',sans-serif;",
+    "font-size:14px;",
+    "font-weight:700;",
+    "}",
+    ".myex-badges{",
+    "display:flex;",
+    "flex-wrap:wrap;",
+    "gap:6px;",
+    "margin:8px 0;",
+    "}",
+    ".myex-badge{",
+    "display:inline-flex;",
+    "align-items:center;",
+    "min-height:28px;",
+    "padding:4px 8px;",
+    "border:1px solid var(--border);",
+    "border-radius:999px;",
+    "font-size:11px;",
+    "color:var(--dim);",
+    "}",
+    ".myex-badge.shape{",
+    "border-color:rgba(var(--ember-rgb),.5);",
+    "color:var(--ember);",
+    "}",
+    ".myex-ref{",
+    "margin:8px 0 10px;",
+    "font-size:12px;",
+    "line-height:1.5;",
+    "color:var(--dim);",
+    "}",
+    ".myex-ref.protected{color:var(--warn);}",
+    ".myex-rename{",
+    "display:grid;",
+    "grid-template-columns:minmax(0,1fr) auto;",
+    "gap:8px;",
+    "align-items:center;",
+    "}",
+    ".myex-actions{",
+    "display:flex;",
+    "flex-wrap:wrap;",
+    "gap:8px;",
+    "margin-top:10px;",
+    "}",
+    ".myex-actions button,",
+    ".myex-rename button,",
+    "#myExercisesCloseBtn,",
+    "#manageMyExercisesBtn{",
+    "min-height:44px;",
+    "}",
+    ".myex-actions button{flex:1 1 150px;}",
+    ".myex-delete{color:var(--warn)!important;}",
+    ".myex-empty{",
+    "padding:22px 16px;",
+    "border:1px dashed var(--border);",
+    "border-radius:12px;",
+    "text-align:center;",
+    "color:var(--dim);",
+    "}",
+    "@media(max-width:420px){",
+    ".myex-rename{grid-template-columns:1fr;}",
+    ".myex-rename button{width:100%;}",
+    ".myex-title{font-size:16px;}",
+    "}"
+  ].join("");
+
+  document.head.appendChild(style);
+
+  return style;
+}
+
+function closeMyExercisesManager(){
+  const overlay =
+    document.querySelector("#myExercisesOverlay");
+
+  if (!overlay) return;
+
+  overlay.classList.add("hidden");
+  overlay.setAttribute("aria-hidden","true");
+
+  const trigger =
+    document.querySelector("#manageMyExercisesBtn");
+
+  if (trigger && typeof trigger.focus==="function"){
+    trigger.focus();
+  }
+}
+
+function ensureMyExercisesManagerOverlay(){
+  ensureMyExercisesManagerStyles();
+
+  let overlay =
+    document.querySelector("#myExercisesOverlay");
+
+  if (overlay) return overlay;
+
+  overlay = document.createElement("div");
+  overlay.id = "myExercisesOverlay";
+  overlay.className = "hidden";
+  overlay.setAttribute("role","dialog");
+  overlay.setAttribute("aria-modal","true");
+  overlay.setAttribute(
+    "aria-labelledby",
+    "myExercisesTitle"
+  );
+  overlay.setAttribute("aria-hidden","true");
+  overlay.tabIndex = -1;
+
+  const shell = document.createElement("div");
+  shell.className = "myex-shell";
+
+  const head = document.createElement("div");
+  head.className = "myex-head";
+
+  const heading = document.createElement("div");
+
+  const title = document.createElement("div");
+  title.id = "myExercisesTitle";
+  title.className = "myex-title";
+  title.textContent = "Manage My Exercises";
+
+  const subtitle = document.createElement("div");
+  subtitle.className = "note";
+  subtitle.textContent =
+    "Rename or archive custom exercises without changing "
+    +"their tracking type. Referenced exercises cannot be "
+    +"permanently deleted.";
+
+  heading.appendChild(title);
+  heading.appendChild(subtitle);
+
+  const close = document.createElement("button");
+  close.id = "myExercisesCloseBtn";
+  close.className = "btn ghost small";
+  close.type = "button";
+  close.textContent = "Close";
+  close.setAttribute(
+    "aria-label",
+    "Close Manage My Exercises"
+  );
+
+  close.addEventListener(
+    "click",
+    closeMyExercisesManager
+  );
+
+  head.appendChild(heading);
+  head.appendChild(close);
+
+  const list = document.createElement("div");
+  list.id = "myExercisesManagerList";
+  list.className = "myex-list";
+
+  shell.appendChild(head);
+  shell.appendChild(list);
+  overlay.appendChild(shell);
+  document.body.appendChild(overlay);
+
+  overlay.addEventListener("click",event=>{
+    if (event.target===overlay){
+      closeMyExercisesManager();
+    }
+  });
+
+  overlay.addEventListener("keydown",event=>{
+    if (event.key==="Escape"){
+      event.preventDefault();
+      closeMyExercisesManager();
+    }
+  });
+
+  return overlay;
+}
+
+function ensureMyExercisesManagerButton(){
+  let button =
+    document.querySelector("#manageMyExercisesBtn");
+
+  if (button) return button;
+
+  const anchor =
+    document.getElementById("trainingToolsCard");
+
+  if (!anchor || !anchor.parentElement) return null;
+
+  let card =
+    document.querySelector("#myExercisesLaunchCard");
+
+  if (!card){
+    card = document.createElement("div");
+    card.id = "myExercisesLaunchCard";
+    card.className =
+      "card my-exercises-launch-card";
+
+    const title = document.createElement("div");
+    title.className =
+      "label my-exercises-launch-title";
+    title.textContent = "My Exercises";
+
+    const copy = document.createElement("div");
+    copy.className =
+      "my-exercises-launch-copy";
+    copy.textContent =
+      "Create, rename, archive, restore, or remove "
+      +"your custom exercises.";
+
+    button = document.createElement("button");
+    button.id = "manageMyExercisesBtn";
+    button.className = "btn ghost small";
+    button.type = "button";
+    button.textContent = "Manage My Exercises";
+    button.style.width = "100%";
+
+    button.addEventListener(
+      "click",
+      openMyExercisesManager
+    );
+
+    card.appendChild(title);
+    card.appendChild(copy);
+    card.appendChild(button);
+
+    anchor.insertAdjacentElement(
+      "afterend",
+      card
+    );
+  }
+
+  return (
+    button
+    || card.querySelector("#manageMyExercisesBtn")
+  );
+}
+function renderMyExercisesManager(){
+  const overlay =
+    ensureMyExercisesManagerOverlay();
+
+  const list =
+    document.querySelector("#myExercisesManagerList");
+
+  if (!overlay || !list) return;
+
+  list.textContent = "";
+
+  const records =
+    listUserExercisesForManagement()
+      .sort((a,b)=>{
+        const archivedA =
+          a.entry.deprecated===true ? 1 : 0;
+
+        const archivedB =
+          b.entry.deprecated===true ? 1 : 0;
+
+        return archivedA-archivedB
+          || a.entry.name.localeCompare(b.entry.name);
+      });
+
+  if (!records.length){
+    const empty = document.createElement("div");
+    empty.className = "myex-empty";
+    empty.textContent =
+      "No custom exercises yet. Create one from "
+      +"Freestyle or the Program Builder.";
+
+    list.appendChild(empty);
+    return;
+  }
+
+  records.forEach(record=>{
+    const entry = record.entry;
+    const references = record.references;
+    const archived = entry.deprecated===true;
+
+    const card = document.createElement("section");
+    card.className =
+      "myex-card"+(archived ? " archived" : "");
+    card.dataset.exerciseId = entry.id;
+
+    const name = document.createElement("div");
+    name.className = "myex-name";
+    name.textContent = entry.name;
+
+    const badges = document.createElement("div");
+    badges.className = "myex-badges";
+
+    const shape = document.createElement("span");
+    shape.className = "myex-badge shape";
+    shape.textContent =
+      "Tracking: "
+      +(EXERCISE_SHAPE_LABELS[entry.shape] || entry.shape)
+      +" · locked";
+
+    shape.setAttribute(
+      "aria-label",
+      "Tracking type "
+      +(EXERCISE_SHAPE_LABELS[entry.shape] || entry.shape)
+      +", cannot be changed"
+    );
+
+    const idBadge = document.createElement("span");
+    idBadge.className = "myex-badge";
+    idBadge.textContent = entry.id;
+
+    badges.appendChild(shape);
+    badges.appendChild(idBadge);
+
+    if (archived){
+      const archivedBadge =
+        document.createElement("span");
+
+      archivedBadge.className = "myex-badge";
+      archivedBadge.textContent = "Archived";
+      badges.appendChild(archivedBadge);
+    }
+
+    const former = document.createElement("div");
+    former.className = "note";
+
+    if ((entry.formerNames||[]).length){
+      former.textContent =
+        "Former names: "
+        +entry.formerNames.join(", ");
+    } else {
+      former.textContent = "Former names: none";
+    }
+
+    const referenceText =
+      document.createElement("div");
+
+    referenceText.className =
+      "myex-ref"
+      +(references.protected ? " protected" : "");
+
+    referenceText.textContent =
+      myExerciseReferenceText(references);
+
+    const renameRow = document.createElement("div");
+    renameRow.className = "myex-rename";
+
+    const renameInput =
+      document.createElement("input");
+
+    renameInput.type = "text";
+    renameInput.value = entry.name;
+    renameInput.maxLength = 120;
+
+    renameInput.setAttribute(
+      "aria-label",
+      "New name for "+entry.name
+    );
+
+    const renameButton =
+      document.createElement("button");
+
+    renameButton.className = "btn ghost small";
+    renameButton.type = "button";
+    renameButton.textContent = "Rename";
+    renameButton.dataset.action = "rename";
+
+    renameButton.setAttribute(
+      "aria-label",
+      "Rename "+entry.name
+    );
+
+    const performRename = ()=>{
+      const result =
+        renameUserExercise(
+          entry.id,
+          renameInput.value
+        );
+
+      if (!result.ok){
+        flashSave(result.reason,true);
+        renameInput.focus();
+        return;
+      }
+
+      flashSave("Exercise renamed ✓");
+    };
+
+    renameButton.addEventListener(
+      "click",
+      performRename
+    );
+
+    renameInput.addEventListener("keydown",event=>{
+      if (event.key==="Enter"){
+        event.preventDefault();
+        performRename();
+      }
+    });
+
+    renameRow.appendChild(renameInput);
+    renameRow.appendChild(renameButton);
+
+    const actions = document.createElement("div");
+    actions.className = "myex-actions";
+
+    const archiveButton =
+      document.createElement("button");
+
+    archiveButton.className = "btn ghost small";
+    archiveButton.type = "button";
+
+    archiveButton.dataset.action =
+      archived ? "restore" : "archive";
+
+    archiveButton.textContent =
+      archived ? "Restore" : "Archive";
+
+    archiveButton.setAttribute(
+      "aria-label",
+      (archived ? "Restore " : "Archive ")
+      +entry.name
+    );
+
+    archiveButton.addEventListener("click",()=>{
+      if (
+        !archived
+        && !confirm(
+          'Archive "'
+          +entry.name
+          +'"?\n\nIt will leave exercise pickers but '
+          +'will remain available to existing programs, '
+          +'history, and saved drafts.'
+        )
+      ){
+        return;
+      }
+
+      const result =
+        setUserExerciseArchived(
+          entry.id,
+          !archived
+        );
+
+      if (!result.ok){
+        flashSave(result.reason,true);
+        return;
+      }
+
+      flashSave(
+        archived
+          ? "Exercise restored ✓"
+          : "Exercise archived ✓"
+      );
+    });
+
+    const deleteButton =
+      document.createElement("button");
+
+    deleteButton.className =
+      "btn ghost small myex-delete";
+
+    deleteButton.type = "button";
+    deleteButton.dataset.action = "delete";
+    deleteButton.disabled = references.protected;
+
+    deleteButton.textContent =
+      references.protected
+        ? "Protected"
+        : "Delete permanently";
+
+    deleteButton.setAttribute(
+      "aria-label",
+      references.protected
+        ? entry.name
+          +" is protected from permanent deletion"
+        : "Permanently delete "+entry.name
+    );
+
+    deleteButton.title =
+      references.protected
+        ? myExerciseReferenceText(references)
+        : "This exercise is unused and can be deleted.";
+
+    deleteButton.addEventListener("click",()=>{
+      if (references.protected) return;
+
+      if (
+        !confirm(
+          'Permanently delete "'
+          +entry.name
+          +'"?\n\nThis cannot be undone.'
+        )
+      ){
+        return;
+      }
+
+      const result =
+        deleteUserExercisePermanently(entry.id);
+
+      if (!result.ok){
+        flashSave(result.reason,true);
+        return;
+      }
+
+      flashSave("Exercise permanently deleted");
+    });
+
+    actions.appendChild(archiveButton);
+    actions.appendChild(deleteButton);
+
+    card.appendChild(name);
+    card.appendChild(badges);
+    card.appendChild(former);
+    card.appendChild(referenceText);
+    card.appendChild(renameRow);
+    card.appendChild(actions);
+
+    list.appendChild(card);
+  });
+}
+
+function openMyExercisesManager(){
+  const overlay =
+    ensureMyExercisesManagerOverlay();
+
+  renderMyExercisesManager();
+
+  overlay.classList.remove("hidden");
+  overlay.setAttribute("aria-hidden","false");
+  overlay.scrollTop = 0;
+
+  const close =
+    document.querySelector("#myExercisesCloseBtn");
+
+  if (close && typeof close.focus==="function"){
+    close.focus();
+  }
+}
+
+function renderLibraryOptions(){
+  populateUnifiedExercisePicker(
+    document.getElementById("addExSel")
+  );
+  ensureFreestyleCustomShapeSelect();
+  setFreestyleCustomControlsVisible(false);
+  ensureMyExercisesManagerButton();
+}
+
+function extraExerciseIndex(name){
+  return extraExercises.findIndex(ex=>ex && ex.name===name);
+}
+
+function removeUnsavedExtraExercise(name){
+  const idx = extraExerciseIndex(name);
+  if (idx<0) return false;
+
+  const st = sessionState[name];
+
+  if (st && st.status==="saved" && st.saved!=null){
+    showWorkoutError(
+      name.replace("[Cardio] ","")
+        +" — this exercise is already saved in the workout draft. Edit it rather than removing it here.",
+      null
+    );
+    return false;
+  }
+
+  extraExercises.splice(idx,1);
+  delete sessionState[name];
+
+  clearWorkoutError();
+  renderSessionInputs();
+  return true;
 }
 
 let activeSessionType = null;
@@ -41,6 +1330,8 @@ function sessionDraftHasMeaningfulWork(){
     const st = sessionState[name];
     if (st.saved!=null) return true;
     if (st.mode==="text") return !!st.textTouched && !!st.text.trim();
+    if (st.mode==="timeDist" || st.mode==="carry" || st.mode==="rounds") return !!st.typedTouched;
+    if (st.mode==="future") return false;
     return st.rows.some(r=>r.touched && (r.w!=="" || r.r!==""));
   });
 }
@@ -129,12 +1420,61 @@ function replaceActiveProgram(candidate){
 }
 
 // ---------- set-row engine ----------
-let sessionState = {}; // exName -> rows track planned/completed/touched state; text tracks explicit entry
+let sessionState = {}; // exName -> editable/saved workout state
 let workoutDraftLoaded = false;
 
+// v76 stored workout-value discriminator.
+//
+// Legacy workout values remain valid forever:
+//   string                -> legacy text
+//   [{w,r}, ...]          -> lift/reps rows
+//
+// v76 typed objects carry a `t` discriminator. Known typed values are handled
+// explicitly. An object with an unknown future `t` is never coerced to text,
+// dropped, or rewritten; later editor work treats it as preserved/read-only.
+const KNOWN_TYPED_WORKOUT_VALUE_TYPES = new Set(["timeDist","carry","rounds"]);
+
+function isTypedWorkoutValue(val){
+  return !!val
+    && typeof val === "object"
+    && !Array.isArray(val)
+    && typeof val.t === "string"
+    && !!val.t;
+}
+
+function workoutValueKind(val){
+  if (Array.isArray(val)) return "rows";
+  if (typeof val === "string") return "legacyText";
+  if (isTypedWorkoutValue(val)){
+    return KNOWN_TYPED_WORKOUT_VALUE_TYPES.has(val.t) ? val.t : "future";
+  }
+  if (val == null) return "empty";
+  return "unknown";
+}
+
+function cloneWorkoutValue(val){
+  if (val && typeof val === "object") return cloneJSON(val);
+  return val;
+}
+
+function newerWorkoutValueNotice(val){
+  const type = isTypedWorkoutValue(val) ? val.t : "";
+  return "Saved by a newer BlackPyre version"
+    +(type ? " ("+type+")" : "")
+    +". This entry is preserved read-only.";
+}
+
 function toRows(val){
-  // converts a stored sets value (array or legacy string) into editable rows
-  if (Array.isArray(val)) return val.map(s=>({w:s.w, r:s.r, done:false, touched:false}));
+  // Converts only row-compatible stored values into editable rows.
+  // Reps-only rows intentionally preserve an absent weight.
+  if (Array.isArray(val)){
+    return val.map(s=>({
+      w:s && Object.prototype.hasOwnProperty.call(s,"w") ? s.w : undefined,
+      r:s ? s.r : undefined,
+      done:false,
+      touched:false
+    }));
+  }
   if (typeof val === "string"){
     const rows = [];
     const re = /(\d+(?:\.\d+)?)\s*[x\u00d7]\s*(\d+)/g;
@@ -146,9 +1486,247 @@ function toRows(val){
   }
   return [];
 }
+
+function formatWorkoutRow(row){
+  if (!row || typeof row !== "object") return "";
+  const hasW = row.w !== undefined && row.w !== null && row.w !== "";
+  const hasR = row.r !== undefined && row.r !== null && row.r !== "";
+  if (hasW && hasR) return row.w+"\u00d7"+row.r;
+  if (hasR) return row.r+" rep"+(Number(row.r)===1 ? "" : "s");
+  if (hasW) return String(row.w);
+  return "";
+}
+
+function formatWorkoutSeconds(value){
+  const n = Number(value);
+  if (!(Number.isFinite(n) && n>0)) return "";
+  const secs = Math.round(n);
+  if (secs%60===0) return (secs/60)+" min";
+  if (secs>=60) return Math.floor(secs/60)+"m "+(secs%60)+"s";
+  return secs+" sec";
+}
+
 function formatSets(val){
-  if (Array.isArray(val)) return val.map(s=>s.w+"\u00d7"+s.r).join(", ");
+  const kind = workoutValueKind(val);
+
+  if (kind==="rows"){
+    return val.map(formatWorkoutRow).filter(Boolean).join(", ");
+  }
+
+  if (kind==="legacyText") return val;
+
+  if (kind==="timeDist"){
+    const parts = [formatWorkoutSeconds(val.secs)];
+    if (val.dist!==undefined && val.dist!==null && val.dist!==""){
+      parts.push(val.dist+" "+val.distUnit);
+    }
+    return parts.filter(Boolean).join(" · ");
+  }
+
+  if (kind==="carry"){
+    return val.lbs+" lb · "+val.dist+" "+val.distUnit;
+  }
+
+  if (kind==="rounds"){
+    let out = val.rounds+" rounds · "+val.workSecs+"s work / "+val.recSecs+"s recovery";
+    if (val.note) out += " · "+val.note;
+    return out;
+  }
+
+  if (kind==="future") return newerWorkoutValueNotice(val);
+  if (kind==="empty") return "";
+
+  // Invalid/unsupported objects are deliberately never stringified.
+  if (val && typeof val === "object") return "Unsupported saved workout entry";
+
   return String(val);
+}
+
+function exerciseModelEntryForName(name){
+  const normalized = normalizeExerciseName(
+    String(name||"").replace(/^\[Cardio\]\s*/,"")
+  );
+  if (!normalized) return null;
+
+  const builtIns = typeof EXERCISE_LIBRARY!=="undefined" && Array.isArray(EXERCISE_LIBRARY)
+    ? EXERCISE_LIBRARY
+    : [];
+  const users = data && data.myExercises && typeof data.myExercises==="object"
+    ? Object.values(data.myExercises)
+    : [];
+
+  return builtIns.concat(users).find(entry=>
+    exerciseEntryNames(entry).indexOf(normalized)!==-1
+  ) || null;
+}
+
+function exerciseShapeForName(name){
+  const entry = exerciseModelEntryForName(name);
+  return entry ? entry.shape : null;
+}
+
+function rowShapeForValue(exName, val){
+  const shape = exerciseShapeForName(exName);
+  if (shape==="reps") return "reps";
+  if (shape==="lift") return "lift";
+
+  // Legacy/custom history can still reveal a reps-only row model.
+  if (Array.isArray(val) && val.some(row=>
+    row && typeof row==="object" && !Object.prototype.hasOwnProperty.call(row,"w")
+  )) return "reps";
+
+  return "lift";
+}
+
+function blankTypedWorkoutValue(kind){
+  if (kind==="timeDist") return {t:"timeDist", secs:"", dist:"", distUnit:"mi"};
+  if (kind==="carry") return {t:"carry", lbs:"", dist:"", distUnit:"ft"};
+  if (kind==="rounds") return {t:"rounds", rounds:"", workSecs:"", recSecs:0, note:""};
+  return null;
+}
+
+function editableWorkoutValueKind(kind){
+  return kind==="rows"
+    || kind==="legacyText"
+    || kind==="timeDist"
+    || kind==="carry"
+    || kind==="rounds";
+}
+
+function makePlanSessionState(ex, lastVal){
+  const shape = exerciseShapeForName(ex.name);
+  const lastKind = workoutValueKind(lastVal);
+  const typedShape = ["timeDist","carry","rounds"].includes(shape)
+    ? shape
+    : (["timeDist","carry","rounds"].includes(lastKind) ? lastKind : null);
+
+  if (typedShape){
+    return {
+      mode:typedShape,
+      rowShape:null,
+      rows:[],
+      text:"",
+      textTouched:false,
+      typed:blankTypedWorkoutValue(typedShape),
+      typedTouched:false,
+      auto:false,
+      autoDelta:0,
+      saved:null,
+      status:"plan"
+    };
+  }
+
+  if (shape==="text" || ex.name.indexOf("[Cardio] ")===0){
+    return {
+      mode:"text",
+      rowShape:null,
+      rows:[],
+      text:"",
+      textTouched:false,
+      typed:null,
+      typedTouched:false,
+      auto:false,
+      autoDelta:0,
+      saved:null,
+      status:"plan"
+    };
+  }
+
+  const pf = prefillRows(ex, lastVal);
+  return {
+    mode:"rows",
+    rowShape:shape==="reps" ? "reps" : rowShapeForValue(ex.name,lastVal),
+    rows:pf.rows,
+    text:"",
+    textTouched:false,
+    typed:null,
+    typedTouched:false,
+    auto:pf.auto,
+    autoDelta:pf.autoDelta,
+    saved:null,
+    status:"plan"
+  };
+}
+
+function makeSavedSessionState(exName, val){
+  const kind = workoutValueKind(val);
+  const base = {
+    rowShape:null,
+    rows:[],
+    text:"",
+    textTouched:false,
+    typed:null,
+    typedTouched:false,
+    auto:false,
+    autoDelta:0,
+    saved:cloneWorkoutValue(val),
+    status:"saved"
+  };
+
+  if (kind==="rows"){
+    base.mode = "rows";
+    base.rowShape = rowShapeForValue(exName,val);
+    return base;
+  }
+
+  if (kind==="legacyText"){
+    base.mode = "text";
+    return base;
+  }
+
+  if (kind==="timeDist" || kind==="carry" || kind==="rounds"){
+    base.mode = kind;
+    base.typed = cloneWorkoutValue(val);
+    return base;
+  }
+
+  // Unknown future typed objects are deliberately kept in the saved state
+  // and never exposed through a writable editor.
+  base.mode = "future";
+  return base;
+}
+
+function loadWorkoutValueIntoEditableState(st, exName, val){
+  const kind = workoutValueKind(val);
+
+  st.auto = false;
+  st.autoDelta = 0;
+  st.textTouched = false;
+  st.typedTouched = false;
+
+  if (kind==="rows"){
+    st.mode = "rows";
+    st.rowShape = rowShapeForValue(exName,val);
+    st.rows = toRows(val).map(r=>({
+      w:r.w,
+      r:r.r,
+      done:false,
+      touched:true
+    }));
+    st.typed = null;
+    return true;
+  }
+
+  if (kind==="legacyText"){
+    st.mode = "text";
+    st.rowShape = null;
+    st.text = val;
+    st.textTouched = true;
+    st.typed = null;
+    return true;
+  }
+
+  if (kind==="timeDist" || kind==="carry" || kind==="rounds"){
+    st.mode = kind;
+    st.rowShape = null;
+    st.rows = [];
+    st.text = "";
+    st.typed = cloneWorkoutValue(val);
+    st.typedTouched = true;
+    return true;
+  }
+
+  return false;
 }
 function parseScheme(scheme){
   // "4\u00d75" -> 4 sets at 5; "3x8-12" -> start at 8, progress only after 12
@@ -197,18 +1775,16 @@ function initSessionState(){
   const v = wDaySel.value;
   activeSessionType = v;
   if (v==="__CARDIO__") return;
+
   const last = (v!=="__FREE__") ? lastSessionFor(v) : null;
+
   sessionList().forEach(ex=>{
-    const isCardio = ex.name.indexOf("[Cardio] ")===0;
-    if (isCardio){
-      sessionState[ex.name] = {mode:"text", rows:[], text:"", textTouched:false, auto:false, autoDelta:0, saved:null, status:"plan"};
-    } else {
-      const pf = prefillRows(ex, last && last.sets ? last.sets[ex.name.replace("[Cardio] ","")] : null);
-      sessionState[ex.name] = {mode:"rows", rows:pf.rows, text:"", textTouched:false, auto:pf.auto, autoDelta:pf.autoDelta, saved:null, status:"plan"};
-    }
+    const lastVal = last && last.sets
+      ? last.sets[ex.name.replace("[Cardio] ","")]
+      : null;
+    sessionState[ex.name] = makePlanSessionState(ex,lastVal);
   });
 }
-
 // ---------- v51 exercise-level completion engine ----------
 // A row is "entered" once the lifter touched it and gave it any value; untouched
 // prefilled rows remain plans and can never be saved or logged (v49 rule, kept).
@@ -220,15 +1796,140 @@ function validateExerciseEntry(st){
     const t = (st.textTouched && st.text.trim()) ? st.text.trim() : null;
     return {ok:true, value:t};
   }
+
+  if (st.mode==="timeDist"){
+    if (!st.typedTouched) return {ok:true, value:null};
+    const raw = st.typed || {};
+    const secs = Number(raw.secs);
+    if (!(secs>0)){
+      return {ok:false, message:"enter a duration greater than 0 before saving."};
+    }
+
+    const hasDist = raw.dist!==undefined && raw.dist!==null && raw.dist!=="";
+    const value = {t:"timeDist", secs:secs};
+
+    if (hasDist){
+      const dist = Number(raw.dist);
+      if (!(dist>0)){
+        return {ok:false, message:"enter a distance greater than 0, or clear the distance."};
+      }
+      if (!EXERCISE_DISTANCE_UNITS.includes(raw.distUnit)){
+        return {ok:false, message:"choose a valid distance unit."};
+      }
+      value.dist = dist;
+      value.distUnit = raw.distUnit;
+    }
+
+    return {ok:true, value:value};
+  }
+
+  if (st.mode==="carry"){
+    if (!st.typedTouched) return {ok:true, value:null};
+    const raw = st.typed || {};
+    const lbs = Number(raw.lbs);
+    const dist = Number(raw.dist);
+
+    if (!(lbs>0)){
+      return {ok:false, message:"enter a carry weight greater than 0 lb before saving."};
+    }
+    if (!(dist>0)){
+      return {ok:false, message:"enter a carry distance greater than 0 before saving."};
+    }
+    if (!EXERCISE_DISTANCE_UNITS.includes(raw.distUnit)){
+      return {ok:false, message:"choose a valid carry distance unit."};
+    }
+
+    return {
+      ok:true,
+      value:{t:"carry", lbs:lbs, dist:dist, distUnit:raw.distUnit}
+    };
+  }
+
+  if (st.mode==="rounds"){
+    if (!st.typedTouched) return {ok:true, value:null};
+    const raw = st.typed || {};
+    const rounds = Number(raw.rounds);
+    const workSecs = Number(raw.workSecs);
+    const recSecs = Number(raw.recSecs);
+
+    if (!(Number.isInteger(rounds) && rounds>0)){
+      return {ok:false, message:"enter a whole number of rounds greater than 0."};
+    }
+    if (!(Number.isInteger(workSecs) && workSecs>0)){
+      return {ok:false, message:"enter whole work seconds greater than 0."};
+    }
+    if (!(Number.isInteger(recSecs) && recSecs>=0)){
+      return {ok:false, message:"enter whole recovery seconds of 0 or more."};
+    }
+
+    const value = {
+      t:"rounds",
+      rounds:rounds,
+      workSecs:workSecs,
+      recSecs:recSecs
+    };
+    if (typeof raw.note==="string" && raw.note.trim()){
+      value.note = raw.note.trim();
+    }
+    return {ok:true, value:value};
+  }
+
+  if (st.mode==="future"){
+    return {
+      ok:false,
+      message:"this entry was saved by a newer BlackPyre version and is read-only."
+    };
+  }
+
   const entered = enteredRows(st);
   if (!entered.length) return {ok:true, value:null};
+
   const sets = [];
+  const repsOnly = st.rowShape==="reps";
+
   for (const x of entered){
-    if (!(Number(x.r.w)>0) || !(Number(x.r.r)>0)){
-      return {ok:false, rowIndex:x.i, message:"enter weight and reps for Set "+(x.i+1)+", or clear it, before saving."};
+    const reps = Number(x.r.r);
+    const hasWeight = x.r.w!==undefined && x.r.w!==null && x.r.w!=="";
+
+    if (!(reps>0)){
+      return {
+        ok:false,
+        rowIndex:x.i,
+        field:"reps",
+        message:"enter reps for Set "+(x.i+1)+", or clear it, before saving."
+      };
     }
-    sets.push({w:Number(x.r.w), r:Number(x.r.r)});
+
+    if (repsOnly){
+      const row = {r:reps};
+      if (hasWeight){
+        const weight = Number(x.r.w);
+        if (!(weight>=0)){
+          return {
+            ok:false,
+            rowIndex:x.i,
+            field:"weight",
+            message:"enter a valid optional weight for Set "+(x.i+1)+", or clear it."
+          };
+        }
+        row.w = weight;
+      }
+      sets.push(row);
+      continue;
+    }
+
+    if (!(Number(x.r.w)>0)){
+      return {
+        ok:false,
+        rowIndex:x.i,
+        field:"weight",
+        message:"enter weight and reps for Set "+(x.i+1)+", or clear it, before saving."
+      };
+    }
+
+    sets.push({w:Number(x.r.w), r:reps});
   }
+
   return {ok:true, value:sets};
 }
 function saveExercise(exName){
@@ -237,11 +1938,14 @@ function saveExercise(exName){
   const key = exName.replace("[Cardio] ","");
   const v = validateExerciseEntry(st);
   if (!v.ok){
-    showWorkoutError(key+" — "+v.message, findSessionSetInput(exName, v.rowIndex, !(Number(st.rows[v.rowIndex].w)>0)?"weight":"reps"));
+    showWorkoutError(key+" — "+v.message, v.rowIndex==null ? null : findSessionSetInput(exName, v.rowIndex, v.field || (!(Number(st.rows[v.rowIndex].w)>0)?"weight":"reps")));
     return {ok:false};
   }
   if (v.value===null){
-    showWorkoutError(key+" — enter at least one set before saving this exercise.", null);
+    const message = st.mode==="text"
+      ? "enter details / notes before saving this exercise."
+      : "enter at least one set before saving this exercise.";
+    showWorkoutError(key+" — "+message, null);
     return {ok:false};
   }
   const previousSaved = st.saved;
@@ -263,6 +1967,8 @@ function saveExercise(exName){
 function hasUnsavedEntry(st){
   if (st.status!=="unsaved") return false;
   if (st.mode==="text") return !!st.textTouched && !!st.text.trim();
+  if (st.mode==="timeDist" || st.mode==="carry" || st.mode==="rounds") return !!st.typedTouched;
+  if (st.mode==="future") return false;
   return enteredRows(st).length>0;
 }
 function unsavedExerciseNames(){
@@ -332,24 +2038,35 @@ function renderWorkoutDraftCard(){
 function resumeWorkoutDraft(){
   const d = data.activeWorkoutDraft;
   if (!d) return false;
+
   if (sessionDraftHasMeaningfulWork() && !workoutDraftLoaded){
     if (!confirm("Replace the current in-progress screen with the saved workout draft?")) return false;
   }
+
   document.getElementById("wDate").value = d.date || todayStr();
   document.getElementById("wNotes").value = d.notes || "";
+
   const hasDay = [...wDaySel.options].some(o=>o.value===d.day);
   wDaySel.value = hasDay ? d.day : "__FREE__";
+
   const dayObj = program.days.find(x=>x.id===wDaySel.value);
-  const planned = dayObj ? dayObj.exercises.map(ex=>ex.name.replace("[Cardio] ","")) : [];
-  extraExercises = Object.keys(d.sets||{}).filter(name=>planned.indexOf(name)===-1).map(name=>({name:name,scheme:""}));
+  const planned = dayObj
+    ? dayObj.exercises.map(ex=>ex.name.replace("[Cardio] ",""))
+    : [];
+
+  extraExercises = Object.keys(d.sets||{})
+    .filter(name=>planned.indexOf(name)===-1)
+    .map(name=>({name:name,scheme:""}));
+
   initSessionState();
+
   Object.keys(d.sets||{}).forEach(key=>{
-    const stateName = Object.keys(sessionState).find(n=>n.replace("[Cardio] ","")===key) || key;
-    const val = d.sets[key];
-    if (!sessionState[stateName]) sessionState[stateName] = {mode:"rows",rows:[],text:"",textTouched:false,auto:false,autoDelta:0,saved:null,status:"plan"};
-    if (Array.isArray(val)) sessionState[stateName] = {mode:"rows",rows:[],text:"",textTouched:false,auto:false,autoDelta:0,saved:cloneJSON(val),status:"saved"};
-    else sessionState[stateName] = {mode:"text",rows:[],text:"",textTouched:false,auto:false,autoDelta:0,saved:String(val),status:"saved"};
+    const stateName = Object.keys(sessionState)
+      .find(n=>n.replace("[Cardio] ","")===key) || key;
+
+    sessionState[stateName] = makeSavedSessionState(stateName,d.sets[key]);
   });
+
   activeSessionType = wDaySel.value;
   workoutDraftLoaded = true;
   clearWorkoutError();
@@ -382,6 +2099,34 @@ function discardWorkoutDraft(ask, resetSession){
 }
 document.getElementById("resumeWorkoutDraftBtn").addEventListener("click", resumeWorkoutDraft);
 document.getElementById("discardWorkoutDraftBtn").addEventListener("click", ()=>discardWorkoutDraft(true,true));
+
+// A successful backup restore replaces persisted data and program state.
+// Sever every transient reference to the pre-restore workout screen before
+// rebuilding the UI. Otherwise stale loaded-session state can hide and later
+// delete the newly restored activeWorkoutDraft.
+function resetTrainingUiAfterRestore(){
+  workoutDraftLoaded = false;
+  extraExercises = [];
+  sessionState = {};
+  sessionSwaps = {};
+  activeSessionType = null;
+
+  if (typeof editingWorkoutIdx!=="undefined"){
+    editingWorkoutIdx = null;
+  }
+
+  const dateInput = document.getElementById("wDate");
+  if (dateInput) dateInput.value = todayStr();
+
+  clearSessionDraftFields();
+  renderDayOptions();
+  initSessionState();
+  renderLibraryOptions();
+  clearWorkoutError();
+  renderSessionInputs();
+  renderWorkoutDraftCard();
+}
+
 function clearWorkoutError(){
   const el = document.getElementById("workoutErr");
   if (!el) return;
@@ -408,6 +2153,203 @@ function markUnsavedChip(exDiv){
   const c = exDiv.querySelector(".unsavedChip");
   if (c) c.style.display = "";
 }
+
+function touchTypedWorkoutState(st, div){
+  st.typedTouched = true;
+  st.status = "unsaved";
+  markUnsavedChip(div);
+  clearWorkoutError();
+}
+
+function appendTypedWorkoutEditor(div, ex, st){
+  const name = ex.name.replace("[Cardio] ","");
+  if (!st.typed) st.typed = blankTypedWorkoutValue(st.mode);
+
+  const addNumber = (label, key, placeholder, options)=>{
+    const row = document.createElement("div");
+    row.className = "srow";
+
+    const lab = document.createElement("span");
+    lab.className = "slabel";
+    lab.textContent = label;
+    row.appendChild(lab);
+
+    const inp = document.createElement("input");
+    inp.type = "number";
+    inp.className = "snum";
+    inp.inputMode = options && options.integer ? "numeric" : "decimal";
+    inp.placeholder = placeholder || "";
+    inp.value = st.typed[key]===undefined || st.typed[key]===null
+      ? ""
+      : st.typed[key];
+
+    if (options && options.min!==undefined) inp.min = String(options.min);
+    if (options && options.step!==undefined) inp.step = String(options.step);
+
+    inp.setAttribute("aria-label",name+" "+label.toLowerCase());
+
+    inp.addEventListener("input",()=>{
+      st.typed[key] = inp.value==="" ? "" : Number(inp.value);
+      touchTypedWorkoutState(st,div);
+    });
+
+    row.appendChild(inp);
+    div.appendChild(row);
+    return inp;
+  };
+
+  const addUnit = (label, key)=>{
+    const row = document.createElement("div");
+    row.className = "srow";
+
+    const lab = document.createElement("span");
+    lab.className = "slabel";
+    lab.textContent = label;
+    row.appendChild(lab);
+
+    const sel = document.createElement("select");
+    sel.setAttribute("aria-label",name+" distance unit");
+
+    EXERCISE_DISTANCE_UNITS.forEach(unit=>{
+      const opt = document.createElement("option");
+      opt.value = unit;
+      opt.textContent = unit;
+      sel.appendChild(opt);
+    });
+
+    sel.value = EXERCISE_DISTANCE_UNITS.includes(st.typed[key])
+      ? st.typed[key]
+      : EXERCISE_DISTANCE_UNITS[0];
+
+    st.typed[key] = sel.value;
+
+    sel.addEventListener("change",()=>{
+      st.typed[key] = sel.value;
+      touchTypedWorkoutState(st,div);
+    });
+
+    row.appendChild(sel);
+    div.appendChild(row);
+  };
+
+  if (st.mode==="timeDist"){
+    const totalSecs = Number(st.typed.secs);
+    const hasDuration =
+      st.typed.secs!=="" &&
+      Number.isFinite(totalSecs) &&
+      totalSecs>=0;
+
+    const initialMinutes = hasDuration
+      ? Math.floor(totalSecs/60)
+      : "";
+
+    const initialSeconds = hasDuration
+      ? totalSecs%60
+      : "";
+
+    const addDurationNumber = (label,value,aria,max)=>{
+      const row = document.createElement("div");
+      row.className = "srow";
+
+      const lab = document.createElement("span");
+      lab.className = "slabel";
+      lab.textContent = label;
+
+      const input = document.createElement("input");
+      input.type = "number";
+      input.inputMode = "numeric";
+      input.min = "0";
+      input.step = "1";
+
+      if (max!=null) input.max = String(max);
+
+      input.value = value;
+      input.setAttribute("aria-label",name+" "+aria);
+
+      row.appendChild(lab);
+      row.appendChild(input);
+      div.appendChild(row);
+
+      return input;
+    };
+
+    const minutesInput =
+      addDurationNumber("Minutes",initialMinutes,"minutes",null);
+
+    const secondsInput =
+      addDurationNumber("Seconds",initialSeconds,"seconds",59);
+
+    const syncDuration = ()=>{
+      const mText = minutesInput.value.trim();
+      const sText = secondsInput.value.trim();
+
+      if (mText==="" && sText===""){
+        st.typed.secs = "";
+        touchTypedWorkoutState(st,div);
+        return;
+      }
+
+      const minutes = mText==="" ? 0 : Number(mText);
+      const seconds = sText==="" ? 0 : Number(sText);
+
+      if (
+        !Number.isInteger(minutes) ||
+        minutes<0 ||
+        !Number.isInteger(seconds) ||
+        seconds<0 ||
+        seconds>59
+      ){
+        st.typed.secs = "";
+        touchTypedWorkoutState(st,div);
+        return;
+      }
+
+      st.typed.secs = (minutes*60)+seconds;
+      touchTypedWorkoutState(st,div);
+    };
+
+    minutesInput.addEventListener("input",syncDuration);
+    secondsInput.addEventListener("input",syncDuration);
+
+    addNumber("Distance","dist","optional",{min:0,step:"any"});
+    addUnit("Distance unit","distUnit");
+    return;
+  }
+
+  if (st.mode==="carry"){
+    addNumber("Weight (lb)","lbs","lb",{min:0,step:"any"});
+    addNumber("Distance","dist","distance",{min:0,step:"any"});
+    addUnit("Distance unit","distUnit");
+    return;
+  }
+
+  if (st.mode==="rounds"){
+    addNumber("Rounds","rounds","rounds",{min:1,step:1,integer:true});
+    addNumber("Work (sec)","workSecs","seconds",{min:1,step:1,integer:true});
+    addNumber("Recovery (sec)","recSecs","seconds",{min:0,step:1,integer:true});
+
+    const row = document.createElement("div");
+    row.className = "srow";
+
+    const lab = document.createElement("span");
+    lab.className = "slabel";
+    lab.textContent = "Note";
+    row.appendChild(lab);
+
+    const note = document.createElement("input");
+    note.placeholder = "optional";
+    note.value = typeof st.typed.note==="string" ? st.typed.note : "";
+    note.setAttribute("aria-label",name+" rounds note");
+    note.addEventListener("input",()=>{
+      st.typed.note = note.value;
+      touchTypedWorkoutState(st,div);
+    });
+
+    row.appendChild(note);
+    div.appendChild(row);
+  }
+}
+
 function renderSessionInputs(){
   renderProgramIdentity();
   const v = wDaySel.value;
@@ -428,10 +2370,10 @@ function renderSessionInputs(){
   }
   list.forEach(ex=>{
     if (!sessionState[ex.name]) {
-      const pf = prefillRows(ex, last && last.sets ? last.sets[ex.name.replace("[Cardio] ","")] : null);
-      sessionState[ex.name] = ex.name.indexOf("[Cardio] ")===0
-        ? {mode:"text", rows:[], text:"", textTouched:false, auto:false, autoDelta:0, saved:null, status:"plan"}
-        : {mode:"rows", rows:pf.rows, text:"", textTouched:false, auto:pf.auto, autoDelta:pf.autoDelta, saved:null, status:"plan"};
+      const historical = last && last.sets
+        ? last.sets[ex.name.replace("[Cardio] ","")]
+        : null;
+      sessionState[ex.name] = makePlanSessionState(ex,historical);
     }
     const st = sessionState[ex.name];
     const prevVal = last && last.sets ? last.sets[ex.name.replace("[Cardio] ","")] : null;
@@ -441,27 +2383,36 @@ function renderSessionInputs(){
       const head0 = document.createElement("div");
       head0.className = "x-head";
       head0.innerHTML = '<span><b>'+esc(ex.name.replace("[Cardio] ",""))+'</b>'
-        +(ex.scheme?' <span class="scheme">\u00b7 '+esc(ex.scheme)+'</span>':'')+'</span>';
+        +(ex.scheme?' <span class="scheme">· '+esc(ex.scheme)+'</span>':'')+'</span>';
       div.appendChild(head0);
+
       const line = document.createElement("div");
       line.className = "savedLine";
-      line.innerHTML = '<span class="savedChip">\u2713 Completed</span> <span>'+esc(formatSets(st.saved))+'</span>';
-      const editBtn = document.createElement("button");
-      editBtn.className = "xbtn"; editBtn.textContent = "Edit";
-      editBtn.addEventListener("click", ()=>{
-        st.status = "unsaved";
-        if (Array.isArray(st.saved)){
-          st.mode = "rows";
-          st.rows = st.saved.map(r=>({w:r.w, r:r.r, done:false, touched:true}));
-        } else {
-          st.mode = "text";
-          st.text = String(st.saved);
-          st.textTouched = true;
-        }
-        clearWorkoutError();
-        renderSessionInputs();
-      });
-      line.appendChild(editBtn);
+      line.innerHTML = '<span class="savedChip">✓ Completed</span> <span>'+esc(formatSets(st.saved))+'</span>';
+
+      const savedKind = workoutValueKind(st.saved);
+
+      if (editableWorkoutValueKind(savedKind)){
+        const editBtn = document.createElement("button");
+        editBtn.className = "xbtn";
+        editBtn.textContent = "Edit";
+        editBtn.addEventListener("click",()=>{
+          if (!loadWorkoutValueIntoEditableState(st,ex.name,st.saved)){
+            showWorkoutError(ex.name.replace("[Cardio] ","")+" — this saved entry cannot be edited by this BlackPyre version.",null);
+            return;
+          }
+          st.status = "unsaved";
+          clearWorkoutError();
+          renderSessionInputs();
+        });
+        line.appendChild(editBtn);
+      } else {
+        const ro = document.createElement("span");
+        ro.className = "scheme";
+        ro.textContent = "Read only";
+        line.appendChild(ro);
+      }
+
       div.appendChild(line);
       container.appendChild(div);
       return;
@@ -473,14 +2424,13 @@ function renderSessionInputs(){
       +(st.auto?' <span class="autoUp">'+(st.autoDelta<0?'−5 assist':'+5 auto')+'</span>':'')+'</span>';
     const tools = document.createElement("div");
     tools.className = "x-tools";
-    if (prevVal){
+    if (prevVal && editableWorkoutValueKind(workoutValueKind(prevVal))){
       const sameBtn = document.createElement("button");
-      sameBtn.className = "xbtn"; sameBtn.textContent = "= last";
+      sameBtn.className = "xbtn";
+      sameBtn.textContent = "= last";
       sameBtn.title = "Log same as last time";
-      sameBtn.addEventListener("click", ()=>{
-        st.mode = "rows";
-        st.rows = toRows(prevVal).map(r=>({w:r.w, r:r.r, done:false, touched:true}));
-        st.auto = false;
+      sameBtn.addEventListener("click",()=>{
+        if (!loadWorkoutValueIntoEditableState(st,ex.name,prevVal)) return;
         st.status = "unsaved";
         clearWorkoutError();
         renderSessionInputs();
@@ -492,6 +2442,21 @@ function renderSessionInputs(){
     vBtn.title = "How to do this - video";
     vBtn.addEventListener("click", ()=>openFormVideo(ex.name));
     tools.appendChild(vBtn);
+
+    if (extraExerciseIndex(ex.name)>=0){
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "xbtn";
+      removeBtn.textContent = "Remove";
+      removeBtn.style.color = "var(--warn)";
+      removeBtn.setAttribute(
+        "aria-label",
+        "Remove "+ex.name.replace("[Cardio] ","")
+      );
+      removeBtn.addEventListener("click",()=>{
+        removeUnsavedExtraExercise(ex.name);
+      });
+      tools.appendChild(removeBtn);
+    }
     const origName = ex.__orig || ex.name;
     if (ALT_MAP[origName] || ex.__orig){
       const swBtn = document.createElement("button");
@@ -507,27 +2472,42 @@ function renderSessionInputs(){
       });
       tools.appendChild(swBtn);
     }
-    const tBtn = document.createElement("button");
-    tBtn.className = "xbtn"; tBtn.textContent = st.mode==="rows" ? "Aa" : "#";
-    tBtn.title = "Toggle text entry";
-    tBtn.addEventListener("click", ()=>{
-      if (st.mode==="rows"){
-        const entered = enteredRows(st).map(x=>x.r).filter(r=>Number(r.w)>0 && Number(r.r)>0);
-        st.text = entered.map(r=>r.w+"x"+r.r).join(", ");
-        st.textTouched = entered.length>0;
-        if (st.textTouched) st.status = "unsaved";
-        st.mode = "text";
-      } else {
-        const hadText = !!st.textTouched && !!st.text.trim();
-        st.rows = toRows(st.text).map(r=>({w:r.w,r:r.r,done:false,touched:hadText}));
-        if(!st.rows.length) st.rows = [{w:"",r:"",done:false,touched:false}];
-        if (hadText) st.status = "unsaved";
-        st.mode = "rows";
-      }
-      clearWorkoutError();
-      renderSessionInputs();
-    });
-    tools.appendChild(tBtn);
+    const canonicalShape = exerciseShapeForName(ex.name);
+    const allowLegacyToggle = !canonicalShape || canonicalShape==="lift";
+    if (allowLegacyToggle && (st.mode==="rows" || st.mode==="text")){
+      const tBtn = document.createElement("button");
+      tBtn.className = "xbtn";
+      tBtn.textContent = st.mode==="rows" ? "Aa" : "#";
+      tBtn.title = "Toggle text entry";
+      tBtn.addEventListener("click",()=>{
+        if (st.mode==="rows"){
+          const entered = enteredRows(st)
+            .map(x=>x.r)
+            .filter(r=>Number(r.w)>0 && Number(r.r)>0);
+          st.text = entered.map(r=>r.w+"x"+r.r).join(", ");
+          st.textTouched = entered.length>0;
+          if (st.textTouched) st.status = "unsaved";
+          st.mode = "text";
+        } else {
+          const hadText = !!st.textTouched && !!st.text.trim();
+          st.rows = toRows(st.text).map(r=>({
+            w:r.w,
+            r:r.r,
+            done:false,
+            touched:hadText
+          }));
+          if (!st.rows.length){
+            st.rows = [{w:"",r:"",done:false,touched:false}];
+          }
+          st.rowShape = "lift";
+          if (hadText) st.status = "unsaved";
+          st.mode = "rows";
+        }
+        clearWorkoutError();
+        renderSessionInputs();
+      });
+      tools.appendChild(tBtn);
+    }
     head.appendChild(tools);
     div.appendChild(head);
     if (prevVal){
@@ -538,12 +2518,38 @@ function renderSessionInputs(){
     }
 
     if (st.mode==="text"){
+      const row = document.createElement("div");
+      row.className = "srow";
+
+      const lab = document.createElement("span");
+      lab.className = "slabel";
+      lab.textContent = "Details / notes (required)";
+
       const inp = document.createElement("input");
-      inp.setAttribute("aria-label", ex.name.replace("[Cardio] ","")+" completed sets or cardio details");
-      inp.placeholder = ex.name.indexOf("[Cardio] ")===0 ? "e.g. 20 min, 2 mi" : "e.g. 275x5, 275x5, 275x4";
+      inp.setAttribute(
+        "aria-label",
+        ex.name.replace("[Cardio] ","")+" details or notes"
+      );
+      inp.placeholder = "Enter what you completed";
       inp.value = st.text;
-      inp.addEventListener("input", ()=>{ st.text = inp.value; st.textTouched = true; st.status="unsaved"; markUnsavedChip(div); clearWorkoutError(); });
-      div.appendChild(inp);
+      inp.addEventListener("input",()=>{
+        st.text = inp.value;
+        st.textTouched = true;
+        st.status = "unsaved";
+        markUnsavedChip(div);
+        clearWorkoutError();
+      });
+
+      row.appendChild(lab);
+      row.appendChild(inp);
+      div.appendChild(row);
+    } else if (st.mode==="timeDist" || st.mode==="carry" || st.mode==="rounds"){
+      appendTypedWorkoutEditor(div,ex,st);
+    } else if (st.mode==="future"){
+      const notice = document.createElement("div");
+      notice.className = "note";
+      notice.textContent = newerWorkoutValueNotice(st.saved);
+      div.appendChild(notice);
     } else {
       st.rows.forEach((row, ri)=>{
         const rdiv = document.createElement("div");
@@ -551,7 +2557,7 @@ function renderSessionInputs(){
         rdiv.innerHTML = '<span class="slabel">Set '+(ri+1)+'</span>';
         const mkStep = (txt, label, fn)=>{ const b=document.createElement("button"); b.className="step"; b.textContent=txt; b.setAttribute("aria-label",label); b.addEventListener("click", fn); return b; };
         const wIn = document.createElement("input");
-        wIn.type="number"; wIn.className="snum"; wIn.inputMode="decimal"; wIn.placeholder="lb"; wIn.value=row.w;
+        wIn.type="number"; wIn.className="snum"; wIn.inputMode="decimal"; wIn.placeholder=st.rowShape==="reps" ? "lb opt." : "lb"; wIn.value=(row.w===undefined || row.w===null) ? "" : row.w;
         wIn.dataset.exercise=ex.name; wIn.dataset.row=String(ri); wIn.dataset.field="weight";
         wIn.setAttribute("aria-label",ex.name.replace("[Cardio] ","")+" set "+(ri+1)+" weight in pounds");
         wIn.addEventListener("input", ()=>{ row.w = wIn.value===""?"":Number(wIn.value); row.touched=true; st.status="unsaved"; markUnsavedChip(div); clearWorkoutError(); });
@@ -601,18 +2607,54 @@ function renderSessionInputs(){
 }
 
 document.getElementById("addExSel").addEventListener("change", ()=>{
-  document.getElementById("addExCustom").classList.toggle("hidden", document.getElementById("addExSel").value!=="__CUSTOM__");
+  setFreestyleCustomControlsVisible(
+    document.getElementById("addExSel").value==="__CUSTOM__"
+  );
 });
+
 document.getElementById("addExBtn").addEventListener("click", ()=>{
-  let name = document.getElementById("addExSel").value;
+  const picker = document.getElementById("addExSel");
+  let name = picker.value;
+
   if (name==="__CUSTOM__"){
-    name = document.getElementById("addExCustom").value.trim();
-    if (!name){ flashSave("Type the exercise name", true); return; }
-    document.getElementById("addExCustom").value = "";
-    document.getElementById("addExCustom").classList.add("hidden");
-    document.getElementById("addExSel").selectedIndex = 0;
+    const nameInput = document.getElementById("addExCustom");
+    const shapeSel = ensureFreestyleCustomShapeSelect();
+
+    const created = createUserExercise(
+      nameInput.value,
+      shapeSel.value
+    );
+
+    if (!created.ok){
+      flashSave(created.reason,true);
+      return;
+    }
+
+    name = created.entry.name;
+
+    nameInput.value = "";
+    shapeSel.value = "lift";
+
+    renderLibraryOptions();
+    picker.value = name;
+
+    flashSave("Custom exercise saved ✓");
   }
-  extraExercises.push({name:name, scheme:""});
+
+  const duplicate = sessionList().some(ex=>
+    ex.name.replace("[Cardio] ","")===name.replace("[Cardio] ","")
+  );
+
+  if (duplicate){
+    showWorkoutError(
+      name.replace("[Cardio] ","")+" — this exercise is already in the session.",
+      null
+    );
+    return;
+  }
+
+  extraExercises.push({name:name,scheme:""});
+  clearWorkoutError();
   renderSessionInputs();
 });
 
@@ -711,61 +2753,116 @@ document.getElementById("logWorkoutBtn").addEventListener("click", ()=>{
     Object.keys(sets).length+" exercises logged"+(streak>1?"  \u00b7  \ud83d\udd25 "+streak+"-day streak":""));
 });
 
+const WORK_HISTORY_PAGE_SIZE = 25;
+let workHistoryVisibleCount = WORK_HISTORY_PAGE_SIZE;
+
 function renderWork(){
   renderWorkoutDraftCard();
   renderPRs();
   renderProgramIdentity();
+
   const el = document.getElementById("workHistory");
+  const countEl = document.getElementById("workHistoryCount");
+
+  if (countEl){
+    countEl.textContent =
+      data.workouts.length+" session"+(data.workouts.length===1?"":"s");
+  }
+
   if(data.workouts.length===0){
-    el.innerHTML = '<div style="padding:18px; font-size:13px; color:var(--dim);">No sessions yet.</div>';
+    workHistoryVisibleCount = WORK_HISTORY_PAGE_SIZE;
+    el.innerHTML =
+      '<div style="padding:18px; font-size:13px; color:var(--dim);">No sessions yet.</div>';
     return;
   }
-  const sorted = data.workouts.map((s,idx)=>Object.assign({},s,{idx})).sort((a,b)=>b.date.localeCompare(a.date));
-  const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-  const groups = {};
-  const order = [];
-  sorted.forEach(s=>{
-    const key = s.date.slice(0,7);
-    if (!groups[key]){ groups[key] = []; order.push(key); }
-    groups[key].push(s);
-  });
-  const curKey = todayStr().slice(0,7);
-  el.innerHTML = order.map(key=>{
-    const list = groups[key];
-    const label = MONTHS[Number(key.slice(5,7))-1]+" "+key.slice(0,4);
-    const openAttr = key===curKey ? " open" : "";
-    const body = list.map(s=>{
-      const dayObj = program.days.find(p=>p.id===s.day);
-      const title = s.title || (dayObj?dayObj.title:s.day);
-      const setsHTML = Object.keys(s.sets).map(ex=>'<div>'+esc(ex)+': <span style="color:var(--text)">'+esc(formatSets(s.sets[ex]))+'</span></div>').join("");
-      return '<div style="padding:14px 16px; border-bottom:1px solid var(--border); font-size:12px;">'
-        +'<div style="display:flex; justify-content:space-between;">'
-        +'<span style="font-weight:600; color:var(--ember);">'+fmtDate(s.date)+' — '+esc(title)+'</span>'
-        +'<button class="del edtWork" data-i="'+s.idx+'" aria-label="Edit" style="color:var(--dim); margin-right:2px;">✎</button>'
-        +'<button class="del delWork" data-i="'+s.idx+'" aria-label="Delete">✕</button></div>'
-        +'<div style="color:var(--dim); margin-top:6px; line-height:1.7;">'+setsHTML
-        +(s.notes?'<div style="color:var(--ember); margin-top:3px;">Note: '+esc(s.notes)+'</div>':'')
-        +'</div></div>';
-    }).join("");
-    return '<details'+openAttr+' style="border-bottom:1px solid var(--border);">'
-      +'<summary style="padding:12px 16px; cursor:pointer; font-family:\'Oswald\',sans-serif; font-weight:600; font-size:13px; letter-spacing:.05em; text-transform:uppercase; color:var(--text); list-style:none; display:flex; justify-content:space-between;">'
-      +'<span>'+label+'</span><span style="color:var(--dim); font-size:11px;">'+list.length+' session'+(list.length===1?'':'s')+'</span></summary>'
-      +body+'</details>';
+
+  const sorted = data.workouts
+    .map((s,idx)=>Object.assign({},s,{idx:idx}))
+    .sort((a,b)=>b.date.localeCompare(a.date) || b.idx-a.idx);
+
+  const visible = sorted.slice(0,workHistoryVisibleCount);
+
+  const body = visible.map(s=>{
+    const dayObj = program.days.find(p=>p.id===s.day);
+    const title = s.title || (dayObj?dayObj.title:s.day) || "Workout";
+    const names = Object.keys(s.sets||{});
+
+    const values = names.map(ex=>
+      '<div>'+esc(ex)+': <span style="color:var(--text)">'
+      +esc(formatSets(s.sets[ex]))+'</span></div>'
+    ).join("");
+
+    return '<details class="workSession" data-i="'+s.idx+'" style="border-bottom:1px solid var(--border);">'
+      +'<summary style="padding:13px 16px; cursor:pointer; list-style:none; display:flex; justify-content:space-between; align-items:center; gap:12px;">'
+      +'<span style="min-width:0;"><span style="font-weight:600; color:var(--ember);">'
+      +fmtDate(s.date)+'</span> <span style="color:var(--dim);">·</span> '
+      +'<span style="color:var(--text);">'+esc(title)+'</span></span>'
+      +'<span style="flex:none; color:var(--dim); font-size:10px;">'
+      +names.length+' exercise'+(names.length===1?'':'s')+'</span>'
+      +'</summary>'
+      +'<div style="padding:0 16px 14px; font-size:12px;">'
+      +'<div style="color:var(--dim); line-height:1.7;">'
+      +values
+      +(s.notes?'<div style="color:var(--ember); margin-top:5px;">Note: '+esc(s.notes)+'</div>':'')
+      +'</div>'
+      +'<div style="display:flex; justify-content:flex-end; gap:6px; margin-top:10px;">'
+      +'<button class="xbtn edtWork" data-i="'+s.idx+'" aria-label="Edit '+esc(title)+'">✎ Edit</button>'
+      +'<button class="xbtn delWork" data-i="'+s.idx+'" aria-label="Delete '+esc(title)+'" style="color:var(--warn);">✕ Delete</button>'
+      +'</div></div></details>';
   }).join("");
+
+  const remaining = sorted.length-visible.length;
+  const nextCount = Math.min(WORK_HISTORY_PAGE_SIZE,remaining);
+
+  el.innerHTML = body
+    +(remaining>0
+      ? '<div style="padding:12px 16px; text-align:center;">'
+        +'<button class="btn ghost small" id="workHistoryMore">Load '
+        +nextCount+' older workout'+(nextCount===1?'':'s')+'</button>'
+        +'<div style="color:var(--dim); font-size:10px; margin-top:6px;">'
+        +visible.length+' of '+sorted.length+' sessions shown</div></div>'
+      : '');
+
+  // Dynamic control: query inside the just-rendered History container
+  // rather than treating it as a permanent static document element.
+  const more = el.querySelector("#workHistoryMore");
+
+  if (more){
+    more.addEventListener("click",()=>{
+      workHistoryVisibleCount += WORK_HISTORY_PAGE_SIZE;
+      renderWork();
+    });
+  }
+
   el.querySelectorAll(".delWork").forEach(b=>b.addEventListener("click",()=>{
     const i = Number(b.dataset.i);
     const removed = data.workouts[i];
+
     if (!removed) return;
+
     data.workouts.splice(i,1);
-    if (!save()){ data.workouts.splice(i,0,removed); renderWork(); return; }
-    renderWork(); renderDash();
+
+    if (!save()){
+      data.workouts.splice(i,0,removed);
+      renderWork();
+      return;
+    }
+
+    renderWork();
+    renderDash();
+
     offerUndo('Deleted workout "'+(removed.title||removed.day||"session")+'"', ()=>{
       data.workouts.splice(Math.min(i,data.workouts.length),0,removed);
-      save(); renderWork(); renderDash();
+      save();
+      renderWork();
+      renderDash();
       flashSave("Workout restored ✓");
     });
   }));
-  el.querySelectorAll(".edtWork").forEach(b=>b.addEventListener("click",()=>startEditWorkout(Number(b.dataset.i))));
+
+  el.querySelectorAll(".edtWork").forEach(
+    b=>b.addEventListener("click",()=>startEditWorkout(Number(b.dataset.i)))
+  );
 }
 
 // ---------- workout edit mode ----------
@@ -779,49 +2876,72 @@ function endWorkoutEdit(skipRender){
 function startEditWorkout(i){
   const sess = data.workouts[i];
   if (!sess) return;
+
   editingWorkoutIdx = i;
   document.getElementById("wDate").value = sess.date;
   document.getElementById("wNotes").value = sess.notes||"";
-  if (sess.day === "CARDIO"){
+
+  const storedValues = Object.values(sess.sets||{});
+  const legacyCardio = sess.day==="CARDIO"
+    && storedValues.length>0
+    && storedValues.every(v=>typeof v==="string");
+
+  if (legacyCardio){
     wDaySel.value = "__CARDIO__";
     renderSessionInputs();
+
     const type = Object.keys(sess.sets)[0];
     const valStr = String(sess.sets[type]||"");
     const m = valStr.match(/(\d+(?:\.\d+)?)\s*min(?:\s*·\s*(.*))?/);
+
     const typeSel = document.getElementById("cardioType");
     if ([...typeSel.options].some(o=>o.value===type)) typeSel.value = type;
+
     document.getElementById("cardioMin").value = m ? m[1] : "";
     document.getElementById("cardioDetail").value = (m && m[2]) ? m[2] : "";
   } else {
     const dayObj = program.days.find(d=>d.id===sess.day);
     wDaySel.value = dayObj ? sess.day : "__FREE__";
-    const dayNames = dayObj ? dayObj.exercises.map(e=>e.name.replace("[Cardio] ","")) : [];
-    extraExercises = Object.keys(sess.sets).filter(k=>dayNames.indexOf(k)===-1).map(k=>({name:k, scheme:""}));
+
+    const dayNames = dayObj
+      ? dayObj.exercises.map(e=>e.name.replace("[Cardio] ",""))
+      : [];
+
+    extraExercises = Object.keys(sess.sets||{})
+      .filter(k=>dayNames.indexOf(k)===-1)
+      .map(k=>({name:k,scheme:""}));
+
     sessionState = {};
-    const allNames = (dayObj ? dayObj.exercises.map(e=>e.name) : []).concat(extraExercises.map(e=>e.name));
+
+    const allNames = (dayObj ? dayObj.exercises.map(e=>e.name) : [])
+      .concat(extraExercises.map(e=>e.name));
+
     allNames.forEach(exName=>{
       const key = exName.replace("[Cardio] ","");
       const val = sess.sets[key];
+
       if (val==null){
-        sessionState[exName] = exName.indexOf("[Cardio] ")===0
-          ? {mode:"text", rows:[], text:"", textTouched:false, auto:false, autoDelta:0, saved:null, status:"plan"}
-          : {mode:"rows", rows:[{w:"",r:"",done:false,touched:false}], text:"", textTouched:false, auto:false, autoDelta:0, saved:null, status:"plan"};
-      } else if (Array.isArray(val)){
-        sessionState[exName] = {mode:"rows", rows:[], text:"", textTouched:false, auto:false, autoDelta:0, saved:val.map(r=>({w:r.w, r:r.r})), status:"saved"};
+        const programExercise = dayObj
+          ? dayObj.exercises.find(e=>e.name===exName)
+          : null;
+
+        sessionState[exName] = makePlanSessionState(
+          programExercise || {name:exName,scheme:""},
+          null
+        );
       } else {
-        const rows = toRows(val);
-        sessionState[exName] = rows.length
-          ? {mode:"rows", rows:[], text:"", textTouched:false, auto:false, autoDelta:0, saved:rows.map(r=>({w:r.w, r:r.r})), status:"saved"}
-          : {mode:"text", rows:[], text:"", textTouched:false, auto:false, autoDelta:0, saved:String(val), status:"saved"};
+        sessionState[exName] = makeSavedSessionState(exName,val);
       }
     });
+
     renderSessionInputs();
   }
+
   activeSessionType = wDaySel.value;
   clearWorkoutError();
   document.getElementById("logWorkoutBtn").textContent = "Update session";
   document.getElementById("cancelEditWorkBtn").classList.remove("hidden");
-  activateView("work", "trainingSessionCard", false);
+  activateView("work","trainingSessionCard",false);
 }
 document.getElementById("cancelEditWorkBtn").addEventListener("click", ()=>{
   document.getElementById("wNotes").value = "";
@@ -1090,29 +3210,74 @@ function renderBuilder(){
     const addRow = document.createElement("div");
     addRow.className = "bex";
     const sel = document.createElement("select");
-    const og1 = document.createElement("optgroup"); og1.label = "Strength";
-    EXERCISE_LIBRARY.forEach(x=>{ const o=document.createElement("option"); o.value=x; o.textContent=x; og1.appendChild(o); });
-    const og2 = document.createElement("optgroup"); og2.label = "Cardio";
-    CARDIO_TYPES.forEach(x=>{ const o=document.createElement("option"); o.value="[Cardio] "+x; o.textContent=x; og2.appendChild(o); });
-    const ogC = document.createElement("optgroup"); ogC.label = "Custom";
-    const oc = document.createElement("option"); oc.value="__CUSTOM__"; oc.textContent="Type my own…"; ogC.appendChild(oc);
-    sel.appendChild(og1); sel.appendChild(og2); sel.appendChild(ogC);
+    populateUnifiedExercisePicker(sel);
     sel.setAttribute("aria-label","Exercise to add to "+(day.title||("Day "+(di+1))));
     sel.style.flex = "2";
     const custom = document.createElement("input");
-    custom.placeholder = "Custom exercise name"; custom.className = "bname hidden"; custom.setAttribute("aria-label","Custom exercise name for "+(day.title||("Day "+(di+1))));
-    sel.addEventListener("change", ()=>{ custom.classList.toggle("hidden", sel.value!=="__CUSTOM__"); });
+    custom.placeholder = "Custom exercise name";
+    custom.className = "bname hidden";
+    custom.setAttribute(
+      "aria-label",
+      "Custom exercise name for "+(day.title||("Day "+(di+1)))
+    );
+
+    const customShape = makeExerciseShapeSelect(
+      "Custom exercise tracking type for "+(day.title||("Day "+(di+1)))
+    );
+    customShape.classList.add("bshape","hidden");
+
+    sel.addEventListener("change",()=>{
+      const isCustom = sel.value==="__CUSTOM__";
+      custom.classList.toggle("hidden",!isCustom);
+      customShape.classList.toggle("hidden",!isCustom);
+    });
+
     const schIn = document.createElement("input");
-    schIn.className = "bscheme"; schIn.placeholder = "e.g. 3×8"; schIn.setAttribute("aria-label","Set and rep scheme for new exercise");
+    schIn.className = "bscheme";
+    schIn.placeholder = "e.g. 3×8";
+    schIn.setAttribute(
+      "aria-label",
+      "Set and rep scheme for new exercise"
+    );
+
     const addBtn = document.createElement("button");
-    addBtn.className = "xbtn"; addBtn.textContent = "＋ Add";
-    addBtn.addEventListener("click", ()=>{
-      const name = sel.value==="__CUSTOM__" ? custom.value.trim() : sel.value;
+    addBtn.className = "xbtn";
+    addBtn.textContent = "＋ Add";
+
+    addBtn.addEventListener("click",()=>{
+      let name = sel.value;
+
+      if (name==="__CUSTOM__"){
+        const created = createUserExercise(
+          custom.value,
+          customShape.value
+        );
+
+        if (!created.ok){
+          flashSave(created.reason,true);
+          return;
+        }
+
+        name = created.entry.name;
+        renderLibraryOptions();
+        flashSave("Custom exercise saved ✓");
+      }
+
       if (!name) return;
-      day.exercises.push({name:name, scheme:schIn.value.trim()});
+
+      day.exercises.push({
+        name:name,
+        scheme:schIn.value.trim()
+      });
+
       renderBuilder();
     });
-    addRow.appendChild(sel); addRow.appendChild(custom); addRow.appendChild(schIn); addRow.appendChild(addBtn);
+
+    addRow.appendChild(sel);
+    addRow.appendChild(custom);
+    addRow.appendChild(customShape);
+    addRow.appendChild(schIn);
+    addRow.appendChild(addBtn);
     dd.appendChild(addRow);
     wrap.appendChild(dd);
   });

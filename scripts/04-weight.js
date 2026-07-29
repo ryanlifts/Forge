@@ -610,6 +610,51 @@ document.getElementById("restStartBtn").addEventListener("click", ()=>{ setRestO
 document.getElementById("restPauseBtn").addEventListener("click", pauseRest);
 document.getElementById("restAddBtn").addEventListener("click", ()=>addRest(30));
 document.getElementById("restEndBtn").addEventListener("click", cancelRest);
+function applyRestDurationSelection(seconds){
+  const next = normalizedRestSeconds(
+    seconds,
+    selectedRestSeconds()
+  );
+
+  cfg.restSec = next;
+  saveCfg();
+  restReadySec = next;
+
+  if (restRunning){
+    restDurationSec = next;
+    restRemaining = next;
+    restEndsAt = Date.now() + (next*1000);
+
+    persistRestTimer();
+    scheduleRestNotification(
+      restEndsAt,
+      false
+    );
+
+    return "running";
+  }
+
+  if (restPaused){
+    restDurationSec = next;
+    restRemaining = next;
+    restEndsAt = 0;
+
+    persistRestTimer();
+    cancelRestNotification();
+
+    return "paused";
+  }
+
+  restDurationSec = 0;
+  restRemaining = 0;
+  restEndsAt = 0;
+
+  clearRestTimerState();
+  cancelRestNotification();
+
+  return "ready";
+}
+
 function renderRestPresets(){
   restoreRestTimerState();
   // migrate old single custom to list
@@ -625,15 +670,8 @@ function renderRestPresets(){
     b.textContent = fmtRest(p);
     if (p===selectedRestSeconds()) b.style.borderColor = "var(--ember)";
     b.addEventListener("click", ()=>{
-      cfg.restSec = p; saveCfg();
-      if (!(restRunning||restPaused)){
-        restReadySec = p;
-        restDurationSec = 0;
-        clearRestTimerState();
-        cancelRestNotification();
-      }
+      applyRestDurationSelection(p);
       renderRestPresets();
-      if (!(restRunning||restPaused)) paintRestDock();
       setRestOptionsOpen(false);
     });
     holder.appendChild(b);

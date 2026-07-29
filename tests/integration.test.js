@@ -72,11 +72,11 @@ check("restore preserves AI key + provider", B.window.eval("cfg.anthropicKey")==
 
 // ================= v45: schemaVersion & protected migrations =================
 const V1_CFG = Object.assign({}, EXISTING_CFG, {schemaVersion:1});
-const V2_CFG = Object.assign({}, EXISTING_CFG, {schemaVersion:2});
+const V3_CFG = Object.assign({}, EXISTING_CFG, {schemaVersion:3});
 const V2_DATA = Object.assign({}, EMPTY_DATA, {activeWorkoutDraft:null});
 const TEST_PROGRAM = {name:"Test Program",author:"Suite",days:[{id:"D1",title:"Day 1",exercises:[{name:"Bench Press",scheme:"3×5"}]}]};
 const RAW_V1_CFG = JSON.stringify(V1_CFG);
-const RAW_V2_CFG = JSON.stringify(V2_CFG);
+const RAW_V3_CFG = JSON.stringify(V3_CFG);
 const RAW_DATA = JSON.stringify(EMPTY_DATA);
 const RAW_V2_DATA = JSON.stringify(V2_DATA);
 const RAW_PROGRAM = JSON.stringify(TEST_PROGRAM);
@@ -160,12 +160,12 @@ check("protected export does not mutate backup metadata", PC.window.eval("JSON.s
 // Healthy boot paths: one-time cfg stamp only, then no-op forever.
 let Fresh45 = bootRaw({});
 const freshCalls = sacredCalls(Fresh45);
-check("fresh install stamps schemaVersion 2", JSON.parse(Fresh45.window.localStorage.getItem("forge:cfg")).schemaVersion===2);
+check("fresh install stamps schemaVersion 3", JSON.parse(Fresh45.window.localStorage.getItem("forge:cfg")).schemaVersion===3);
 check("fresh install writes a complete primary state", freshCalls.length===3 && freshCalls.map(c=>c.key).join(",")==="forge:data,forge:program,forge:cfg");
 const rawV44Cfg = JSON.stringify(Object.assign({},EXISTING_CFG,{futureField:"survives"}));
 let H45 = bootRaw({cfg:rawV44Cfg,data:RAW_DATA,program:RAW_PROGRAM});
 const h45Calls = sacredCalls(H45);
-check("legacy-shaped install adds the draft field then stamps schema 2", h45Calls.length===2 && h45Calls.map(c=>c.key).join(",")==="forge:data,forge:cfg" && JSON.parse(h45Calls[1].value).schemaVersion===2 && JSON.parse(H45.window.localStorage.getItem("forge:data")).activeWorkoutDraft===null);
+check("legacy-shaped install adds exercise defaults then stamps schema 3", h45Calls.length===2 && h45Calls.map(c=>c.key).join(",")==="forge:data,forge:cfg" && JSON.parse(h45Calls[1].value).schemaVersion===3 && JSON.parse(H45.window.localStorage.getItem("forge:data")).activeWorkoutDraft===null && Object.keys(JSON.parse(H45.window.localStorage.getItem("forge:data")).myExercises||{}).length===0);
 check("healthy migration leaves program byte-identical", H45.window.localStorage.getItem("forge:program")===RAW_PROGRAM);
 check("unknown settings fields survive migration", H45.window.eval("cfg.futureField")==="survives");
 let H45b = bootRaw(sacredBytes(H45));
@@ -228,7 +228,7 @@ tProto.setItem = tSpySet;
 check("commit order writes data and program before settings stamp", sacredCalls(T45).slice(0,2).map(c=>c.key).join(",")==="forge:data,forge:program");
 check("simulated interrupted commit reports failed rollback", tornCommit.ok===false && tornCommit.rollbackFailed===true && JSON.parse(tStore.getItem("forge:cfg")).schemaVersion===undefined);
 let Healed45 = bootRaw({cfg:tStore.getItem("forge:cfg"),data:tStore.getItem("forge:data"),program:tStore.getItem("forge:program")});
-check("next boot heals an unstamped interrupted commit", Healed45.window.eval("protectedMode")===false && Healed45.window.eval("cfg.schemaVersion")===2 && Healed45.window.eval("cfg.calTarget")===1600 && Healed45.window.eval("data.activeWorkoutDraft")===null);
+check("next boot heals an unstamped interrupted commit", Healed45.window.eval("protectedMode")===false && Healed45.window.eval("cfg.schemaVersion")===3 && Healed45.window.eval("cfg.calTarget")===1600 && Healed45.window.eval("data.activeWorkoutDraft")===null && Healed45.window.eval("Object.keys(data.myExercises||{}).length")===0);
 
 // ================= v46: recovery vault, quarantine, and LKG =================
 const fiveBytes = dom=>({
@@ -243,14 +243,14 @@ const callsFor = (dom,key)=>allBlackPyreCalls(dom).filter(c=>c.key===key);
 const validQuarantineRaw = originals=>JSON.stringify({recoveryFormatVersion:1,quarantinedAt:"2026-07-14T12:00:00.000Z",diagnostic:{stage:"parse",part:"cfg",code:"json-parse",reason:"test"},originals:originals});
 
 // Healthy v46 boot creates one validated LKG without changing current primary schema or bytes.
-let H46 = bootRaw({cfg:RAW_V2_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM});
+let H46 = bootRaw({cfg:RAW_V3_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM});
 let h46LkgRaw = H46.window.localStorage.getItem("forge:lkg");
 let h46Lkg = JSON.parse(h46LkgRaw);
-check("v46 recovery behavior keeps current primary schemaVersion 2", H46.window.eval("cfg.schemaVersion")===2 && JSON.parse(H46.window.localStorage.getItem("forge:cfg")).schemaVersion===2);
+check("v46 recovery behavior keeps current primary schemaVersion 3", H46.window.eval("cfg.schemaVersion")===3 && JSON.parse(H46.window.localStorage.getItem("forge:cfg")).schemaVersion===3);
 check("v46 healthy boot creates a format-1 whole-state LKG", h46Lkg.recoveryFormatVersion===1 && ["cfg","data","program"].every(k=>typeof h46Lkg.strings[k]==="string"));
 check("creating LKG does not rewrite unchanged primary keys", sacredCalls(H46).length===0 && callsFor(H46,"forge:lkg").length===1);
 check("LKG final strings pass the shared prepare pipeline", H46.window.eval(`inspectLkgRaw(${JSON.stringify(h46LkgRaw)}).ok`)===true);
-let H46b = bootRaw({cfg:RAW_V2_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM,lkg:h46LkgRaw});
+let H46b = bootRaw({cfg:RAW_V3_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM,lkg:h46LkgRaw});
 check("identical second boot retains LKG timestamp and writes nothing", allBlackPyreCalls(H46b).length===0 && JSON.parse(H46b.window.localStorage.getItem("forge:lkg")).savedAt===h46Lkg.savedAt);
 check("Settings reports automatic recovery ready", /ready/i.test(H46b.window.document.getElementById("recoveryStatusLine").textContent));
 
@@ -283,7 +283,7 @@ check("invalid unsaved in-memory candidate cannot replace persisted LKG", invali
 H46.window.eval(`data=JSON.parse(localStorage.getItem("forge:data")); normalizeDataState(data);`);
 
 // LKG failure is secondary: live save succeeds and previous snapshot remains.
-let LkgFail = bootRaw({cfg:RAW_V2_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM,lkg:h46LkgRaw});
+let LkgFail = bootRaw({cfg:RAW_V3_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM,lkg:h46LkgRaw});
 const lkgFailBefore = LkgFail.window.localStorage.getItem("forge:lkg");
 const lfProto = Object.getPrototypeOf(LkgFail.window.localStorage), lfSpySet=lfProto.setItem;
 lfProto.setItem=function(k,v){ if(k==="forge:lkg") throw new Error("snapshot denied"); return lfSpySet.call(this,k,v); };
@@ -291,7 +291,7 @@ const lkgFailSave = LkgFail.window.eval(`data.weights.push({date:"2026-07-14",lb
 lfProto.setItem=lfSpySet;
 check("LKG write failure leaves primary save successful", lkgFailSave===true && JSON.parse(LkgFail.window.localStorage.getItem("forge:data")).weights[0].lbs===216);
 check("LKG write failure leaves previous snapshot intact and reports unavailable", LkgFail.window.localStorage.getItem("forge:lkg")===lkgFailBefore && LkgFail.window.eval("lkgStatus.state")==="unavailable");
-let LkgVerifyFail=bootRaw({cfg:RAW_V2_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM,lkg:lkgFailBefore});
+let LkgVerifyFail=bootRaw({cfg:RAW_V3_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM,lkg:lkgFailBefore});
 const lvProto=Object.getPrototypeOf(LkgVerifyFail.window.localStorage), lvSet=lvProto.setItem, lvGet=lvProto.getItem;
 let lvWrote=false, lvMismatch=false;
 lvProto.setItem=function(k,v){ const out=lvSet.call(this,k,v); if(k==="forge:lkg") lvWrote=true; return out; };
@@ -302,7 +302,7 @@ check("LKG verification failure rolls back to the previous snapshot", LkgVerifyF
 
 // A quota-caused primary failure may sacrifice LKG once, never quarantine.
 const quotaQuarantine = validQuarantineRaw({cfg:"old",data:"old",program:"old",legacyData:null});
-let Quota46 = bootRaw({cfg:RAW_V2_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM,lkg:h46LkgRaw,quarantine:quotaQuarantine});
+let Quota46 = bootRaw({cfg:RAW_V3_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM,lkg:h46LkgRaw,quarantine:quotaQuarantine});
 const qProto=Object.getPrototypeOf(Quota46.window.localStorage), qSpySet=qProto.setItem;
 let qFirst=true; const qOrder=[];
 qProto.setItem=function(k,v){
@@ -319,14 +319,14 @@ check("quota retry sacrifices LKG then saves live data once", quotaSaved===true 
 check("quota retry never sacrifices quarantine", Quota46.window.localStorage.getItem("forge:quarantine")===quotaQuarantine && !qOrder.includes("remove:forge:quarantine"));
 
 // Bad LKG cannot poison healthy data; malformed is rebuilt, newer format is untouched.
-let BadLkg = bootRaw({cfg:RAW_V2_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM,lkg:"{broken"});
+let BadLkg = bootRaw({cfg:RAW_V3_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM,lkg:"{broken"});
 check("malformed LKG never protects healthy live data", BadLkg.window.eval("protectedMode")===false);
 check("malformed LKG is rebuilt as a valid snapshot", BadLkg.window.eval(`inspectLkgRaw(localStorage.getItem("forge:lkg")).ok`)===true && callsFor(BadLkg,"forge:lkg").some(c=>c.method==="setItem"));
 const newerLkgRaw=JSON.stringify({recoveryFormatVersion:99,savedAt:"future",strings:{}});
-let NewLkg = bootRaw({cfg:RAW_V2_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM,lkg:newerLkgRaw});
+let NewLkg = bootRaw({cfg:RAW_V3_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM,lkg:newerLkgRaw});
 check("newer-format LKG is not used or overwritten", NewLkg.window.eval("protectedMode")===false && NewLkg.window.localStorage.getItem("forge:lkg")===newerLkgRaw && NewLkg.window.eval("lkgStatus.state")==="newer" && callsFor(NewLkg,"forge:lkg").length===0);
 const newerStateLkgRaw=JSON.stringify({recoveryFormatVersion:1,savedAt:"future",strings:{cfg:JSON.stringify({schemaVersion:99}),data:RAW_DATA,program:RAW_PROGRAM},legacyData:null});
-let NewStateLkg=bootRaw({cfg:RAW_V2_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM,lkg:newerStateLkgRaw});
+let NewStateLkg=bootRaw({cfg:RAW_V3_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM,lkg:newerStateLkgRaw});
 check("LKG carrying newer primary schema is not overwritten", NewStateLkg.window.localStorage.getItem("forge:lkg")===newerStateLkgRaw && NewStateLkg.window.eval("lkgStatus.state")==="newer" && callsFor(NewStateLkg,"forge:lkg").length===0);
 
 // Protected boot diagnoses exact area, shows recovery before gates, and never refreshes LKG.
@@ -335,7 +335,7 @@ check("v46 diagnosis identifies corrupt settings", DiagCfg.window.eval(`protecte
 check("corruption recovery panel appears before gates", !DiagCfg.window.document.getElementById("recoveryOverlay").classList.contains("hidden") && DiagCfg.window.document.getElementById("disclaimerOverlay").classList.contains("hidden") && DiagCfg.window.document.getElementById("setupOverlay").classList.contains("hidden"));
 check("protected boot never refreshes or replaces LKG", DiagCfg.window.localStorage.getItem("forge:lkg")===h46LkgRaw && callsFor(DiagCfg,"forge:lkg").length===0);
 let DiagData=bootRaw({cfg:RAW_V1_CFG,data:"{broken",program:RAW_PROGRAM,lkg:h46LkgRaw});
-let DiagProgram=bootRaw({cfg:RAW_V2_CFG,data:RAW_V2_DATA,program:"{broken",lkg:h46LkgRaw});
+let DiagProgram=bootRaw({cfg:RAW_V3_CFG,data:RAW_V2_DATA,program:"{broken",lkg:h46LkgRaw});
 check("v46 diagnosis distinguishes logs and program", DiagData.window.eval("protectedModeDiagnostic.part")==="data" && DiagProgram.window.eval("protectedModeDiagnostic.part")==="program");
 let MigrationDiag46=bootRaw({cfg:JSON.stringify(EXISTING_CFG),data:RAW_DATA,program:RAW_PROGRAM,lkg:h46LkgRaw},w=>{w.__BP_TEST_PREPARE_OPTIONS={forceMigrationFailure:true};});
 check("structured boot diagnosis identifies migration failure", MigrationDiag46.window.eval(`protectedModeDiagnostic.stage+":"+protectedModeDiagnostic.part`)==="migration:state" && MigrationDiag46.window.eval("recoveryWritesAllowed()")===true);
@@ -346,7 +346,7 @@ let BootCommitDiag46=bootRaw({cfg:JSON.stringify(EXISTING_CFG),data:RAW_DATA,pro
 check("structured boot diagnosis identifies commit failure", BootCommitDiag46.window.eval(`protectedModeDiagnostic.stage+":"+protectedModeDiagnostic.code`)==="commit:boot-commit-failed" && BootCommitDiag46.window.eval("recoveryWritesAllowed()")===true);
 let Newer46=bootRaw({cfg:JSON.stringify(Object.assign({},V1_CFG,{schemaVersion:99})),data:RAW_DATA,program:RAW_PROGRAM,lkg:h46LkgRaw});
 check("newer primary data offers no downgrade recovery", Newer46.window.document.getElementById("protectedRecoveryBtn").classList.contains("hidden") && Newer46.window.document.getElementById("recoveryOverlay").classList.contains("hidden") && Newer46.window.eval("recoveryWritesAllowed()")===false);
-let StorageRead46=bootRaw({cfg:RAW_V2_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM},w=>{
+let StorageRead46=bootRaw({cfg:RAW_V3_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM},w=>{
   const p=Object.getPrototypeOf(w.localStorage), g=p.getItem;
   p.getItem=function(k){ if(k==="forge:cfg") throw new Error("read denied"); return g.call(this,k); };
 });
@@ -717,7 +717,7 @@ check("malformed nutrition rejected → USDA", C.window.document.getElementById(
 
 // ================= v49: training-session integrity =================
 const priorWorkout = {date:"2026-07-01",day:"D1",title:"Day 1",sets:{"Bench Press":[{w:100,r:5},{w:100,r:5},{w:100,r:5}]},notes:""};
-const T49 = boot(V2_CFG, {food:{},workouts:[priorWorkout],weights:[],meta:{lastBackup:null,logsSince:0}}, null, TEST_PROGRAM);
+const T49 = boot(V3_CFG, {food:{},workouts:[priorWorkout],weights:[],meta:{lastBackup:null,logsSince:0}}, null, TEST_PROGRAM);
 const dT49 = T49.window.document;
 const clickT49 = el=>(typeof el==="string"?dT49.getElementById(el):el).dispatchEvent(new T49.window.Event("click",{bubbles:true}));
 const plannedRows = [...dT49.querySelectorAll("#exerciseInputs .srow")];
@@ -736,7 +736,7 @@ clickT49("logWorkoutBtn");
 check("logging saves only the genuinely saved set", T49.window.eval(`data.workouts.length===2 && data.workouts[1].sets["Bench Press"].length===1 && data.workouts[1].sets["Bench Press"][0].w===105`));
 check("partial saved history cannot trigger false progression next time", T49.window.eval(`sessionState["Bench Press"].auto===false && sessionState["Bench Press"].rows.length===1 && sessionState["Bench Press"].rows[0].w===105`));
 
-const T49Invalid = boot(V2_CFG, EMPTY_DATA, null, TEST_PROGRAM);
+const T49Invalid = boot(V3_CFG, EMPTY_DATA, null, TEST_PROGRAM);
 const dT49Invalid = T49Invalid.window.document;
 const rIn49 = dT49Invalid.querySelector('#exerciseInputs input[data-field="reps"]');
 rIn49.value="5"; rIn49.dispatchEvent(new T49Invalid.window.Event("input",{bubbles:true}));
@@ -752,7 +752,7 @@ dT49Invalid.getElementById("wDay").dispatchEvent(new T49Invalid.window.Event("ch
 dT49Invalid.getElementById("logWorkoutBtn").dispatchEvent(new T49Invalid.window.Event("click",{bubbles:true}));
 check("cardio without minutes is refused with an explanation", T49Invalid.window.eval("data.workouts.length")===0 && /Enter cardio minutes/.test(dT49Invalid.getElementById("workoutErr").textContent));
 
-const T49Switch = boot(V2_CFG, EMPTY_DATA, null, TEST_PROGRAM);
+const T49Switch = boot(V3_CFG, EMPTY_DATA, null, TEST_PROGRAM);
 const dT49Switch = T49Switch.window.document;
 const touchedWeight = dT49Switch.querySelector('#exerciseInputs input[data-field="weight"]');
 touchedWeight.value="135";
@@ -768,7 +768,7 @@ dT49Switch.getElementById("wDay").dispatchEvent(new T49Switch.window.Event("chan
 check("confirming session-type change discards the in-progress draft only", dT49Switch.getElementById("wDay").value==="__CARDIO__" && T49Switch.window.eval("Object.keys(sessionState).length")===0 && T49Switch.window.eval("data.workouts.length")===0);
 
 // ================= v50: daily navigation + mobile consistency =================
-const T50 = boot(V2_CFG, EMPTY_DATA, null, TEST_PROGRAM);
+const T50 = boot(V3_CFG, EMPTY_DATA, null, TEST_PROGRAM);
 const dT50 = T50.window.document;
 const workChildren = [...dT50.getElementById("view-work").children];
 const identityPos = workChildren.indexOf(dT50.getElementById("programIdentityCard"));
@@ -798,7 +798,7 @@ check("workout step controls have 44px touch targets", !!stepTarget && T50.windo
 check("workout completion controls have 44px touch targets", !!saveTarget && T50.window.getComputedStyle(saveTarget).minHeight==="44px");
 
 // ================= v51: exercise-level completion =================
-const T51 = boot(V2_CFG, EMPTY_DATA, null, TEST_PROGRAM);
+const T51 = boot(V3_CFG, EMPTY_DATA, null, TEST_PROGRAM);
 const dT51 = T51.window.document;
 const clickT51 = el=>(typeof el==="string"?dT51.getElementById(el):el).dispatchEvent(new T51.window.Event("click",{bubbles:true}));
 function enterSet51(dom, dd, w, r){
@@ -824,7 +824,7 @@ clickT51("logWorkoutBtn");
 check("v51 save-and-log path: valid unsaved work is saved then logged, never silently dropped", T51.window.eval(`data.workouts.length===1 && data.workouts[0].sets["Bench Press"].length===1 && data.workouts[0].sets["Bench Press"][0].w===135`));
 
 // leaving Train with unsaved work warns; canceling stays
-const T51b = boot(V2_CFG, EMPTY_DATA, null, TEST_PROGRAM);
+const T51b = boot(V3_CFG, EMPTY_DATA, null, TEST_PROGRAM);
 const dT51b = T51b.window.document;
 dT51b.querySelector('.tab[data-view="work"]').dispatchEvent(new T51b.window.Event("click",{bubbles:true}));
 enterSet51(T51b, dT51b, 95, 8);
@@ -836,7 +836,7 @@ T51b.window.confirm = ()=>true;
 dT51b.querySelector('.tab[data-view="food"]').dispatchEvent(new T51b.window.Event("click",{bubbles:true}));
 check("v51 leave-Train warning: confirming leaves (entries remain in memory)", dT51b.getElementById("view-food").classList.contains("active") && T51b.window.eval(`sessionState["Bench Press"].rows[0].w`)===95);
 // saved-but-unlogged work also counts as meaningful for session-type switching
-const T51c = boot(V2_CFG, EMPTY_DATA, null, TEST_PROGRAM);
+const T51c = boot(V3_CFG, EMPTY_DATA, null, TEST_PROGRAM);
 const dT51c = T51c.window.document;
 enterSet51(T51c, dT51c, 115, 5);
 dT51c.querySelector("#exerciseInputs .saveExBtn").dispatchEvent(new T51c.window.Event("click",{bubbles:true}));
@@ -847,7 +847,7 @@ dT51c.getElementById("wDay").dispatchEvent(new T51c.window.Event("change",{bubbl
 check("v51 saved-but-unlogged work still guards session-type switching", switch51===1 && dT51c.getElementById("wDay").value==="D1");
 
 // ================= v51: food-flow improvements =================
-const F51 = boot(V2_CFG, EMPTY_DATA);
+const F51 = boot(V3_CFG, EMPTY_DATA);
 const dF51 = F51.window.document;
 F51.window.eval(`currentMeal="lunch"; renderMealSeg();`);
 F51.window.eval(`addEntry({name:"Chicken", cal:165, pro:31, carb:0, fat:3.6, meal:"lunch"});`);
@@ -885,7 +885,7 @@ check("v51 handoff behavior untouched by food changes", !!dF51.getElementById("h
 
 
 // ================= editable slider portions + stable usual-meal identity =================
-const FoodEdit = boot(V2_CFG, EMPTY_DATA);
+const FoodEdit = boot(V3_CFG, EMPTY_DATA);
 const dFoodEdit = FoodEdit.window.document;
 const clickFoodEdit = id=>dFoodEdit.getElementById(id).dispatchEvent(new FoodEdit.window.Event("click",{bubbles:true}));
 FoodEdit.window.eval(`
@@ -980,7 +980,7 @@ Object.assign(usualFood[dstr(-1)][0],{
   }
 });
 
-const UsualIdentity = boot(V2_CFG,Object.assign({},EMPTY_DATA,{food:usualFood}));
+const UsualIdentity = boot(V3_CFG,Object.assign({},EMPTY_DATA,{food:usualFood}));
 const dUsualIdentity = UsualIdentity.window.document;
 
 UsualIdentity.window.eval(`currentMeal="breakfast"; renderMealSeg(); renderFood();`);
@@ -1202,14 +1202,14 @@ for(let i=1;i<=6;i++){
   }];
 }
 const DistinctRecurring = boot(
-  V2_CFG,
+  V3_CFG,
   Object.assign({},EMPTY_DATA,{food:distinctRecurringFood})
 );
 check("usual foods do not merge unrelated products merely because they share a vague phrase",
   DistinctRecurring.window.eval(`usualFor("lunch")`)===null);
 
 // ================= v68: default ChatGPT handoff provider =================
-const H68Cfg = Object.assign({},V2_CFG);
+const H68Cfg = Object.assign({},V3_CFG);
 delete H68Cfg.aiProvider;
 delete H68Cfg.foodHandoffOn;
 const H68 = boot(H68Cfg,EMPTY_DATA);
@@ -1221,13 +1221,13 @@ check("v68 missing AI provider defaults to ChatGPT handoff",
 check("v68 default provider and Quick Log defaults are aligned",
   H68.window.eval("foodHandoffEnabled()")===true
   && !dH68.getElementById("aiHandoffControls").classList.contains("hidden"));
-const H68Claude = boot(Object.assign({},V2_CFG,{aiProvider:"anthropic",anthropicKey:"sk-test"}),EMPTY_DATA);
+const H68Claude = boot(Object.assign({},V3_CFG,{aiProvider:"anthropic",anthropicKey:"sk-test"}),EMPTY_DATA);
 check("v68 explicit Claude provider remains unchanged",
   H68Claude.window.eval("cfg.aiProvider")==="anthropic"
   && H68Claude.window.document.getElementById("sAiProvider").value==="anthropic");
 
 // ================= v60: default-on ChatGPT food handoff =================
-const H60 = boot(V2_CFG, EMPTY_DATA);
+const H60 = boot(V3_CFG, EMPTY_DATA);
 const dH60 = H60.window.document;
 const clickH60 = id=>dH60.getElementById(id).dispatchEvent(new H60.window.Event("click",{bubbles:true}));
 check("v60 food handoff is visible by default without a key", !dH60.getElementById("aiFoodCard").classList.contains("hidden") && !dH60.getElementById("aiHandoffControls").classList.contains("hidden"));
@@ -1236,22 +1236,22 @@ clickH60("foodHandoffToggleBtn");
 check("v60 disabling food handoff persists false and hides the no-key card", H60.window.eval("cfg.foodHandoffOn")===false && JSON.parse(H60.window.localStorage.getItem("forge:cfg")).foodHandoffOn===false && dH60.getElementById("aiFoodCard").classList.contains("hidden"));
 clickH60("foodHandoffToggleBtn");
 check("v60 food handoff can be restored from Settings", H60.window.eval("cfg.foodHandoffOn")===true && !dH60.getElementById("aiFoodCard").classList.contains("hidden") && dH60.getElementById("foodHandoffToggleBtn").getAttribute("aria-pressed")==="true");
-const H60Api = boot(Object.assign({},V2_CFG,{aiProvider:"anthropic",anthropicKey:"sk-test",foodHandoffOn:true}),EMPTY_DATA);
+const H60Api = boot(Object.assign({},V3_CFG,{aiProvider:"anthropic",anthropicKey:"sk-test",foodHandoffOn:true}),EMPTY_DATA);
 check("v60 a configured live API key keeps the live food flow", H60Api.window.document.getElementById("aiHandoffControls").classList.contains("hidden") && !H60Api.window.document.getElementById("aiFoodGoBtn").classList.contains("hidden"));
-const H60Off = boot(Object.assign({},V2_CFG,{aiProvider:"handoff",foodHandoffOn:false}),EMPTY_DATA);
+const H60Off = boot(Object.assign({},V3_CFG,{aiProvider:"handoff",foodHandoffOn:false}),EMPTY_DATA);
 check("v60 disabling food handoff also hides it in handoff provider mode", H60Off.window.document.getElementById("aiFoodCard").classList.contains("hidden"));
 check("v60 FAQ explains the default-on toggle", H60.window.eval(`FAQ.some(x=>x.q==="What is ChatGPT handoff mode?"&&/on by default/i.test(x.a)&&/Settings/.test(x.a))`));
-check("v60 keeps primary schemaVersion 2", H60.window.eval("SCHEMA_VERSION")===2);
+check("v60 keeps current primary schemaVersion 3", H60.window.eval("SCHEMA_VERSION")===3);
 
 // ================= v61: local food suggestions =================
-const S61 = boot(V2_CFG, EMPTY_DATA);
+const S61 = boot(V3_CFG, EMPTY_DATA);
 const dS61 = S61.window.document;
 const clickS61 = id=>dS61.getElementById(id).dispatchEvent(new S61.window.Event("click",{bubbles:true}));
 check("v61 food suggestions are opt-in and hidden by default", dS61.getElementById("foodSuggestionsCard").classList.contains("hidden") && dS61.getElementById("foodSuggestionsToggleBtn").getAttribute("aria-pressed")==="false");
 clickS61("foodSuggestionsToggleBtn");
 check("v61 enabling suggestions persists the preference", S61.window.eval("cfg.foodSuggestionsOn")===true && JSON.parse(S61.window.localStorage.getItem("forge:cfg")).foodSuggestionsOn===true);
 check("v61 enabled suggestions show three local review choices", !dS61.getElementById("foodSuggestionsCard").classList.contains("hidden") && dS61.querySelectorAll("#foodSuggestionsList button.result").length===3);
-const S61Offline=boot(Object.assign({},V2_CFG,{foodSuggestionsOn:true}),EMPTY_DATA,(w)=>{
+const S61Offline=boot(Object.assign({},V3_CFG,{foodSuggestionsOn:true}),EMPTY_DATA,(w)=>{
   Object.defineProperty(w.navigator,"onLine",{configurable:true,value:false});
   w.__suggestionFetches=0; w.fetch=()=>{ w.__suggestionFetches++; return Promise.reject(new Error("network should not run")); };
 });
@@ -1276,22 +1276,22 @@ clickS61("foodSuggestionsWeightLossBtn");
 check("v61 weight-loss focus is optional, accessible, and persisted", S61.window.eval("cfg.foodSuggestionsWeightLoss")===false && dS61.getElementById("foodSuggestionsWeightLossBtn").getAttribute("aria-pressed")==="false" && JSON.parse(S61.window.localStorage.getItem("forge:cfg")).foodSuggestionsWeightLoss===false);
 const past61=dstr(-1); dS61.getElementById("foodDate").value=past61; dS61.getElementById("foodDate").dispatchEvent(new S61.window.Event("change",{bubbles:true}));
 check("v61 next-food suggestions stay hidden while editing a historical date", dS61.getElementById("foodSuggestionsCard").classList.contains("hidden"));
-const S61NoTargets=boot(Object.assign({},V2_CFG,{calTarget:0,proTarget:0,carbGoal:0,fatGoal:0,foodSuggestionsOn:true}),EMPTY_DATA);
+const S61NoTargets=boot(Object.assign({},V3_CFG,{calTarget:0,proTarget:0,carbGoal:0,fatGoal:0,foodSuggestionsOn:true}),EMPTY_DATA);
 check("v61 enabled suggestions explain that targets are required", /Set calorie and macro targets/.test(S61NoTargets.window.document.getElementById("foodSuggestionsSummary").textContent) && S61NoTargets.window.document.querySelectorAll("#foodSuggestionsList button").length===0);
 const fullFood61={}; fullFood61[dstr(0)]=[{name:"Full day",cal:1800,pro:170,carb:180,fat:55,meal:"dinner"}];
-const S61Full=boot(Object.assign({},V2_CFG,{foodSuggestionsOn:true}),Object.assign({},EMPTY_DATA,{food:fullFood61}));
+const S61Full=boot(Object.assign({},V3_CFG,{foodSuggestionsOn:true}),Object.assign({},EMPTY_DATA,{food:fullFood61}));
 check("v61 reached calorie target gives an honest no-force message", S61Full.window.document.querySelectorAll("#foodSuggestionsList button").length===0 && /No need to force another food|No normal food/.test(S61Full.window.document.getElementById("foodSuggestionsList").textContent));
 const familiarData61=Object.assign({},EMPTY_DATA,{recents:[{name:"Ryan's lunch yogurt",brand:"Saved",cal100:60,pro100:10,carb100:4,fat100:0.5,lastAmt:200,lastUnit:"g"}],foodCounts:{"Ryan's lunch yogurt|Saved":9},mealCounts:{lunch:{"Ryan's lunch yogurt|Saved":7}}});
-const S61Familiar=boot(Object.assign({},V2_CFG,{foodSuggestionsOn:true}),familiarData61);
+const S61Familiar=boot(Object.assign({},V3_CFG,{foodSuggestionsOn:true}),familiarData61);
 S61Familiar.window.eval(`currentMeal="lunch"; foodSuggestionPage=0; renderMealSeg(); renderFood();`);
 check("v61 familiar meal history is represented in suggestions", /Ryan's lunch yogurt/.test(S61Familiar.window.document.getElementById("foodSuggestionsList").textContent) && /Familiar lunch choice/.test(S61Familiar.window.document.getElementById("foodSuggestionsList").textContent));
 check("v61 suggestion buttons remain keyboard-accessible native controls", [...S61Familiar.window.document.querySelectorAll("#foodSuggestionsList button")].every(b=>b.tagName==="BUTTON" && /Review suggestion:/.test(b.getAttribute("aria-label")||"")));
 check("v61 FAQ fully explains local suggestions, review-before-log, visibility limits, and allergy limits", S61.window.eval(`FAQ.some(x=>x.q==="How do food suggestions work?"&&/one food at a time/.test(x.a)&&/works offline/.test(x.a)&&/does not call USDA or an AI/.test(x.a)&&/nothing logs until/.test(x.a)&&/allergy/i.test(x.a)) && FAQ.some(x=>x.q==="Why aren't food suggestions showing?"&&/today's date/.test(x.a)&&/calorie and macro targets/.test(x.a)&&/individual foods/.test(x.a))`));
-check("v61 keeps primary schemaVersion 2", S61.window.eval("SCHEMA_VERSION")===2);
+check("v61 keeps current primary schemaVersion 3", S61.window.eval("SCHEMA_VERSION")===3);
 
 
 // ================= v62: expanded USDA-anchored suggestion catalog =================
-const C62 = boot(Object.assign({},V2_CFG,{foodSuggestionsOn:true}), EMPTY_DATA);
+const C62 = boot(Object.assign({},V3_CFG,{foodSuggestionsOn:true}), EMPTY_DATA);
 const dC62 = C62.window.document;
 check("v62 bundled USDA suggestion catalog loads with exactly 120 foods", C62.window.eval(`FOOD_SUGGESTION_CATALOG_VERSION==="USDA Standard Reference 28" && FOOD_SUGGESTION_CATALOG.length===120`));
 check("v62 catalog display names and USDA NDB numbers are unique", C62.window.eval(`new Set(FOOD_SUGGESTION_CATALOG.map(x=>x.name)).size===120 && new Set(FOOD_SUGGESTION_CATALOG.map(x=>x.ndb)).size===120`));
@@ -1317,8 +1317,8 @@ check("v62 a catalog suggestion opens its exact listed serving for review", dC62
 check("v62 review shows the USDA per-100g values and correctly scaled serving", /USDA reference · SR28/.test(dC62.getElementById("selName").textContent) && /165 kcal/.test(dC62.getElementById("selPer100").textContent) && dC62.getElementById("calcCal").textContent==="186" && dC62.getElementById("calcPro").textContent==="35");
 check("v62 reviewing a broad-catalog suggestion never auto-logs it", C62.window.eval(`(data.food[todayStr()]||[]).length`)===beforeReview62);
 check("v62 FAQ explains USDA sourcing, exact servings, and real-world variation", C62.window.eval(`FAQ.some(x=>x.q==="How accurate are suggested-food calories and macros?"&&/per 100 grams/.test(x.a)&&/exact gram weight/.test(x.a)&&/NDB number/.test(x.a)&&/brand/.test(x.a)) && FAQ.some(x=>x.q==="How do food suggestions work?"&&/120 common foods/.test(x.a)&&/familiar foods receive a bonus but are not required/.test(x.a)&&/does not call USDA or an AI/.test(x.a))`));
-check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v67"'); })());
-check("v62 keeps primary schemaVersion 2", C62.window.eval("SCHEMA_VERSION")===2);
+check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"'); })());
+check("v62 keeps current primary schemaVersion 3", C62.window.eval("SCHEMA_VERSION")===3);
 
 // ================= ChatGPT handoff paste flow =================
 const H = boot(Object.assign({}, EXISTING_CFG, {aiProvider:"handoff"}), EMPTY_DATA);
@@ -1364,7 +1364,7 @@ check("her handwriting embedded byte-identically to the frozen reference", bella
 check("embed count is exactly 1 (Phase 1 dedup landed; was 2 in v41)", bellaCount === 1);
 
 // ================= v54: manual rest + program identity =================
-const T54 = boot(V2_CFG, EMPTY_DATA, null, TEST_PROGRAM);
+const T54 = boot(V3_CFG, EMPTY_DATA, null, TEST_PROGRAM);
 const dT54 = T54.window.document;
 check("v54 current-program card identifies the loaded program and selected session", dT54.getElementById("programName").textContent===TEST_PROGRAM.name && /Selected session:/.test(dT54.getElementById("programDayName").textContent));
 dT54.getElementById("wDay").value="__CARDIO__";
@@ -1404,7 +1404,7 @@ check("v54 leaving Train hides the rest control", dT54.getElementById("restDock"
 
 // ================= v64: elapsed-time rest timer =================
 const CLOCK64 = 2000000000000;
-const T64 = boot(V2_CFG, EMPTY_DATA, w=>{ w.Date.now=()=>CLOCK64; }, TEST_PROGRAM);
+const T64 = boot(V3_CFG, EMPTY_DATA, w=>{ w.Date.now=()=>CLOCK64; }, TEST_PROGRAM);
 const dT64 = T64.window.document;
 T64.window.eval(`activateView("work",null,false)`);
 dT64.getElementById("restStartBtn").dispatchEvent(new T64.window.Event("click",{bubbles:true}));
@@ -1438,7 +1438,7 @@ const T64Expired = bootRaw({
 const relaunchedReady64 = JSON.parse(T64Expired.window.localStorage.getItem("forge:rest-timer"));
 check("v65 relaunch or phone restart expiration resets to the last started duration", T64Expired.window.eval("!restRunning && !restPaused && restRemaining===0 && restReadySec===30") && T64Expired.window.document.getElementById("restDisplay").textContent==="0:30" && relaunchedReady64.status==="ready" && relaunchedReady64.durationSec===30);
 
-const T65VisibleExpired = boot(Object.assign({},V2_CFG,{restSec:75}), EMPTY_DATA, w=>{ w.Date.now=()=>CLOCK64; }, TEST_PROGRAM);
+const T65VisibleExpired = boot(Object.assign({},V3_CFG,{restSec:75}), EMPTY_DATA, w=>{ w.Date.now=()=>CLOCK64; }, TEST_PROGRAM);
 T65VisibleExpired.window.eval(`activateView("work",null,false)`);
 T65VisibleExpired.window.document.getElementById("restStartBtn").dispatchEvent(new T65VisibleExpired.window.Event("click",{bubbles:true}));
 T65VisibleExpired.window.Date.now=()=>CLOCK64+76000;
@@ -1446,7 +1446,7 @@ T65VisibleExpired.window.eval("tickRestCountdown()");
 const visibleReady65 = JSON.parse(T65VisibleExpired.window.localStorage.getItem("forge:rest-timer"));
 check("v65 visible timer expiration resets to the exact last started duration", T65VisibleExpired.window.eval("!restRunning && !restPaused && restRemaining===0 && restReadySec===75") && T65VisibleExpired.window.document.getElementById("restDisplay").textContent==="1:15" && !T65VisibleExpired.window.document.getElementById("restStartBtn").classList.contains("hidden"));
 
-const T65BackgroundExpired = boot(Object.assign({},V2_CFG,{restSec:120}), EMPTY_DATA, w=>{ w.Date.now=()=>CLOCK64; }, TEST_PROGRAM);
+const T65BackgroundExpired = boot(Object.assign({},V3_CFG,{restSec:120}), EMPTY_DATA, w=>{ w.Date.now=()=>CLOCK64; }, TEST_PROGRAM);
 T65BackgroundExpired.window.eval(`activateView("work",null,false)`);
 T65BackgroundExpired.window.document.getElementById("restStartBtn").dispatchEvent(new T65BackgroundExpired.window.Event("click",{bubbles:true}));
 T65BackgroundExpired.window.Date.now=()=>CLOCK64+121000;
@@ -1467,7 +1467,7 @@ check("native timer enables sound, banner, and notification-list presentation on
 
 const CLOCK_NOTIFY = 2100000000000;
 const NotifyGranted = makeLocalNotifications({permission:"granted"});
-const TN = boot(Object.assign({},V2_CFG,{restSec:60}), EMPTY_DATA, w=>{
+const TN = boot(Object.assign({},V3_CFG,{restSec:60}), EMPTY_DATA, w=>{
   w.Date.now=()=>CLOCK_NOTIFY;
   NotifyGranted.install(w);
 }, TEST_PROGRAM);
@@ -1497,7 +1497,7 @@ await TN.window.eval("restNotificationWork");
 check("ending early cancels the pending notification and clears the timer", !TN.window.eval("restRunning||restPaused") && NotifyGranted.pending.size===0 && TN.window.localStorage.getItem("forge:rest-timer")===null);
 
 const NotifyPrompt = makeLocalNotifications({permission:"prompt",requestResult:"granted"});
-const TNPrompt = boot(Object.assign({},V2_CFG,{restSec:30}), EMPTY_DATA, w=>{
+const TNPrompt = boot(Object.assign({},V3_CFG,{restSec:30}), EMPTY_DATA, w=>{
   w.Date.now=()=>CLOCK_NOTIFY;
   NotifyPrompt.install(w);
 }, TEST_PROGRAM);
@@ -1512,7 +1512,7 @@ const notifyPromptStartMethods = NotifyPrompt.calls.slice(notifyPromptCallsBefor
 check("starting the timer is the user action that requests notification permission", notifyPromptRequestsBeforeStart===0 && notifyPromptSchedulesBeforeStart===0 && notifyPromptStartMethods==="checkPermissions,requestPermissions,getPending,schedule" && NotifyPrompt.pending.size===1);
 
 const NotifyDenied = makeLocalNotifications({permission:"denied"});
-const TNDenied = boot(Object.assign({},V2_CFG,{restSec:30}), EMPTY_DATA, w=>{
+const TNDenied = boot(Object.assign({},V3_CFG,{restSec:30}), EMPTY_DATA, w=>{
   w.Date.now=()=>CLOCK_NOTIFY;
   NotifyDenied.install(w);
 }, TEST_PROGRAM);
@@ -1523,7 +1523,7 @@ check("denied permission never breaks or delays the manual timer", TNDenied.wind
 
 const NotifyRestore = makeLocalNotifications({permission:"granted",pending:[{id:64065,title:"Old",body:"Old",schedule:{at:new Date(CLOCK_NOTIFY+999999)}}]});
 const TNRestore = bootRaw({
-  cfg:JSON.stringify(Object.assign({},V2_CFG,{restSec:45})),
+  cfg:JSON.stringify(Object.assign({},V3_CFG,{restSec:45})),
   data:JSON.stringify(EMPTY_DATA),
   program:JSON.stringify(TEST_PROGRAM),
   restTimer:JSON.stringify({formatVersion:1,status:"running",endAt:CLOCK_NOTIFY+45000,remainingSec:45,durationSec:45,savedAt:CLOCK_NOTIFY})
@@ -1537,7 +1537,7 @@ check("relaunch replaces a stale pending notification with the persisted timer d
 
 const NotifyRestorePrompt = makeLocalNotifications({permission:"prompt"});
 const TNRestorePrompt = bootRaw({
-  cfg:JSON.stringify(V2_CFG),
+  cfg:JSON.stringify(V3_CFG),
   data:JSON.stringify(EMPTY_DATA),
   program:JSON.stringify(TEST_PROGRAM),
   restTimer:JSON.stringify({formatVersion:1,status:"running",endAt:CLOCK_NOTIFY+45000,remainingSec:45,durationSec:45,savedAt:CLOCK_NOTIFY})
@@ -1550,7 +1550,7 @@ check("relaunch never opens the notification permission prompt without a timer a
 
 const NotifyPausedRestore = makeLocalNotifications({permission:"granted",pending:[{id:64065,title:"Old",body:"Old"}]});
 const TNPausedRestore = bootRaw({
-  cfg:JSON.stringify(V2_CFG),
+  cfg:JSON.stringify(V3_CFG),
   data:JSON.stringify(EMPTY_DATA),
   program:JSON.stringify(TEST_PROGRAM),
   restTimer:JSON.stringify({formatVersion:1,status:"paused",remainingSec:20,durationSec:30,savedAt:CLOCK_NOTIFY})
@@ -1561,7 +1561,7 @@ const TNPausedRestore = bootRaw({
 await TNPausedRestore.window.eval("restNotificationWork");
 check("relaunch cancels stale pending notifications for paused timers", TNPausedRestore.window.eval("restPaused && !restRunning") && NotifyPausedRestore.pending.size===0 && NotifyPausedRestore.calls.some(c=>c.method==="cancel"));
 
-const TNWeb = boot(Object.assign({},V2_CFG,{restSec:30}), EMPTY_DATA, w=>{ w.Date.now=()=>CLOCK_NOTIFY; }, TEST_PROGRAM);
+const TNWeb = boot(Object.assign({},V3_CFG,{restSec:30}), EMPTY_DATA, w=>{ w.Date.now=()=>CLOCK_NOTIFY; }, TEST_PROGRAM);
 TNWeb.window.eval(`activateView("work",null,false)`);
 TNWeb.window.document.getElementById("restStartBtn").dispatchEvent(new TNWeb.window.Event("click",{bubbles:true}));
 await TNWeb.window.eval("restNotificationWork");
@@ -1676,9 +1676,21 @@ check("FAQ no longer sends users to the retired Program tools label", P.window.e
 check("FAQ privacy and storage copy distinguish local data, network requests, and approximate usage", P.window.eval(`FAQ.some(x=>x.q==="Where is my data stored? Is it private?"&&/on this device/.test(x.a)&&/Local food suggestions/.test(x.a)&&/Online food searches/.test(x.a)&&/Optional AI features/.test(x.a)) && FAQ.some(x=>x.q==="How much storage is BlackPyre using?"&&/Settings → Data &amp; recovery/.test(x.a)&&/approximate browser-storage/.test(x.a)&&/Back up before clearing/.test(x.a))`));
 check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.some(f=>/chicken breast/i.test(f.n))`));
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
-check("SW precaches the four data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js"].every(f=>sw.includes('"./'+f+'"')));
+check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+"/.test(sw));
-check("v67 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v67"'));
+check("v76 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v76"'));
+
+const nativePrep76 = fs.readFileSync(
+  path.join(__dirname,"..","tools","prepare-native.sh"),
+  "utf8"
+);
+check(
+  "v76 native prep copies the canonical exercise library before Capacitor sync",
+  /^\s*data-exercises\.js\s+\\$/m.test(nativePrep76)
+  && nativePrep76.indexOf("data-exercises.js")
+     < nativePrep76.indexOf("npx cap sync ios")
+);
+
 const rawIndex = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 
 check("Undo reserves bottom space and stacks above both collapsed and expanded Train timer controls",
@@ -1689,7 +1701,7 @@ check("Undo reserves bottom space and stacks above both collapsed and expanded T
   && /body\.rest-dock-visible\.rest-options-open #undoToast\s*\{[^}]*bottom:calc\(226px \+ env\(safe-area-inset-bottom, 0px\)\);[^}]*\}/s.test(rawIndex));
 
 check("data scripts load before the app scripts (raw file order)",
-  ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js"].every(f=>
+  ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>
     rawIndex.indexOf('src="'+f+'"') > -1 &&
     rawIndex.indexOf('src="'+f+'"') < rawIndex.indexOf('src="scripts/01-storage.js"')));
 
@@ -1704,14 +1716,14 @@ check("no inline app script remains in index.html", !/<script>(?!\s*<)/.test(raw
 check("SW precaches all 7 slices", SLICES.every(f=>sw.includes('"./scripts/'+f+'"')));
 
 // ================= Phase 2 corrections: strict mode, exact order, migration identity =================
-const LOCAL_SCRIPTS = ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js"].concat(SLICES.map(f=>"scripts/"+f));
+const LOCAL_SCRIPTS = ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].concat(SLICES.map(f=>"scripts/"+f));
 check("every local classic script begins with the strict-mode directive",
   LOCAL_SCRIPTS.every(f=>fs.readFileSync(path.join(__dirname, "..", f), "utf8").startsWith('"use strict";')));
 
 const APPROVED_ORDER = LOCAL_SCRIPTS; // data files, then slices 01..07 — this order is load-bearing
 const scriptTags = [...rawIndex.matchAll(/<script\b[^>]*\bsrc="([^"]+)"[^>]*><\/script>/g)];
-check("exactly the 11 approved scripts, each exactly once, in the approved order",
-  scriptTags.length===11 && scriptTags.every((t,i)=>t[1]===APPROVED_ORDER[i]));
+check("exactly the 12 approved scripts, each exactly once, in the approved order",
+  scriptTags.length===12 && scriptTags.every((t,i)=>t[1]===APPROVED_ORDER[i]));
 check("no local script tag uses async, defer, or type=module",
   scriptTags.every(t=>!/\basync\b|\bdefer\b|type="module"/.test(t[0])));
 
@@ -1736,7 +1748,7 @@ check("SW update mechanics unchanged (skipWaiting, clients.claim, cache-first sh
   sw.includes("skipWaiting()") && sw.includes("clients.claim()") && sw.includes("caches.open(CACHE)"));
 
 // ================= v55: interface simplification, timer consolidation, offline clarity =================
-const T55 = boot(V2_CFG, EMPTY_DATA);
+const T55 = boot(V3_CFG, EMPTY_DATA);
 const dT55 = T55.window.document;
 const clickT55 = id=>dT55.getElementById(id).dispatchEvent(new T55.window.Event("click",{bubbles:true}));
 check("v55 Home keeps secondary content collapsed by default",
@@ -1755,6 +1767,102 @@ const v55Preset120=[...dT55.querySelectorAll("#restPresets .xbtn")].find(b=>b.te
 v55Preset120.dispatchEvent(new T55.window.Event("click",{bubbles:true}));
 check("v55 choosing a duration updates the timer and recloses the compact chooser",
   T55.window.eval("cfg.restSec===120") && dT55.getElementById("restDisplay").textContent==="2:00" && dT55.getElementById("restDockOptions").classList.contains("hidden") && !dT55.body.classList.contains("rest-options-open"));
+clickT55("restStartBtn");
+clickT55("restDurationBtn");
+
+const v76RunningPreset30 =
+  [...dT55.querySelectorAll(
+    "#restPresets .xbtn"
+  )].find(button=>
+    button.textContent.trim()==="0:30"
+  );
+
+if (v76RunningPreset30){
+  v76RunningPreset30.dispatchEvent(
+    new T55.window.Event(
+      "click",
+      {bubbles:true}
+    )
+  );
+}
+
+const v76RunningTimerRecord =
+  JSON.parse(
+    T55.window.localStorage.getItem(
+      "forge:rest-timer"
+    )
+  ) || {};
+
+check(
+  "v76 quick duration immediately replaces a running countdown",
+  !!v76RunningPreset30
+  && T55.window.eval(`
+    restRunning
+    && !restPaused
+    && restRemaining===30
+    && restDurationSec===30
+    && cfg.restSec===30
+  `)
+  && dT55.getElementById(
+    "restDisplay"
+  ).textContent==="0:30"
+  && v76RunningTimerRecord.status==="running"
+  && v76RunningTimerRecord.remainingSec===30
+  && v76RunningTimerRecord.durationSec===30
+  && dT55.getElementById(
+    "restDockOptions"
+  ).classList.contains("hidden")
+);
+
+clickT55("restPauseBtn");
+clickT55("restDurationBtn");
+
+const v76PausedPreset60 =
+  [...dT55.querySelectorAll(
+    "#restPresets .xbtn"
+  )].find(button=>
+    button.textContent.trim()==="1:00"
+  );
+
+if (v76PausedPreset60){
+  v76PausedPreset60.dispatchEvent(
+    new T55.window.Event(
+      "click",
+      {bubbles:true}
+    )
+  );
+}
+
+const v76PausedTimerRecord =
+  JSON.parse(
+    T55.window.localStorage.getItem(
+      "forge:rest-timer"
+    )
+  ) || {};
+
+check(
+  "v76 quick duration immediately replaces a paused countdown without resuming it",
+  !!v76PausedPreset60
+  && T55.window.eval(`
+    !restRunning
+    && restPaused
+    && restRemaining===60
+    && restDurationSec===60
+    && cfg.restSec===60
+  `)
+  && dT55.getElementById(
+    "restDisplay"
+  ).textContent==="1:00"
+  && dT55.getElementById(
+    "restPauseBtn"
+  ).textContent==="Resume"
+  && v76PausedTimerRecord.status==="paused"
+  && v76PausedTimerRecord.remainingSec===60
+  && v76PausedTimerRecord.durationSec===60
+);
+
+clickT55("restEndBtn");
+
 Object.defineProperty(T55.window.navigator,"onLine",{configurable:true,value:false});
 T55.window.dispatchEvent(new T55.window.Event("offline"));
 check("v55 offline notice explains what remains available",
@@ -1769,12 +1877,32 @@ T55.window.eval("renderRecoveryStatus()");
 check("v55 Data & recovery opens automatically when a recovery copy needs attention", dT55.getElementById("settingsDataDetails").open===true && !dT55.getElementById("quarantineCard").classList.contains("hidden"));
 check("v55 common compact controls retain practical touch targets",
   /\.xbtn \{[^}]*min-height:44px/.test(rawIndex) && /\.btn\.small, \.chip, \.faq-q, \.seg button \{ min-height:44px; \}/.test(rawIndex));
+check(
+  "v76 exercise names remain smaller than verified card headings without changing field labels",
+  /\.exercise \.x-head b \{[^}]*font-size:14px[^}]*font-weight:700[^}]*overflow-wrap:anywhere/.test(rawIndex)
+  && /\.card > \.label:first-child,\s*#trainingToolsCard > \.row:first-child > \.label:first-child \{[^}]*font-size:16px[^}]*font-weight:700/.test(rawIndex)
+  && /\.label \{ font-size:10px; letter-spacing:\.14em;/.test(rawIndex)
+  && /\.exercise \.x-head \.scheme \{[^}]*font-size:12px/.test(rawIndex)
+);
+
+check(
+  "v76 My Exercises uses the 16px card-heading level while Save Exercise keeps the selected accent",
+  rawIndex.includes(".my-exercises-launch-title { font-family:'Oswald',sans-serif; font-size:16px;")
+  && rawIndex.includes(".saveExBtn { background:var(--ember); border-color:var(--ember); color:#101215; font-weight:700;")
+);
+
+check(
+  "v76 rest-duration dropdown has a larger visible control, chevron, and tap target",
+  /\.rest-dock-readout \{[^}]*min-width:124px[^}]*min-height:52px[^}]*padding:8px 12px[^}]*border:1px solid/.test(rawIndex)
+  && /\.rest-dock-caret \{[^}]*min-width:24px[^}]*min-height:24px[^}]*font-size:20px[^}]*font-weight:700/.test(rawIndex)
+);
+
 check("v55 FAQ documents consolidated timer, collapsed sections, and offline behavior",
   T55.window.eval(`FAQ.some(x=>x.q==="What's plate math and the rest timer?"&&/floating timer/.test(x.a)&&/tap the displayed duration/.test(x.a)) && FAQ.some(x=>x.q==="Why are parts of Home and Settings collapsed?") && FAQ.some(x=>x.q==="What works when BlackPyre says Offline?")`));
 
 
 // ================= v56: persistent drafts, action safety, offline fast-fail =================
-const D56 = boot(V2_CFG, V2_DATA, null, TEST_PROGRAM);
+const D56 = boot(V3_CFG, V2_DATA, null, TEST_PROGRAM);
 const dD56 = D56.window.document;
 const wD56=dD56.querySelector('#exerciseInputs input[data-field="weight"]');
 const rD56=dD56.querySelector('#exerciseInputs input[data-field="reps"]');
@@ -1809,7 +1937,7 @@ check("v56 confirmed Discard removes the saved draft", D56Discard.window.eval("d
 const deleteDay=dstr(0);
 const deleteData={food:{},workouts:[{date:deleteDay,day:"D1",title:"Delete Me",sets:{Squat:[{w:100,r:5}]},notes:""}],weights:[{date:deleteDay,lbs:200}],measure:[{date:deleteDay,waist:36,chest:42,arm:15}],myFoods:{abc:{name:"Saved Food",brand:"Mine",cal100:100,pro100:10,carb100:5,fat100:2}},meals:[{name:"Saved Meal",items:[{name:"Food",cal:100,pro:10,carb:5,fat:2,meal:"other"}]}],meta:{lastBackup:null,logsSince:0},activeWorkoutDraft:null};
 deleteData.food[deleteDay]=[{name:"Food Entry",cal:100,pro:10,carb:5,fat:2,meal:"other"}];
-const U56=boot(Object.assign({},V2_CFG,{measureOn:true}),deleteData,null,TEST_PROGRAM);
+const U56=boot(Object.assign({},V3_CFG,{measureOn:true}),deleteData,null,TEST_PROGRAM);
 const dU56=U56.window.document;
 dU56.querySelector("#workHistory .delWork").dispatchEvent(new U56.window.Event("click",{bubbles:true}));
 check("v56 workout deletion offers working Undo", U56.window.eval("data.workouts.length")===0 && !dU56.getElementById("undoToast").classList.contains("hidden"));
@@ -1832,7 +1960,7 @@ U56.window.eval("deleteSavedMealAt(0)");
 dU56.getElementById("undoBtn").dispatchEvent(new U56.window.Event("click",{bubbles:true}));
 check("v56 Undo restores a deleted saved meal", U56.window.eval("data.meals.length")===1);
 
-const M56=boot(V2_CFG,V2_DATA);
+const M56=boot(V3_CFG,V2_DATA);
 const dM56=M56.window.document;
 dM56.getElementById("mCal").value="200";
 dM56.getElementById("addManualBtn").dispatchEvent(new M56.window.Event("click",{bubbles:true}));
@@ -1841,7 +1969,7 @@ dM56.getElementById("mName").value="Test food"; dM56.getElementById("mCal").valu
 dM56.getElementById("addManualBtn").dispatchEvent(new M56.window.Event("click",{bubbles:true}));
 check("v56 manual food missing calories explains and focuses calories", dM56.activeElement===dM56.getElementById("mCal") && /calories greater than 0/.test(dM56.getElementById("saveState").textContent));
 
-const P56=boot(V2_CFG,Object.assign({},V2_DATA,{workouts:[{date:deleteDay,day:"D1",title:"History",sets:{},notes:""}]}),null,TEST_PROGRAM);
+const P56=boot(V3_CFG,Object.assign({},V2_DATA,{workouts:[{date:deleteDay,day:"D1",title:"History",sets:{},notes:""}]}),null,TEST_PROGRAM);
 P56.window.confirm=()=>false;
 let replace56=P56.window.eval(`replaceActiveProgram({name:"New Program",days:[{id:"N1",title:"New",exercises:[{name:"Squat"}]}]})`);
 check("v56 canceling program replacement preserves the active program and history", replace56.cancelled && P56.window.eval("program.name")===TEST_PROGRAM.name && P56.window.eval("data.workouts.length")===1);
@@ -1849,7 +1977,7 @@ P56.window.confirm=()=>true;
 replace56=P56.window.eval(`replaceActiveProgram({name:"New Program",days:[{id:"N1",title:"New",exercises:[{name:"Squat"}]}]})`);
 check("v56 confirmed program replacement changes only the program", replace56.ok && P56.window.eval("program.name")==="New Program" && P56.window.eval("data.workouts.length")===1);
 
-const O56=boot(Object.assign({},V2_CFG,{usdaKey:"k",anthropicKey:"sk-test",aiProvider:"anthropic"}),V2_DATA,w=>{w.__netCalls=[];w.fetch=(...a)=>{w.__netCalls.push(a);return Promise.reject(new Error("should not fetch"));};});
+const O56=boot(Object.assign({},V3_CFG,{usdaKey:"k",anthropicKey:"sk-test",aiProvider:"anthropic"}),V2_DATA,w=>{w.__netCalls=[];w.fetch=(...a)=>{w.__netCalls.push(a);return Promise.reject(new Error("should not fetch"));};});
 const dO56=O56.window.document;
 Object.defineProperty(O56.window.navigator,"onLine",{configurable:true,value:false});
 dO56.getElementById("foodQuery").value="chicken";
@@ -1881,7 +2009,7 @@ const hasAccessibleName57 = el=>{
   }
   return el.tagName==="BUTTON" && !!el.textContent.trim();
 };
-const A57=boot(Object.assign({},V2_CFG,{anthropicKey:"sk-test",aiProvider:"anthropic"}),V2_DATA,null,TEST_PROGRAM);
+const A57=boot(Object.assign({},V3_CFG,{anthropicKey:"sk-test",aiProvider:"anthropic"}),V2_DATA,null,TEST_PROGRAM);
 const dA57=A57.window.document;
 A57.window.eval(`renderSessionInputs(); renderRecents(); renderMyFoods(); openBuilder(false); renderResults([{name:"Accessible chicken",brand:"Suite",cal100:165,pro100:31,carb100:0,fat100:3.6}]);`);
 await wait(40);
@@ -1961,7 +2089,7 @@ const V63_POPULATED_DATA = Object.assign({}, V2_DATA, {
 });
 function makeV63Lkg(dataObj,savedAt){
   return JSON.stringify({recoveryFormatVersion:1,savedAt:savedAt||"2026-07-20T12:00:00.000Z",source:"v63-test",
-    strings:{cfg:RAW_V2_CFG,data:JSON.stringify(dataObj),program:RAW_PROGRAM},legacyData:null});
+    strings:{cfg:RAW_V3_CFG,data:JSON.stringify(dataObj),program:RAW_PROGRAM},legacyData:null});
 }
 const V63_POP_LKG = makeV63Lkg(V63_POPULATED_DATA);
 const V63_EMPTY_LKG = makeV63Lkg(V2_DATA,"2026-07-21T12:00:00.000Z");
@@ -1974,7 +2102,7 @@ const V63_NEWER_INSTALL = JSON.stringify({formatVersion:2,establishedAt:"future"
 const NewerInstall63=bootRaw({install:V63_NEWER_INSTALL});
 check("v63 newer installation markers are preserved and cannot be mistaken for a fresh install", NewerInstall63.window.eval(`protectedMode && installMarkerStatus().newer`) && NewerInstall63.window.localStorage.getItem("forge:install")===V63_NEWER_INSTALL && NewerInstall63.window.localStorage.getItem("forge:data")===null);
 
-const MissingData63=bootRaw({cfg:RAW_V2_CFG,program:RAW_PROGRAM,lkg:V63_POP_LKG});
+const MissingData63=bootRaw({cfg:RAW_V3_CFG,program:RAW_PROGRAM,lkg:V63_POP_LKG});
 check("v63 missing logs on an established install enters protected mode", MissingData63.window.eval(`protectedMode && protectedModeDiagnostic.stage==="missing-primary" && protectedModeDiagnostic.part==="data"`));
 check("v63 missing-log protected view loads the validated snapshot", MissingData63.window.eval(`data.weights.length===1 && data.food["2026-07-20"].length===1`));
 check("v63 missing logs are never silently recreated or allowed to replace LKG", MissingData63.window.localStorage.getItem("forge:data")===null && MissingData63.window.localStorage.getItem("forge:lkg")===V63_POP_LKG && callsFor(MissingData63,"forge:lkg").length===0);
@@ -1987,27 +2115,27 @@ check("v63 missing-settings protected view uses snapshot settings without writin
 const AllMissing63=bootRaw({lkg:V63_POP_LKG});
 check("v63 all-primary-keys-missing incident remains recoverable", AllMissing63.window.eval(`protectedMode && data.weights.length===1 && cfg.calTarget===1800 && program.name==="Test Program"`));
 
-const PreviousWins63=bootRaw({cfg:RAW_V2_CFG,program:RAW_PROGRAM,lkg:V63_EMPTY_LKG,lkgPrevious:V63_POP_LKG});
+const PreviousWins63=bootRaw({cfg:RAW_V3_CFG,program:RAW_PROGRAM,lkg:V63_EMPTY_LKG,lkgPrevious:V63_POP_LKG});
 check("v63 populated previous snapshot outranks a newer empty current snapshot", PreviousWins63.window.eval(`getBestStoredLkgStatus().key===LKG_PREVIOUS_KEY && data.weights.length===1`));
 check("v63 recovery summary reports multiple validated snapshots", /best of 2 validated snapshots/.test(PreviousWins63.window.eval(`buildLkgRecoveryCandidate().summary`)));
 
-const EmptyRegression63=bootRaw({cfg:RAW_V2_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM,lkg:V63_POP_LKG});
+const EmptyRegression63=bootRaw({cfg:RAW_V3_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM,lkg:V63_POP_LKG});
 check("v63 present-but-empty regression cannot replace a populated snapshot", EmptyRegression63.window.localStorage.getItem("forge:lkg")===V63_POP_LKG && EmptyRegression63.window.eval(`lkgStatus.retained===true`));
 
 const Old63=makeV63Lkg(Object.assign({},V63_POPULATED_DATA,{weights:[{date:"2026-07-19",lbs:221}]}),"2026-07-19T12:00:00.000Z");
-const Rotate63=bootRaw({cfg:RAW_V2_CFG,data:JSON.stringify(V63_POPULATED_DATA),program:RAW_PROGRAM,lkg:Old63});
+const Rotate63=bootRaw({cfg:RAW_V3_CFG,data:JSON.stringify(V63_POPULATED_DATA),program:RAW_PROGRAM,lkg:Old63});
 check("v63 healthy snapshot refresh rotates prior current into previous", Rotate63.window.localStorage.getItem("forge:lkg:previous")===Old63 && Rotate63.window.localStorage.getItem("forge:lkg")!==Old63);
 const firstCurrent63=Rotate63.window.localStorage.getItem("forge:lkg");
 Rotate63.window.eval(`data.weights.push({date:"2026-07-21",lbs:219}); save();`);
 check("v63 second healthy snapshot keeps two rolling generations", Rotate63.window.localStorage.getItem("forge:lkg:previous")===firstCurrent63 && Rotate63.window.localStorage.getItem("forge:lkg:older")===Old63);
 
-const RuntimeLoss63=bootRaw({cfg:RAW_V2_CFG,data:JSON.stringify(V63_POPULATED_DATA),program:RAW_PROGRAM});
+const RuntimeLoss63=bootRaw({cfg:RAW_V3_CFG,data:JSON.stringify(V63_POPULATED_DATA),program:RAW_PROGRAM});
 const runtimeLkg63=RuntimeLoss63.window.localStorage.getItem("forge:lkg");
 RuntimeLoss63.window.eval(`localStorage.removeItem(DATA_KEY); save();`);
 check("v63 runtime disappearance pauses all later saving", RuntimeLoss63.window.eval(`protectedMode && protectedModeDiagnostic.part==="data"`));
 check("v63 runtime disappearance leaves recovery snapshot byte-identical", RuntimeLoss63.window.localStorage.getItem("forge:lkg")===runtimeLkg63);
 
-const ManualRestore63=bootRaw({cfg:RAW_V2_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM,lkg:V63_POP_LKG});
+const ManualRestore63=bootRaw({cfg:RAW_V3_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM,lkg:V63_POP_LKG});
 const manualBefore63=ManualRestore63.window.localStorage.getItem("forge:data");
 const manualResult63=ManualRestore63.window.eval(`performRecoveryCandidate(buildLkgRecoveryCandidate(),{allowNormalRestore:true})`);
 check("v63 normal-mode snapshot restore is verified and reaffirms the established install", manualResult63.ok && ManualRestore63.window.eval(`data.weights.length===1 && installMarkerStatus().ok`));
@@ -2048,38 +2176,38 @@ function exactNativeStrings(dom){
 function nativeVaultRecordMatches(dom,record){
   const expected=exactNativeStrings(dom);
   return !!record && record.type==="blackpyre-native-vault" && record.formatVersion===1
-    && record.schemaVersion===2 && record.strings
+    && record.schemaVersion===3 && record.strings
     && Object.keys(expected).every(k=>Object.prototype.hasOwnProperty.call(record.strings,k) && record.strings[k]===expected[k]);
 }
 
-const PwaVault=bootRaw({cfg:RAW_V2_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM});
+const PwaVault=bootRaw({cfg:RAW_V3_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM});
 await settleNativeVault(PwaVault);
 const pwaVaultStatus=nativeVaultStatusOf(PwaVault);
 check("native vault exposes stable diagnostic and idle APIs", nativeVaultApiPresent(PwaVault));
 check("native vault stays unavailable in the ordinary PWA", pwaVaultStatus && pwaVaultStatus.available===false && pwaVaultStatus.native===false);
 
 const NotNativeFs=makeNativeFilesystem({native:false});
-const NotNativeVault=bootRaw({cfg:RAW_V2_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM},w=>NotNativeFs.install(w));
+const NotNativeVault=bootRaw({cfg:RAW_V3_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM},w=>NotNativeFs.install(w));
 await settleNativeVault(NotNativeVault);
 check("Capacitor bridge presence alone cannot activate the vault on a web platform", NotNativeFs.calls.length===0 && nativeVaultField(NotNativeVault,"available")===false);
 
 const MissingPluginFs=makeNativeFilesystem({available:false});
-const MissingPluginVault=bootRaw({cfg:RAW_V2_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM},w=>MissingPluginFs.install(w));
+const MissingPluginVault=bootRaw({cfg:RAW_V3_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM},w=>MissingPluginFs.install(w));
 await settleNativeVault(MissingPluginVault);
 check("native mode without the Filesystem plugin leaves all app storage behavior unchanged", MissingPluginFs.calls.length===0 && nativeVaultField(MissingPluginVault,"available")===false);
 
 const NATIVE_LEGACY_RAW=' {"food":{"2026-07-18":[{"name":"Legacy oats","cal":150,"pro":5,"carb":27,"fat":3}]},"workouts":[],"weights":[],"recents":[],"myFoods":{},"meals":[],"finished":{},"foodCounts":{},"mealCounts":{},"meta":{"lastBackup":null,"logsSince":0},"activeWorkoutDraft":null} ';
 const NativeFs=makeNativeFilesystem();
 const NativeVault=bootRaw({
-  cfg:RAW_V2_CFG,
+  cfg:RAW_V3_CFG,
   data:JSON.stringify(V63_POPULATED_DATA),
   program:RAW_PROGRAM,
   legacyData:NATIVE_LEGACY_RAW,
   lkgPrevious:V63_EMPTY_LKG,
   lkgOlder:Old63,
   quarantine:JSON.stringify({recoveryFormatVersion:1,quarantinedAt:"2026-07-20T11:00:00.000Z",diagnostic:null,
-    originals:{cfg:RAW_V2_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM,legacyData:NATIVE_LEGACY_RAW}}),
-  install:JSON.stringify({formatVersion:1,establishedAt:"2026-07-20T10:00:00.000Z",lastHealthyAt:"2026-07-20T10:00:00.000Z",schemaVersion:2})
+    originals:{cfg:RAW_V3_CFG,data:RAW_V2_DATA,program:RAW_PROGRAM,legacyData:NATIVE_LEGACY_RAW}}),
+  install:JSON.stringify({formatVersion:1,establishedAt:"2026-07-20T10:00:00.000Z",lastHealthyAt:"2026-07-20T10:00:00.000Z",schemaVersion:3})
 },w=>NativeFs.install(w));
 const nativeStorageCallsAfterBoot=NativeVault.__storageCalls.length;
 await settleNativeVault(NativeVault);
@@ -2184,7 +2312,7 @@ const STAGE2_KEYS = [
 
 function stage2VaultStrings(){
   return {
-    "forge:cfg":RAW_V2_CFG,
+    "forge:cfg":RAW_V3_CFG,
     "forge:data":JSON.stringify(V63_POPULATED_DATA),
     "forge:program":RAW_PROGRAM,
     "forge:lkg":V63_POP_LKG,
@@ -2195,7 +2323,7 @@ function stage2VaultStrings(){
       formatVersion:1,
       establishedAt:"2026-07-20T10:00:00.000Z",
       lastHealthyAt:"2026-07-21T10:00:00.000Z",
-      schemaVersion:2
+      schemaVersion:3
     }),
     "ryan-cut:data":NATIVE_LEGACY_RAW
   };
@@ -2207,7 +2335,7 @@ function stage2VaultRaw(options){
   return JSON.stringify({
     type:opts.type===undefined ? "blackpyre-native-vault" : opts.type,
     formatVersion:opts.formatVersion===undefined ? 1 : opts.formatVersion,
-    schemaVersion:opts.schemaVersion===undefined ? 2 : opts.schemaVersion,
+    schemaVersion:opts.schemaVersion===undefined ? 3 : opts.schemaVersion,
     savedAt:"2026-07-21T22:00:00.000Z",
     source:"stage2-test",
     strings:strings
@@ -2281,7 +2409,7 @@ const Stage2WebFs=makeNativeFilesystem({
   files:{[STAGE2_VAULT_PATH]:stage2VaultRaw()}
 });
 const Stage2Web=bootRaw({
-  cfg:RAW_V2_CFG,
+  cfg:RAW_V3_CFG,
   data:'{"broken":',
   program:RAW_PROGRAM
 },w=>Stage2WebFs.install(w));
@@ -2298,13 +2426,13 @@ const Stage2HealthyFs=makeNativeFilesystem({
   files:{[STAGE2_VAULT_PATH]:Stage2HealthyVaultRaw}
 });
 const Stage2Healthy=bootRaw({
-  cfg:RAW_V2_CFG,
+  cfg:RAW_V3_CFG,
   data:RAW_V2_DATA,
   program:RAW_PROGRAM
 },w=>Stage2HealthyFs.install(w));
 await settleNativeVault(Stage2Healthy);
 check("Stage 2 never replaces healthy native primary localStorage",
-  Stage2Healthy.window.localStorage.getItem("forge:cfg")===RAW_V2_CFG
+  Stage2Healthy.window.localStorage.getItem("forge:cfg")===RAW_V3_CFG
   && Stage2Healthy.window.localStorage.getItem("forge:data")===RAW_V2_DATA
   && Stage2Healthy.window.localStorage.getItem("forge:program")===RAW_PROGRAM);
 check("healthy native localStorage does not create a restore quarantine",
@@ -2316,7 +2444,7 @@ const Stage2HealthyEmptyFs=makeNativeFilesystem({
   files:{[STAGE2_VAULT_PATH]:Stage2HealthyVaultRaw}
 });
 const Stage2HealthyEmpty=bootRaw({
-  cfg:RAW_V2_CFG,
+  cfg:RAW_V3_CFG,
   data:RAW_V2_DATA,
   program:RAW_PROGRAM
 },w=>Stage2HealthyEmptyFs.install(w));
@@ -2399,7 +2527,7 @@ check("successful Stage 2 restore marks its exact native quarantine completed",
 // Invalid primary localStorage must also restore from a valid vault while preserving
 // its exact pre-restore bytes in native quarantine.
 const Stage2InvalidOriginal={
-  cfg:RAW_V2_CFG,
+  cfg:RAW_V3_CFG,
   data:' {"damaged": ',
   program:RAW_PROGRAM
 };
@@ -2488,7 +2616,7 @@ const Stage2RejectedVaultCases=[
   },
   {
     name:"wrong vault schemaVersion",
-    raw:stage2VaultRaw({schemaVersion:3})
+    raw:stage2VaultRaw({schemaVersion:4})
   },
   {
     name:"missing contracted vault key",
@@ -2506,7 +2634,7 @@ const Stage2RejectedVaultCases=[
 
 for (const rejectedCase of Stage2RejectedVaultCases){
   const original={
-    cfg:RAW_V2_CFG,
+    cfg:RAW_V3_CFG,
     data:' {"existing-invalid": ',
     program:RAW_PROGRAM
   };
@@ -2544,7 +2672,7 @@ check("Stage 2 keeps an unreadable native vault incident protected instead of st
 
 // A quarantine write failure must occur before any localStorage restoration.
 const Stage2QuarantineFailOriginal={
-  cfg:RAW_V2_CFG,
+  cfg:RAW_V3_CFG,
   data:' {"quarantine-write-failure": ',
   program:RAW_PROGRAM
 };
@@ -2572,7 +2700,7 @@ check("Stage 2 quarantine write failure leaves localStorage byte-for-byte unchan
 
 // A quarantine read-back mismatch is also a hard stop before restoration.
 const Stage2QuarantineMismatchOriginal={
-  cfg:RAW_V2_CFG,
+  cfg:RAW_V3_CFG,
   data:' {"quarantine-mismatch": ',
   program:RAW_PROGRAM
 };
@@ -2637,7 +2765,7 @@ const Stage2ExistingQuarantineFs=makeNativeFilesystem({
   }
 });
 const Stage2ExistingQuarantineOriginal={
-  cfg:RAW_V2_CFG,
+  cfg:RAW_V3_CFG,
   data:' {"existing-quarantine-conflict": ',
   program:RAW_PROGRAM
 };
@@ -2658,7 +2786,7 @@ const Stage2NullRemovalFs=makeNativeFilesystem({
   files:{[STAGE2_VAULT_PATH]:stage2VaultRaw()}
 });
 const Stage2NullRemoval=bootRaw({
-  cfg:RAW_V2_CFG,
+  cfg:RAW_V3_CFG,
   data:' {"invalid-before-null-removal": ',
   program:RAW_PROGRAM,
   lkgOlder:"old-value-that-must-be-removed",
@@ -2920,7 +3048,7 @@ check("healthy upgraded device backfills completed proof after user data evolved
 
 // ================= native verified backup sharing + elapsed reminder =================
 const reminderNow = Date.parse("2026-07-25T12:00:00.000Z");
-const reminderLogic = boot(V2_CFG, Object.assign({},EMPTY_DATA,{meta:{lastBackup:"2026-07-25",logsSince:0}}));
+const reminderLogic = boot(V3_CFG, Object.assign({},EMPTY_DATA,{meta:{lastBackup:"2026-07-25",logsSince:0}}));
 const reminderCases = reminderLogic.window.eval(`(()=>{
   const now=${reminderNow};
   return {
@@ -2969,7 +3097,7 @@ const NativeBackupFiles = new Map();
 const NativeBackupShares = [];
 let resolveNativeBackupShare = null;
 const NativeBackup = boot(
-  V2_CFG,
+  V3_CFG,
   Object.assign({},EMPTY_DATA,{meta:{lastBackup:null,logsSince:7}}),
   w=>{
     w.Capacitor = {
@@ -3055,7 +3183,7 @@ check("completed native share records honest completion metadata and activity ty
 
 const NativeCancelFiles = new Map();
 const NativeShareCancel = boot(
-  V2_CFG,
+  V3_CFG,
   Object.assign({},EMPTY_DATA,{meta:{lastBackup:null,logsSince:4}}),
   w=>{
     w.Capacitor = {
@@ -3095,7 +3223,7 @@ check("cancelled share preserves the local backup and records only the attempt",
 
 const staleCompletedAt = new Date(Date.now()-15*86400000).toISOString();
 const ReminderSnooze = boot(
-  V2_CFG,
+  V3_CFG,
   Object.assign({},EMPTY_DATA,{meta:{lastBackup:dstr(0),logsSince:0,lastShareCompletedAt:staleCompletedAt}})
 );
 check("elapsed completed-share age shows the offsite reminder without requiring new logs",
@@ -3111,7 +3239,7 @@ check("remind-me-later persists a seven-day snooze and hides the reminder",
   `));
 
 const NativeBackupFailure = boot(
-  V2_CFG,
+  V3_CFG,
   Object.assign({},EMPTY_DATA,{meta:{lastBackup:null,logsSince:4}}),
   w=>{
     w.Capacitor = {
@@ -3193,6 +3321,2538 @@ check("dismissal is session-only (no persistent storage written)", V.window.eval
 let W2 = bootSW(false); await wait(30);
 W2.__fire("controllerchange");
 check("first service-worker installation never shows the toast", toastEl(W2).classList.contains("hidden"));
+
+
+// ================= v76: typed workout model regression =================
+const v76FixtureCandidates = [
+  path.join(__dirname,"fixtures","exercise-model-cross-platform.json"),
+  path.join(__dirname,"tests","fixtures","exercise-model-cross-platform.json")
+];
+const v76FixturePath = v76FixtureCandidates.find(p=>fs.existsSync(p));
+if (!v76FixturePath) throw new Error("v76 cross-platform fixture not found");
+
+const V76_FIXTURE = JSON.parse(fs.readFileSync(v76FixturePath,"utf8"));
+const V76_FX_DATA = V76_FIXTURE.backup.data;
+const V76_FX_WORKOUT = V76_FX_DATA.workouts[0];
+const V76_FX_DRAFT = V76_FX_DATA.activeWorkoutDraft;
+
+const clone76 = v=>JSON.parse(JSON.stringify(v));
+const stable76 = v=>{
+  if (Array.isArray(v)) return v.map(stable76);
+  if (v && typeof v==="object"){
+    return Object.fromEntries(
+      Object.keys(v).sort().map(k=>[k,stable76(v[k])])
+    );
+  }
+  return v;
+};
+const same76 = (a,b)=>
+  JSON.stringify(stable76(a))===JSON.stringify(stable76(b));
+
+const card76 = (doc,name)=>
+  [...doc.querySelectorAll("#exerciseInputs .exercise")].find(card=>{
+    const b=card.querySelector(".x-head b");
+    return b && b.textContent===name;
+  });
+
+const click76 = (dom,el)=>
+  el.dispatchEvent(new dom.window.Event("click",{bubbles:true}));
+
+const input76 = (dom,el,value)=>{
+  el.value=String(value);
+  el.dispatchEvent(new dom.window.Event("input",{bubbles:true}));
+};
+
+const change76 = (dom,el,value)=>{
+  el.value=value;
+  el.dispatchEvent(new dom.window.Event("change",{bubbles:true}));
+};
+
+// 1. Canonical exercise library must choose the correct editor on a fresh session.
+const V76_PROGRAM = {
+  name:"V76 Typed Program",
+  author:"Suite",
+  days:[{
+    id:"D1",
+    title:"Typed Day",
+    exercises:[
+      {name:"Bench Press",scheme:"3×5"},
+      {name:"Pull-Up",scheme:"3×8"},
+      {name:"Run",scheme:""},
+      {name:"Farmer Carry",scheme:""},
+      {name:"Sprint Intervals",scheme:""},
+      {name:"Mobility Flow",scheme:""}
+    ]
+  }]
+};
+
+const T76Fresh = boot(
+  V3_CFG,
+  Object.assign({},EMPTY_DATA,{workouts:[],activeWorkoutDraft:null}),
+  null,
+  V76_PROGRAM
+);
+
+const dT76Fresh = T76Fresh.window.document;
+
+check(
+  "v76 canonical shapes choose lift/reps/timeDist/carry/rounds/text session modes",
+  T76Fresh.window.eval(`
+    sessionState["Bench Press"].mode==="rows"
+    && sessionState["Bench Press"].rowShape==="lift"
+    && sessionState["Pull-Up"].mode==="rows"
+    && sessionState["Pull-Up"].rowShape==="reps"
+    && sessionState["Run"].mode==="timeDist"
+    && sessionState["Farmer Carry"].mode==="carry"
+    && sessionState["Sprint Intervals"].mode==="rounds"
+    && sessionState["Mobility Flow"].mode==="text"
+  `)
+);
+
+check(
+  "v76 fresh typed editors render fields without a guided rounds timer",
+  !!card76(dT76Fresh,"Run").querySelector("select")
+  && !!card76(dT76Fresh,"Run").querySelector('input[aria-label="Run minutes"]')
+  && !!card76(dT76Fresh,"Run").querySelector('input[aria-label="Run seconds"]')
+  && card76(dT76Fresh,"Run").querySelector('input[aria-label="Run seconds"]').max==="59"
+  && card76(dT76Fresh,"Run").querySelectorAll('input[type="number"]').length===3
+  && !!card76(dT76Fresh,"Farmer Carry").querySelector("select")
+  && card76(dT76Fresh,"Farmer Carry").querySelectorAll('input[type="number"]').length===2
+  && card76(dT76Fresh,"Sprint Intervals").querySelectorAll('input[type="number"]').length===3
+  && !/start timer|pause timer|resume timer/i.test(card76(dT76Fresh,"Sprint Intervals").textContent)
+);
+
+// 2. Exact fixture semantics for reps rows: bodyweight and weighted reps can coexist.
+const fixtureMixedReps76 = V76_FX_WORKOUT.sets["Pull-Up"];
+const validatedMixedReps76 = JSON.parse(
+  T76Fresh.window.eval(`
+    JSON.stringify(
+      validateExerciseEntry({
+        mode:"rows",
+        rowShape:"reps",
+        rows:[
+          {r:8,w:undefined,touched:true},
+          {r:5,w:25,touched:true}
+        ]
+      }).value
+    )
+  `)
+);
+
+check(
+  "v76 reps rows preserve fixture bodyweight and weighted sets exactly",
+  same76(validatedMixedReps76,fixtureMixedReps76)
+);
+
+// Fresh bodyweight reps can save with no weight property.
+const pullCard76 = card76(dT76Fresh,"Pull-Up");
+const pullReps76 = pullCard76.querySelector('input[data-field="reps"]');
+const pullWeight76 = pullCard76.querySelector('input[data-field="weight"]');
+
+check(
+  "v76 reps editor visibly treats weight as optional",
+  pullWeight76.placeholder==="lb opt."
+);
+
+input76(T76Fresh,pullReps76,10);
+click76(T76Fresh,pullCard76.querySelector(".saveExBtn"));
+
+check(
+  "v76 reps-only Save Exercise stores {r} without inventing weight",
+  T76Fresh.window.eval(`
+    sessionState["Pull-Up"].status==="saved"
+    && sessionState["Pull-Up"].saved.length===1
+    && sessionState["Pull-Up"].saved[0].r===10
+    && !Object.prototype.hasOwnProperty.call(sessionState["Pull-Up"].saved[0],"w")
+  `)
+);
+
+// 3. Draft resume: use the actual cross-platform values, plus carry/text/future
+//    values from the fixture's historical workout.
+const typedDraft76 = clone76(V76_FX_DRAFT);
+typedDraft76.date = dstr(0);
+typedDraft76.day = "__FREE__";
+typedDraft76.title = "V76 Fixture Draft";
+typedDraft76.programName = "Fixture";
+typedDraft76.sets["Farmer Carry"] = clone76(V76_FX_WORKOUT.sets["Farmer Carry"]);
+typedDraft76.sets["Mobility Flow"] = clone76(V76_FX_WORKOUT.sets["Mobility Flow"]);
+typedDraft76.sets["Future Shape"] = clone76(V76_FX_WORKOUT.sets["Future Shape"]);
+
+const typedDraftData76 = Object.assign(
+  {},
+  EMPTY_DATA,
+  {
+    workouts:[],
+    activeWorkoutDraft:typedDraft76,
+    myExercises:clone76(V76_FX_DATA.myExercises||{})
+  }
+);
+
+const T76Draft = boot(V3_CFG,typedDraftData76,null,TEST_PROGRAM);
+const dT76Draft = T76Draft.window.document;
+
+check(
+  "v76 persisted typed draft is offered for Resume",
+  !dT76Draft.getElementById("workoutDraftCard").classList.contains("hidden")
+);
+
+click76(T76Draft,dT76Draft.getElementById("resumeWorkoutDraftBtn"));
+
+check(
+  "v76 draft Resume restores every stored shape without stringification",
+  T76Draft.window.eval(`
+    workoutDraftLoaded
+    && sessionState["Pull-Up"].mode==="rows"
+    && sessionState["Pull-Up"].rowShape==="reps"
+    && sessionState["Run"].mode==="timeDist"
+    && sessionState["Tempo Step Intervals"].mode==="rounds"
+    && sessionState["Farmer Carry"].mode==="carry"
+    && sessionState["Mobility Flow"].mode==="text"
+    && sessionState["Future Shape"].mode==="future"
+  `)
+  && !dT76Draft.getElementById("exerciseInputs").textContent.includes("[object Object]")
+);
+
+const resumedFuture76 = JSON.parse(
+  T76Draft.window.eval(`JSON.stringify(sessionState["Future Shape"].saved)`)
+);
+
+check(
+  "v76 unknown future draft value is byte-meaning preserved and read-only",
+  same76(resumedFuture76,V76_FX_WORKOUT.sets["Future Shape"])
+  && /Read only/.test(card76(dT76Draft,"Future Shape").textContent)
+  && ![...card76(dT76Draft,"Future Shape").querySelectorAll("button")]
+      .some(b=>b.textContent==="Edit")
+);
+
+check(
+  "v76 typed history formatter renders real values instead of object placeholders",
+  T76Draft.window.eval(`
+    formatSets(${JSON.stringify(V76_FX_WORKOUT.sets["Run"])})==="20 min · 2 mi"
+    && formatSets(${JSON.stringify(V76_FX_WORKOUT.sets["Farmer Carry"])})==="80 lb · 100 ft"
+    && /8 rounds/.test(formatSets(${JSON.stringify(V76_FX_WORKOUT.sets["Sprint Intervals"])}))
+  `)
+);
+
+// Edit and re-save timeDist through the actual UI.
+click76(
+  T76Draft,
+  [...card76(dT76Draft,"Run").querySelectorAll("button")]
+    .find(b=>b.textContent==="Edit")
+);
+
+let runCard76 = card76(dT76Draft,"Run");
+const runMinutes76 =
+  runCard76.querySelector('input[aria-label="Run minutes"]');
+const runSeconds76 =
+  runCard76.querySelector('input[aria-label="Run seconds"]');
+const runNums76 =
+  [...runCard76.querySelectorAll('input[type="number"]')];
+const runDistance76 =
+  runNums76.find(
+    input=>input!==runMinutes76 && input!==runSeconds76
+  );
+const runUnit76 = runCard76.querySelector("select");
+
+check(
+  "v76 timeDist Edit exposes minutes, seconds, optional distance, and unit",
+  !!runMinutes76
+  && !!runSeconds76
+  && runSeconds76.max==="59"
+  && !!runDistance76
+  && runNums76.length===3
+  && !!runUnit76
+);
+
+input76(T76Draft,runMinutes76,15);
+input76(T76Draft,runSeconds76,50);
+input76(T76Draft,runDistance76,1.5);
+change76(T76Draft,runUnit76,"km");
+click76(T76Draft,card76(dT76Draft,"Run").querySelector(".saveExBtn"));
+
+const savedDraftAfterRun76 = JSON.parse(
+  T76Draft.window.localStorage.getItem("forge:data")
+).activeWorkoutDraft;
+
+check(
+  "v76 minutes-seconds timeDist UI saves the exact typed contract",
+  same76(
+    savedDraftAfterRun76.sets["Run"],
+    {t:"timeDist",secs:950,dist:1.5,distUnit:"km"}
+  )
+);
+
+check(
+  "v76 saving a known typed draft entry does not rewrite the unknown future entry",
+  same76(
+    savedDraftAfterRun76.sets["Future Shape"],
+    V76_FX_WORKOUT.sets["Future Shape"]
+  )
+);
+
+// Carry editor: open and save unchanged fixture value.
+click76(
+  T76Draft,
+  [...card76(dT76Draft,"Farmer Carry").querySelectorAll("button")]
+    .find(b=>b.textContent==="Edit")
+);
+
+let carryCard76 = card76(dT76Draft,"Farmer Carry");
+
+check(
+  "v76 carry Edit exposes weight, distance, and distance unit",
+  carryCard76.querySelectorAll('input[type="number"]').length===2
+  && !!carryCard76.querySelector("select")
+);
+
+click76(T76Draft,carryCard76.querySelector(".saveExBtn"));
+
+check(
+  "v76 carry re-save preserves fixture value exactly",
+  same76(
+    JSON.parse(
+      T76Draft.window.eval(`JSON.stringify(sessionState["Farmer Carry"].saved)`)
+    ),
+    V76_FX_WORKOUT.sets["Farmer Carry"]
+  )
+);
+
+// Rounds editor: no timer, just the contract fields.
+click76(
+  T76Draft,
+  [...card76(dT76Draft,"Tempo Step Intervals").querySelectorAll("button")]
+    .find(b=>b.textContent==="Edit")
+);
+
+let roundsCard76 = card76(dT76Draft,"Tempo Step Intervals");
+
+check(
+  "v76 rounds Edit exposes rounds/work/recovery/note fields only",
+  roundsCard76.querySelectorAll('input[type="number"]').length===3
+  && roundsCard76.querySelectorAll("input").length===4
+  && !/start timer|pause timer|resume timer/i.test(roundsCard76.textContent)
+);
+
+click76(T76Draft,roundsCard76.querySelector(".saveExBtn"));
+
+check(
+  "v76 rounds re-save preserves fixture typed value exactly",
+  same76(
+    JSON.parse(
+      T76Draft.window.eval(`JSON.stringify(sessionState["Tempo Step Intervals"].saved)`)
+    ),
+    V76_FX_DRAFT.sets["Tempo Step Intervals"]
+  )
+);
+
+// Reps-only draft row must still be lossless after Edit + Save.
+click76(
+  T76Draft,
+  [...card76(dT76Draft,"Pull-Up").querySelectorAll("button")]
+    .find(b=>b.textContent==="Edit")
+);
+
+let pullDraftCard76 = card76(dT76Draft,"Pull-Up");
+const pullDraftWeight76 = pullDraftCard76.querySelector('input[data-field="weight"]');
+const pullDraftReps76 = pullDraftCard76.querySelector('input[data-field="reps"]');
+
+check(
+  "v76 resumed reps-only row reopens with blank optional weight",
+  pullDraftWeight76.value===""
+  && pullDraftWeight76.placeholder==="lb opt."
+  && pullDraftReps76.value==="10"
+);
+
+input76(T76Draft,pullDraftReps76,11);
+click76(T76Draft,card76(dT76Draft,"Pull-Up").querySelector(".saveExBtn"));
+
+const updatedPull76 = JSON.parse(
+  T76Draft.window.eval(`JSON.stringify(sessionState["Pull-Up"].saved)`)
+);
+
+check(
+  "v76 edited reps-only draft remains {r} without adding weight",
+  updatedPull76.length===1
+  && updatedPull76[0].r===11
+  && !Object.prototype.hasOwnProperty.call(updatedPull76[0],"w")
+);
+
+// 4. Historical editor: load the fixture workout, preserve all saved shapes,
+//    then perform a real Update Session with no edits.
+const historyData76 = Object.assign(
+  {},
+  EMPTY_DATA,
+  {
+    workouts:[clone76(V76_FX_WORKOUT)],
+    activeWorkoutDraft:null,
+    myExercises:clone76(V76_FX_DATA.myExercises||{})
+  }
+);
+
+const T76History = boot(V3_CFG,historyData76,null,TEST_PROGRAM);
+const dT76History = T76History.window.document;
+
+T76History.window.eval("startEditWorkout(0)");
+
+check(
+  "v76 historical Edit loads typed, text, reps, and future values losslessly",
+  T76History.window.eval(`
+    sessionState["Bench Press"].mode==="rows"
+    && sessionState["Pull-Up"].mode==="rows"
+    && sessionState["Pull-Up"].rowShape==="reps"
+    && sessionState["Run"].mode==="timeDist"
+    && sessionState["Farmer Carry"].mode==="carry"
+    && sessionState["Sprint Intervals"].mode==="rounds"
+    && sessionState["Mobility Flow"].mode==="text"
+    && sessionState["Future Shape"].mode==="future"
+  `)
+  && !dT76History.getElementById("exerciseInputs").textContent.includes("[object Object]")
+);
+
+const collectedHistory76 = JSON.parse(
+  T76History.window.eval(`JSON.stringify(collectSavedSessionSets(sessionState).sets)`)
+);
+
+check(
+  "v76 historical editor collection preserves the complete fixture set map",
+  same76(collectedHistory76,V76_FX_WORKOUT.sets)
+);
+
+const futureBeforeUpdate76 = clone76(V76_FX_WORKOUT.sets["Future Shape"]);
+
+click76(T76History,dT76History.getElementById("logWorkoutBtn"));
+
+const updatedHistory76 = JSON.parse(
+  T76History.window.eval(`JSON.stringify(data.workouts[0].sets)`)
+);
+
+check(
+  "v76 Update Session rewrites no untouched typed/history values",
+  same76(updatedHistory76,V76_FX_WORKOUT.sets)
+);
+
+check(
+  "v76 historical Update Session preserves unknown future object exactly",
+  same76(updatedHistory76["Future Shape"],futureBeforeUpdate76)
+);
+
+check(
+  "v76 historical update exits edit mode normally",
+  T76History.window.eval("editingWorkoutIdx===null")
+);
+
+
+
+// ---------- v76 typed Save Exercise failure rollback ----------
+const rollbackDraft76 = clone76(V76_FX_DRAFT);
+rollbackDraft76.date = dstr(0);
+rollbackDraft76.day = "__FREE__";
+rollbackDraft76.title = "V76 Rollback Draft";
+rollbackDraft76.programName = "Fixture";
+
+const rollbackData76 = Object.assign(
+  {},
+  EMPTY_DATA,
+  {
+    workouts:[],
+    activeWorkoutDraft:rollbackDraft76,
+    myExercises:clone76(V76_FX_DATA.myExercises||{})
+  }
+);
+
+const T76Rollback = boot(V3_CFG,rollbackData76,null,TEST_PROGRAM);
+const dT76Rollback = T76Rollback.window.document;
+
+click76(T76Rollback,dT76Rollback.getElementById("resumeWorkoutDraftBtn"));
+
+const rollbackRunEdit76 =
+  [...card76(dT76Rollback,"Run").querySelectorAll("button")]
+    .find(b=>b.textContent==="Edit");
+
+click76(T76Rollback,rollbackRunEdit76);
+
+let rollbackRunCard76 = card76(dT76Rollback,"Run");
+let rollbackRunMinutes76 =
+  rollbackRunCard76.querySelector('input[aria-label="Run minutes"]');
+let rollbackRunSeconds76 =
+  rollbackRunCard76.querySelector('input[aria-label="Run seconds"]');
+
+input76(T76Rollback,rollbackRunMinutes76,16);
+input76(T76Rollback,rollbackRunSeconds76,15);
+
+const rollbackPrimaryBefore76 =
+  T76Rollback.window.localStorage.getItem("forge:data");
+
+const rollbackLkgBefore76 =
+  T76Rollback.window.localStorage.getItem("forge:lkg");
+
+const rollbackProto76 =
+  Object.getPrototypeOf(T76Rollback.window.localStorage);
+
+const rollbackSetItem76 = rollbackProto76.setItem;
+
+rollbackProto76.setItem = function(k,v){
+  if (k==="forge:data"){
+    throw new Error("v76 typed workout save denied");
+  }
+  return rollbackSetItem76.call(this,k,v);
+};
+
+click76(
+  T76Rollback,
+  card76(dT76Rollback,"Run").querySelector(".saveExBtn")
+);
+
+rollbackProto76.setItem = rollbackSetItem76;
+
+check(
+  "v76 failed typed Save Exercise keeps edited typed fields available for retry",
+  T76Rollback.window.eval(`
+    sessionState["Run"].status==="unsaved"
+    && sessionState["Run"].mode==="timeDist"
+    && sessionState["Run"].typed.secs===975
+  `)
+);
+
+check(
+  "v76 failed typed Save Exercise restores the prior saved exercise value in memory",
+  T76Rollback.window.eval(`
+    sessionState["Run"].saved.t==="timeDist"
+    && sessionState["Run"].saved.secs===900
+  `)
+);
+
+check(
+  "v76 failed typed Save Exercise restores the prior active workout draft in memory",
+  T76Rollback.window.eval(`
+    data.activeWorkoutDraft.sets["Run"].t==="timeDist"
+    && data.activeWorkoutDraft.sets["Run"].secs===900
+  `)
+);
+
+check(
+  "v76 failed typed Save Exercise leaves persisted primary workout draft unchanged",
+  T76Rollback.window.localStorage.getItem("forge:data")===rollbackPrimaryBefore76
+);
+
+check(
+  "v76 failed typed Save Exercise does not replace the last-known-good snapshot",
+  T76Rollback.window.localStorage.getItem("forge:lkg")===rollbackLkgBefore76
+);
+
+check(
+  "v76 failed typed Save Exercise reports failure instead of false completion",
+  !dT76Rollback.getElementById("workoutErr").classList.contains("hidden")
+  && /could not be saved/i.test(
+    dT76Rollback.getElementById("workoutErr").textContent
+  )
+  && !/Completed/.test(card76(dT76Rollback,"Run").textContent)
+);
+
+
+
+// ---------- v76 unified canonical exercise pickers ----------
+const pickerUser76 =
+  Object.values(V76_FX_DATA.myExercises||{})[0];
+
+check(
+  "v76 fixture supplies a saved user exercise for unified-picker coverage",
+  !!pickerUser76
+  && typeof pickerUser76.id==="string"
+  && typeof pickerUser76.name==="string"
+  && typeof pickerUser76.shape==="string"
+);
+
+const pickerData76 = Object.assign(
+  {},
+  EMPTY_DATA,
+  {
+    workouts:[],
+    activeWorkoutDraft:null,
+    myExercises:clone76(V76_FX_DATA.myExercises||{})
+  }
+);
+
+const T76Picker = boot(
+  V3_CFG,
+  pickerData76,
+  null,
+  TEST_PROGRAM
+);
+
+const dT76Picker = T76Picker.window.document;
+const freestylePicker76 =
+  dT76Picker.getElementById("addExSel");
+
+const freestyleBuiltIns76 =
+  [...freestylePicker76.querySelectorAll(
+    'option[data-exercise-source="builtin"]'
+  )];
+
+const freestyleUsers76 =
+  [...freestylePicker76.querySelectorAll(
+    'option[data-exercise-source="user"]'
+  )];
+
+check(
+  "v76 Freestyle picker exposes all 202 canonical built-ins by display name",
+  freestyleBuiltIns76.length===202
+  && freestyleBuiltIns76.every(o=>
+    o.value.length>0
+    && o.textContent===o.value
+    && o.value!=="[object Object]"
+  )
+);
+
+check(
+  "v76 Freestyle picker retains canonical id and shape metadata",
+  freestyleBuiltIns76.some(o=>
+    o.value==="Bench Press"
+    && o.dataset.exerciseShape==="lift"
+    && /^bp:/.test(o.dataset.exerciseId)
+  )
+  && freestyleBuiltIns76.some(o=>
+    o.value==="Pull-Up"
+    && o.dataset.exerciseShape==="reps"
+    && /^bp:/.test(o.dataset.exerciseId)
+  )
+  && freestyleBuiltIns76.some(o=>
+    o.value==="Run"
+    && o.dataset.exerciseShape==="timeDist"
+    && /^bp:/.test(o.dataset.exerciseId)
+  )
+  && freestyleBuiltIns76.some(o=>
+    o.value==="Farmer Carry"
+    && o.dataset.exerciseShape==="carry"
+    && /^bp:/.test(o.dataset.exerciseId)
+  )
+  && freestyleBuiltIns76.some(o=>
+    o.value==="Sprint Intervals"
+    && o.dataset.exerciseShape==="rounds"
+    && /^bp:/.test(o.dataset.exerciseId)
+  )
+  && freestyleBuiltIns76.some(o=>
+    o.value==="Mobility Flow"
+    && o.dataset.exerciseShape==="text"
+    && /^bp:/.test(o.dataset.exerciseId)
+  )
+);
+
+check(
+  "v76 Freestyle unified picker contains no legacy [Cardio] duplicate values",
+  ![...freestylePicker76.options]
+    .some(o=>o.value.startsWith("[Cardio] "))
+);
+
+check(
+  "v76 Freestyle picker includes restored myExercises with stored metadata",
+  freestyleUsers76.length===
+    Object.keys(V76_FX_DATA.myExercises||{}).length
+  && freestyleUsers76.some(o=>
+    o.value===pickerUser76.name
+    && o.dataset.exerciseId===pickerUser76.id
+    && o.dataset.exerciseShape===pickerUser76.shape
+    && o.dataset.exerciseSource==="user"
+  )
+);
+
+check(
+  "v76 saved user exercise former names still resolve to its canonical shape",
+  (pickerUser76.formerNames||[]).every(oldName=>
+    T76Picker.window.eval(
+      `exerciseShapeForName(${JSON.stringify(oldName)})`
+    )===pickerUser76.shape
+  )
+);
+
+// Add the restored user exercise through the real Freestyle picker.
+dT76Picker.getElementById("wDay").value="__FREE__";
+dT76Picker.getElementById("wDay").dispatchEvent(
+  new T76Picker.window.Event("change",{bubbles:true})
+);
+
+freestylePicker76.value=pickerUser76.name;
+
+dT76Picker.getElementById("addExBtn").dispatchEvent(
+  new T76Picker.window.Event("click",{bubbles:true})
+);
+
+const expectedUserMode76 =
+  pickerUser76.shape==="lift" || pickerUser76.shape==="reps"
+    ? "rows"
+    : pickerUser76.shape;
+
+check(
+  "v76 restored myExercise added from Freestyle uses its saved tracking shape",
+  T76Picker.window.eval(`
+    !!sessionState[${JSON.stringify(pickerUser76.name)}]
+    && sessionState[${JSON.stringify(pickerUser76.name)}].mode
+       ===${JSON.stringify(expectedUserMode76)}
+  `)
+);
+
+// The dedicated Cardio session still exists independently.
+check(
+  "v76 dedicated Cardio session remains available outside unified exercise picker",
+  [...dT76Picker.getElementById("wDay").options]
+    .some(o=>o.value==="__CARDIO__")
+  && dT76Picker.getElementById("cardioType").options.length>0
+);
+
+// Program Builder must use the exact same unified source.
+T76Picker.window.eval("openBuilder(false)");
+
+const builderPicker76 =
+  [...dT76Picker.querySelectorAll("select")]
+    .filter(s=>s!==freestylePicker76)
+    .find(s=>
+      s.querySelectorAll(
+        'option[data-exercise-source="builtin"]'
+      ).length===202
+    );
+
+check(
+  "v76 Program Builder exposes all 202 canonical built-in exercise names",
+  !!builderPicker76
+  && builderPicker76.querySelectorAll(
+    'option[data-exercise-source="builtin"]'
+  ).length===202
+  && [...builderPicker76.querySelectorAll(
+    'option[data-exercise-source="builtin"]'
+  )].every(o=>
+    o.value.length>0
+    && o.value!=="[object Object]"
+    && o.textContent===o.value
+  )
+);
+
+check(
+  "v76 Program Builder includes restored myExercises",
+  !!builderPicker76
+  && [...builderPicker76.querySelectorAll(
+    'option[data-exercise-source="user"]'
+  )].some(o=>
+    o.value===pickerUser76.name
+    && o.dataset.exerciseId===pickerUser76.id
+    && o.dataset.exerciseShape===pickerUser76.shape
+  )
+);
+
+check(
+  "v76 Program Builder contains no legacy [Cardio] duplicate values",
+  !!builderPicker76
+  && ![...builderPicker76.options]
+    .some(o=>o.value.startsWith("[Cardio] "))
+);
+
+
+
+
+// ---------- v76 grouped exercise picker parity ----------
+const Grouped76 = boot(EXISTING_CFG, EMPTY_DATA);
+const dGrouped76 = Grouped76.window.document;
+
+Grouped76.window.eval(`renderLibraryOptions()`);
+
+const groupedPicker76 =
+  dGrouped76.getElementById("addExSel");
+
+const builtInGroups76 =
+  [...groupedPicker76.querySelectorAll("optgroup")]
+    .filter(group=>group.dataset.exerciseSource==="builtin");
+
+const expectedShapeLabels76 = [
+  "Weight × reps",
+  "Reps (weight optional)",
+  "Time / distance",
+  "Weight + distance",
+  "Rounds / intervals",
+  "Free text"
+];
+
+check(
+  "v76 Freestyle picker restores the six web-v76 exercise shape sections",
+  JSON.stringify(builtInGroups76.map(group=>group.label))
+    === JSON.stringify(expectedShapeLabels76)
+);
+
+check(
+  "v76 Freestyle shape sections remain in canonical shape order",
+  JSON.stringify(builtInGroups76.map(group=>group.dataset.exerciseShape))
+    === JSON.stringify(["lift","reps","timeDist","carry","rounds","text"])
+);
+
+check(
+  "v76 Freestyle shape sections contain all 202 built-ins exactly once",
+  (()=>{
+    const options=builtInGroups76.flatMap(group=>[...group.querySelectorAll("option")]);
+    return options.length===202
+      && new Set(options.map(option=>option.dataset.exerciseId)).size===202
+      && options.every(option=>option.dataset.exerciseSource==="builtin");
+  })()
+);
+
+check(
+  "v76 Freestyle exercises are A-Z inside every shape section",
+  builtInGroups76.every(group=>{
+    const names=[...group.querySelectorAll("option")].map(option=>option.textContent);
+    const sorted=names.slice().sort((a,b)=>a.localeCompare(b));
+    return JSON.stringify(names)===JSON.stringify(sorted);
+  })
+);
+
+check(
+  "v76 grouped picker preserves separate My Exercises and Custom sections",
+  (()=>{
+    const groups=[...groupedPicker76.querySelectorAll("optgroup")];
+    const custom=groups.find(group=>group.label==="Custom");
+    return !groups.some(group=>group.label==="Exercise library")
+      && !!custom
+      && [...custom.querySelectorAll("option")].some(
+        option=>option.value==="__CUSTOM__"
+      );
+  })()
+);
+
+const groupedTrainSource76 = fs.readFileSync(
+  path.join(__dirname,"..","scripts","03-train.js"),
+  "utf8"
+);
+
+check(
+  "v76 Program Builder continues to use the same grouped picker helper",
+  /function renderBuilder\(\)[\s\S]*?populateUnifiedExercisePicker\(sel\);/
+    .test(groupedTrainSource76)
+);
+
+
+
+// ---------- v76 physical-device UX corrections ----------
+const DeviceUX76 = boot(EXISTING_CFG, EMPTY_DATA);
+const dDeviceUX76 = DeviceUX76.window.document;
+
+DeviceUX76.window.eval(`
+  wDaySel.value="__FREE__";
+  initSessionState();
+  renderSessionInputs();
+  renderLibraryOptions();
+`);
+
+const devicePicker76 =
+  dDeviceUX76.getElementById("addExSel");
+
+const deviceAdd76 =
+  dDeviceUX76.getElementById("addExBtn");
+
+devicePicker76.value="Run";
+deviceAdd76.click();
+
+devicePicker76.value="Run";
+deviceAdd76.click();
+
+check(
+  "v76 Freestyle rejects a duplicate same-name exercise",
+  DeviceUX76.window.eval(`
+    extraExercises.filter(ex=>ex.name==="Run").length===1
+  `)
+  && /already in the session/i.test(
+    dDeviceUX76.getElementById("workoutErr").textContent
+  )
+);
+
+const removeRun76 =
+  [...dDeviceUX76.querySelectorAll("button")]
+    .find(
+      button=>
+        button.getAttribute("aria-label")==="Remove Run"
+    );
+
+check(
+  "v76 unsaved Freestyle extra exposes a Remove control",
+  !!removeRun76
+);
+
+if (removeRun76) removeRun76.click();
+
+check(
+  "v76 Remove clears the accidental extra and its session state",
+  DeviceUX76.window.eval(`
+    extraExercises.every(ex=>ex.name!=="Run")
+      && !sessionState["Run"]
+  `)
+);
+
+devicePicker76.value="Mobility Flow";
+deviceAdd76.click();
+
+const mobilityCard76 =
+  [...dDeviceUX76.querySelectorAll(".exercise")]
+    .find(
+      card=>card.textContent.includes("Mobility Flow")
+    );
+
+const mobilityLabel76 =
+  mobilityCard76
+    ? [...mobilityCard76.querySelectorAll(".slabel")]
+        .find(
+          label=>
+            label.textContent==="Details / notes (required)"
+        )
+    : null;
+
+const mobilityInput76 =
+  dDeviceUX76.querySelector(
+    'input[aria-label="Mobility Flow details or notes"]'
+  );
+
+check(
+  "v76 Free Text visibly identifies its required details field",
+  !!mobilityLabel76
+  && !!mobilityInput76
+  && mobilityInput76.placeholder==="Enter what you completed"
+);
+
+
+// ---------- v76 persistent custom exercises ----------
+const T76Custom = boot(
+  V3_CFG,
+  Object.assign(
+    {},
+    EMPTY_DATA,
+    {workouts:[],activeWorkoutDraft:null,myExercises:{}}
+  ),
+  null,
+  TEST_PROGRAM
+);
+
+const dT76Custom = T76Custom.window.document;
+
+dT76Custom.getElementById("wDay").value="__FREE__";
+dT76Custom.getElementById("wDay").dispatchEvent(
+  new T76Custom.window.Event("change",{bubbles:true})
+);
+
+const customPicker76 =
+  dT76Custom.getElementById("addExSel");
+
+customPicker76.value="__CUSTOM__";
+customPicker76.dispatchEvent(
+  new T76Custom.window.Event("change",{bubbles:true})
+);
+
+const customName76 =
+  dT76Custom.getElementById("addExCustom");
+
+const customShape76 =
+  dT76Custom.getElementById("addExCustomShape");
+
+check(
+  "v76 Type my own exposes an explicit six-shape tracking selector",
+  !!customShape76
+  && customShape76.options.length===6
+  && !customShape76.classList.contains("hidden")
+);
+
+customName76.value="Garage Shuttle";
+customShape76.value="rounds";
+
+dT76Custom.getElementById("addExBtn").dispatchEvent(
+  new T76Custom.window.Event("click",{bubbles:true})
+);
+
+const customEntries76 = JSON.parse(
+  T76Custom.window.eval(`JSON.stringify(data.myExercises)`)
+);
+
+const garageEntry76 =
+  Object.values(customEntries76)
+    .find(x=>x.name==="Garage Shuttle");
+
+check(
+  "v76 Freestyle custom creation persists a valid u: exercise record",
+  !!garageEntry76
+  && /^u:/.test(garageEntry76.id)
+  && garageEntry76.shape==="rounds"
+  && Array.isArray(garageEntry76.tags)
+  && Array.isArray(garageEntry76.aliases)
+  && Array.isArray(garageEntry76.formerNames)
+  && Array.isArray(garageEntry76.equipment)
+  && garageEntry76.muscles
+  && Array.isArray(garageEntry76.muscles.primary)
+  && Array.isArray(garageEntry76.muscles.secondary)
+  && garageEntry76.unilateral===false
+  && garageEntry76.bodyweight===false
+  && garageEntry76.deprecated===false
+);
+
+check(
+  "v76 persisted custom exercise immediately uses its selected tracking mode",
+  T76Custom.window.eval(`
+    sessionState["Garage Shuttle"].mode==="rounds"
+    && exerciseShapeForName("Garage Shuttle")==="rounds"
+  `)
+);
+
+check(
+  "v76 persisted custom exercise is immediately available in My Exercises picker",
+  [...dT76Custom.getElementById("addExSel").options]
+    .some(o=>
+      o.value==="Garage Shuttle"
+      && o.dataset.exerciseSource==="user"
+      && o.dataset.exerciseShape==="rounds"
+    )
+);
+
+const persistedCustomData76 =
+  JSON.parse(T76Custom.window.localStorage.getItem("forge:data"));
+
+check(
+  "v76 custom exercise survives in persisted primary data",
+  Object.values(persistedCustomData76.myExercises||{})
+    .some(x=>
+      x.name==="Garage Shuttle"
+      && x.shape==="rounds"
+    )
+);
+
+const T76CustomReload = boot(
+  V3_CFG,
+  persistedCustomData76,
+  null,
+  TEST_PROGRAM
+);
+
+check(
+  "v76 persisted custom exercise survives reload with its tracking shape",
+  T76CustomReload.window.eval(
+    `exerciseShapeForName("Garage Shuttle")==="rounds"`
+  )
+  && [...T76CustomReload.window.document
+      .getElementById("addExSel").options]
+      .some(o=>
+        o.value==="Garage Shuttle"
+        && o.dataset.exerciseShape==="rounds"
+      )
+);
+
+// Built-in name collision must not create a duplicate user record.
+const collisionBefore76 =
+  T76CustomReload.window.eval(
+    "Object.keys(data.myExercises).length"
+  );
+
+const collisionResult76 =
+  JSON.parse(
+    T76CustomReload.window.eval(`
+      JSON.stringify(createUserExercise("Bench Press","lift"))
+    `)
+  );
+
+check(
+  "v76 custom creation refuses built-in name collisions",
+  collisionResult76.ok===false
+  && /already exists/i.test(collisionResult76.reason)
+  && T76CustomReload.window.eval(
+    "Object.keys(data.myExercises).length"
+  )===collisionBefore76
+);
+
+// Alias/former-name collision must also be rejected.
+const aliasCollisionData76 = Object.assign(
+  {},
+  EMPTY_DATA,
+  {
+    workouts:[],
+    activeWorkoutDraft:null,
+    myExercises:clone76(V76_FX_DATA.myExercises||{})
+  }
+);
+
+const T76AliasCollision = boot(
+  V3_CFG,
+  aliasCollisionData76,
+  null,
+  TEST_PROGRAM
+);
+
+const aliasCollisionCount76 =
+  T76AliasCollision.window.eval(
+    "Object.keys(data.myExercises).length"
+  );
+
+const aliasCollisionResult76 =
+  JSON.parse(
+    T76AliasCollision.window.eval(`
+      JSON.stringify(
+        createUserExercise("Tempo Step Intervals","rounds")
+      )
+    `)
+  );
+
+check(
+  "v76 custom creation refuses saved-user former-name collisions",
+  aliasCollisionResult76.ok===false
+  && /already exists/i.test(aliasCollisionResult76.reason)
+  && T76AliasCollision.window.eval(
+    "Object.keys(data.myExercises).length"
+  )===aliasCollisionCount76
+);
+
+// Failed persistence must undo the newly created entry.
+const T76CustomFail = boot(
+  V3_CFG,
+  Object.assign(
+    {},
+    EMPTY_DATA,
+    {workouts:[],activeWorkoutDraft:null,myExercises:{}}
+  ),
+  null,
+  TEST_PROGRAM
+);
+
+const failStore76 =
+  T76CustomFail.window.localStorage;
+
+const failDataBefore76 =
+  failStore76.getItem("forge:data");
+
+const failProto76 =
+  Object.getPrototypeOf(failStore76);
+
+const failSet76 =
+  failProto76.setItem;
+
+failProto76.setItem=function(k,v){
+  if (k==="forge:data"){
+    throw new Error("v76 custom exercise save denied");
+  }
+  return failSet76.call(this,k,v);
+};
+
+const failedCreate76 =
+  JSON.parse(
+    T76CustomFail.window.eval(`
+      JSON.stringify(
+        createUserExercise("Failure Shuttle","carry")
+      )
+    `)
+  );
+
+failProto76.setItem=failSet76;
+
+check(
+  "v76 failed custom exercise save rolls myExercises back in memory",
+  failedCreate76.ok===false
+  && T76CustomFail.window.eval(
+    'exerciseModelEntryForName("Failure Shuttle")===null'
+  )
+  && T76CustomFail.window.eval(
+    "Object.keys(data.myExercises).length===0"
+  )
+);
+
+check(
+  "v76 failed custom exercise save leaves persisted primary data unchanged",
+  failStore76.getItem("forge:data")===failDataBefore76
+);
+
+// Manage My Exercises core: stable rename, archive/restore, reference
+// protection, permanent deletion, and failed-save rollback.
+const manageExercise76 = {
+  id:"u:garage-shuttle",
+  name:"Garage Shuttle",
+  shape:"rounds",
+  tags:[],
+  aliases:[],
+  formerNames:[],
+  muscles:{primary:[],secondary:[]},
+  equipment:[],
+  unilateral:false,
+  bodyweight:false,
+  deprecated:false
+};
+
+const manageValue76 = {
+  t:"rounds",
+  rounds:4,
+  workSecs:30,
+  recSecs:20,
+  note:""
+};
+
+const manageData76 = Object.assign(
+  {},
+  EMPTY_DATA,
+  {
+    workouts:[
+      {
+        date:"2026-07-20",
+        day:"D1",
+        title:"Garage history",
+        sets:{"Garage Shuttle":clone76(manageValue76)},
+        notes:""
+      }
+    ],
+    activeWorkoutDraft:{
+      date:"2026-07-29",
+      day:"D1",
+      title:"Garage draft",
+      sets:{"Garage Shuttle":clone76(manageValue76)},
+      notes:""
+    },
+    myExercises:{
+      "u:garage-shuttle":clone76(manageExercise76)
+    }
+  }
+);
+
+const manageProgram76 = {
+  name:"Garage Program",
+  days:[
+    {
+      id:"D1",
+      title:"Garage Day",
+      exercises:[
+        {name:"Garage Shuttle",scheme:"4 rounds"}
+      ]
+    }
+  ]
+};
+
+const T76Manage = boot(
+  V3_CFG,
+  manageData76,
+  null,
+  manageProgram76
+);
+
+const dT76Manage = T76Manage.window.document;
+
+const manageList76 = JSON.parse(
+  T76Manage.window.eval(`
+    JSON.stringify(listUserExercisesForManagement())
+  `)
+);
+
+const manageRefsBefore76 =
+  manageList76[0] &&
+  manageList76[0].references;
+
+check(
+  "v76 My Exercises core lists custom exercises and detects program, history, and draft references",
+  manageList76.length===1
+  && manageList76[0].entry.id==="u:garage-shuttle"
+  && manageRefsBefore76.protected===true
+  && manageRefsBefore76.counts.program===1
+  && manageRefsBefore76.counts.history===1
+  && manageRefsBefore76.counts.draft===1
+);
+
+const manageRename76 = JSON.parse(
+  T76Manage.window.eval(`
+    JSON.stringify(
+      renameUserExercise(
+        "u:garage-shuttle",
+        "Driveway Shuttle"
+      )
+    )
+  `)
+);
+
+const renamedEntry76 = JSON.parse(
+  T76Manage.window.eval(`
+    JSON.stringify(data.myExercises["u:garage-shuttle"])
+  `)
+);
+
+check(
+  "v76 custom exercise rename preserves stable u: id, shape, and prior canonical name",
+  manageRename76.ok===true
+  && renamedEntry76.id==="u:garage-shuttle"
+  && renamedEntry76.name==="Driveway Shuttle"
+  && renamedEntry76.shape==="rounds"
+  && renamedEntry76.formerNames.includes("garage shuttle")
+);
+
+check(
+  "v76 rename leaves program, history, and draft values intact while both names keep resolving",
+  T76Manage.window.eval(`
+    program.days[0].exercises[0].name==="Garage Shuttle"
+    && Object.prototype.hasOwnProperty.call(
+      data.workouts[0].sets,
+      "Garage Shuttle"
+    )
+    && Object.prototype.hasOwnProperty.call(
+      data.activeWorkoutDraft.sets,
+      "Garage Shuttle"
+    )
+    && exerciseShapeForName("Garage Shuttle")==="rounds"
+    && exerciseShapeForName("Driveway Shuttle")==="rounds"
+  `)
+);
+
+const renamedPersisted76 =
+  JSON.parse(T76Manage.window.localStorage.getItem("forge:data"));
+
+check(
+  "v76 renamed exercise persists and immediately replaces its picker label",
+  renamedPersisted76.myExercises["u:garage-shuttle"].name
+    ==="Driveway Shuttle"
+  && [...dT76Manage.getElementById("addExSel").options]
+    .some(o=>
+      o.value==="Driveway Shuttle"
+      && o.dataset.exerciseId==="u:garage-shuttle"
+      && o.dataset.exerciseShape==="rounds"
+    )
+  && ![...dT76Manage.getElementById("addExSel").options]
+    .some(o=>o.value==="Garage Shuttle")
+);
+
+const manageCollision76 = JSON.parse(
+  T76Manage.window.eval(`
+    JSON.stringify(
+      renameUserExercise(
+        "u:garage-shuttle",
+        "Bench Press"
+      )
+    )
+  `)
+);
+
+check(
+  "v76 custom exercise rename refuses canonical library collisions without mutation",
+  manageCollision76.ok===false
+  && /already exists/i.test(manageCollision76.reason)
+  && T76Manage.window.eval(`
+    data.myExercises["u:garage-shuttle"].name
+      ==="Driveway Shuttle"
+    && data.myExercises["u:garage-shuttle"].shape
+      ==="rounds"
+  `)
+);
+
+const manageArchive76 = JSON.parse(
+  T76Manage.window.eval(`
+    JSON.stringify(
+      setUserExerciseArchived(
+        "u:garage-shuttle",
+        true
+      )
+    )
+  `)
+);
+
+check(
+  "v76 referenced custom exercise can be archived non-destructively and leaves both names resolvable",
+  manageArchive76.ok===true
+  && T76Manage.window.eval(`
+    data.myExercises["u:garage-shuttle"].deprecated===true
+    && exerciseShapeForName("Driveway Shuttle")==="rounds"
+    && exerciseShapeForName("Garage Shuttle")==="rounds"
+  `)
+  && ![...dT76Manage.getElementById("addExSel").options]
+    .some(o=>o.value==="Driveway Shuttle")
+);
+
+check(
+  "v76 archived exercise state persists without changing id or tracking shape",
+  JSON.parse(
+    T76Manage.window.localStorage.getItem("forge:data")
+  ).myExercises["u:garage-shuttle"].deprecated===true
+  && JSON.parse(
+    T76Manage.window.localStorage.getItem("forge:data")
+  ).myExercises["u:garage-shuttle"].id
+    ==="u:garage-shuttle"
+  && JSON.parse(
+    T76Manage.window.localStorage.getItem("forge:data")
+  ).myExercises["u:garage-shuttle"].shape
+    ==="rounds"
+);
+
+const manageRestore76 = JSON.parse(
+  T76Manage.window.eval(`
+    JSON.stringify(
+      setUserExerciseArchived(
+        "u:garage-shuttle",
+        false
+      )
+    )
+  `)
+);
+
+check(
+  "v76 archived custom exercise restores to My Exercises with the same identity and shape",
+  manageRestore76.ok===true
+  && T76Manage.window.eval(`
+    data.myExercises["u:garage-shuttle"].deprecated===false
+    && data.myExercises["u:garage-shuttle"].id
+      ==="u:garage-shuttle"
+    && data.myExercises["u:garage-shuttle"].shape
+      ==="rounds"
+  `)
+  && [...dT76Manage.getElementById("addExSel").options]
+    .some(o=>
+      o.value==="Driveway Shuttle"
+      && o.dataset.exerciseId==="u:garage-shuttle"
+    )
+);
+
+const protectedDataBefore76 =
+  T76Manage.window.localStorage.getItem("forge:data");
+
+const protectedDelete76 = JSON.parse(
+  T76Manage.window.eval(`
+    JSON.stringify(
+      deleteUserExercisePermanently(
+        "u:garage-shuttle"
+      )
+    )
+  `)
+);
+
+check(
+  "v76 permanent deletion refuses any exercise referenced by program, history, or active draft",
+  protectedDelete76.ok===false
+  && protectedDelete76.protected===true
+  && protectedDelete76.references.counts.program===1
+  && protectedDelete76.references.counts.history===1
+  && protectedDelete76.references.counts.draft===1
+  && T76Manage.window.localStorage.getItem("forge:data")
+    ===protectedDataBefore76
+  && T76Manage.window.eval(`
+    !!data.myExercises["u:garage-shuttle"]
+  `)
+);
+
+const unusedCreate76 = JSON.parse(
+  T76Manage.window.eval(`
+    JSON.stringify(
+      createUserExercise(
+        "Unused Carry",
+        "carry"
+      )
+    )
+  `)
+);
+
+const unusedDelete76 = unusedCreate76.ok
+  ? JSON.parse(
+      T76Manage.window.eval(`
+        JSON.stringify(
+          deleteUserExercisePermanently(
+            ${JSON.stringify(
+              unusedCreate76.entry &&
+              unusedCreate76.entry.id
+            )}
+          )
+        )
+      `)
+    )
+  : {ok:false};
+
+check(
+  "v76 genuinely unused custom exercise can be permanently deleted",
+  unusedCreate76.ok===true
+  && unusedDelete76.ok===true
+  && T76Manage.window.eval(`
+    exerciseModelEntryForName("Unused Carry")===null
+  `)
+  && !Object.values(
+    JSON.parse(
+      T76Manage.window.localStorage.getItem("forge:data")
+    ).myExercises||{}
+  ).some(entry=>entry.name==="Unused Carry")
+);
+
+const manageFailEntry76 = {
+  id:"u:rollback-carry",
+  name:"Rollback Carry",
+  shape:"carry",
+  tags:[],
+  aliases:[],
+  formerNames:[],
+  muscles:{primary:[],secondary:[]},
+  equipment:[],
+  unilateral:false,
+  bodyweight:false,
+  deprecated:false
+};
+
+const T76ManageFail = boot(
+  V3_CFG,
+  Object.assign(
+    {},
+    EMPTY_DATA,
+    {
+      workouts:[],
+      activeWorkoutDraft:null,
+      myExercises:{
+        "u:rollback-carry":clone76(manageFailEntry76)
+      }
+    }
+  ),
+  null,
+  TEST_PROGRAM
+);
+
+const manageFailStore76 =
+  T76ManageFail.window.localStorage;
+
+const manageFailDataBefore76 =
+  manageFailStore76.getItem("forge:data");
+
+const manageFailProto76 =
+  Object.getPrototypeOf(manageFailStore76);
+
+const manageFailSet76 =
+  manageFailProto76.setItem;
+
+manageFailProto76.setItem=function(key,value){
+  if (key==="forge:data"){
+    throw new Error(
+      "v76 exercise management save denied"
+    );
+  }
+
+  return manageFailSet76.call(this,key,value);
+};
+
+const failedRenameManage76 = JSON.parse(
+  T76ManageFail.window.eval(`
+    JSON.stringify(
+      renameUserExercise(
+        "u:rollback-carry",
+        "Changed Carry"
+      )
+    )
+  `)
+);
+
+manageFailProto76.setItem=manageFailSet76;
+
+check(
+  "v76 failed management save rolls rename and formerNames back in memory",
+  failedRenameManage76.ok===false
+  && T76ManageFail.window.eval(`
+    data.myExercises["u:rollback-carry"].name
+      ==="Rollback Carry"
+    && data.myExercises["u:rollback-carry"].shape
+      ==="carry"
+    && data.myExercises["u:rollback-carry"].formerNames.length
+      ===0
+  `)
+);
+
+check(
+  "v76 failed management save leaves persisted primary data byte-identical",
+  manageFailStore76.getItem("forge:data")
+    ===manageFailDataBefore76
+);
+
+// Visible Manage My Exercises interface.
+const manageUiButton76 =
+  dT76Manage.getElementById("manageMyExercisesBtn");
+
+check(
+  "v76 Train places Manage My Exercises in its own titled card after Plate Math",
+  !!manageUiButton76
+  && !!manageUiButton76.closest("#myExercisesLaunchCard")
+  && manageUiButton76.closest("#myExercisesLaunchCard").previousElementSibling.id==="trainingToolsCard"
+  && manageUiButton76.closest("#myExercisesLaunchCard").firstElementChild===manageUiButton76.closest("#myExercisesLaunchCard").querySelector(".my-exercises-launch-title")
+  && manageUiButton76.closest("#myExercisesLaunchCard").querySelector(".my-exercises-launch-title").textContent==="My Exercises"
+  && manageUiButton76.closest("#myExercisesLaunchCard").querySelector(".my-exercises-launch-title").classList.contains("label")
+  && manageUiButton76.classList.contains("small")
+  && manageUiButton76.style.width==="100%"
+);
+
+const sessionTypeCard76 =
+  dT76Manage.getElementById(
+    "sessionTypeCard"
+  );
+
+const workoutCard76 =
+  dT76Manage.getElementById(
+    "trainingSessionCard"
+  );
+
+const sessionTypeControl76 =
+  dT76Manage.getElementById("wDay");
+
+const workoutDate76 =
+  dT76Manage.getElementById("wDate");
+
+check(
+  "v76 static Session Type card preserves the existing workout controls",
+  !!sessionTypeCard76
+  && !!workoutCard76
+  && sessionTypeCard76.nextElementSibling
+    ===workoutCard76
+  && sessionTypeCard76.firstElementChild.id
+    ==="sessionTypeCardTitle"
+  && sessionTypeCard76.firstElementChild.textContent
+    ==="Session Type"
+  && sessionTypeCard76.firstElementChild.getAttribute(
+    "role"
+  )==="heading"
+  && sessionTypeControl76.parentElement
+    ===sessionTypeCard76
+  && sessionTypeControl76.getAttribute(
+    "aria-labelledby"
+  )==="sessionTypeCardTitle"
+  && workoutCard76.firstElementChild.id
+    ==="workoutCardTitle"
+  && workoutCard76.firstElementChild.textContent
+    ==="Workout"
+  && workoutCard76.firstElementChild.getAttribute(
+    "role"
+  )==="heading"
+  && workoutCard76.contains(workoutDate76)
+  && !sessionTypeCard76.contains(workoutDate76)
+  && Array.from(
+    workoutCard76.querySelectorAll(".label")
+  ).some(label=>
+    label.textContent.trim()==="Date"
+  )
+  && /Add exercise to this session/.test(
+    workoutCard76.textContent
+  )
+  && /Notes \(optional\)/.test(
+    workoutCard76.textContent
+  )
+  && dT76Manage.querySelectorAll("#wDay").length===1
+  && dT76Manage.querySelectorAll("#wDate").length===1
+);
+
+manageUiButton76.dispatchEvent(
+  new T76Manage.window.Event(
+    "click",
+    {bubbles:true}
+  )
+);
+
+const manageUiOverlay76 =
+  dT76Manage.getElementById("myExercisesOverlay");
+
+check(
+  "v76 Manage My Exercises opens as an accessible modal with a close control",
+  !!manageUiOverlay76
+  && !manageUiOverlay76.classList.contains("hidden")
+  && manageUiOverlay76.getAttribute("role")==="dialog"
+  && manageUiOverlay76.getAttribute("aria-modal")==="true"
+  && manageUiOverlay76.getAttribute("aria-hidden")==="false"
+  && !!dT76Manage.getElementById("myExercisesCloseBtn")
+);
+
+let manageUiCard76 =
+  manageUiOverlay76.querySelector(
+    '[data-exercise-id="u:garage-shuttle"]'
+  );
+
+check(
+  "v76 manager shows stable identity, locked tracking shape, former names, and references",
+  !!manageUiCard76
+  && /u:garage-shuttle/.test(manageUiCard76.textContent)
+  && /Tracking:.*Rounds.*locked/i.test(
+    manageUiCard76.textContent
+  )
+  && /garage shuttle/i.test(manageUiCard76.textContent)
+  && /program reference/i.test(manageUiCard76.textContent)
+  && /history reference/i.test(manageUiCard76.textContent)
+  && /saved-draft reference/i.test(
+    manageUiCard76.textContent
+  )
+  && manageUiCard76.querySelectorAll("select").length===0
+);
+
+let manageUiDelete76 =
+  manageUiCard76.querySelector(
+    '[data-action="delete"]'
+  );
+
+check(
+  "v76 referenced exercise presents disabled protected deletion and an available archive action",
+  manageUiDelete76.disabled===true
+  && manageUiDelete76.textContent==="Protected"
+  && !!manageUiCard76.querySelector(
+    '[data-action="archive"]'
+  )
+);
+
+let manageUiName76 =
+  manageUiCard76.querySelector('input[type="text"]');
+
+manageUiName76.value = "UI Shuttle";
+
+manageUiCard76.querySelector(
+  '[data-action="rename"]'
+).dispatchEvent(
+  new T76Manage.window.Event(
+    "click",
+    {bubbles:true}
+  )
+);
+
+check(
+  "v76 manager rename keeps the same id and shape while adding the previous name",
+  T76Manage.window.eval(`
+    data.myExercises["u:garage-shuttle"].id
+      ==="u:garage-shuttle"
+    && data.myExercises["u:garage-shuttle"].name
+      ==="UI Shuttle"
+    && data.myExercises["u:garage-shuttle"].shape
+      ==="rounds"
+    && data.myExercises["u:garage-shuttle"].formerNames
+      .includes("driveway shuttle")
+  `)
+  && [...dT76Manage.getElementById("addExSel").options]
+    .some(o=>
+      o.value==="UI Shuttle"
+      && o.dataset.exerciseId==="u:garage-shuttle"
+      && o.dataset.exerciseShape==="rounds"
+    )
+);
+
+T76Manage.window.confirm = ()=>true;
+
+manageUiCard76 =
+  manageUiOverlay76.querySelector(
+    '[data-exercise-id="u:garage-shuttle"]'
+  );
+
+manageUiCard76.querySelector(
+  '[data-action="archive"]'
+).dispatchEvent(
+  new T76Manage.window.Event(
+    "click",
+    {bubbles:true}
+  )
+);
+
+check(
+  "v76 manager archives referenced exercises non-destructively and removes them from pickers",
+  T76Manage.window.eval(`
+    data.myExercises["u:garage-shuttle"].deprecated===true
+    && exerciseShapeForName("UI Shuttle")==="rounds"
+    && exerciseShapeForName("Garage Shuttle")==="rounds"
+  `)
+  && ![...dT76Manage.getElementById("addExSel").options]
+    .some(o=>o.value==="UI Shuttle")
+);
+
+manageUiCard76 =
+  manageUiOverlay76.querySelector(
+    '[data-exercise-id="u:garage-shuttle"]'
+  );
+
+check(
+  "v76 archived exercises remain visible in management with Restore and Protected controls",
+  manageUiCard76.classList.contains("archived")
+  && /Archived/.test(manageUiCard76.textContent)
+  && !!manageUiCard76.querySelector(
+    '[data-action="restore"]'
+  )
+  && manageUiCard76.querySelector(
+    '[data-action="delete"]'
+  ).disabled===true
+);
+
+manageUiCard76.querySelector(
+  '[data-action="restore"]'
+).dispatchEvent(
+  new T76Manage.window.Event(
+    "click",
+    {bubbles:true}
+  )
+);
+
+check(
+  "v76 manager restores an archived exercise with its original id and tracking shape",
+  T76Manage.window.eval(`
+    data.myExercises["u:garage-shuttle"].deprecated===false
+    && data.myExercises["u:garage-shuttle"].id
+      ==="u:garage-shuttle"
+    && data.myExercises["u:garage-shuttle"].shape
+      ==="rounds"
+  `)
+  && [...dT76Manage.getElementById("addExSel").options]
+    .some(o=>
+      o.value==="UI Shuttle"
+      && o.dataset.exerciseId==="u:garage-shuttle"
+    )
+);
+
+const manageUiUnused76 = JSON.parse(
+  T76Manage.window.eval(`
+    JSON.stringify(
+      createUserExercise(
+        "UI Unused Exercise",
+        "text"
+      )
+    )
+  `)
+);
+
+T76Manage.window.eval(
+  "renderMyExercisesManager()"
+);
+
+const manageUiUnusedCard76 =
+  manageUiUnused76.ok
+    ? manageUiOverlay76.querySelector(
+        '[data-exercise-id="'
+        +manageUiUnused76.entry.id
+        +'"]'
+      )
+    : null;
+
+check(
+  "v76 manager identifies genuinely unused exercises and enables permanent deletion",
+  manageUiUnused76.ok===true
+  && !!manageUiUnusedCard76
+  && /Unused.*permanent deletion/i.test(
+    manageUiUnusedCard76.textContent
+  )
+  && manageUiUnusedCard76.querySelector(
+    '[data-action="delete"]'
+  ).disabled===false
+);
+
+manageUiUnusedCard76.querySelector(
+  '[data-action="delete"]'
+).dispatchEvent(
+  new T76Manage.window.Event(
+    "click",
+    {bubbles:true}
+  )
+);
+
+check(
+  "v76 manager permanently deletes only the confirmed unused exercise",
+  T76Manage.window.eval(`
+    !data.myExercises[
+      ${JSON.stringify(
+        manageUiUnused76.entry
+        && manageUiUnused76.entry.id
+      )}
+    ]
+    && !!data.myExercises["u:garage-shuttle"]
+  `)
+  && !manageUiOverlay76.querySelector(
+    '[data-exercise-id="'
+    +manageUiUnused76.entry.id
+    +'"]'
+  )
+);
+
+dT76Manage.getElementById(
+  "myExercisesCloseBtn"
+).dispatchEvent(
+  new T76Manage.window.Event(
+    "click",
+    {bubbles:true}
+  )
+);
+
+check(
+  "v76 Manage My Exercises closes cleanly and returns focus to its trigger",
+  manageUiOverlay76.classList.contains("hidden")
+  && manageUiOverlay76.getAttribute("aria-hidden")==="true"
+  && dT76Manage.activeElement===manageUiButton76
+);
+
+const manageUiStyles76 =
+  dT76Manage.getElementById(
+    "myExercisesManagerStyles"
+  ).textContent;
+
+check(
+  "v76 manager retains mobile-safe scrolling, safe-area padding, and 44px action targets",
+  /overflow:auto/.test(manageUiStyles76)
+  && /safe-area-inset-top/.test(manageUiStyles76)
+  && /safe-area-inset-bottom/.test(manageUiStyles76)
+  && /min-height:44px/.test(manageUiStyles76)
+  && /max-width:420px/.test(manageUiStyles76)
+  && /\.myex-title\{[^}]*font-size:16px/.test(manageUiStyles76)
+  && /\.myex-name\{[^}]*font-size:14px/.test(manageUiStyles76)
+);
+
+// Program Builder custom creation uses the same persistent shape contract.
+const T76BuilderCustom = boot(
+  V3_CFG,
+  Object.assign(
+    {},
+    EMPTY_DATA,
+    {workouts:[],activeWorkoutDraft:null,myExercises:{}}
+  ),
+  null,
+  TEST_PROGRAM
+);
+
+const dT76BuilderCustom =
+  T76BuilderCustom.window.document;
+
+T76BuilderCustom.window.eval("openBuilder(false)");
+
+const builderSelectCustom76 =
+  [...dT76BuilderCustom.querySelectorAll("select")]
+    .find(s=>
+      [...s.options].some(o=>o.value==="__CUSTOM__")
+      && s!==dT76BuilderCustom.getElementById("addExSel")
+    );
+
+const builderRowCustom76 =
+  builderSelectCustom76 &&
+  builderSelectCustom76.closest(".bex");
+
+const builderNameCustom76 =
+  builderRowCustom76 &&
+  builderRowCustom76.querySelector(".bname");
+
+const builderShapeCustom76 =
+  builderRowCustom76 &&
+  builderRowCustom76.querySelector(".bshape");
+
+const builderAddCustom76 =
+  builderRowCustom76 &&
+  [...builderRowCustom76.querySelectorAll("button")]
+    .find(b=>/Add/.test(b.textContent));
+
+check(
+  "v76 Program Builder custom row includes the same six-shape selector",
+  !!builderSelectCustom76
+  && !!builderNameCustom76
+  && !!builderShapeCustom76
+  && builderShapeCustom76.options.length===6
+);
+
+builderSelectCustom76.value="__CUSTOM__";
+builderSelectCustom76.dispatchEvent(
+  new T76BuilderCustom.window.Event("change",{bubbles:true})
+);
+
+builderNameCustom76.value="Builder Carry Test";
+builderShapeCustom76.value="carry";
+
+builderAddCustom76.dispatchEvent(
+  new T76BuilderCustom.window.Event("click",{bubbles:true})
+);
+
+check(
+  "v76 Program Builder custom creation persists selected shape and program reference",
+  T76BuilderCustom.window.eval(`
+    exerciseShapeForName("Builder Carry Test")==="carry"
+    && Object.values(data.myExercises)
+         .some(x=>x.name==="Builder Carry Test" && x.shape==="carry")
+    && builderProg.days.some(
+         d=>d.exercises.some(e=>e.name==="Builder Carry Test")
+       )
+  `)
+);
+
+
+
+// ================= v76 history scalability + AI training range =================
+const dayAgo76 = n=>{
+  const d = new Date();
+  d.setHours(12,0,0,0);
+  d.setDate(d.getDate()-n);
+
+  return d.getFullYear()
+    +"-"+String(d.getMonth()+1).padStart(2,"0")
+    +"-"+String(d.getDate()).padStart(2,"0");
+};
+
+const historyScaleWorkouts76 = Array.from({length:60},(_,i)=>({
+  date:dayAgo76(i),
+  day:"D1",
+  title:"Scale Session "+(i+1),
+  sets:{"Bench Press":[{w:100+i,r:5}]},
+  notes:""
+}));
+
+const H76Scale = boot(
+  V3_CFG,
+  {
+    food:{},
+    workouts:historyScaleWorkouts76,
+    weights:[],
+    meta:{lastBackup:null,logsSince:0},
+    myExercises:{}
+  },
+  null,
+  TEST_PROGRAM
+);
+
+const dH76Scale = H76Scale.window.document;
+
+check(
+  "v76 History section is collapsed by default",
+  dH76Scale.getElementById("workHistoryPanel")
+  && dH76Scale.getElementById("workHistoryPanel").open===false
+);
+
+check(
+  "v76 History initially renders only 25 workout rows without trimming stored history",
+  dH76Scale.querySelectorAll("#workHistory .workSession").length===25
+  && H76Scale.window.eval("data.workouts.length")===60
+  && dH76Scale.getElementById("workHistoryCount").textContent==="60 sessions"
+);
+
+check(
+  "v76 individual workout history rows start collapsed and show date/title",
+  dH76Scale.querySelector("#workHistory .workSession")
+  && dH76Scale.querySelector("#workHistory .workSession").open===false
+  && /Scale Session/.test(
+    dH76Scale.querySelector("#workHistory .workSession summary").textContent
+  )
+);
+
+dH76Scale.querySelector("#workHistoryMore").click();
+
+check(
+  "v76 History Load older reveals the next 25 without changing stored history",
+  dH76Scale.querySelectorAll("#workHistory .workSession").length===50
+  && H76Scale.window.eval("data.workouts.length")===60
+);
+
+dH76Scale.querySelector("#workHistoryMore").click();
+
+check(
+  "v76 History can reveal all stored sessions and removes Load older when complete",
+  dH76Scale.querySelectorAll("#workHistory .workSession").length===60
+  && !dH76Scale.querySelector("#workHistoryMore")
+  && H76Scale.window.eval("data.workouts.length")===60
+);
+
+const aiRangeWorkouts76 = [
+  {
+    date:dayAgo76(2),
+    day:"D1",
+    title:"Recent",
+    sets:{"Bench Press":[{w:205,r:5}]},
+    notes:""
+  },
+  {
+    date:dayAgo76(45),
+    day:"D1",
+    title:"Mid",
+    sets:{"Bench Press":[{w:195,r:5}]},
+    notes:""
+  },
+  {
+    date:dayAgo76(200),
+    day:"__FREE__",
+    title:"Old",
+    sets:{
+      "Bench Press":[{w:175,r:5}],
+      "Future Shape":{
+        t:"futureShape",
+        payload:{keep:true}
+      }
+    },
+    notes:"historic"
+  }
+];
+
+const H76AI = boot(
+  V3_CFG,
+  {
+    food:{},
+    workouts:aiRangeWorkouts76,
+    weights:[],
+    meta:{lastBackup:null,logsSince:0},
+    myExercises:{}
+  },
+  null,
+  TEST_PROGRAM
+);
+
+const dH76AI = H76AI.window.document;
+const aiRangeSel76 = dH76AI.getElementById("aiTrainingRange");
+
+check(
+  "v76 AI Coach exposes five training-history ranges with 4 weeks default",
+  !!aiRangeSel76
+  && [...aiRangeSel76.options].map(o=>o.value).join(",")==="4w,3m,6m,1y,all"
+  && aiRangeSel76.value==="4w"
+  && !!dH76AI.getElementById("aiTrainingJsonShareBtn")
+  && !!dH76AI.getElementById("aiTrainingJsonCopyBtn")
+  && !dH76AI.getElementById("aiTrainingJsonBtn")
+);
+
+check(
+  "v76 AI training range filters report/export history without deleting stored workouts",
+  H76AI.window.eval('aiTrainingWorkouts("4w").length')===1
+  && H76AI.window.eval('aiTrainingWorkouts("3m").length')===2
+  && H76AI.window.eval('aiTrainingWorkouts("6m").length')===2
+  && H76AI.window.eval('aiTrainingWorkouts("1y").length')===3
+  && H76AI.window.eval('aiTrainingWorkouts("all").length')===3
+  && H76AI.window.eval("data.workouts.length")===3
+);
+
+const aiReport4w76 = H76AI.window.eval('aiReport("4w")');
+const aiReportAll76 = H76AI.window.eval('aiReport("all")');
+
+check(
+  "v76 AI report follows selected range and all-history summary includes historic exercises",
+  /## Training \(last 4 weeks\)/.test(aiReport4w76)
+  && /1 session in selected range/.test(aiReport4w76)
+  && /## Training \(all history\)/.test(aiReportAll76)
+  && /3 sessions in selected range/.test(aiReportAll76)
+  && /Future Shape/.test(aiReportAll76)
+);
+
+const aiExportAll76 = H76AI.window.eval('aiTrainingExport("all")');
+
+check(
+  "v76 All-history Training JSON exports every exact workout and preserves unknown future objects",
+  aiExportAll76.workoutCount===3
+  && aiExportAll76.workouts.length===3
+  && JSON.stringify(
+    aiExportAll76.workouts
+      .find(w=>w.sets && w.sets["Future Shape"])
+      .sets["Future Shape"]
+  )==='{"t":"futureShape","payload":{"keep":true}}'
+  && H76AI.window.eval("data.workouts.length")===3
+);
+
+
+
+// ================= v76 training JSON native share + exact copy =================
+const trainingShareDataBefore76 =
+  H76AI.window.eval(
+    "JSON.stringify(data.workouts)"
+  );
+
+H76AI.window.eval(`
+  window.__trainingShareCapture = {
+    write:null,
+    share:null,
+    ack:null,
+    notice:null
+  };
+
+  nativePlatformForTrainingJson = ()=>true;
+
+  nativeJsonExportCapability = ()=>({
+    available:true,
+    shareAvailable:true
+  });
+
+  writeNativeJson = async (
+    capability,
+    filename,
+    text
+  )=>{
+    window.__trainingShareCapture.write = {
+      capability:capability,
+      filename:filename,
+      text:text
+    };
+
+    return {
+      ok:true,
+      uri:"file:///Documents/"+filename
+    };
+  };
+
+  shareNativeJson = async (
+    capability,
+    nativeFile,
+    title
+  )=>{
+    window.__trainingShareCapture.share = {
+      capability:capability,
+      nativeFile:nativeFile,
+      title:title
+    };
+
+    return {
+      activityType:
+        "com.apple.DocumentManagerUICore.SaveToFiles"
+    };
+  };
+
+  ackBtn = (
+    id,
+    text
+  )=>{
+    window.__trainingShareCapture.ack = {
+      id:id,
+      text:text
+    };
+  };
+
+  flashSave = (
+    message,
+    isError
+  )=>{
+    window.__trainingShareCapture.notice = {
+      message:message,
+      isError:!!isError
+    };
+  };
+`);
+
+const nativeTrainingShareOk76 =
+  await H76AI.window.eval(
+    'shareTrainingJson("all")'
+  );
+
+const nativeTrainingShareCapture76 =
+  H76AI.window.eval(
+    "window.__trainingShareCapture"
+  );
+
+const nativeTrainingSharedPayload76 =
+  JSON.parse(
+    nativeTrainingShareCapture76.write.text
+  );
+
+check(
+  "v76 native Training JSON writes verified exact All-history JSON before opening the share sheet",
+  nativeTrainingShareOk76===true
+  && /^blackpyre-training-all-.*\.json$/.test(
+       nativeTrainingShareCapture76.write.filename
+     )
+  && nativeTrainingSharedPayload76.type
+       ==="blackpyre-ai-training-export"
+  && nativeTrainingSharedPayload76.range==="all"
+  && nativeTrainingSharedPayload76.workoutCount===3
+  && nativeTrainingSharedPayload76.workouts.length===3
+  && JSON.stringify(
+       nativeTrainingSharedPayload76.workouts
+         .find(
+           w=>w.sets
+             && w.sets["Future Shape"]
+         )
+         .sets["Future Shape"]
+     )==='{"t":"futureShape","payload":{"keep":true}}'
+  && nativeTrainingShareCapture76.share.nativeFile.uri
+       ==="file:///Documents/"
+         +nativeTrainingShareCapture76.write.filename
+  && nativeTrainingShareCapture76.share.title
+       ==="BlackPyre training history"
+  && nativeTrainingShareCapture76.ack.id
+       ==="aiTrainingJsonShareBtn"
+  && /Share complete/.test(
+       nativeTrainingShareCapture76.ack.text
+     )
+  && H76AI.window.eval(
+       "JSON.stringify(data.workouts)"
+     )===trainingShareDataBefore76
+);
+
+H76AI.window.eval(`
+  window.__trainingShareCapture.ack = null;
+  window.__trainingShareCapture.notice = null;
+
+  shareNativeJson = async ()=>{
+    throw new Error("Share canceled");
+  };
+`);
+
+const nativeTrainingShareCancelled76 =
+  await H76AI.window.eval(
+    'shareTrainingJson("all")'
+  );
+
+const nativeTrainingCancelCapture76 =
+  H76AI.window.eval(
+    "window.__trainingShareCapture"
+  );
+
+check(
+  "v76 canceled Training JSON share reports cancellation without false completion or workout mutation",
+  nativeTrainingShareCancelled76===false
+  && nativeTrainingCancelCapture76.ack.id
+       ==="aiTrainingJsonShareBtn"
+  && /canceled/i.test(
+       nativeTrainingCancelCapture76.ack.text
+     )
+  && nativeTrainingCancelCapture76.notice.isError===false
+  && /no external destination/i.test(
+       nativeTrainingCancelCapture76.notice.message
+     )
+  && H76AI.window.eval(
+       "JSON.stringify(data.workouts)"
+     )===trainingShareDataBefore76
+);
+
+H76AI.window.eval(`
+  window.__copiedTrainingJson = null;
+  window.__trainingShareCapture.ack = null;
+  window.__trainingShareCapture.notice = null;
+
+  copyExactTrainingJsonText = async text=>{
+    window.__copiedTrainingJson = text;
+    return true;
+  };
+`);
+
+const copyTrainingJsonOk76 =
+  await H76AI.window.eval(
+    'copyTrainingJson("all")'
+  );
+
+const copiedTrainingJson76 =
+  JSON.parse(
+    H76AI.window.eval(
+      "window.__copiedTrainingJson"
+    )
+  );
+
+const copiedTrainingCapture76 =
+  H76AI.window.eval(
+    "window.__trainingShareCapture"
+  );
+
+check(
+  "v76 Copy training JSON places exact selected-range JSON on the clipboard without mutation",
+  copyTrainingJsonOk76===true
+  && copiedTrainingJson76.type
+       ==="blackpyre-ai-training-export"
+  && copiedTrainingJson76.range==="all"
+  && copiedTrainingJson76.workoutCount===3
+  && copiedTrainingJson76.workouts.length===3
+  && JSON.stringify(
+       copiedTrainingJson76.workouts
+         .find(
+           w=>w.sets
+             && w.sets["Future Shape"]
+         )
+         .sets["Future Shape"]
+     )==='{"t":"futureShape","payload":{"keep":true}}'
+  && copiedTrainingCapture76.ack.id
+       ==="aiTrainingJsonCopyBtn"
+  && /JSON copied/.test(
+       copiedTrainingCapture76.ack.text
+     )
+  && /paste into any AI/i.test(
+       copiedTrainingCapture76.notice.message
+     )
+  && H76AI.window.eval(
+       "JSON.stringify(data.workouts)"
+     )===trainingShareDataBefore76
+);
+
+
+
+// A successful restore must sever transient references to the old training
+// screen. This permanently reproduces the physical-device defect where an
+// old resumed draft remained marked as loaded, hid the restored draft card,
+// left My Exercises stale, and erased the restored draft on a session switch.
+const restoreResetOldProgram76 = {
+  name:"Before Restore",
+  days:[
+    {
+      id:"D1",
+      title:"Old Day",
+      exercises:[
+        {
+          name:"Bench Press",
+          scheme:"3×5"
+        }
+      ]
+    }
+  ]
+};
+
+const restoreResetOldDraft76 = {
+  date:"2026-07-28",
+  day:"D1",
+  title:"Old loaded draft",
+  sets:{
+    "Bench Press":[
+      {
+        w:135,
+        r:5
+      }
+    ]
+  },
+  notes:"old live workout state",
+  updatedAt:"2026-07-28T12:00:00.000Z"
+};
+
+const restoreResetInitialData76 = Object.assign(
+  {},
+  clone76(EMPTY_DATA),
+  {
+    workouts:[],
+    myExercises:{},
+    activeWorkoutDraft:clone76(
+      restoreResetOldDraft76
+    ),
+    meta:{
+      lastBackup:null,
+      logsSince:0
+    }
+  }
+);
+
+const RestoreReset76 = boot(
+  V3_CFG,
+  restoreResetInitialData76,
+  null,
+  restoreResetOldProgram76
+);
+
+const dRestoreReset76 =
+  RestoreReset76.window.document;
+
+const oldDraftResumed76 =
+  RestoreReset76.window.eval(
+    "resumeWorkoutDraft()"
+  );
+
+check(
+  "v76 restore regression begins with an old loaded workout draft",
+  oldDraftResumed76===true
+  && RestoreReset76.window.eval(
+       "workoutDraftLoaded"
+     )===true
+  && RestoreReset76.window.eval(`
+       sessionState["Bench Press"].status
+         ==="saved"
+       && sessionState["Bench Press"].saved[0].w
+         ===135
+     `)
+);
+
+const restoreResetResult76 =
+  RestoreReset76.window.eval(
+    `restoreBackupEnvelope(
+      ${JSON.stringify(V76_FIXTURE.backup)}
+    )`
+  );
+
+const restoreResetStoredImmediately76 =
+  JSON.parse(
+    RestoreReset76.window.localStorage.getItem(
+      "forge:data"
+    )
+  );
+
+const restoreResetPickerHasCustom76 =
+  [
+    ...dRestoreReset76
+      .getElementById("addExSel")
+      .options
+  ].some(
+    option =>
+      option.value==="Tempo Step Pattern"
+  );
+
+check(
+  "v76 successful restore clears stale loaded-session state",
+  restoreResetResult76.ok===true
+  && RestoreReset76.window.eval(
+       "workoutDraftLoaded"
+     )===false
+  && RestoreReset76.window.eval(`
+       !sessionState["Bench Press"]
+       || sessionState["Bench Press"].status
+         !=="saved"
+       || sessionState["Bench Press"].saved==null
+     `)
+);
+
+check(
+  "v76 successful restore immediately exposes restored draft and custom exercise",
+  same76(
+       RestoreReset76.window.eval(
+         "JSON.parse(JSON.stringify(data.activeWorkoutDraft))"
+       ),
+       V76_FX_DRAFT
+     )
+  && same76(
+       restoreResetStoredImmediately76.activeWorkoutDraft,
+       V76_FX_DRAFT
+     )
+  && !dRestoreReset76
+       .getElementById("workoutDraftCard")
+       .classList.contains("hidden")
+  && restoreResetPickerHasCustom76
+);
+
+let restoreResetConfirmCalls76 = 0;
+
+RestoreReset76.window.confirm = ()=>{
+  restoreResetConfirmCalls76++;
+  return true;
+};
+
+const restoreResetDaySelect76 =
+  dRestoreReset76.getElementById("wDay");
+
+restoreResetDaySelect76.value = "__FREE__";
+
+restoreResetDaySelect76.dispatchEvent(
+  new RestoreReset76.window.Event(
+    "change",
+    {
+      bubbles:true
+    }
+  )
+);
+
+const restoreResetStoredAfterSwitch76 =
+  JSON.parse(
+    RestoreReset76.window.localStorage.getItem(
+      "forge:data"
+    )
+  );
+
+check(
+  "v76 switching session type after restore cannot discard the restored draft",
+  restoreResetConfirmCalls76===0
+  && same76(
+       RestoreReset76.window.eval(
+         "JSON.parse(JSON.stringify(data.activeWorkoutDraft))"
+       ),
+       V76_FX_DRAFT
+     )
+  && same76(
+       restoreResetStoredAfterSwitch76.activeWorkoutDraft,
+       V76_FX_DRAFT
+     )
+);
+
+const restoredDraftResumed76 =
+  RestoreReset76.window.eval(
+    "resumeWorkoutDraft()"
+  );
+
+check(
+  "v76 restored draft remains resumable with exact typed values",
+  restoredDraftResumed76===true
+  && RestoreReset76.window.eval(
+       "workoutDraftLoaded"
+     )===true
+  && same76(
+       RestoreReset76.window.eval(
+         'sessionState["Pull-Up"].saved'
+       ),
+       V76_FX_DRAFT.sets["Pull-Up"]
+     )
+  && same76(
+       RestoreReset76.window.eval(
+         'sessionState["Run"].saved'
+       ),
+       V76_FX_DRAFT.sets["Run"]
+     )
+  && same76(
+       RestoreReset76.window.eval(
+         'sessionState["Tempo Step Intervals"].saved'
+       ),
+       V76_FX_DRAFT.sets[
+         "Tempo Step Intervals"
+       ]
+     )
+  && RestoreReset76.window.eval(
+       'sessionState["Tempo Step Intervals"].mode'
+     )==="rounds"
+);
 
 summary("INTEGRATION");
 })().catch(e=>{ console.error(e); process.exit(1); });

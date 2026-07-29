@@ -940,7 +940,18 @@ function restoreBackupEnvelope(b){
     }
     applyPreparedState(prepared);
     refreshLastKnownGood("restore");
-    renderDayOptions(); renderSessionInputs(); renderAll();
+
+    if (
+      (present.data || present.program)
+      && typeof resetTrainingUiAfterRestore==="function"
+    ){
+      resetTrainingUiAfterRestore();
+    } else {
+      renderDayOptions();
+      renderSessionInputs();
+    }
+
+    renderAll();
     flashSave("Backup restored ✓");
     ackBtn("importDataBtn", "✓ Restored");
     return {ok:true};

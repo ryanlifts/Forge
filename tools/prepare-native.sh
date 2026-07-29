@@ -14,6 +14,7 @@ cp \
   icon-192.png \
   icon-512.png \
   data-faq.js \
+  data-exercises.js \
   data-foods.js \
   data-quotes.js \
   data-suggestions.js \

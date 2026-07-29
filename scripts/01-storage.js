@@ -4,7 +4,7 @@ const DATA_KEY = "forge:data", CFG_KEY = "forge:cfg", PROG_KEY = "forge:program"
 const LKG_KEY = "forge:lkg", LKG_PREVIOUS_KEY = "forge:lkg:previous", LKG_OLDER_KEY = "forge:lkg:older";
 const QUARANTINE_KEY = "forge:quarantine", INSTALL_KEY = "forge:install";
 const REST_TIMER_KEY = "forge:rest-timer";
-const SCHEMA_VERSION = 2, RECOVERY_FORMAT_VERSION = 1;
+const SCHEMA_VERSION = 3, RECOVERY_FORMAT_VERSION = 1;
 const REST_TIMER_FORMAT_VERSION = 1;
 const AI_CFG_FIELDS = ["anthropicKey","openaiKey","aiProvider","aiModelAnth","aiModelOai","foodHandoffOn"];
 
@@ -27,19 +27,6 @@ const DEFAULT_PROGRAM = {
   ],
 };
 
-const EXERCISE_LIBRARY = [
-  "Bench Press","Incline Bench Press","Decline Bench Press","Dumbbell Bench Press","Dumbbell Incline Press",
-  "Overhead Press","Dumbbell Shoulder Press","Push-Up","Dips","Chest Fly","Cable Crossover",
-  "Barbell Row","Dumbbell Row","T-Bar Row","Seated Cable Row","Pull-Up","Chin-Up","Lat Pulldown",
-  "Face Pull","Rear Delt Fly","Shrug","Lateral Raise","Front Raise",
-  "Biceps Curl","Hammer Curl","Preacher Curl","Cable Curl",
-  "Triceps Pushdown","Overhead Triceps Extension","Skullcrusher","Close-Grip Bench Press",
-  "Back Squat","Box Squat","Front Squat","Goblet Squat","Hack Squat","Leg Press","Bulgarian Split Squat",
-  "Walking Lunge","Reverse Lunge","Step-Up",
-  "Deadlift","Trap Bar Deadlift","Romanian Deadlift","Sumo Deadlift","Good Morning","Hip Thrust","Glute Bridge",
-  "Back Extension","Leg Curl","Leg Extension","Calf Raise","Seated Calf Raise","Spanish Squat / TKE",
-  "Plank","Side Plank","Hanging Leg Raise","Cable Crunch","Ab Wheel","Russian Twist","Farmer Carry","Suitcase Carry",
-];
 
 const CARDIO_TYPES = [
   "Walk","Incline Walk","Run","Jog","Sprint Intervals","Cycling","Rowing","Swimming","Stairmaster","Elliptical",
@@ -60,6 +47,105 @@ function isPlainObject(v){
   return p===Object.prototype || p===null;
 }
 function cloneJSON(v){ return JSON.parse(JSON.stringify(v)); }
+// ================== exercise model contract ==================
+const EXERCISE_SHAPES = ["lift","reps","timeDist","carry","rounds","text"];
+const EXERCISE_TAGS = ["strength","push","pull","squat","hinge","lunge","core","carry","conditioning","cardio","mobility","power","olympic","strongman","bodyweight","machine","isolation","upper","lower","full-body","recovery","sport","rehab"];
+const EXERCISE_EQUIPMENT = ["barbell","dumbbell","kettlebell","machine","cable","bodyweight","bench","rack","pull-up-bar","bands","suspension","medicine-ball","sled","yoke","trap-bar","landmine","box","step","bike","rower","treadmill","elliptical","stair-machine","pool","track","road","trail","jump-rope","battle-rope","sandbag","other"];
+const EXERCISE_DISTANCE_UNITS = ["mi","km","m","ft"];
+const EXERCISE_ENTRY_FIELDS = ["id","name","shape","tags","aliases","formerNames","muscles","equipment","unilateral","bodyweight","deprecated"];
+
+function normalizeExerciseName(value){
+  return String(value==null?"":value).trim().replace(/\s+/g," ").toLowerCase();
+}
+function exerciseEntryNames(entry){
+  return [entry.name].concat(entry.aliases||[],entry.formerNames||[]).map(normalizeExerciseName).filter(Boolean);
+}
+function validateExerciseEntryObject(entry, expectedPrefix){
+  if (!isPlainObject(entry)) throw new Error("Exercise entry is not an object.");
+  if (typeof entry.id!=="string" || !entry.id.startsWith(expectedPrefix) || entry.id.length<=expectedPrefix.length) throw new Error("Exercise id is invalid.");
+  if (typeof entry.name!=="string" || !normalizeExerciseName(entry.name)) throw new Error("Exercise name is invalid.");
+  if (!EXERCISE_SHAPES.includes(entry.shape)) throw new Error("Exercise shape is invalid.");
+  if (!Array.isArray(entry.tags) || entry.tags.some(x=>!EXERCISE_TAGS.includes(x))) throw new Error("Exercise tags are invalid.");
+  if (!Array.isArray(entry.aliases) || entry.aliases.some(x=>typeof x!=="string" || !normalizeExerciseName(x))) throw new Error("Exercise aliases are invalid.");
+  if (!Array.isArray(entry.formerNames) || entry.formerNames.some(x=>typeof x!=="string" || x!==normalizeExerciseName(x))) throw new Error("Exercise formerNames are invalid.");
+  if (!isPlainObject(entry.muscles) || !Array.isArray(entry.muscles.primary) || !Array.isArray(entry.muscles.secondary)
+      || entry.muscles.primary.concat(entry.muscles.secondary).some(x=>typeof x!=="string" || !normalizeExerciseName(x))) throw new Error("Exercise muscles are invalid.");
+  if (!Array.isArray(entry.equipment) || entry.equipment.some(x=>!EXERCISE_EQUIPMENT.includes(x))) throw new Error("Exercise equipment is invalid.");
+  if (typeof entry.unilateral!=="boolean" || typeof entry.bodyweight!=="boolean" || typeof entry.deprecated!=="boolean") throw new Error("Exercise flags are invalid.");
+  if (Object.keys(entry).some(k=>!EXERCISE_ENTRY_FIELDS.includes(k))) throw new Error("Exercise data contains a behavior or unsupported field.");
+  const names=exerciseEntryNames(entry);
+  if (new Set(names).size!==names.length) throw new Error("Exercise name, aliases, and formerNames collide within one entry.");
+  return entry;
+}
+function validateBuiltInExerciseLibrary(){
+  if (!Array.isArray(EXERCISE_LIBRARY) || EXERCISE_LIBRARY.length<150 || EXERCISE_LIBRARY.length>300) throw new Error("Built-in exercise library count is invalid.");
+  const ids=new Set(), names=new Map();
+  EXERCISE_LIBRARY.forEach(entry=>{
+    validateExerciseEntryObject(entry,"bp:");
+    if (ids.has(entry.id)) throw new Error("Built-in exercise id collision: "+entry.id);
+    ids.add(entry.id);
+    exerciseEntryNames(entry).forEach(name=>{
+      if (names.has(name)) throw new Error("Built-in exercise naming collision: "+name);
+      names.set(name,entry.id);
+    });
+  });
+  return true;
+}
+function validateUserExercisesMap(map){
+  if (!isPlainObject(map)) throw new Error("Saved user exercises have an unusable shape.");
+  const ids=new Set(), names=new Map();
+  Object.keys(map).forEach(key=>{
+    const entry=map[key];
+    validateExerciseEntryObject(entry,"u:");
+    if (entry.id!==key || ids.has(entry.id)) throw new Error("Saved user exercise id is invalid.");
+    ids.add(entry.id);
+    exerciseEntryNames(entry).forEach(name=>{
+      if (names.has(name)) throw new Error("Saved user exercise names collide.");
+      names.set(name,entry.id);
+    });
+  });
+  return true;
+}
+function validSetRows(value){
+  return Array.isArray(value) && value.length>0 && value.every(row=>{
+    if (!isPlainObject(row) || !(Number(row.r)>0)) return false;
+    if (hasOwn(row,"w") && !(Number(row.w)>=0)) return false;
+    return Object.keys(row).every(k=>k==="w" || k==="r");
+  });
+}
+function validTypedExerciseValue(value){
+  if (!isPlainObject(value) || typeof value.t!=="string" || !value.t) return false;
+  if (value.t==="timeDist"){
+    if (!(Number(value.secs)>0)) return false;
+    const hasDist=hasOwn(value,"dist") && value.dist!==null && value.dist!=="";
+    if (hasDist && !(Number(value.dist)>0 && EXERCISE_DISTANCE_UNITS.includes(value.distUnit))) return false;
+    if (!hasDist && hasOwn(value,"distUnit") && value.distUnit!==undefined && value.distUnit!==null && value.distUnit!=="") return false;
+    return Object.keys(value).every(k=>["t","secs","dist","distUnit"].includes(k));
+  }
+  if (value.t==="carry"){
+    return Number(value.lbs)>0 && Number(value.dist)>0 && EXERCISE_DISTANCE_UNITS.includes(value.distUnit)
+      && Object.keys(value).every(k=>["t","lbs","dist","distUnit"].includes(k));
+  }
+  if (value.t==="rounds"){
+    return Number.isInteger(Number(value.rounds)) && Number(value.rounds)>0
+      && Number.isInteger(Number(value.workSecs)) && Number(value.workSecs)>0
+      && Number.isInteger(Number(value.recSecs)) && Number(value.recSecs)>=0
+      && (!hasOwn(value,"note") || typeof value.note==="string")
+      && Object.keys(value).every(k=>["t","rounds","workSecs","recSecs","note"].includes(k));
+  }
+  // Unknown typed values belong to a newer shape version. Preserve them exactly and
+  // let the reader render them read-only instead of rejecting or rewriting them.
+  return true;
+}
+function validStoredExerciseValue(value){
+  return typeof value==="string" || validSetRows(value) || validTypedExerciseValue(value);
+}
+function validateWorkoutRecord(record,label){
+  if (!isPlainObject(record) || typeof record.date!=="string" || !isPlainObject(record.sets)) throw new Error(label+" has an unusable shape.");
+  Object.keys(record.sets).forEach(name=>{
+    if (!normalizeExerciseName(name) || !validStoredExerciseValue(record.sets[name])) throw new Error(label+" exercise has an unusable shape.");
+  });
+}
 function todayStr(){
   const d = new Date();
   return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
@@ -96,6 +182,7 @@ function download(filename, text){
   setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 500);
 }
 
+validateBuiltInExerciseLibrary();
 // ================== device-only rest timer state ==================
 // The rest timer is intentionally separate from the three primary user-state keys.
 // It is short-lived UI state, not backup/recovery data, and must not force a primary
@@ -143,7 +230,7 @@ function clearRestTimerState(){
 }
 
 // ================== migrations & prepared state ==================
-function makeDefaultData(){ return { food:{}, workouts:[], weights:[], recents:[], activeWorkoutDraft:null }; }
+function makeDefaultData(){ return { food:{}, workouts:[], weights:[], recents:[], myExercises:{}, activeWorkoutDraft:null }; }
 function normalizeDataState(obj){
   const out = obj || makeDefaultData();
   if(!out.food) out.food = {};
@@ -151,12 +238,20 @@ function normalizeDataState(obj){
   if(!out.weights) out.weights = [];
   if(!out.recents) out.recents = [];
   if(!out.myFoods) out.myFoods = {};
+  if(!out.myExercises) out.myExercises = {};
   if(!out.meals) out.meals = [];
   if(!out.finished) out.finished = {};
   if(!out.foodCounts) out.foodCounts = {};
   if(!out.mealCounts) out.mealCounts = {};
   if(!out.meta) out.meta = {lastBackup:null, logsSince:0};
   if(!hasOwn(out,"activeWorkoutDraft")) out.activeWorkoutDraft = null;
+  if(
+    out.activeWorkoutDraft
+    && isPlainObject(out.activeWorkoutDraft.sets)
+    && !Object.keys(out.activeWorkoutDraft.sets).length
+  ){
+    out.activeWorkoutDraft=null;
+  }
   return out;
 }
 function dataContentScore(obj){
@@ -165,7 +260,7 @@ function dataContentScore(obj){
   ["workouts","weights","measure","recents","meals"].forEach(k=>{ if (Array.isArray(obj[k])) score += obj[k].length; });
   if (isPlainObject(obj.food)) Object.keys(obj.food).forEach(day=>{ if (Array.isArray(obj.food[day])) score += obj.food[day].length; });
   if (isPlainObject(obj.water)) score += Object.keys(obj.water).filter(k=>Number(obj.water[k])>0).length;
-  ["myFoods","finished","foodCounts","mealCounts"].forEach(k=>{ if (isPlainObject(obj[k])) score += Object.keys(obj[k]).length; });
+  ["myFoods","myExercises","finished","foodCounts","mealCounts"].forEach(k=>{ if (isPlainObject(obj[k])) score += Object.keys(obj[k]).length; });
   if (obj.activeWorkoutDraft) score += 1;
   return score;
 }
@@ -206,18 +301,18 @@ function parseStatePart(raw, label, part){
 }
 function validateDataShape(obj){
   if (!isPlainObject(obj)) throw new Error("Saved logs are not an object.");
-  const objectFields = ["food","water","finished","myFoods","foodCounts","mealCounts","meta","activeWorkoutDraft"];
+  const objectFields = ["food","water","finished","myFoods","myExercises","foodCounts","mealCounts","meta","activeWorkoutDraft"];
   objectFields.forEach(k=>{ if (hasOwn(obj,k) && obj[k] && !isPlainObject(obj[k])) throw new Error("Saved logs field "+k+" has an unusable shape."); });
   const arrayFields = ["workouts","weights","measure","recents","meals"];
   arrayFields.forEach(k=>{ if (hasOwn(obj,k) && obj[k] && !Array.isArray(obj[k])) throw new Error("Saved logs field "+k+" has an unusable shape."); });
   if (isPlainObject(obj.food)) Object.keys(obj.food).forEach(day=>{ if (!Array.isArray(obj.food[day])) throw new Error("A saved food day is not a list."); });
+  if (isPlainObject(obj.myExercises)) validateUserExercisesMap(obj.myExercises);
+  if (Array.isArray(obj.workouts)) obj.workouts.forEach((record,i)=>validateWorkoutRecord(record,"Saved workout "+(i+1)));
   if (obj.activeWorkoutDraft!=null){
     const d = obj.activeWorkoutDraft;
     if (!isPlainObject(d) || typeof d.date!=="string" || typeof d.day!=="string" || !isPlainObject(d.sets)) throw new Error("Saved workout draft has an unusable shape.");
     Object.keys(d.sets).forEach(name=>{
-      const val = d.sets[name];
-      if (!Array.isArray(val) && typeof val!=="string") throw new Error("Saved workout draft exercise has an unusable shape.");
-      if (Array.isArray(val) && val.some(row=>!isPlainObject(row) || !(Number(row.w)>0) || !(Number(row.r)>0))) throw new Error("Saved workout draft set has an unusable shape.");
+      if (!normalizeExerciseName(name) || !validStoredExerciseValue(d.sets[name])) throw new Error("Saved workout draft exercise has an unusable shape.");
     });
   }
 }
@@ -307,6 +402,15 @@ function prepareState(rawCfg, rawData, rawProgram, options){
         state.cfg.schemaVersion = 2; // whole-state draft contract; stamp after the step succeeds
         changed.cfg = true;
         current = 2;
+      } else if (current===2){
+        if (opts.forceMigrationFailureAt===3) throw new Error("Migration step 2→3 failed.");
+        if (!hasOwn(state.data,"myExercises")){
+          state.data.myExercises = {};
+          changed.data = true;
+        }
+        state.cfg.schemaVersion = 3; // additive exercise shapes + persistent user exercises
+        changed.cfg = true;
+        current = 3;
       } else {
         throw new Error("No migration path from schema "+current+".");
       }

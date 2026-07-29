@@ -1079,81 +1079,688 @@ document.getElementById("hfReviewBtn").addEventListener("click", ()=>{
 
 
 // ================== AI COACH REPORT ==================
-function aiReport(){
-  const today = todayStr();
-  const sorted = data.weights.slice().sort((a,b)=>a.date.localeCompare(b.date));
-  const cur = sorted.length ? sorted[sorted.length-1].lbs : cfg.startWt;
-  const sl = weightSlope(28);
-  const rate = sl ? Math.round(sl.slope*7*10)/10 : null;
-  const tdee = (typeof computeTDEE==="function") ? computeTDEE() : null;
+const AI_TRAINING_RANGES = Object.freeze({
+  "4w":  {label:"last 4 weeks", days:28},
+  "3m":  {label:"last 3 months", days:90},
+  "6m":  {label:"last 6 months", days:180},
+  "1y":  {label:"last 1 year", days:365},
+  "all": {label:"all history", days:null}
+});
 
-  // nutrition adherence: last 14 days
-  const days = [];
+function aiTrainingRangeKey(){
+  const el = document.getElementById("aiTrainingRange");
+  return el && AI_TRAINING_RANGES[el.value] ? el.value : "4w";
+}
+
+function aiDateDaysAgoStr(days){
+  const d = new Date();
+  d.setHours(12,0,0,0);
+  d.setDate(d.getDate()-days);
+
+  return d.getFullYear()
+    +"-"+String(d.getMonth()+1).padStart(2,"0")
+    +"-"+String(d.getDate()).padStart(2,"0");
+}
+
+function aiTrainingWorkouts(rangeKey){
+  const key = AI_TRAINING_RANGES[rangeKey]
+    ? rangeKey
+    : aiTrainingRangeKey();
+
+  const meta = AI_TRAINING_RANGES[key];
+
+  const cutoff = meta.days==null
+    ? null
+    : aiDateDaysAgoStr(meta.days);
+
+  return data.workouts
+    .filter(w=>!cutoff || w.date>=cutoff)
+    .slice()
+    .sort((a,b)=>a.date.localeCompare(b.date));
+}
+
+function aiTrainingHistoryPoints(points,rangeKey){
+  const key = AI_TRAINING_RANGES[rangeKey]
+    ? rangeKey
+    : aiTrainingRangeKey();
+
+  const meta = AI_TRAINING_RANGES[key];
+
+  if (meta.days==null) return points.slice();
+
+  const cutoff = aiDateDaysAgoStr(meta.days);
+  return points.filter(p=>p.date>=cutoff);
+}
+
+function aiSafeWorkoutValue(value){
+  try {
+    if (typeof formatSets==="function") return formatSets(value);
+  } catch(e){}
+
+  if (typeof value==="string") return value;
+
+  try { return JSON.stringify(value); }
+  catch(e){ return "stored value"; }
+}
+
+function aiExerciseSummaries(workouts){
+  const byName = {};
+
+  workouts.forEach(session=>{
+    Object.keys(session.sets||{}).forEach(name=>{
+      const value = session.sets[name];
+
+      if (!byName[name]){
+        byName[name] = {
+          name:name,
+          count:0,
+          firstDate:session.date,
+          firstValue:value,
+          lastDate:session.date,
+          lastValue:value,
+          bestE1RM:null
+        };
+      }
+
+      const rec=byName[name];
+      rec.count++;
+
+      if (session.date<rec.firstDate){
+        rec.firstDate=session.date;
+        rec.firstValue=value;
+      }
+
+      if (session.date>=rec.lastDate){
+        rec.lastDate=session.date;
+        rec.lastValue=value;
+      }
+
+      try {
+        const best=parseBestSet(value);
+
+        if (best && Number.isFinite(best.e1rm)){
+          rec.bestE1RM = rec.bestE1RM==null
+            ? best.e1rm
+            : Math.max(rec.bestE1RM,best.e1rm);
+        }
+      } catch(e){}
+    });
+  });
+
+  return Object.keys(byName)
+    .map(name=>byName[name])
+    .sort((a,b)=>b.count-a.count || a.name.localeCompare(b.name));
+}
+
+function aiTrainingExport(rangeKey){
+  const key = AI_TRAINING_RANGES[rangeKey]
+    ? rangeKey
+    : aiTrainingRangeKey();
+
+  const meta=AI_TRAINING_RANGES[key];
+  const workouts=aiTrainingWorkouts(key);
+
+  return {
+    type:"blackpyre-ai-training-export",
+    formatVersion:1,
+    exportedAt:new Date().toISOString(),
+    range:key,
+    rangeLabel:meta.label,
+    workoutCount:workouts.length,
+    workouts:cloneJSON(workouts),
+    currentProgram:cloneJSON(program),
+    liftGoals:cloneJSON(cfg.liftGoals||{})
+  };
+}
+
+function aiReport(rangeKey){
+  const key = AI_TRAINING_RANGES[rangeKey]
+    ? rangeKey
+    : aiTrainingRangeKey();
+
+  const rangeMeta=AI_TRAINING_RANGES[key];
+  const today=todayStr();
+
+  const sorted=data.weights.slice().sort((a,b)=>a.date.localeCompare(b.date));
+  const cur=sorted.length ? sorted[sorted.length-1].lbs : cfg.startWt;
+  const sl=weightSlope(28);
+  const rate=sl ? Math.round(sl.slope*7*10)/10 : null;
+  const tdee=(typeof computeTDEE==="function") ? computeTDEE() : null;
+
+  // Nutrition deliberately remains a recent 14-day adherence snapshot.
+  const days=[];
+
   for(let i=13;i>=0;i--){
-    const d = new Date(); d.setDate(d.getDate()-i);
-    days.push(d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"));
+    const d=new Date();
+    d.setDate(d.getDate()-i);
+
+    days.push(
+      d.getFullYear()
+      +"-"+String(d.getMonth()+1).padStart(2,"0")
+      +"-"+String(d.getDate()).padStart(2,"0")
+    );
   }
-  const logged = days.filter(d=>(data.food[d]||[]).length>0);
-  const fullDays = logged.map(d=>daySums(d)).filter(x=>x.cal>500);
-  const avgCal = fullDays.length ? Math.round(fullDays.reduce((a,x)=>a+x.cal,0)/fullDays.length) : null;
-  const avgPro = fullDays.length ? Math.round(fullDays.reduce((a,x)=>a+x.pro,0)/fullDays.length) : null;
-  const proHit = logged.filter(d=>daySums(d).pro>=dayTargets(d).pro).length;
 
-  // training: last 28 days
-  const cut28 = new Date(Date.now()-28*86400000);
-  const cutStr = cut28.getFullYear()+"-"+String(cut28.getMonth()+1).padStart(2,"0")+"-"+String(cut28.getDate()).padStart(2,"0");
-  const recent = data.workouts.filter(w=>w.date>=cutStr);
-  const strengthS = recent.filter(w=>w.day!=="CARDIO").length;
-  const cardioS = recent.filter(w=>w.day==="CARDIO").length;
+  const logged=days.filter(d=>(data.food[d]||[]).length>0);
+  const fullDays=logged.map(d=>daySums(d)).filter(x=>x.cal>500);
 
-  // per-lift progression: every program exercise with history
-  const liftLines = [];
+  const avgCal=fullDays.length
+    ? Math.round(fullDays.reduce((a,x)=>a+x.cal,0)/fullDays.length)
+    : null;
+
+  const avgPro=fullDays.length
+    ? Math.round(fullDays.reduce((a,x)=>a+x.pro,0)/fullDays.length)
+    : null;
+
+  const proHit=logged.filter(
+    d=>daySums(d).pro>=dayTargets(d).pro
+  ).length;
+
+  const training=aiTrainingWorkouts(key);
+  const legacyCardio=training.filter(w=>w.day==="CARDIO").length;
+  const programOrFreestyle=training.length-legacyCardio;
+
+  const summaries=aiExerciseSummaries(training);
+  const shownSummaries=summaries.slice(0,30);
+
+  const liftLines=[];
+
   program.days.forEach(d=>d.exercises.forEach(ex=>{
-    const name = ex.name.replace("[Cardio] ","");
-    const hist = liftHistory(name);
+    const name=ex.name.replace("[Cardio] ","");
+
+    const hist=aiTrainingHistoryPoints(
+      liftHistory(name),
+      key
+    );
+
     if (!hist.length) return;
-    const last3 = hist.slice(-3).map(p=>fmtDate(p.date)+": ~"+Math.round(p.y));
-    const goal = (cfg.liftGoals||{})[name];
-    liftLines.push("- **"+name+"** ("+(ex.scheme||"no scheme")+"): est-1RM trend "+last3.join(" → ")
-      +(goal ? " · goal "+goal : ""));
+
+    const last3=hist.slice(-3).map(
+      p=>fmtDate(p.date)+": ~"+Math.round(p.y)
+    );
+
+    const goal=(cfg.liftGoals||{})[name];
+
+    liftLines.push(
+      "- **"+name+"** ("+(ex.scheme||"no scheme")
+      +"): est-1RM trend "
+      +last3.join(" → ")
+      +(goal ? " · goal "+goal : "")
+    );
   }));
 
-  const L = [];
+  const recentSessions=training.slice(-10).reverse();
+  const L=[];
+
   L.push("# BlackPyre Progress Report — "+fmtDate(today));
   L.push("");
   L.push("You are my fitness coach. Below is my real logged data from the BlackPyre app. Please:");
   L.push("1. Assess my rate of progress toward my goal — too fast, too slow, or on track.");
   L.push("2. Flag anything in my nutrition adherence that needs fixing.");
-  L.push("3. Review my lift progression and suggest specific training adjustments.");
+  L.push("3. Review my training progression over the selected history range and suggest specific adjustments.");
   L.push("4. If my program should change, return a COMPLETE updated program as a JSON code block in the exact format shown at the bottom (same structure, keep exercise names I'm progressing on unchanged so my history stays connected). I will load it directly into the app.");
   L.push("5. Be direct — no generic advice.");
+
   L.push("");
   L.push("## Goal & weight");
   L.push("- Start: "+cfg.startWt+" lb · Current: "+cur+" lb · Goal: "+cfg.goalWt+" lb");
-  L.push(rate!=null ? "- Trend (last 28 days): "+(rate>0?"+":"")+rate+" lb/week" : "- Trend: not enough weigh-ins yet ("+sorted.length+" recorded)");
-  if (tdee && tdee.tdee) L.push("- Measured TDEE from my actual logs: ~"+tdee.tdee+" kcal/day");
+
+  L.push(
+    rate!=null
+      ? "- Weight trend (last 28 days): "+(rate>0?"+":"")+rate+" lb/week"
+      : "- Weight trend: not enough weigh-ins yet ("+sorted.length+" recorded)"
+  );
+
+  if (tdee && tdee.tdee){
+    L.push("- Measured TDEE from my actual logs: ~"+tdee.tdee+" kcal/day");
+  }
+
   L.push("");
   L.push("## Nutrition (last 14 days)");
-  L.push("- Daily targets (exact): "+cfg.calTarget+" kcal"+(cfg.calSchedMode!=="same"?" (scheduled by day; weekly total "+weeklyCalTotal()+")":"")+" · protein "+cfg.proTarget+"g · carbs "+cfg.carbGoal+"g · fat "+cfg.fatGoal+"g");
-  L.push(logged.length ? "- Logged "+logged.length+" of 14 days · avg "+ (avgCal!=null ? avgCal+" kcal, "+avgPro+"g protein" : "insufficient full days") + " · protein target hit "+proHit+"/"+logged.length+" days" : "- No food logged in the last 14 days");
+
+  L.push(
+    "- Daily targets (exact): "+cfg.calTarget+" kcal"
+    +(cfg.calSchedMode!=="same"
+      ? " (scheduled by day; weekly total "+weeklyCalTotal()+")"
+      : "")
+    +" · protein "+cfg.proTarget+"g"
+    +" · carbs "+cfg.carbGoal+"g"
+    +" · fat "+cfg.fatGoal+"g"
+  );
+
+  L.push(
+    logged.length
+      ? "- Logged "+logged.length+" of 14 days · avg "
+        +(avgCal!=null
+          ? avgCal+" kcal, "+avgPro+"g protein"
+          : "insufficient full days")
+        +" · protein target hit "+proHit+"/"+logged.length+" days"
+      : "- No food logged in the last 14 days"
+  );
+
   L.push("");
-  L.push("## Training (last 28 days)");
-  L.push("- "+strengthS+" strength sessions, "+cardioS+" cardio sessions · program: \""+(program.name||"unnamed")+"\" ("+program.days.length+" days/rotation)");
-  if (liftLines.length){ L.push("- Lift progression (best estimated 1RM per session):"); liftLines.forEach(x=>L.push("  "+x)); }
-  else L.push("- No strength sessions logged against the current program yet.");
+  L.push("## Training ("+rangeMeta.label+")");
+
+  if (!training.length){
+    L.push("- No workout sessions logged in the selected range.");
+  } else {
+    const first=training[0];
+    const last=training[training.length-1];
+
+    L.push(
+      "- "+training.length+" session"+(training.length===1?"":"s")
+      +" in selected range · "
+      +fmtDate(first.date)+" → "+fmtDate(last.date)
+      +" · program: \""+(program.name||"unnamed")+"\""
+    );
+
+    if (legacyCardio){
+      L.push(
+        "- Session types: "+programOrFreestyle
+        +" program/freestyle · "
+        +legacyCardio+" legacy cardio"
+      );
+    }
+
+    if (shownSummaries.length){
+      L.push("- Exercise history summary:");
+
+      shownSummaries.forEach(rec=>{
+        let line =
+          "  - **"+rec.name+"**: "
+          +rec.count+" session"+(rec.count===1?"":"s")
+          +" · first "+fmtDate(rec.firstDate)+": "
+          +aiSafeWorkoutValue(rec.firstValue)
+          +" · latest "+fmtDate(rec.lastDate)+": "
+          +aiSafeWorkoutValue(rec.lastValue);
+
+        if (rec.bestE1RM!=null){
+          line += " · best est-1RM ~"+Math.round(rec.bestE1RM);
+        }
+
+        L.push(line);
+      });
+
+      if (summaries.length>30){
+        const omitted=summaries.length-30;
+
+        L.push(
+          "  - "+omitted+" additional exercise"
+          +(omitted===1?"":"s")
+          +" omitted from this compact report; use Download training JSON for exact records."
+        );
+      }
+    }
+
+    if (liftLines.length){
+      L.push("- Current-program lift progression in selected range:");
+      liftLines.forEach(x=>L.push("  "+x));
+    }
+
+    if (recentSessions.length){
+      L.push("- Most recent sessions in selected range (up to 10):");
+
+      recentSessions.forEach(s=>{
+        const dayObj=program.days.find(d=>d.id===s.day);
+        const title=s.title || (dayObj?dayObj.title:s.day) || "Workout";
+
+        const values=Object.keys(s.sets||{}).map(
+          name=>name+" — "+aiSafeWorkoutValue(s.sets[name])
+        ).join("; ");
+
+        L.push(
+          "  - "+fmtDate(s.date)+" · "+title
+          +(values ? ": "+values : "")
+          +(s.notes ? " · note: "+s.notes : "")
+        );
+      });
+    }
+  }
+
   L.push("");
   L.push("## My current program (edit this and return the full updated JSON)");
   L.push("```json");
-  L.push(JSON.stringify(program, null, 2));
+  L.push(JSON.stringify(program,null,2));
   L.push("```");
   L.push("");
-  L.push("Program format rules: top level {name, days:[...]}; each day {id:\"D1\", title, exercises:[{name, scheme}]}; schemes like \"4×5\" or \"3×8-12\" power the app's prefill and auto-progression; cardio entries are named \"[Cardio] Type\" with a duration as the scheme.");
+
+  L.push(
+    'Program format rules: top level {name, days:[...]}; each day {id:"D1", title, exercises:[{name, scheme}]}; schemes like "4×5" or "3×8-12" power the app\'s prefill and auto-progression; cardio entries are named "[Cardio] Type" with a duration as the scheme.'
+  );
+
+  L.push("");
+
+  L.push(
+    "Exact raw workout records for the selected training range can be shared as a JSON file or copied directly from BlackPyre. Choosing All history includes every stored workout session without shortening the saved history."
+  );
+
   return L.join("\n");
 }
+
 document.getElementById("aiDownloadBtn").addEventListener("click", ()=>{
   download("blackpyre-report-"+todayStr()+".md", aiReport());
   ackBtn("aiDownloadBtn", "✓ Downloaded");
 });
+function trainingJsonArtifact(rangeKey){
+  const key =
+    AI_TRAINING_RANGES[rangeKey]
+      ? rangeKey
+      : aiTrainingRangeKey();
+
+  const payload =
+    aiTrainingExport(key);
+
+  return {
+    key:key,
+    payload:payload,
+    filename:
+      "blackpyre-training-"
+      +key
+      +"-"
+      +todayStr()
+      +".json",
+    text:JSON.stringify(payload,null,2)
+  };
+}
+
+function nativePlatformForTrainingJson(){
+  const c =
+    typeof window!=="undefined"
+      ? window.Capacitor
+      : null;
+
+  try {
+    return !!(
+      c
+      && typeof c.isNativePlatform==="function"
+      && c.isNativePlatform()
+    );
+  } catch(e){
+    return false;
+  }
+}
+
+async function copyExactTrainingJsonText(text){
+  if (
+    navigator.clipboard
+    && typeof navigator.clipboard.writeText==="function"
+  ){
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch(e){}
+  }
+
+  const ta =
+    document.createElement("textarea");
+
+  ta.value = text;
+  ta.setAttribute("readonly","");
+  ta.style.position = "fixed";
+  ta.style.left = "-9999px";
+  ta.style.top = "0";
+  ta.style.opacity = "0";
+
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+
+  let copied = false;
+
+  try {
+    copied =
+      document.execCommand("copy") !== false;
+  } catch(e){
+    copied = false;
+  }
+
+  document.body.removeChild(ta);
+
+  return copied;
+}
+
+async function copyTrainingJson(rangeKey){
+  const artifact =
+    trainingJsonArtifact(rangeKey);
+
+  const copied =
+    await copyExactTrainingJsonText(
+      artifact.text
+    );
+
+  if (!copied){
+    flashSave(
+      "Training JSON could not be copied",
+      true
+    );
+
+    ackBtn(
+      "aiTrainingJsonCopyBtn",
+      "✕ Copy failed"
+    );
+
+    return false;
+  }
+
+  const count =
+    artifact.payload.workoutCount;
+
+  flashSave(
+    count
+    +" workout"
+    +(count===1?"":"s")
+    +" copied — paste into any AI"
+  );
+
+  ackBtn(
+    "aiTrainingJsonCopyBtn",
+    "✓ JSON copied"
+  );
+
+  return true;
+}
+
+async function shareTrainingJson(rangeKey){
+  const artifact =
+    trainingJsonArtifact(rangeKey);
+
+  const capability =
+    typeof nativeJsonExportCapability==="function"
+      ? nativeJsonExportCapability()
+      : {
+          available:false,
+          shareAvailable:false
+        };
+
+  if (nativePlatformForTrainingJson()){
+    if (
+      !capability.available
+      || !capability.shareAvailable
+      || typeof writeNativeJson!=="function"
+      || typeof shareNativeJson!=="function"
+    ){
+      flashSave(
+        "Native file sharing is unavailable — use Copy training JSON",
+        true
+      );
+
+      ackBtn(
+        "aiTrainingJsonShareBtn",
+        "✕ Share unavailable"
+      );
+
+      return false;
+    }
+
+    try {
+      const nativeFile =
+        await writeNativeJson(
+          capability,
+          artifact.filename,
+          artifact.text
+        );
+
+      await shareNativeJson(
+        capability,
+        nativeFile,
+        "BlackPyre training history"
+      );
+
+      const count =
+        artifact.payload.workoutCount;
+
+      flashSave(
+        count
+        +" workout"
+        +(count===1?"":"s")
+        +" ready — choose where to save or share the file"
+      );
+
+      ackBtn(
+        "aiTrainingJsonShareBtn",
+        "✓ Share complete"
+      );
+
+      return true;
+    } catch(error){
+      const cancelled =
+        typeof isNativeShareCancellation==="function"
+          ? isNativeShareCancellation(error)
+          : /cancel/i.test(
+              error && error.message
+                ? error.message
+                : String(error||"")
+            );
+
+      console.error(
+        "BlackPyre training JSON share did not complete:",
+        error
+      );
+
+      if (cancelled){
+        flashSave(
+          "Share canceled — no external destination was selected"
+        );
+
+        ackBtn(
+          "aiTrainingJsonShareBtn",
+          "↩ Share canceled"
+        );
+      } else {
+        flashSave(
+          "Training JSON could not be shared",
+          true
+        );
+
+        ackBtn(
+          "aiTrainingJsonShareBtn",
+          "✕ Share failed"
+        );
+      }
+
+      return false;
+    }
+  }
+
+  if (
+    typeof File==="function"
+    && navigator.share
+    && typeof navigator.share==="function"
+  ){
+    try {
+      const file =
+        new File(
+          [artifact.text],
+          artifact.filename,
+          {type:"application/json"}
+        );
+
+      const canShare =
+        !navigator.canShare
+        || typeof navigator.canShare!=="function"
+        || navigator.canShare({files:[file]});
+
+      if (canShare){
+        await navigator.share({
+          title:"BlackPyre training history",
+          files:[file]
+        });
+
+        ackBtn(
+          "aiTrainingJsonShareBtn",
+          "✓ Share complete"
+        );
+
+        return true;
+      }
+    } catch(error){
+      const cancelled =
+        error
+        && (
+          error.name==="AbortError"
+          || /cancel/i.test(
+               error.message
+                 ? error.message
+                 : String(error)
+             )
+        );
+
+      if (cancelled){
+        ackBtn(
+          "aiTrainingJsonShareBtn",
+          "↩ Share canceled"
+        );
+
+        return false;
+      }
+    }
+  }
+
+  try {
+    download(
+      artifact.filename,
+      artifact.text
+    );
+
+    ackBtn(
+      "aiTrainingJsonShareBtn",
+      "✓ Downloaded"
+    );
+
+    return true;
+  } catch(error){
+    console.error(
+      "BlackPyre training JSON browser export failed:",
+      error
+    );
+
+    flashSave(
+      "Training JSON could not be exported",
+      true
+    );
+
+    ackBtn(
+      "aiTrainingJsonShareBtn",
+      "✕ Export failed"
+    );
+
+    return false;
+  }
+}
+
+document
+  .getElementById("aiTrainingJsonShareBtn")
+  .addEventListener(
+    "click",
+    ()=>shareTrainingJson()
+  );
+
+document
+  .getElementById("aiTrainingJsonCopyBtn")
+  .addEventListener(
+    "click",
+    ()=>copyTrainingJson()
+  );
 document.getElementById("aiCopyBtn").addEventListener("click", ()=>{
   const txt = aiReport();
   const done = ()=>ackBtn("aiCopyBtn", "✓ Copied — paste into any AI");
