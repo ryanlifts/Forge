@@ -2,7 +2,8 @@
 // NOTE: sw.js deliberately does NOT appear in SHELL. The browser fetches the service
 // worker itself through its own update mechanism (byte-compare on navigation); precaching
 // it would freeze updates and break the cache-bump release ritual. Do not "fix" this.
-const CACHE = "blackpyre-v76";
+const CACHE = "blackpyre-v76-parity-4";
+// BlackPyre v76 native-final parity build 4: physical UI validation fixes.
 const SHELL = [
   "./",
   "./index.html",

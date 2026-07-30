@@ -1422,12 +1422,27 @@ function renderSessionInputs(){
     const div=document.createElement("div");div.className="exercise";div.dataset.shape=st.shape;
     const head=document.createElement("div");head.className="x-head";head.innerHTML='<span><b>'+esc(ex.name)+'</b> <span class="shapeChip">'+esc(shapeGroupLabel(st.shape))+'</span>'+(ex.scheme?' <span class="scheme">· '+esc(ex.scheme)+'</span>':'')+(st.auto?' <span class="autoUp">'+(st.autoDelta<0?'−5 assist':'+5 auto')+'</span>':'')+'</span>';
     const tools=document.createElement("div");tools.className="x-tools";
+    const rawExtra=extraExercises.find(item=>sessionExtraMatchesRendered(item,ex));
     if(
       st.status!=="saved"
       && prev
       && !storedValueUsesUnknownShape(prev)
     ){
       const same=document.createElement("button");same.className="xbtn";same.textContent="= last";same.addEventListener("click",()=>{sessionState[ex.name]=stateFromStoredValue(ex,prev,"unsaved",null,true);sessionState[ex.name].saved=null;renderSessionInputs();});tools.appendChild(same);}
+    if(rawExtra){
+      const remove=document.createElement("button");
+      remove.type="button";
+      remove.className="xbtn removeSessionExerciseBtn";
+      remove.textContent="Remove";
+      remove.setAttribute(
+        "aria-label",
+        "Remove "+displayExerciseName(ex.name)+" from this session"
+      );
+      remove.addEventListener("click",()=>{
+        removeExtraExerciseFromSession(rawExtra);
+      });
+      tools.appendChild(remove);
+    }
     const video=document.createElement("button");video.className="xbtn";video.textContent="Video";video.addEventListener("click",()=>openFormVideo(ex.name));tools.appendChild(video);
     const orig=ex.__orig||ex.programName||ex.name;if(typeof offerSwap==="function"&&(typeof swapOptionsForExercise!=="function"||swapOptionsForExercise(orig,ex.name).length)){const swap=document.createElement("button");swap.className="xbtn";swap.textContent="⇄";swap.title="Swap for an alternative";swap.addEventListener("click",()=>{const existing=div.querySelector(".swapmenu");if(existing){existing.remove();return;}const holder=document.createElement("div");holder.className="swapmenu";div.insertBefore(holder,div.children[1]||null);offerSwap(orig,ex.name,holder);});tools.appendChild(swap);}
     head.appendChild(tools);div.appendChild(head);
@@ -1442,6 +1457,117 @@ function renderSessionInputs(){
 }
 
 document.getElementById("exerciseSearch").addEventListener("input",renderLibraryOptions);
+
+function sessionExtraNameKey(name){
+  return normalizeExerciseName(
+    displayExerciseName(name)
+  );
+}
+function sessionExtraMatchesRendered(raw,rendered){
+  if(
+    raw
+    && rendered
+    && raw.id
+    && rendered.id
+    && raw.id===rendered.id
+  ){
+    return true;
+  }
+
+  return !!(
+    raw
+    && rendered
+    && sessionExtraNameKey(raw.name)
+      ===sessionExtraNameKey(rendered.__orig||rendered.name)
+  );
+}
+function removeExtraExerciseFromSession(rawEntry){
+  const index=extraExercises.findIndex(item=>
+    item===rawEntry
+    ||(
+      item
+      && rawEntry
+      && item.id
+      && rawEntry.id
+      && item.id===rawEntry.id
+    )
+    ||(
+      item
+      && rawEntry
+      && sessionExtraNameKey(item.name)
+        ===sessionExtraNameKey(rawEntry.name)
+    )
+  );
+
+  if(index<0)return false;
+
+  const runtime=openSessionRuntimeSnapshot();
+  const removed=extraExercises[index];
+  const shownName=sessionSwaps[removed.name]||removed.name;
+  const removedNames=new Set([
+    sessionExtraNameKey(removed.name),
+    sessionExtraNameKey(shownName)
+  ]);
+
+  extraExercises.splice(index,1);
+  delete sessionSwaps[removed.name];
+
+  Object.keys(sessionState||{}).forEach(key=>{
+    const state=sessionState[key];
+
+    if(
+      removedNames.has(sessionExtraNameKey(key))
+      ||(
+        state
+        && state.historyKey
+        && removedNames.has(
+          sessionExtraNameKey(state.historyKey)
+        )
+      )
+    ){
+      delete sessionState[key];
+    }
+  });
+
+  let draftChanged=false;
+
+  if(
+    data.activeWorkoutDraft
+    && isPlainObject(data.activeWorkoutDraft.sets)
+  ){
+    Object.keys(data.activeWorkoutDraft.sets).forEach(key=>{
+      if(removedNames.has(sessionExtraNameKey(key))){
+        delete data.activeWorkoutDraft.sets[key];
+        draftChanged=true;
+      }
+    });
+
+    if(draftChanged){
+      if(!Object.keys(data.activeWorkoutDraft.sets).length){
+        data.activeWorkoutDraft=null;
+      }else{
+        data.activeWorkoutDraft.updatedAt=
+          new Date().toISOString();
+      }
+
+      if(!save()){
+        restoreOpenSessionRuntime(runtime);
+        renderSessionInputs();
+        flashSave(
+          "The exercise could not be removed.",
+          true
+        );
+        return false;
+      }
+    }
+  }
+
+  clearWorkoutError();
+  renderWorkoutDraftCard();
+  renderSessionInputs();
+  flashSave("Exercise removed from this session ✓");
+  return true;
+}
 document.getElementById("addExSel").addEventListener("change",()=>document.getElementById("customExerciseFields").classList.toggle("hidden",document.getElementById("addExSel").value!=="__CUSTOM__"));
 document.getElementById("addExBtn").addEventListener("click",()=>{
   const sel=document.getElementById("addExSel");
@@ -1503,7 +1629,17 @@ function renderMyExercisesManager(){
   const list=document.getElementById("myExercisesList");
   if(!list)return;
 
-  const entries=userExerciseEntries().sort((a,b)=>a.name.localeCompare(b.name));
+  const entries=Object.entries(data.myExercises||{})
+    .map(([id,stored])=>{
+      if(!stored||typeof stored!=="object"||Array.isArray(stored))return null;
+      return Object.assign({id:id},stored);
+    })
+    .filter(Boolean)
+    .sort(
+      (a,b)=>
+        Number(a.deprecated)-Number(b.deprecated)
+        ||a.name.localeCompare(b.name)
+    );
 
   if(!entries.length){
     list.innerHTML='<div class="note">No user-created exercises yet.</div>';
@@ -1512,7 +1648,19 @@ function renderMyExercisesManager(){
 
   list.innerHTML="";
 
+  let currentSection="";
+
   entries.forEach(entry=>{
+    const section=entry.deprecated?"Archived":"Active";
+
+    if(section!==currentSection){
+      const heading=document.createElement("div");
+      heading.className="label my-exercise-section-title";
+      heading.textContent=section;
+      list.appendChild(heading);
+      currentSection=section;
+    }
+
     const refs=userExerciseReferenceCount(entry);
 
     const row=document.createElement("div");
@@ -1548,9 +1696,7 @@ function renderMyExercisesManager(){
         result.entry
       );
 
-      renderLibraryOptions();
-      renderSessionInputs();
-      if(builderProg)renderBuilder();
+      refreshMyExercisesManager();
       flashSave("Exercise renamed ✓");
     });
     row.appendChild(rename);
@@ -1567,9 +1713,7 @@ function renderMyExercisesManager(){
           return;
         }
 
-        renderLibraryOptions();
-        renderSessionInputs();
-        if(builderProg)renderBuilder();
+        refreshMyExercisesManager();
         flashSave("Exercise restored ✓");
       });
       row.appendChild(restore);
@@ -1596,9 +1740,7 @@ function renderMyExercisesManager(){
           }
 
 
-          renderLibraryOptions();
-          renderSessionInputs();
-          if(builderProg)renderBuilder();
+          refreshMyExercisesManager();
           flashSave("Unused exercise deleted ✓");
         });
         row.appendChild(remove);
@@ -1620,9 +1762,7 @@ function renderMyExercisesManager(){
       }
 
 
-      renderLibraryOptions();
-      renderSessionInputs();
-      if(builderProg)renderBuilder();
+      refreshMyExercisesManager();
 
       flashSave(
         result.archived
@@ -1636,8 +1776,109 @@ function renderMyExercisesManager(){
   });
 }
 
-document.getElementById("myExercisesManageBtn").addEventListener("click",()=>{const card=document.getElementById("myExercisesCard");card.classList.toggle("hidden");renderMyExercisesManager();});
-document.getElementById("myExercisesCloseBtn").addEventListener("click",()=>document.getElementById("myExercisesCard").classList.add("hidden"));
+function focusMyExercisesManager(){
+  const overlay=document.getElementById("myExercisesOverlay");
+  const close=document.getElementById("myExercisesCloseBtn");
+
+  if(
+    overlay
+    && !overlay.classList.contains("hidden")
+    && close
+    && typeof close.focus==="function"
+  ){
+    close.focus();
+  }
+}
+function refreshMyExercisesManager(){
+  renderLibraryOptions();
+  renderSessionInputs();
+  if(builderProg)renderBuilder();
+  focusMyExercisesManager();
+}
+
+let myExercisesReturnFocus=null;
+function openMyExercisesManager(){
+  const overlay=document.getElementById("myExercisesOverlay");
+  const opener=document.getElementById("myExercisesManageBtn");
+  const close=document.getElementById("myExercisesCloseBtn");
+
+  if(!overlay||!opener||!close)return;
+
+  myExercisesReturnFocus=document.activeElement;
+  renderMyExercisesManager();
+  overlay.classList.remove("hidden");
+  opener.setAttribute("aria-expanded","true");
+  lockScroll();
+  close.focus();
+}
+function closeMyExercisesManager(){
+  const overlay=document.getElementById("myExercisesOverlay");
+  const opener=document.getElementById("myExercisesManageBtn");
+
+  if(!overlay||overlay.classList.contains("hidden"))return;
+
+  overlay.classList.add("hidden");
+  if(opener)opener.setAttribute("aria-expanded","false");
+  unlockScroll();
+
+  const target=
+    myExercisesReturnFocus
+    && typeof myExercisesReturnFocus.focus==="function"
+      ?myExercisesReturnFocus
+      :opener;
+
+  myExercisesReturnFocus=null;
+  if(target&&typeof target.focus==="function")target.focus();
+}
+function handleMyExercisesManagerKeydown(event){
+  const overlay=document.getElementById("myExercisesOverlay");
+
+  if(!overlay||overlay.classList.contains("hidden"))return;
+
+  if(event.key==="Escape"){
+    event.preventDefault();
+    closeMyExercisesManager();
+    return;
+  }
+
+  if(event.key!=="Tab")return;
+
+  const focusable=[...overlay.querySelectorAll(
+    'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  )];
+
+  if(!focusable.length)return;
+
+  const first=focusable[0];
+  const last=focusable[focusable.length-1];
+
+  if(event.shiftKey&&document.activeElement===first){
+    event.preventDefault();
+    last.focus();
+  }else if(!event.shiftKey&&document.activeElement===last){
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+document.getElementById("myExercisesManageBtn").addEventListener(
+  "click",
+  openMyExercisesManager
+);
+document.getElementById("myExercisesCloseBtn").addEventListener(
+  "click",
+  closeMyExercisesManager
+);
+document.getElementById("myExercisesOverlay").addEventListener(
+  "click",
+  event=>{
+    if(event.target===event.currentTarget)closeMyExercisesManager();
+  }
+);
+document.getElementById("myExercisesOverlay").addEventListener(
+  "keydown",
+  handleMyExercisesManagerKeydown
+);
 
 document.getElementById("logWorkoutBtn").addEventListener("click",()=>{
   const date=document.getElementById("wDate").value,notes=document.getElementById("wNotes").value.trim(),v=wDaySel.value;if(!date)return;

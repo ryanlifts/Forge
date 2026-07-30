@@ -355,7 +355,7 @@ function setRestOptionsOpen(open){
   box.classList.toggle("hidden", !open);
   btn.setAttribute("aria-expanded", open ? "true" : "false");
   const caret = btn.querySelector(".rest-dock-caret");
-  if (caret) caret.textContent = open ? "⌃" : "⌄";
+  if (caret) caret.textContent = open ? "▴" : "▾";
   document.body.classList.toggle("rest-options-open", !!open && !document.getElementById("restDock").classList.contains("hidden"));
   if (!open){
     const custom = document.getElementById("restCustomRow");
@@ -436,6 +436,40 @@ function startRest(seconds){
   restReadySec = restDurationSec;
   restRemaining = restDurationSec;
   runRestCountdown();
+}
+function applyRestDurationSelection(seconds){
+  const next=normalizedRestSeconds(seconds,selectedRestSeconds());
+
+  cfg.restSec=next;
+  saveCfg();
+  restReadySec=next;
+
+  if(restRunning){
+    stopRestInterval();
+    restDurationSec=next;
+    restRemaining=next;
+    restEndsAt=Date.now()+(next*1000);
+    persistRestTimer();
+    paintRestDock();
+    armRestInterval();
+    return "running";
+  }
+
+  if(restPaused){
+    restDurationSec=next;
+    restRemaining=next;
+    restEndsAt=0;
+    persistRestTimer();
+    paintRestDock();
+    return "paused";
+  }
+
+  restDurationSec=0;
+  restRemaining=0;
+  restEndsAt=0;
+  clearRestTimerState();
+  paintRestDock();
+  return "ready";
 }
 function pauseRest(){
   if (restRunning){
@@ -529,14 +563,8 @@ function renderRestPresets(){
     b.textContent = fmtRest(p);
     if (p===selectedRestSeconds()) b.style.borderColor = "var(--ember)";
     b.addEventListener("click", ()=>{
-      cfg.restSec = p; saveCfg();
-      if (!(restRunning||restPaused)){
-        restReadySec = p;
-        restDurationSec = 0;
-        clearRestTimerState();
-      }
+      applyRestDurationSelection(p);
       renderRestPresets();
-      if (!(restRunning||restPaused)) paintRestDock();
       setRestOptionsOpen(false);
     });
     holder.appendChild(b);
@@ -583,13 +611,7 @@ document.getElementById("restCustomSet").addEventListener("click", ()=>{
     cfg.customRests.push(v);
     cfg.customRests = cfg.customRests.slice(-4); // keep it tidy
   }
-  cfg.restSec = v;
-  saveCfg();
-  if (!(restRunning||restPaused)){
-    restReadySec = v;
-    restDurationSec = 0;
-    clearRestTimerState();
-  }
+  applyRestDurationSelection(v);
   document.getElementById("restCustomRow").classList.add("hidden");
   document.getElementById("restCustomInput").value = "";
   renderRestPresets();

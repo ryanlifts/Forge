@@ -918,9 +918,19 @@ const dT50 = T50.window.document;
 const workChildren = [...dT50.getElementById("view-work").children];
 const identityPos = workChildren.indexOf(dT50.getElementById("programIdentityCard"));
 const programPos = workChildren.indexOf(dT50.getElementById("programToolsCard"));
+const sessionTypePos = workChildren.indexOf(dT50.getElementById("sessionTypeCard"));
 const sessionPos = workChildren.indexOf(dT50.getElementById("trainingSessionCard"));
 const toolsPos = workChildren.indexOf(dT50.getElementById("trainingToolsCard"));
-check("Train opens with compact program identity first and the daily session ahead of utility tools", identityPos===0 && identityPos<programPos && programPos<sessionPos && sessionPos<toolsPos);
+const myExercisesPos = workChildren.indexOf(dT50.getElementById("myExercisesLaunchCard"));
+check("Train opens with compact program identity first and the daily session ahead of utility tools", identityPos===0 && identityPos<programPos && programPos<sessionTypePos && sessionTypePos<sessionPos && sessionPos<toolsPos);
+check("native-final Train uses separate static Session Type and Workout cards in order",
+  sessionTypePos>-1
+  && sessionTypePos+1===sessionPos
+  && dT50.getElementById("sessionTypeCard").contains(dT50.getElementById("wDay"))
+  && !dT50.getElementById("trainingSessionCard").contains(dT50.getElementById("wDay"))
+  && dT50.getElementById("trainingSessionCard").contains(dT50.getElementById("wDate")));
+check("My Exercises launch card follows Plate Math",
+  toolsPos>-1 && myExercisesPos===toolsPos+1);
 check("program administration is a separate hidden panel by default", dT50.getElementById("programToolsCard").tagName==="DIV" && dT50.getElementById("programToolsCard").classList.contains("hidden") && dT50.getElementById("programManageBtn").getAttribute("aria-expanded")==="false");
 
 let topScroll=null;
@@ -941,6 +951,365 @@ const stepTarget=dT50.querySelector("#exerciseInputs .step");
 const saveTarget=dT50.querySelector("#exerciseInputs .saveExBtn");
 check("workout step controls have 44px touch targets", !!stepTarget && T50.window.getComputedStyle(stepTarget).width==="44px" && T50.window.getComputedStyle(stepTarget).height==="44px");
 check("workout completion controls have 44px touch targets", !!saveTarget && T50.window.getComputedStyle(saveTarget).minHeight==="44px");
+const sessionTypeTitle50=dT50.getElementById("sessionTypeCardTitle");
+const workoutTitle50=dT50.getElementById("workoutCardTitle");
+const plateTitle50=dT50.querySelector("#trainingToolsCard > .card-title");
+const exerciseName50=dT50.querySelector("#exerciseInputs .x-head b");
+const exerciseScheme50=dT50.querySelector("#exerciseInputs .x-head .scheme");
+check("native-final card headings share the 16px bold Oswald hierarchy",
+  [sessionTypeTitle50,workoutTitle50,plateTitle50].every(el=>
+    !!el
+    && T50.window.getComputedStyle(el).fontSize==="16px"
+    && /Oswald/.test(T50.window.getComputedStyle(el).fontFamily)
+    && Number(T50.window.getComputedStyle(el).fontWeight)>=700
+  ));
+check("native-final exercise names are 14px bold Oswald while schemes remain 12px",
+  !!exerciseName50
+  && T50.window.getComputedStyle(exerciseName50).fontSize==="14px"
+  && /Oswald/.test(T50.window.getComputedStyle(exerciseName50).fontFamily)
+  && Number(T50.window.getComputedStyle(exerciseName50).fontWeight)>=700
+  && !!exerciseScheme50
+  && T50.window.getComputedStyle(exerciseScheme50).fontSize==="12px");
+check("native-final hierarchy preserves the existing smaller global labels",
+  T50.window.getComputedStyle(dT50.querySelector(".label")).fontSize==="10px");
+
+const MyExercisesParity76=boot(
+  V2_CFG,
+  JSON.parse(JSON.stringify(V2_DATA)),
+  null,
+  TEST_PROGRAM
+);
+const dMyExercisesParity76=MyExercisesParity76.window.document;
+
+const activeExerciseParity76=MyExercisesParity76.window.eval(`
+  createUserExercise(
+    "Active Parity Exercise",
+    "reps"
+  )
+`);
+const archivedExerciseParity76=MyExercisesParity76.window.eval(`
+  createUserExercise(
+    "Archived Parity Exercise",
+    "text"
+  )
+`);
+const deleteExerciseParity76=MyExercisesParity76.window.eval(`
+  createUserExercise(
+    "Delete Parity Exercise",
+    "carry"
+  )
+`);
+
+MyExercisesParity76.window.eval(`
+  program.days[0].exercises.push({
+    name:"Archived Parity Exercise",
+    scheme:""
+  });
+
+  archiveOrDeleteUserExercise(
+    ${JSON.stringify(archivedExerciseParity76.entry.id)}
+  );
+`);
+
+check("My Exercises parity fixture uses the shipped create and archive lifecycle",
+  activeExerciseParity76.ok
+  && archivedExerciseParity76.ok
+  && deleteExerciseParity76.ok
+  && MyExercisesParity76.window.eval(`
+    data.myExercises[
+      ${JSON.stringify(activeExerciseParity76.entry.id)}
+    ].deprecated===false
+  `)
+  && MyExercisesParity76.window.eval(`
+    data.myExercises[
+      ${JSON.stringify(archivedExerciseParity76.entry.id)}
+    ].deprecated===true
+  `));
+MyExercisesParity76.window.eval(`
+  activateView("work",null,false);
+  Object.defineProperty(
+    window,
+    "scrollY",
+    {configurable:true,value:432}
+  );
+  window.__myExercisesScrollRestore=null;
+  window.scrollTo=(x,y)=>{
+    window.__myExercisesScrollRestore={x:x,y:y};
+  };
+`);
+
+const myExercisesOpener76=dMyExercisesParity76.getElementById("myExercisesManageBtn");
+myExercisesOpener76.focus();
+myExercisesOpener76.dispatchEvent(new MyExercisesParity76.window.Event("click",{bubbles:true}));
+const myExercisesOverlay76=dMyExercisesParity76.getElementById("myExercisesOverlay");
+const myExercisesHeadings76=[...dMyExercisesParity76.querySelectorAll(".my-exercise-section-title")].map(el=>el.textContent);
+check("My Exercises opens as a named modal and moves focus to Close",
+  !myExercisesOverlay76.classList.contains("hidden")
+  && myExercisesOverlay76.getAttribute("role")==="dialog"
+  && myExercisesOverlay76.getAttribute("aria-modal")==="true"
+  && dMyExercisesParity76.activeElement===dMyExercisesParity76.getElementById("myExercisesCloseBtn")
+  && myExercisesOpener76.getAttribute("aria-expanded")==="true");
+check("My Exercises modal covers the visible Train rest dock",
+  !dMyExercisesParity76.getElementById("restDock").classList.contains("hidden")
+  && Number(
+    MyExercisesParity76.window.getComputedStyle(
+      myExercisesOverlay76
+    ).zIndex
+  )>
+  Number(
+    MyExercisesParity76.window.getComputedStyle(
+      dMyExercisesParity76.getElementById("restDock")
+    ).zIndex
+  ));
+check("My Exercises uses the shared scroll-preserving body lock",
+  dMyExercisesParity76.body.classList.contains("locked"));
+
+dMyExercisesParity76.getElementById("myExercisesCloseBtn").dispatchEvent(
+  new MyExercisesParity76.window.Event("click",{bubbles:true})
+);
+await wait(10);
+
+check("closing My Exercises immediately restores focus and the underlying scroll",
+  myExercisesOverlay76.classList.contains("hidden")
+  && dMyExercisesParity76.activeElement===myExercisesOpener76
+  && myExercisesOpener76.getAttribute("aria-expanded")==="false"
+  && !dMyExercisesParity76.body.classList.contains("locked")
+  && MyExercisesParity76.window.eval(`
+    window.__myExercisesScrollRestore
+    && window.__myExercisesScrollRestore.x===0
+    && window.__myExercisesScrollRestore.y===432
+  `));
+
+MyExercisesParity76.window.eval(`
+  window.__myExercisesScrollRestore=null;
+`);
+
+myExercisesOpener76.focus();
+myExercisesOpener76.dispatchEvent(
+  new MyExercisesParity76.window.Event("click",{bubbles:true})
+);
+
+check("My Exercises reopens for lifecycle management after the scroll test",
+  !myExercisesOverlay76.classList.contains("hidden")
+  && dMyExercisesParity76.activeElement===
+    dMyExercisesParity76.getElementById("myExercisesCloseBtn")
+  && dMyExercisesParity76.body.classList.contains("locked"));
+
+check("My Exercises manager separates active and archived exercise lists",
+  myExercisesHeadings76.join("|")==="Active|Archived"
+  && /Active Parity Exercise/.test(dMyExercisesParity76.getElementById("myExercisesList").textContent)
+  && /Archived Parity Exercise/.test(dMyExercisesParity76.getElementById("myExercisesList").textContent));
+const myExerciseRow76=name=>
+  [...dMyExercisesParity76.querySelectorAll(".my-exercise-row")]
+    .find(row=>row.textContent.includes(name));
+const myExerciseButton76=(name,label)=>{
+  const row=myExerciseRow76(name);
+  return row
+    ? [...row.querySelectorAll("button")]
+        .find(button=>button.textContent.trim()===label)
+    : null;
+};
+const focusStayedInMyExercises76=()=>
+  myExercisesOverlay76.contains(dMyExercisesParity76.activeElement)
+  && dMyExercisesParity76.activeElement===
+    dMyExercisesParity76.getElementById("myExercisesCloseBtn");
+
+MyExercisesParity76.window.prompt=()=>"Renamed Parity Exercise";
+MyExercisesParity76.window.confirm=()=>true;
+
+const renameParityButton76=
+  myExerciseButton76("Active Parity Exercise","Rename");
+
+renameParityButton76.dispatchEvent(
+  new MyExercisesParity76.window.Event("click",{bubbles:true})
+);
+
+check("renaming from My Exercises keeps keyboard focus inside the modal",
+  MyExercisesParity76.window.eval(`
+    data.myExercises[
+      ${JSON.stringify(activeExerciseParity76.entry.id)}
+    ].name==="Renamed Parity Exercise"
+  `)
+  && focusStayedInMyExercises76());
+
+const restoreParityButton76=
+  myExerciseButton76("Archived Parity Exercise","Restore");
+
+restoreParityButton76.dispatchEvent(
+  new MyExercisesParity76.window.Event("click",{bubbles:true})
+);
+
+check("restoring from My Exercises keeps keyboard focus inside the modal",
+  MyExercisesParity76.window.eval(`
+    data.myExercises[
+      ${JSON.stringify(archivedExerciseParity76.entry.id)}
+    ].deprecated===false
+  `)
+  && focusStayedInMyExercises76());
+
+const archiveParityButton76=
+  myExerciseButton76("Archived Parity Exercise","Archive");
+
+archiveParityButton76.dispatchEvent(
+  new MyExercisesParity76.window.Event("click",{bubbles:true})
+);
+
+check("archiving from My Exercises keeps keyboard focus inside the modal",
+  MyExercisesParity76.window.eval(`
+    data.myExercises[
+      ${JSON.stringify(archivedExerciseParity76.entry.id)}
+    ].deprecated===true
+  `)
+  && focusStayedInMyExercises76());
+
+const deleteParityButton76=
+  myExerciseButton76("Delete Parity Exercise","Delete");
+
+deleteParityButton76.dispatchEvent(
+  new MyExercisesParity76.window.Event("click",{bubbles:true})
+);
+
+check("deleting from My Exercises keeps keyboard focus inside the modal",
+  MyExercisesParity76.window.eval(`
+    !data.myExercises[
+      ${JSON.stringify(deleteExerciseParity76.entry.id)}
+    ]
+  `)
+  && focusStayedInMyExercises76());
+
+check("My Exercises title uses the shared 16px card-title style",
+  dMyExercisesParity76.defaultView.getComputedStyle(
+    dMyExercisesParity76.getElementById("myExercisesTitle")
+  ).fontSize==="16px");
+dMyExercisesParity76.getElementById("myExercisesCloseBtn").dispatchEvent(
+  new MyExercisesParity76.window.Event("click",{bubbles:true})
+);
+await wait(10);
+check("closing My Exercises after mutations returns focus and unlocks the page",
+  myExercisesOverlay76.classList.contains("hidden")
+  && dMyExercisesParity76.activeElement===myExercisesOpener76
+  && myExercisesOpener76.getAttribute("aria-expanded")==="false"
+  && !dMyExercisesParity76.body.classList.contains("locked"));
+
+
+// ================= v76 parity physical-validation fixes =================
+const SessionRemove78=boot(
+  V2_CFG,
+  JSON.parse(JSON.stringify(V2_DATA)),
+  null,
+  TEST_PROGRAM
+);
+const dSessionRemove78=SessionRemove78.window.document;
+
+const removableExercise78=SessionRemove78.window.eval(`
+  createUserExercise(
+    "Session Removal Test",
+    "lift"
+  )
+`);
+
+SessionRemove78.window.eval(`
+  activateView("work",null,false);
+  wDaySel.value="__FREE__";
+
+  const entry=data.myExercises[
+    ${JSON.stringify(removableExercise78.entry.id)}
+  ];
+
+  extraExercises=[{
+    id:entry.id,
+    name:entry.name,
+    shape:entry.shape,
+    scheme:""
+  }];
+
+  sessionState=newExerciseNameMap();
+  sessionState[entry.name]=blankShapeState(entry);
+
+  data.activeWorkoutDraft={
+    date:todayStr(),
+    day:"__FREE__",
+    title:"Freestyle",
+    programName:program.name||"Unnamed program",
+    sets:{
+      "Session Removal Test":[
+        {w:50,r:5}
+      ]
+    },
+    notes:"",
+    updatedAt:new Date().toISOString()
+  };
+
+  save();
+  renderSessionInputs();
+`);
+
+const sessionRemoveButtons78=[
+  ...dSessionRemove78.querySelectorAll(
+    ".removeSessionExerciseBtn"
+  )
+];
+
+const sessionRemoveToolsParity76=
+  sessionRemoveButtons78[0]
+    ?sessionRemoveButtons78[0].closest(".x-tools")
+    :null;
+const sessionRemoveVideoParity76=
+  sessionRemoveToolsParity76
+    ?[...sessionRemoveToolsParity76.querySelectorAll("button")]
+      .find(button=>button.textContent.trim()==="Video")
+    :null;
+
+check("v76 parity Remove sits immediately left of Video in the exercise header action row",
+  !!sessionRemoveToolsParity76
+  && !!sessionRemoveVideoParity76
+  && sessionRemoveButtons78[0].nextElementSibling===
+    sessionRemoveVideoParity76);
+
+check("v76 parity only session-added exercises receive a Remove control",
+  removableExercise78.ok
+  && sessionRemoveButtons78.length===1
+  && /Session Removal Test/.test(
+    sessionRemoveButtons78[0]
+      .closest(".exercise").textContent
+  ));
+
+sessionRemoveButtons78[0].dispatchEvent(
+  new SessionRemove78.window.Event(
+    "click",
+    {bubbles:true}
+  )
+);
+
+check("v76 parity Remove clears the added exercise from the live workout",
+  SessionRemove78.window.eval(`
+    extraExercises.length===0
+    && !sessionState["Session Removal Test"]
+  `)
+  && !/Session Removal Test/.test(
+    dSessionRemove78
+      .getElementById("exerciseInputs").textContent
+  ));
+
+check("v76 parity Remove updates the persisted active workout draft",
+  SessionRemove78.window.eval(`
+    data.activeWorkoutDraft===null
+  `)
+  && JSON.parse(
+    SessionRemove78.window.localStorage
+      .getItem("forge:data")
+  ).activeWorkoutDraft===null);
+
+check("v76 parity Remove does not delete the exercise from My Exercises",
+  SessionRemove78.window.eval(`
+    !!data.myExercises[
+      ${JSON.stringify(removableExercise78.entry.id)}
+    ]
+  `));
+
+check("v76 parity Save Exercise carries the accent-specific classes",
+  !!saveTarget
+  && saveTarget.matches(".xbtn.saveExBtn"));
 
 // ================= v51: exercise-level completion =================
 const T51 = boot(V2_CFG, EMPTY_DATA, null, TEST_PROGRAM);
@@ -1506,7 +1875,7 @@ check("v62 a catalog suggestion opens its exact listed serving for review", dC62
 check("v62 review shows the USDA per-100g values and correctly scaled serving", /USDA reference · SR28/.test(dC62.getElementById("selName").textContent) && /165 kcal/.test(dC62.getElementById("selPer100").textContent) && dC62.getElementById("calcCal").textContent==="186" && dC62.getElementById("calcPro").textContent==="35");
 check("v62 reviewing a broad-catalog suggestion never auto-logs it", C62.window.eval(`(data.food[todayStr()]||[]).length`)===beforeReview62);
 check("v62 FAQ explains USDA sourcing, exact servings, and real-world variation", C62.window.eval(`FAQ.some(x=>x.q==="How accurate are suggested-food calories and macros?"&&/per 100 grams/.test(x.a)&&/exact gram weight/.test(x.a)&&/NDB number/.test(x.a)&&/brand/.test(x.a)) && FAQ.some(x=>x.q==="How do food suggestions work?"&&/120 common foods/.test(x.a)&&/familiar foods receive a bonus but are not required/.test(x.a)&&/does not call USDA or an AI/.test(x.a))`));
-check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v76"'); })());
+check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v76-parity-4"'); })());
 check("v62 keeps primary schemaVersion 3", C62.window.eval("SCHEMA_VERSION")===3);
 
 // ================= ChatGPT handoff paste flow =================
@@ -1626,6 +1995,82 @@ const T64Expired = bootRaw({
 }, w=>{ w.Date.now=()=>CLOCK64+45000; });
 const relaunchedReady64 = JSON.parse(T64Expired.window.localStorage.getItem("forge:rest-timer"));
 check("v65 relaunch or phone restart expiration resets to the last started duration", T64Expired.window.eval("!restRunning && !restPaused && restRemaining===0 && restReadySec===30") && T64Expired.window.document.getElementById("restDisplay").textContent==="0:30" && relaunchedReady64.status==="ready" && relaunchedReady64.durationSec===30);
+
+// ================= v76 native-final timer duration switching =================
+const TimerRunningParity76=boot(
+  Object.assign({},V2_CFG,{restSec:90}),
+  EMPTY_DATA,
+  w=>{w.Date.now=()=>CLOCK64;},
+  TEST_PROGRAM
+);
+const dTimerRunningParity76=TimerRunningParity76.window.document;
+TimerRunningParity76.window.eval(`activateView("work",null,false)`);
+dTimerRunningParity76.getElementById("restStartBtn").dispatchEvent(
+  new TimerRunningParity76.window.Event("click",{bubbles:true})
+);
+const runningPreset30Parity76=[
+  ...dTimerRunningParity76.querySelectorAll("#restPresets .xbtn")
+].find(button=>button.textContent==="0:30");
+runningPreset30Parity76.dispatchEvent(
+  new TimerRunningParity76.window.Event("click",{bubbles:true})
+);
+const runningRecordParity76=JSON.parse(
+  TimerRunningParity76.window.localStorage.getItem("forge:rest-timer")
+);
+check("native-final running timer immediately switches to the selected quick duration",
+  TimerRunningParity76.window.eval(
+    "restRunning && !restPaused && restRemaining===30 && restDurationSec===30 && restEndsAt===2000000030000"
+  )
+  && dTimerRunningParity76.getElementById("restDisplay").textContent==="0:30");
+check("native-final running duration switch persists the new active deadline",
+  runningRecordParity76.status==="running"
+  && runningRecordParity76.remainingSec===30
+  && runningRecordParity76.durationSec===30
+  && runningRecordParity76.endAt===CLOCK64+30000);
+TimerRunningParity76.window.eval("cancelRest()");
+
+const TimerPausedParity76=boot(
+  Object.assign({},V2_CFG,{restSec:90}),
+  EMPTY_DATA,
+  w=>{w.Date.now=()=>CLOCK64;},
+  TEST_PROGRAM
+);
+const dTimerPausedParity76=TimerPausedParity76.window.document;
+TimerPausedParity76.window.eval(`activateView("work",null,false)`);
+dTimerPausedParity76.getElementById("restStartBtn").dispatchEvent(
+  new TimerPausedParity76.window.Event("click",{bubbles:true})
+);
+dTimerPausedParity76.getElementById("restPauseBtn").dispatchEvent(
+  new TimerPausedParity76.window.Event("click",{bubbles:true})
+);
+const pausedPreset120Parity76=[
+  ...dTimerPausedParity76.querySelectorAll("#restPresets .xbtn")
+].find(button=>button.textContent==="2:00");
+pausedPreset120Parity76.dispatchEvent(
+  new TimerPausedParity76.window.Event("click",{bubbles:true})
+);
+const pausedRecordParity76=JSON.parse(
+  TimerPausedParity76.window.localStorage.getItem("forge:rest-timer")
+);
+check("native-final paused timer immediately switches duration while remaining paused",
+  TimerPausedParity76.window.eval(
+    "!restRunning && restPaused && restRemaining===120 && restDurationSec===120 && restEndsAt===0"
+  )
+  && dTimerPausedParity76.getElementById("restDisplay").textContent==="2:00"
+  && dTimerPausedParity76.getElementById("restPauseBtn").textContent==="Resume");
+check("native-final paused duration switch persists the replacement remainder",
+  pausedRecordParity76.status==="paused"
+  && pausedRecordParity76.remainingSec===120
+  && pausedRecordParity76.durationSec===120
+  && !Object.prototype.hasOwnProperty.call(pausedRecordParity76,"endAt"));
+dTimerPausedParity76.getElementById("restPauseBtn").dispatchEvent(
+  new TimerPausedParity76.window.Event("click",{bubbles:true})
+);
+check("resuming after a paused duration switch starts from the replacement duration",
+  TimerPausedParity76.window.eval(
+    "restRunning && !restPaused && restRemaining===120 && restEndsAt===2000000120000"
+  ));
+TimerPausedParity76.window.eval("cancelRest()");
 
 const T65VisibleExpired = boot(Object.assign({},V2_CFG,{restSec:75}), EMPTY_DATA, w=>{ w.Date.now=()=>CLOCK64; }, TEST_PROGRAM);
 T65VisibleExpired.window.eval(`activateView("work",null,false)`);
@@ -1756,9 +2201,91 @@ check("FAQ privacy and storage copy distinguish local data, network requests, an
 check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.some(f=>/chicken breast/i.test(f.n))`));
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
-check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+"/.test(sw));
-check("v76 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v76"'));
+check("SW cache key remains a BlackPyre v76 build",
+  /const CACHE = "blackpyre-v76(?:-[a-z0-9-]+)?";/.test(sw));
+check("v76 parity service-worker cache is refreshed", sw.includes('const CACHE = "blackpyre-v76-parity-4"'));
 const rawIndex = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+const rawWeightParity76 = fs.readFileSync(
+  path.join(__dirname, "..", "scripts", "04-weight.js"),
+  "utf8"
+);
+
+check("v76 parity timer duration control has a larger touch target",
+  /\.rest-dock-readout\s*\{[^}]*min-width:132px[^}]*min-height:52px[^}]*touch-action:manipulation/s.test(rawIndex)
+  && /\.rest-dock-caret\s*\{[^}]*width:32px[^}]*height:32px[^}]*font-size:20px/s.test(rawIndex));
+
+check("v76 parity timer uses clearly visible open and closed chevrons",
+  /rest-dock-caret" aria-hidden="true">▾</.test(rawIndex)
+  && /caret\.textContent = open \? "▴" : "▾";/.test(rawWeightParity76));
+
+check("v76 parity History has one complete outer disclosure",
+  (rawIndex.match(/id="workHistoryDisclosure"/g)||[]).length===1
+  && /<details class="disclosure" id="workHistoryDisclosure" open>[\s\S]*?id="workHistoryBody"[\s\S]*?id="workHistory"/.test(rawIndex)
+  && /#workHistoryDisclosure:not\(\[open\]\) > \.history-disclosure-body\s*\{\s*display:none;\s*\}/.test(rawIndex));
+
+const HistoryCollapseParity76Data=
+  JSON.parse(JSON.stringify(V2_DATA));
+
+HistoryCollapseParity76Data.workouts=[{
+  date:"2026-07-29",
+  day:"D1",
+  title:"History Collapse Test",
+  sets:{Squat:[{w:100,r:5}]},
+  notes:""
+}];
+
+const HistoryCollapseParity76=boot(
+  V2_CFG,
+  HistoryCollapseParity76Data,
+  null,
+  TEST_PROGRAM
+);
+
+const dHistoryCollapseParity76=
+  HistoryCollapseParity76.window.document;
+const historyDisclosureParity76=
+  dHistoryCollapseParity76.getElementById(
+    "workHistoryDisclosure"
+  );
+const historyBodyParity76=
+  dHistoryCollapseParity76.getElementById(
+    "workHistoryBody"
+  );
+
+check("v76 parity History starts open with its complete body",
+  historyDisclosureParity76.open
+  && historyDisclosureParity76.contains(
+    dHistoryCollapseParity76.getElementById(
+      "workHistory"
+    )
+  ));
+
+historyDisclosureParity76.open=false;
+
+check("v76 parity closing History completely hides its body",
+  !historyDisclosureParity76.open
+  && HistoryCollapseParity76.window
+    .getComputedStyle(historyBodyParity76).display==="none");
+
+check("native-final Save Exercise uses the selected accent directly",
+  /\.xbtn\.saveExBtn\s*\{[^}]*background\s*:\s*var\(--ember\)\s*!important/s.test(rawIndex));
+check("native-final Train markup keeps one static Session Type card and one static Workout card",
+  (rawIndex.match(/id="sessionTypeCard"/g)||[]).length===1
+  && (rawIndex.match(/id="trainingSessionCard"/g)||[]).length===1
+  && rawIndex.indexOf('id="sessionTypeCard"')<rawIndex.indexOf('id="trainingSessionCard"'));
+check("native-final My Exercises modal is mobile-safe and statically declared",
+  (rawIndex.match(/id="myExercisesOverlay"/g)||[]).length===1
+  && /#myExercisesOverlay\s*\{[^}]*position:fixed[^}]*z-index:210[^}]*overflow:auto/s.test(rawIndex)
+  && /\.my-exercises-overlay-shell\s*\{[^}]*max-width:560px/s.test(rawIndex));
+const rawTrainParity = fs.readFileSync(
+  path.join(__dirname, "..", "scripts", "03-train.js"),
+  "utf8"
+);
+check("My Exercises uses shared scroll locking and one mutation refresh path",
+  /function openMyExercisesManager\(\)[\s\S]*?lockScroll\(\)/.test(rawTrainParity)
+  && /function closeMyExercisesManager\(\)[\s\S]*?unlockScroll\(\)/.test(rawTrainParity)
+  && (rawTrainParity.match(/function refreshMyExercisesManager\(/g)||[]).length===1
+  && !/renderLibraryOptions\(\);\s*renderSessionInputs\(\);\s*if\(builderProg\)renderBuilder\(\);\s*renderMyExercisesManager\(\);/.test(rawTrainParity));
 check("data scripts load before the app scripts (raw file order)",
   ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>
     rawIndex.indexOf('src="'+f+'"') > -1 &&
