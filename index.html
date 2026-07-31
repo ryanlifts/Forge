@@ -139,6 +139,7 @@
 
   .tabbar {
     position:fixed; left:0; right:0; bottom:0; display:flex; justify-content:center;
+    transform:translateY(var(--keyboard-footer-offset, 0px));
     background:rgba(16,18,21,.96); border-top:1px solid var(--border);
     padding:8px 10px calc(8px + env(safe-area-inset-bottom)); backdrop-filter:blur(8px);
   }
@@ -742,23 +743,96 @@
     <div class="card hidden" id="programToolsCard">
       <div class="row program-tools-panel-head">
         <div>
-          <div class="label" style="margin:0;">Manage plan</div>
+          <div class="label" style="margin:0;">Program Manager</div>
         </div>
-        <button class="xbtn" id="programManageCloseBtn" aria-label="Close program management">Close</button>
+        <button class="xbtn" id="programManageCloseBtn" aria-label="Close Program Manager">Close</button>
       </div>
-      <div class="row">
-        <button class="btn ghost small" id="importBtn">Load</button>
+
+      <div class="note" id="programManagerIntro">
+        Build a program in BlackPyre, ask BlackPyre Coach to make one, or load a BlackPyre training plan file.
+      </div>
+
+      <div class="row mt10">
+        <button class="btn ghost small" id="newProgBtn" aria-label="Build a new program in BlackPyre">＋ Build it myself</button>
+        <button class="btn ghost small" id="coachPlanBtn">Ask BlackPyre Coach</button>
+      </div>
+
+      <button class="btn ghost small mt10" id="createAIPlanBtn" style="width:100%;" aria-expanded="false" aria-controls="aiPlanHelperCard">Create a plan with AI</button>
+
+      <div class="card hidden" id="aiPlanHelperCard" style="margin:12px 0 0; padding:12px;">
+        <div class="label">Create a plan with AI</div>
+        <div class="note" style="margin-top:6px;">
+          Tell the AI what kind of training plan you want. BlackPyre will give you instructions to copy so the AI creates the file correctly.
+        </div>
+
+        <label class="label" for="aiPlanGoal" style="display:block; margin-top:12px;">Main goal</label>
+        <input id="aiPlanGoal" placeholder="Example: build strength and improve conditioning" style="width:100%;">
+
+        <label class="label" for="aiPlanDays" style="display:block; margin-top:10px;">Days per week</label>
+        <input id="aiPlanDays" type="number" min="1" max="7" inputmode="numeric" placeholder="Example: 4" style="width:100%;">
+
+        <label class="label" for="aiPlanEquipment" style="display:block; margin-top:10px;">Equipment</label>
+        <textarea id="aiPlanEquipment" rows="2" placeholder="Example: barbell, dumbbells, pull-up bar" style="width:100%; resize:vertical;"></textarea>
+
+        <label class="label" for="aiPlanLength" style="display:block; margin-top:10px;">Workout length</label>
+        <input id="aiPlanLength" placeholder="Example: 45 minutes" style="width:100%;">
+
+        <label class="label" for="aiPlanExperience" style="display:block; margin-top:10px;">Experience</label>
+        <select id="aiPlanExperience" style="width:100%;">
+          <option value="">Leave blank</option>
+          <option value="Beginner">Beginner</option>
+          <option value="Intermediate">Intermediate</option>
+          <option value="Advanced">Advanced</option>
+        </select>
+
+        <label class="label" for="aiPlanLimits" style="display:block; margin-top:10px;">Injuries or limits</label>
+        <textarea id="aiPlanLimits" rows="2" placeholder="Leave blank if none" style="width:100%; resize:vertical;"></textarea>
+
+        <label class="label" for="aiPlanPreferences" style="display:block; margin-top:10px;">Preferred training style or activities</label>
+        <textarea id="aiPlanPreferences" rows="2" placeholder="Example: powerlifting, sprinting, rowing" style="width:100%; resize:vertical;"></textarea>
+
+        <button class="btn small mt14" id="copyAIPlanInstructionsBtn" style="width:100%;">Copy instructions for AI</button>
+
+        <div class="note hidden" id="aiPlanCopyStatus" role="status" aria-live="polite" style="margin-top:10px;">
+          Paste these instructions into an AI. When it finishes, download the .json file, return to BlackPyre, and choose Load program.
+        </div>
+      </div>
+
+      <button class="btn ghost small mt10" id="loadPlanHelpBtn" style="width:100%;" aria-expanded="false" aria-controls="loadPlanHelpCard">How to load a plan</button>
+
+      <div class="card hidden" id="loadPlanHelpCard" style="margin:12px 0 0; padding:12px;">
+        <div class="label">How to load a plan</div>
+        <div style="font-size:13px; line-height:1.7; margin-top:8px;">
+          1. Open <b>Train</b>.<br>
+          2. Tap <b>Manage</b>.<br>
+          3. Tap <b>Load program</b>.<br>
+          4. Choose the BlackPyre training plan file.<br>
+          5. Review the program.<br>
+          6. Fix any exercises BlackPyre could not identify.<br>
+          7. Tap <b>Confirm</b>.
+        </div>
+        <div class="note" style="margin-top:8px;">
+          Your current program is not replaced until you confirm. Completed workout history is not erased.
+        </div>
+      </div>
+
+      <div class="row mt10">
+        <button class="btn ghost small" id="importBtn">Load program</button>
         <button class="btn ghost small" id="exportBtn">Save file</button>
         <button class="btn ghost small" id="shareBtn">Share</button>
       </div>
+
+      <div class="note" style="margin-top:8px;">
+        A BlackPyre training plan file is a .json file exported from BlackPyre or created by an AI using BlackPyre’s instructions.
+      </div>
+
       <div class="row mt10">
         <button class="btn ghost small" id="editProgBtn" aria-label="Edit current program">✎ Edit this program</button>
-        <button class="btn ghost small" id="newProgBtn" aria-label="Build a new program">＋ Build new program</button>
       </div>
+
       <button class="btn ghost small mt10" id="pasteProgBtn" aria-label="Paste a program from an AI" style="width:100%;">Paste program from an AI</button>
-      <input type="file" id="importFile" aria-label="Program file to load" accept=".json,application/json" class="hidden">
+      <input type="file" id="importFile" aria-label="BlackPyre training plan file to load" accept=".json,application/json" class="hidden">
       <div class="err hidden" id="programErr" role="alert" aria-live="assertive"></div>
-      <div class="note">Load a program file from an AI, coach, or friend. BlackPyre resolves every exercise and shows a review before anything replaces your active program.</div>
     </div>
 
     <!-- program builder -->
@@ -1142,7 +1216,7 @@
     <div id="trainingPlanReviewError" class="err hidden" role="alert" aria-live="assertive"></div>
 
     <div class="row mt14">
-      <button class="btn" id="trainingPlanReviewConfirmBtn" disabled>Resolve blocking issues</button>
+      <button class="btn" id="trainingPlanReviewConfirmBtn" disabled>Review highlighted exercises</button>
       <button class="btn ghost" id="trainingPlanReviewCancelBtn">Cancel</button>
     </div>
   </div>
@@ -1153,6 +1227,10 @@
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex:0 0 auto;">
       <div id="coachTitle" style="font-family:'Oswald',sans-serif; font-weight:700; font-size:20px; text-transform:uppercase;">AI Coach</div>
       <button class="xbtn" id="coachCloseBtn" aria-label="Close AI Coach">✕ Close</button>
+    </div>
+    <div id="coachAccessNote" class="card hidden" role="status" aria-live="polite" style="font-size:13px; line-height:1.6; margin-bottom:10px;">
+      <b>BlackPyre Coach needs an AI API key.</b><br>
+      Add one in <b>Settings → Food database &amp; AI</b>. <b>Create a plan with AI</b> still works without a key.
     </div>
     <div id="coachMsgs" style="flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; padding-bottom:8px;"></div>
     <div class="ctyping hidden" id="coachTyping">Coach is thinking…</div>

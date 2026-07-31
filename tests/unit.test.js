@@ -516,7 +516,7 @@ check(
 );
 
 check(
-  "canonical shape conflict blocks confirmation",
+  "canonical shape metadata conflict is repaired when the prescription is clear",
   E(
     `(()=>{
       const p=
@@ -532,14 +532,31 @@ check(
       const r=
         prepareTrainingPlanImport(p);
 
+      const row =
+        r.review.find(
+          x=>x.importedName==="Sprinting"
+        );
+
+      const exercise =
+        r.candidate.days[0]
+          .exercises.find(
+            x=>x.name==="Sprinting"
+          );
+
       return (
-        !r.canConfirm
-        && r.review.some(
-          x=>
-            x.importedName==="Sprinting"
-            && x.status
-               ==="Conflicting prescription"
-        )
+        r.canConfirm
+        && r.blockers===0
+        && row.exerciseId==="bp:sprinting"
+        && row.shape==="timeDist"
+        && row.adjustments.includes(
+             "Adjusted to Sprinting's time tracking: 6 intervals of 20 seconds."
+           )
+        && exercise.exerciseId
+           ==="bp:sprinting"
+        && exercise.prescription.intervals
+           ===6
+        && exercise.prescription.durationSeconds
+           ===20
       );
     })()`
   )
@@ -596,7 +613,7 @@ check(
 );
 
 check(
-  "legacy repeated Sprinting remaps to Sprint Intervals rounds",
+  "legacy repeated Sprinting remains canonical time-distance work",
   E(
     `(()=>{
       const r=
@@ -613,45 +630,31 @@ check(
         });
 
       const row = r.review[0];
+
       const exercise =
         r.candidate.days[0]
           .exercises[0];
+
       const p = exercise.prescription;
 
       return (
         r.canConfirm
         && row.importedName==="Sprinting"
-        && row.canonicalName
-           ==="Sprint Intervals"
-        && row.exerciseId
-           ==="bp:sprint-intervals"
-        && row.shape==="rounds"
-        && row.resolutionMethod
-           ==="semantic-sprint-intervals"
-        && row.warnings.includes(
-             "Repeated sprint prescription resolved as Sprint Intervals."
-           )
+        && row.canonicalName==="Sprinting"
+        && row.exerciseId==="bp:sprinting"
+        && row.shape==="timeDist"
         && exercise.exerciseId
-           ==="bp:sprint-intervals"
-        && exercise.name
-           ==="Sprint Intervals"
-        && p.rounds===6
-        && p.workSeconds===20
+           ==="bp:sprinting"
+        && exercise.name==="Sprinting"
+        && p.intervals===6
+        && p.durationSeconds===20
         && !Object.prototype.hasOwnProperty.call(
              p,
-             "intervals"
+             "rounds"
            )
         && !Object.prototype.hasOwnProperty.call(
              p,
-             "durationSeconds"
-           )
-        && !Object.prototype.hasOwnProperty.call(
-             p,
-             "reps"
-           )
-        && !Object.prototype.hasOwnProperty.call(
-             p,
-             "weight"
+             "workSeconds"
            )
       );
     })()`
@@ -738,7 +741,7 @@ check(
 );
 
 check(
-  "legacy Sprinting work-recovery prescription remaps to rounds",
+  "legacy Sprinting work-recovery remains canonical time-distance work",
   E(
     `(()=>{
       const r=
@@ -756,6 +759,7 @@ check(
         });
 
       const row = r.review[0];
+
       const p =
         r.candidate.days[0]
           .exercises[0]
@@ -763,19 +767,27 @@ check(
 
       return (
         r.canConfirm
-        && row.exerciseId
-           ==="bp:sprint-intervals"
-        && row.shape==="rounds"
-        && p.rounds===6
-        && p.workSeconds===20
+        && row.exerciseId==="bp:sprinting"
+        && row.canonicalName==="Sprinting"
+        && row.shape==="timeDist"
+        && p.intervals===6
+        && p.durationSeconds===20
         && p.recoverySeconds===40
+        && !Object.prototype.hasOwnProperty.call(
+             p,
+             "rounds"
+           )
+        && !Object.prototype.hasOwnProperty.call(
+             p,
+             "workSeconds"
+           )
       );
     })()`
   )
 );
 
 check(
-  "name-only structured repeated Sprinting remaps safely",
+  "name-only structured repeated Sprinting preserves canonical identity",
   E(
     `(()=>{
       const r=
@@ -797,30 +809,36 @@ check(
         });
 
       const row = r.review[0];
-      const p =
+
+      const exercise =
         r.candidate.days[0]
-          .exercises[0]
-          .prescription;
+          .exercises[0];
+
+      const p = exercise.prescription;
 
       return (
         r.canConfirm
-        && row.exerciseId
-           ==="bp:sprint-intervals"
-        && row.shape==="rounds"
-        && p.rounds===6
-        && p.workSeconds===20
+        && row.exerciseId==="bp:sprinting"
+        && row.canonicalName==="Sprinting"
+        && row.shape==="timeDist"
+        && exercise.exerciseId
+           ==="bp:sprinting"
+        && exercise.name==="Sprinting"
+        && p.intervals===6
+        && p.durationSeconds===20
         && p.recoverySeconds===40
-        && row.warnings.some(
-             warning=>
-               /trackingShape was replaced/.test(
-                 warning
-               )
+        && !Object.prototype.hasOwnProperty.call(
+             p,
+             "rounds"
+           )
+        && !Object.prototype.hasOwnProperty.call(
+             p,
+             "workSeconds"
            )
       );
     })()`
   )
 );
-
 
 check(
   "legacy strength scheme remains strength prescription",
@@ -1016,6 +1034,278 @@ check(
             )===entry.shape
      )`
   )
+);
+
+
+// ================= v77 safe common import aliases =================
+
+check(
+  "v77 safe common exercise aliases resolve without manual review",
+  E(
+    `(()=>{
+      const cases = [
+        [
+          "Barbell Bench Press",
+          "bp:bench-press"
+        ],
+        [
+          "Seated Dumbbell Shoulder Press",
+          "bp:dumbbell-shoulder-press"
+        ],
+        [
+          "Cable Triceps Pressdown",
+          "bp:triceps-pushdown"
+        ],
+        [
+          "Weighted Pull-Up",
+          "bp:pull-up"
+        ],
+        [
+          "EZ Bar Curl",
+          "bp:biceps-curl"
+        ]
+      ];
+
+      return cases.every(
+        item=>{
+          const result =
+            resolveTrainingPlanExercise({
+              name:item[0]
+            });
+
+          return (
+            result.ok
+            && result.method
+               ==="safe-reduction"
+            && result.entry
+            && result.entry.id===item[1]
+          );
+        }
+      );
+    })()`
+  )
+);
+
+check(
+  "v77 ambiguous Chest Supported Row is not silently changed to a dumbbell exercise",
+  E(
+    `(()=>{
+      const result =
+        resolveTrainingPlanExercise({
+          name:"Chest Supported Row"
+        });
+
+      return (
+        !result.ok
+        && Array.isArray(
+             result.suggestions
+           )
+        && result.suggestions.some(
+             item=>
+               item.id
+               ==="bp:chest-supported-dumbbell-row"
+           )
+      );
+    })()`
+  )
+);
+
+
+// BLACKPYRE_V77_SYSTEMIC_RESOLVER_REPAIR — generalized resolver matrix
+check(
+  "v77 resolver ignores capitalization safely",
+  E(`(()=>{
+    const r=resolveTrainingPlanExercise({name:"bEnCh PrEsS"});
+    return r.ok && r.entry.id==="bp:bench-press";
+  })()`)===true
+);
+
+check(
+  "v77 resolver ignores safe punctuation and hyphen differences",
+  E(`(()=>{
+    const r=resolveTrainingPlanExercise({
+      name:"Chest–Supported Dumbbell Row"
+    });
+    return (
+      r.ok
+      && r.entry.id==="bp:chest-supported-dumbbell-row"
+    );
+  })()`)===true
+);
+
+check(
+  "v77 resolver singularizes a safe plural",
+  E(`(()=>{
+    const r=resolveTrainingPlanExercise({name:"Bench Presses"});
+    return r.ok && r.entry.id==="bp:bench-press";
+  })()`)===true
+);
+
+check(
+  "v77 resolver safely removes a compatible equipment qualifier",
+  E(`(()=>{
+    const r=resolveTrainingPlanExercise({
+      name:"Barbell Bench Press"
+    });
+    return (
+      r.ok
+      && r.entry.id==="bp:bench-press"
+      && r.method==="safe-reduction"
+    );
+  })()`)===true
+);
+
+
+check(
+  "v77 supplied canonical id accepts the same unique systemic name match",
+  E(`(()=>{
+    const r=resolveTrainingPlanExercise({
+      exerciseId:"bp:bench-press",
+      name:"Barbell Bench Press"
+    });
+    return (
+      r.ok
+      && r.entry.id==="bp:bench-press"
+      && r.method==="exact-built-in-id"
+    );
+  })()`)===true
+);
+
+check(
+  "v77 resolver safely removes a compatible position qualifier",
+  E(`(()=>{
+    const r=resolveTrainingPlanExercise({
+      name:"Seated Dumbbell Shoulder Press"
+    });
+    return (
+      r.ok
+      && r.entry.id==="bp:dumbbell-shoulder-press"
+    );
+  })()`)===true
+);
+
+check(
+  "v77 resolver supports safe word-order normalization",
+  E(`(()=>{
+    const r=resolveTrainingPlanExercise({
+      name:"Dumbbell Press Shoulder"
+    });
+    return (
+      r.ok
+      && r.entry.id==="bp:dumbbell-shoulder-press"
+    );
+  })()`)===true
+);
+
+check(
+  "v77 resolver treats pressdown and pushdown as equivalent",
+  E(`(()=>{
+    const r=resolveTrainingPlanExercise({
+      name:"Cable Triceps Pressdown"
+    });
+    return (
+      r.ok
+      && r.entry.id==="bp:triceps-pushdown"
+    );
+  })()`)===true
+);
+
+check(
+  "v77 resolver safely removes a weighted qualifier",
+  E(`(()=>{
+    const r=resolveTrainingPlanExercise({
+      name:"Weighted Pull-Up"
+    });
+    return r.ok && r.entry.id==="bp:pull-up";
+  })()`)===true
+);
+
+check(
+  "v77 resolver uses compatible equipment and muscle evidence for EZ bar curl",
+  E(`(()=>{
+    const r=resolveTrainingPlanExercise({
+      name:"EZ Bar Curl"
+    });
+    return r.ok && r.entry.id==="bp:biceps-curl";
+  })()`)===true
+);
+
+check(
+  "v77 resolver leaves equipment-ambiguous chest supported row unresolved",
+  E(`(()=>{
+    const r=resolveTrainingPlanExercise({
+      name:"Chest Supported Row"
+    });
+    return !r.ok && r.code==="unknown";
+  })()`)===true
+);
+
+check(
+  "v77 ambiguous chest supported row ranks the dumbbell variation first",
+  E(`(()=>{
+    const r=resolveTrainingPlanExercise({
+      name:"Chest Supported Row"
+    });
+    return (
+      !r.ok
+      && r.suggestions.length>0
+      && r.suggestions[0].id
+         ==="bp:chest-supported-dumbbell-row"
+    );
+  })()`)===true
+);
+
+check(
+  "v77 misspelling ranks a suggestion but never auto-selects it",
+  E(`(()=>{
+    const r=resolveTrainingPlanExercise({name:"Sprintng"});
+    return (
+      !r.ok
+      && r.entry===undefined
+      && r.suggestions[0].id==="bp:sprinting"
+    );
+  })()`)===true
+);
+
+check(
+  "v77 generalized resolver preserves canonical Sprinting identity",
+  E(`(()=>{
+    const r=resolveTrainingPlanExercise({name:"SPRINTING"});
+    return (
+      r.ok
+      && r.entry.id==="bp:sprinting"
+      && r.entry.shape==="timeDist"
+    );
+  })()`)===true
+);
+
+check(
+  "v77 generalized resolver keeps canonical tracking shape during import",
+  E(`(()=>{
+    const result=prepareTrainingPlanImport({
+      format:"blackpyre-training-plan",
+      version:1,
+      program:{
+        name:"Systemic resolver shape",
+        days:[{
+          id:"D1",
+          title:"Push",
+          exercises:[{
+            name:"Barbell Bench Press",
+            prescription:{sets:3,reps:5}
+          }]
+        }]
+      }
+    });
+    const row=result.review[0];
+    return (
+      result.canConfirm
+      && row.exerciseId==="bp:bench-press"
+      && row.shape==="lift"
+      && row.prescription.sets===3
+      && row.prescription.reps===5
+    );
+  })()`)===true
 );
 
 summary("UNIT");

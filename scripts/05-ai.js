@@ -855,28 +855,82 @@ function coachSystem(){
   return "You are the user's personal fitness coach inside the BlackPyre app. Be direct, specific, and evidence-based — no generic filler. Their live data follows.\n\n"
     + aiReport()
     + "\n\n---\nResponse contract:\n"
-    + "- If you propose a new or edited training program, include EXACTLY ONE ```json code block containing valid JSON in this COMPLETE public format: {\"format\":\"blackpyre-training-plan\",\"version\":1,\"program\":{\"name\":...,\"days\":[{\"id\":\"D1\",\"title\":...,\"exercises\":[{\"name\":...,\"scheme\":...,\"prescription\":{...}}]}]}}. Use BlackPyre exercise names when possible. Do not invent exerciseId values. BlackPyre resolves canonical identity and tracking shape; unknown exercise names require review. Prescription fields: lift/reps use sets, reps, optional weight/weightUnit, restSeconds, effort, notes; time or distance work uses intervals, durationSeconds, recoverySeconds, distance, distanceUnit, pace, effort, notes; carries use sets or trips, weight, distance or durationSeconds; rounds use rounds, workSeconds, recoverySeconds, movements and notes; text work uses instructions, completionTarget or notes.\n"
+    + "- If you propose a new or edited training program, include EXACTLY ONE ```json code block containing valid JSON. Do not put the program anywhere else in the reply.\n"
+    + blackpyreTrainingPlanFormatInstructions()
+    + "\n"
     + "- If you propose new nutrition targets, include a ```json block: {\"bpTargets\":{\"calTarget\":...,\"proTarget\":...,\"carbGoal\":...,\"fatGoal\":...}} — exact daily numbers, not ranges.\n"
     + "- Otherwise reply in plain prose. Keep replies under 300 words unless asked for detail.";
 }
+function setCoachAccessState(){
+  const available = hasAIKey();
+
+  const note =
+    document.getElementById("coachAccessNote");
+
+  const input =
+    document.getElementById("coachInput");
+
+  const send =
+    document.getElementById("coachSendBtn");
+
+  note.classList.toggle(
+    "hidden",
+    available
+  );
+
+  input.disabled = !available;
+  send.disabled = !available;
+
+  input.placeholder = available
+    ? "Ask your coach anything…"
+    : "Add an AI API key in Settings to chat";
+
+  return available;
+}
+
 function openCoach(prefillSend){
   lockScroll();
-  document.getElementById("coachOverlay").classList.remove("hidden");
+
+  document
+    .getElementById("coachOverlay")
+    .classList.remove("hidden");
+
+  if (!setCoachAccessState()){
+    return;
+  }
+
   if (!coachHistory.length){
     addCoachBubble("ai", "Hey — I have your full BlackPyre data in front of me: weight trend, nutrition, lift progression, and your current program. Ask me anything, or try:\n\n• How is my progress?\n• Adjust my program — [what's bugging you]\n• Why has my weight stalled?\n• Should I change my calories?", null);
   }
+
   if (prefillSend){
     document.getElementById("coachInput").value = prefillSend;
     sendCoach();
   }
 }
 document.getElementById("coachOpenBtn").addEventListener("click", ()=>{
+  openCoach();
+});
+
+document.getElementById("coachPlanBtn").addEventListener("click",()=>{
+  setProgramManagerGuide(null);
+  setProgramManagerOpen(false);
+  openCoach();
+
   if (!hasAIKey()){
-    flashSave("Add your AI key in Settings first", true);
-    renderAIGates();
     return;
   }
-  openCoach();
+
+  const input =
+    document.getElementById("coachInput");
+
+  input.value =
+    "Build me a training program. "
+    +"My goal is __. I can train __ days per week. "
+    +"My equipment is __. My workout length is __. "
+    +"My experience is __. My injuries or limits are __.";
+
+  input.focus();
 });
 document.getElementById("coachCloseBtn").addEventListener("click", ()=>{
   document.getElementById("coachOverlay").classList.add("hidden");
@@ -907,9 +961,15 @@ function addCoachBubble(role, text, payloads){
         );
 
       if (!inspected.ok){
+        console.error(
+          "Coach program proposal rejected:",
+          inspected.code || "",
+          inspected.message || ""
+        );
+
         flashSave(
-          "Program invalid: "
-          +(inspected.message || "could not be reviewed"),
+          "This program proposal could not be reviewed. "
+          +"Ask BlackPyre Coach to create it again.",
           true
         );
         return;
@@ -1044,7 +1104,8 @@ document.getElementById("pasteProgBtn").addEventListener("click", async ()=>{
 
   if (!documentValue){
     flashSave(
-      "No BlackPyre program was found in that text",
+      "No BlackPyre training plan was found. "
+      +"Use Create a plan with AI to make a new file.",
       true
     );
     return;
@@ -1066,9 +1127,14 @@ document.getElementById("pasteProgBtn").addEventListener("click", async ()=>{
     );
 
   if (!opened.ok){
+    console.error(
+      "Pasted training plan rejected:",
+      opened.code || "",
+      opened.message || ""
+    );
+
     flashSave(
-      "Program invalid: "
-      +(opened.message || "could not be reviewed"),
+      blackpyreTrainingPlanRejectionMessage(),
       true
     );
   }

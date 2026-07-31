@@ -1678,7 +1678,7 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+"/.test(sw));
-check("v76 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v76"'));
+check("v77 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v77"'));
 
 const nativePrep76 = fs.readFileSync(
   path.join(__dirname,"..","tools","prepare-native.sh"),
@@ -6380,7 +6380,7 @@ check(
   && dReviewCancel
        .getElementById("trainingPlanReviewConfirmBtn")
        .disabled===false
-  && /Prescription: 6 × 20 sec/.test(
+  && /Prescription: 6 intervals · 20 sec each · 100 sec recovery/.test(
        dReviewCancel
          .getElementById("trainingPlanReviewList")
          .textContent
@@ -6411,78 +6411,108 @@ check(
      )===0
 );
 
-const ReviewSemanticSprint = boot(
+const ReviewCanonicalSprint = boot(
   V3_CFG,
   V2_DATA,
   null,
   TEST_PROGRAM
 );
 
-const dReviewSemanticSprint =
-  ReviewSemanticSprint.window.document;
+const dReviewCanonicalSprint =
+  ReviewCanonicalSprint.window.document;
 
-ReviewSemanticSprint.window.eval(`
+ReviewCanonicalSprint.window.eval(`
   openTrainingPlanReview({
-    name:"Legacy Sprint Semantics",
-    days:[{
-      id:"D1",
-      title:"Speed",
-      exercises:[{
-        name:"Sprinting",
-        scheme:"6 × 20 sec"
+    format:"blackpyre-training-plan",
+    version:1,
+    program:{
+      name:"Canonical Sprint Timing",
+      days:[{
+        id:"D1",
+        title:"Speed",
+        exercises:[{
+          name:"Sprinting",
+          trackingShape:"lift",
+          scheme:"6 × 20 sec",
+          prescription:{
+            sets:6,
+            reps:1
+          }
+        }]
       }]
-    }]
+    }
   })
 `);
 
-const semanticReviewText =
-  dReviewSemanticSprint
+const canonicalSprintReviewText =
+  dReviewCanonicalSprint
     .getElementById(
       "trainingPlanReviewList"
     )
     .textContent;
 
 check(
-  "training-plan review transparently shows repeated Sprinting remapped to Sprint Intervals",
-  /Sprint Intervals/.test(
-    semanticReviewText
-  )
-  && /Repeated sprint prescription resolved as Sprint Intervals\./
-       .test(
-         semanticReviewText
+  "training-plan review automatically repairs Sprinting tracking metadata when 6 × 20 sec is clear",
+  /Adjusted to Sprinting's time tracking: 6 intervals of 20 seconds\./
+    .test(canonicalSprintReviewText)
+  && !/Sprint Intervals/.test(
+       canonicalSprintReviewText
+     )
+  && !dReviewCanonicalSprint
+       .querySelector(
+         '.training-plan-prescription-editor[data-review-key="0:0"]'
        )
-  && ReviewSemanticSprint.window.eval(`
+  && dReviewCanonicalSprint
+       .getElementById(
+         "trainingPlanReviewConfirmBtn"
+       )
+       .disabled===false
+  && ReviewCanonicalSprint.window.eval(`
        trainingPlanReviewState
          .prepared
-         .review[0]
-         .exerciseId
-         ==="bp:sprint-intervals"
+         .canConfirm
+         ===true
      `)
-  && ReviewSemanticSprint.window.eval(`
-       trainingPlanReviewState
-         .prepared
-         .review[0]
-         .shape
-         ==="rounds"
-     `)
-  && ReviewSemanticSprint.window.eval(`
-       trainingPlanReviewState
-         .prepared
-         .candidate
-         .days[0]
-         .exercises[0]
-         .prescription
-         .rounds===6
-     `)
-  && ReviewSemanticSprint.window.eval(`
-       trainingPlanReviewState
-         .prepared
-         .candidate
-         .days[0]
-         .exercises[0]
-         .prescription
-         .workSeconds===20
-     `)
+);
+
+check(
+  "Sprinting adjustment preserves canonical identity and 6 intervals of 20 seconds",
+  ReviewCanonicalSprint.window.eval(`
+    (()=>{
+      const state =
+        trainingPlanReviewState;
+
+      const row =
+        state.prepared.review[0];
+
+      const exercise =
+        state.prepared
+          .candidate
+          .days[0]
+          .exercises[0];
+
+      return (
+        state.prepared.blockers===0
+        && row.exerciseId==="bp:sprinting"
+        && row.shape==="timeDist"
+        && exercise.exerciseId
+           ==="bp:sprinting"
+        && exercise.name==="Sprinting"
+        && exercise.prescription.intervals
+           ===6
+        && exercise.prescription.durationSeconds
+           ===20
+        && !Object.prototype.hasOwnProperty.call(
+             exercise.prescription,
+             "sets"
+           )
+        && !Object.prototype.hasOwnProperty.call(
+             exercise.prescription,
+             "reps"
+           )
+      );
+    })()
+  `)
 );
 
 const ReviewUnknown = boot(
@@ -6645,6 +6675,26 @@ const CUSTOM_EXERCISE_REVIEW_FIXTURE = {
 };
 
 function customReviewControls(doc){
+
+  const toggle = doc.querySelector(
+    'button[data-custom-toggle-key="0:0"]'
+  );
+
+  if (
+    toggle
+    && !doc.querySelector(
+      'input[data-custom-review-key="0:0"]'
+    )
+  ){
+    toggle.dispatchEvent(
+      new doc.defaultView.Event(
+        "click",
+        {bubbles:true}
+      )
+    );
+  }
+
+
   return {
     name:doc.querySelector(
       'input[data-custom-review-key="0:0"]'
@@ -7295,6 +7345,197 @@ check(
      )
 );
 
+const NativeSaveReview77 = boot(
+  V3_CFG,
+  V2_DATA,
+  null,
+  TEST_PROGRAM
+);
+
+const dNativeSaveReview77 =
+  NativeSaveReview77.window.document;
+
+NativeSaveReview77.window.eval(`
+  program=
+    prepareTrainingPlanImport(
+      ${JSON.stringify(TRAINING_PLAN_REVIEW_FIXTURE)}
+    ).candidate;
+
+  window.__nativePlanSave77={
+    writes:[],
+    shares:[],
+    browserDownload:false
+  };
+
+  nativePlatformForTrainingPlanSave=
+    ()=>true;
+
+  nativeJsonExportCapability=
+    ()=>({
+      available:true,
+      shareAvailable:true
+    });
+
+  writeNativeJson=
+    async (capability,name,text)=>{
+      window.__nativePlanSave77.writes.push({
+        name:name,
+        text:text
+      });
+
+      return {
+        ok:true,
+        uri:"file:///Documents/"+name
+      };
+    };
+
+  shareNativeJson=
+    async (capability,file,title)=>{
+      window.__nativePlanSave77.shares.push({
+        file:file,
+        title:title
+      });
+
+      return {};
+    };
+
+  download=()=>{
+    window.__nativePlanSave77.browserDownload=true;
+  };
+`);
+
+dNativeSaveReview77
+  .getElementById("exportBtn")
+  .dispatchEvent(
+    new NativeSaveReview77.window.Event(
+      "click",
+      {bubbles:true}
+    )
+  );
+
+await wait(30);
+
+const nativePlanSave77 =
+  NativeSaveReview77.window.eval(
+    "window.__nativePlanSave77"
+  );
+
+const nativeSavedPlan77 =
+  JSON.parse(
+    nativePlanSave77.writes[0].text
+  );
+
+check(
+  "Save file opens the native destination sheet with the public training-plan file",
+  nativePlanSave77.writes.length===1
+  && nativePlanSave77.shares.length===1
+  && nativePlanSave77.browserDownload===false
+  && nativeSavedPlan77.format
+       ==="blackpyre-training-plan"
+  && nativeSavedPlan77.version===1
+  && /-training-plan\.json$/.test(
+       nativePlanSave77.writes[0].name
+     )
+  && nativePlanSave77.shares[0].file.uri
+       ===(
+         "file:///Documents/"
+         +nativePlanSave77.writes[0].name
+       )
+  && nativePlanSave77.shares[0].title
+       ==="Save BlackPyre training plan"
+  && /Choose Save to Files and select a folder/.test(
+       dNativeSaveReview77
+         .getElementById("saveState")
+         .textContent
+     )
+  && /Save completed/.test(
+       dNativeSaveReview77
+         .getElementById("exportBtn")
+         .textContent
+     )
+);
+
+const NativeSaveCancel77 = boot(
+  V3_CFG,
+  V2_DATA,
+  null,
+  TEST_PROGRAM
+);
+
+const dNativeSaveCancel77 =
+  NativeSaveCancel77.window.document;
+
+NativeSaveCancel77.window.eval(`
+  window.__nativePlanCancel77={
+    writes:0,
+    browserDownload:false
+  };
+
+  nativePlatformForTrainingPlanSave=
+    ()=>true;
+
+  nativeJsonExportCapability=
+    ()=>({
+      available:true,
+      shareAvailable:true
+    });
+
+  writeNativeJson=
+    async (capability,name,text)=>{
+      window.__nativePlanCancel77.writes++;
+
+      return {
+        ok:true,
+        uri:"file:///Documents/"+name
+      };
+    };
+
+  shareNativeJson=
+    async ()=>{
+      const error =
+        new Error("Share canceled");
+
+      error.name="AbortError";
+      throw error;
+    };
+
+  download=()=>{
+    window.__nativePlanCancel77.browserDownload=true;
+  };
+`);
+
+dNativeSaveCancel77
+  .getElementById("exportBtn")
+  .dispatchEvent(
+    new NativeSaveCancel77.window.Event(
+      "click",
+      {bubbles:true}
+    )
+  );
+
+await wait(30);
+
+const nativePlanCancel77 =
+  NativeSaveCancel77.window.eval(
+    "window.__nativePlanCancel77"
+  );
+
+check(
+  "Save file cancellation never reports a false completed save",
+  nativePlanCancel77.writes===1
+  && nativePlanCancel77.browserDownload===false
+  && /Save canceled/.test(
+       dNativeSaveCancel77
+         .getElementById("exportBtn")
+         .textContent
+     )
+  && !/Save completed/.test(
+       dNativeSaveCancel77
+         .getElementById("exportBtn")
+         .textContent
+     )
+);
+
 const ShareReview = boot(
   V3_CFG,
   V2_DATA,
@@ -7493,6 +7734,576 @@ check(
 );
 
 
+
+// ================= v77: plain-language program creation and loading =================
+const Guidance77 = boot(
+  V3_CFG,
+  V2_DATA,
+  null,
+  TEST_PROGRAM
+);
+
+const dGuidance77 =
+  Guidance77.window.document;
+
+check(
+  "v77 each Program Manager guide appears directly beneath its matching button",
+  dGuidance77
+    .getElementById("createAIPlanBtn")
+    .nextElementSibling
+    .id==="aiPlanHelperCard"
+  && dGuidance77
+       .getElementById("aiPlanHelperCard")
+       .nextElementSibling
+       .id==="loadPlanHelpBtn"
+  && dGuidance77
+       .getElementById("loadPlanHelpBtn")
+       .nextElementSibling
+       .id==="loadPlanHelpCard"
+);
+
+check(
+  "v77 Program Manager explains all three program-creation paths",
+  /Build a program in BlackPyre/.test(
+    dGuidance77
+      .getElementById("programManagerIntro")
+      .textContent
+  )
+  && /BlackPyre Coach/.test(
+       dGuidance77
+         .getElementById("programManagerIntro")
+         .textContent
+     )
+  && /training plan file/.test(
+       dGuidance77
+         .getElementById("programManagerIntro")
+         .textContent
+     )
+  && dGuidance77
+       .getElementById("createAIPlanBtn")
+       .textContent.trim()==="Create a plan with AI"
+  && dGuidance77
+       .getElementById("loadPlanHelpBtn")
+       .textContent.trim()==="How to load a plan"
+  && dGuidance77
+       .getElementById("importBtn")
+       .textContent.trim()==="Load program"
+);
+
+dGuidance77
+  .getElementById("view-work")
+  .classList.add("active");
+
+dGuidance77
+  .getElementById("restDock")
+  .classList.remove("hidden");
+
+dGuidance77.body.classList.add(
+  "rest-dock-visible"
+);
+
+dGuidance77
+  .getElementById("createAIPlanBtn")
+  .dispatchEvent(
+    new Guidance77.window.Event(
+      "click",
+      {bubbles:true}
+    )
+  );
+
+check(
+  "v77 AI-plan helper opens and collects the required plain-language information",
+  !dGuidance77
+    .getElementById("aiPlanHelperCard")
+    .classList.contains("hidden")
+  && [
+       "aiPlanGoal",
+       "aiPlanDays",
+       "aiPlanEquipment",
+       "aiPlanLength",
+       "aiPlanExperience",
+       "aiPlanLimits",
+       "aiPlanPreferences"
+     ].every(id=>!!dGuidance77.getElementById(id))
+  && dGuidance77
+       .getElementById("copyAIPlanInstructionsBtn")
+       .textContent.trim()==="Copy instructions for AI"
+);
+
+check(
+  "v77 primary footer supports keyboard viewport compensation",
+  /\.tabbar\s*\{[^}]*transform:translateY\(var\(--keyboard-footer-offset, 0px\)\);/s.test(
+    rawIndex
+  )
+);
+
+Guidance77.window.eval(`
+  aiPlanKeyboardViewportBaseline = 844;
+
+  Object.defineProperty(
+    window,
+    "innerHeight",
+    {
+      configurable:true,
+      value:500
+    }
+  );
+
+  updateAIPlanKeyboardFooterOffset();
+`);
+
+check(
+  "v77 AI helper keeps the primary footer at the physical screen bottom",
+  dGuidance77.documentElement.style
+    .getPropertyValue(
+      "--keyboard-footer-offset"
+    )==="344px"
+);
+
+check(
+  "v77 AI-plan helper suppresses the rest timer while open",
+  dGuidance77
+    .getElementById("restDock")
+    .classList.contains("hidden")
+  && !dGuidance77.body.classList.contains(
+       "rest-dock-visible"
+     )
+);
+
+dGuidance77
+  .getElementById("createAIPlanBtn")
+  .dispatchEvent(
+    new Guidance77.window.Event(
+      "click",
+      {bubbles:true}
+    )
+  );
+
+check(
+  "v77 closing the AI helper clears footer keyboard compensation",
+  dGuidance77.documentElement.style
+    .getPropertyValue(
+      "--keyboard-footer-offset"
+    )===""
+);
+
+check(
+  "v77 closing the AI-plan helper restores the Train rest timer",
+  dGuidance77
+    .getElementById("aiPlanHelperCard")
+    .classList.contains("hidden")
+  && !dGuidance77
+        .getElementById("restDock")
+        .classList.contains("hidden")
+  && dGuidance77.body.classList.contains(
+       "rest-dock-visible"
+     )
+);
+
+const guidanceTrainSource77 =
+  require("fs").readFileSync(
+    "scripts/03-train.js",
+    "utf8"
+  );
+
+const guidanceCopyMessage77 =
+  "Paste these instructions into an AI. "
+  +"When it finishes, download the .json file, "
+  +"return to BlackPyre, and choose Load program.";
+
+check(
+  "v77 AI-copy confirmation gives one accurate next step",
+  dGuidance77
+    .getElementById("aiPlanCopyStatus")
+    .textContent.trim()===guidanceCopyMessage77
+  && (
+       guidanceTrainSource77.match(
+         /Paste these instructions into an AI\./g
+       ) || []
+     ).length===2
+  && (
+       guidanceTrainSource77.match(
+         /When it finishes, download the \.json file,/g
+       ) || []
+     ).length===2
+  && (
+       guidanceTrainSource77.match(
+         /return to BlackPyre, and choose Load program\./g
+       ) || []
+     ).length===2
+  && !/ChatGPT or another AI/.test(
+       guidanceTrainSource77
+     )
+  && !/do not need to add anything else/.test(
+       guidanceTrainSource77
+     )
+);
+
+const guidancePrompt77 =
+  Guidance77.window.eval(`
+    blackpyreTrainingPlanAIPrompt({
+      goal:"Get stronger",
+      days:"4",
+      equipment:"Barbell and dumbbells",
+      length:"45 minutes",
+      experience:"Intermediate",
+      limits:"No overhead pressing",
+      preferences:"Sprinting and rowing"
+    })
+  `);
+
+check(
+  "v77 copied AI prompt uses the real public format and version",
+  guidancePrompt77.includes(
+    '"format":"blackpyre-training-plan"'
+  )
+  && guidancePrompt77.includes('"version":1')
+  && /Return valid JSON only/.test(guidancePrompt77)
+  && /complete program wrapper/i.test(guidancePrompt77)
+);
+
+check(
+  "v77 copied AI prompt forbids invented IDs and silent strength conversion",
+  guidancePrompt77.includes(
+    "Do not invent exerciseId values"
+  )
+  && guidancePrompt77.includes(
+       "Do not treat every exercise as sets, reps, and weight"
+     )
+  && guidancePrompt77.includes(
+       "Do not silently convert an unknown exercise into a strength exercise"
+     )
+  && guidancePrompt77.includes(
+       "unknown exercise names require review"
+     )
+);
+
+check(
+  "v77 copied AI prompt preserves the user's program request",
+  /Main goal: Get stronger/.test(guidancePrompt77)
+  && /Days per week: 4/.test(guidancePrompt77)
+  && /Equipment: Barbell and dumbbells/.test(
+       guidancePrompt77
+     )
+  && /Workout length: 45 minutes/.test(
+       guidancePrompt77
+     )
+  && /Experience: Intermediate/.test(
+       guidancePrompt77
+     )
+  && /Injuries or limits: No overhead pressing/.test(
+       guidancePrompt77
+     )
+  && /Preferred training style or activities: Sprinting and rowing/.test(
+       guidancePrompt77
+     )
+);
+
+check(
+  "v77 external AI helper and BlackPyre Coach share the importer format contract",
+  Guidance77.window.eval(`
+    coachSystem().includes(
+      blackpyreTrainingPlanFormatInstructions()
+    )
+  `)
+);
+
+const CoachNoKey77 = boot(
+  Object.assign(
+    {},
+    V3_CFG,
+    {
+      aiProvider:"handoff",
+      anthropicKey:"",
+      openaiKey:""
+    }
+  ),
+  V2_DATA,
+  null,
+  TEST_PROGRAM
+);
+
+const dCoachNoKey77 =
+  CoachNoKey77.window.document;
+
+dCoachNoKey77
+  .getElementById("coachPlanBtn")
+  .click();
+
+check(
+  "v77 BlackPyre Coach opens a clear no-key path",
+  !dCoachNoKey77
+     .getElementById("coachOverlay")
+     .classList.contains("hidden")
+  && !dCoachNoKey77
+        .getElementById("coachAccessNote")
+        .classList.contains("hidden")
+  && /needs an AI API key/.test(
+       dCoachNoKey77
+         .getElementById("coachAccessNote")
+         .textContent
+     )
+  && /Settings → Food database & AI/.test(
+       dCoachNoKey77
+         .getElementById("coachAccessNote")
+         .textContent
+     )
+  && /Create a plan with AI/.test(
+       dCoachNoKey77
+         .getElementById("coachAccessNote")
+         .textContent
+     )
+  && dCoachNoKey77
+       .getElementById("coachInput")
+       .disabled
+  && dCoachNoKey77
+       .getElementById("coachSendBtn")
+       .disabled
+);
+
+dCoachNoKey77
+  .getElementById("coachCloseBtn")
+  .click();
+
+check(
+  "v77 load guide uses the actual native navigation and confirmation flow",
+  /Open Train/.test(
+    dGuidance77
+      .getElementById("loadPlanHelpCard")
+      .textContent.replace(/\\s+/g," ")
+  )
+  && /Tap Manage/.test(
+       dGuidance77
+         .getElementById("loadPlanHelpCard")
+         .textContent.replace(/\\s+/g," ")
+     )
+  && /Tap Load program/.test(
+       dGuidance77
+         .getElementById("loadPlanHelpCard")
+         .textContent.replace(/\\s+/g," ")
+     )
+  && /Review the program/.test(
+       dGuidance77
+         .getElementById("loadPlanHelpCard")
+         .textContent.replace(/\\s+/g," ")
+     )
+  && /Tap Confirm/.test(
+       dGuidance77
+         .getElementById("loadPlanHelpCard")
+         .textContent.replace(/\\s+/g," ")
+     )
+  && /Completed workout history is not erased/.test(
+       dGuidance77
+         .getElementById("loadPlanHelpCard")
+         .textContent
+     )
+);
+
+check(
+  "v77 FAQ explains all three ways to create a training program",
+  Guidance77.window.eval(`
+    FAQ.some(
+      item=>
+        item.q==="How do I make a training program?"
+        && /build it in BlackPyre/i.test(item.a)
+        && /BlackPyre Coach/.test(item.a)
+        && /ChatGPT or another AI/.test(item.a)
+    )
+  `)
+);
+
+check(
+  "v77 FAQ gives the native load navigation, review, confirmation, and cancel behavior",
+  Guidance77.window.eval(`
+    FAQ.some(
+      item=>
+        item.q==="How do I load a program?"
+        && /Train/.test(item.a)
+        && /Manage/.test(item.a)
+        && /Load program/.test(item.a)
+        && /Review/.test(item.a)
+        && /Confirm/.test(item.a)
+        && /Canceling the review saves nothing/.test(item.a)
+    )
+  `)
+);
+
+check(
+  "v77 FAQ defines a BlackPyre training plan file without claiming any JSON works",
+  Guidance77.window.eval(`
+    FAQ.some(
+      item=>
+        item.q==="What is a BlackPyre training plan file?"
+        && /\\.json file exported from BlackPyre/.test(item.a)
+        && /random \\.json file may not work/i.test(item.a)
+        && /renaming another file does not make it/i.test(item.a)
+        && /Do not edit BlackPyre backup files/.test(item.a)
+    )
+    && !FAQ.some(
+      item=>
+        item.a
+        && /any JSON file/i.test(item.a)
+    )
+  `)
+);
+
+check(
+  "v77 FAQ explains exercise recording decisions and all unknown-exercise choices",
+  Guidance77.window.eval(`
+    FAQ.some(
+      item=>
+        item.q==="What happens when I load a file?"
+        && /how each exercise should be recorded/.test(item.a)
+        && /match it to an exercise already in BlackPyre/.test(item.a)
+        && /create a custom exercise/.test(item.a)
+        && /remove it from the program/.test(item.a)
+        && /Nothing is saved until you confirm/.test(item.a)
+        && /Canceling saves nothing/.test(item.a)
+    )
+  `)
+);
+
+check(
+  "v77 FAQ states that loading a program preserves completed workout history",
+  Guidance77.window.eval(`
+    FAQ.some(
+      item=>
+        item.q==="Will loading a program erase my workout history?"
+        && /No\\./.test(item.a.replace(/<[^>]+>/g,""))
+        && /does not erase completed workout history/.test(item.a)
+    )
+  `)
+);
+
+check(
+  "v77 FAQ explains Save file and Share program exchange",
+  Guidance77.window.eval(`
+    FAQ.some(
+      item=>
+        item.q==="How do I share a program?"
+        && /Save file/.test(item.a)
+        && /Share/.test(item.a)
+        && /review and load/.test(item.a)
+    )
+  `)
+);
+
+const ReadyMessage77 = boot(
+  V3_CFG,
+  V2_DATA,
+  null,
+  TEST_PROGRAM
+);
+
+ReadyMessage77.window.eval(`
+  openTrainingPlanReview(
+    ${JSON.stringify(TRAINING_PLAN_REVIEW_FIXTURE)}
+  )
+`);
+
+check(
+  "v77 ready-to-review status uses plain language",
+  /This training plan is ready to review/.test(
+    ReadyMessage77.window.document
+      .getElementById("trainingPlanReviewSummary")
+      .textContent
+  )
+);
+
+const MatchMessage77 = boot(
+  V3_CFG,
+  V2_DATA,
+  null,
+  TEST_PROGRAM
+);
+
+MatchMessage77.window.eval(`
+  openTrainingPlanReview({
+    name:"Needs Exercise Match",
+    days:[{
+      id:"D1",
+      title:"Training",
+      exercises:[{
+        name:"Unknown Dragon Movement",
+        scheme:"3 × 8"
+      }]
+    }]
+  })
+`);
+
+check(
+  "v77 exercise-match status uses plain language",
+  /This file needs a few exercise matches before it can be loaded/.test(
+    MatchMessage77.window.document
+      .getElementById("trainingPlanReviewSummary")
+      .textContent
+  )
+);
+
+const RejectionMessage77 = boot(
+  V3_CFG,
+  V2_DATA,
+  null,
+  TEST_PROGRAM
+);
+
+const dRejection77 =
+  RejectionMessage77.window.document;
+
+RejectionMessage77.window.FileReader = class {
+  readAsText(file){
+    this.result = file.contents;
+    this.onload();
+  }
+};
+
+Object.defineProperty(
+  dRejection77.getElementById("importFile"),
+  "files",
+  {
+    configurable:true,
+    value:[{
+      contents:JSON.stringify({
+        format:"not-blackpyre",
+        version:1,
+        program:{
+          name:"Rejected",
+          days:[]
+        }
+      })
+    }]
+  }
+);
+
+dRejection77
+  .getElementById("importFile")
+  .dispatchEvent(
+    new RejectionMessage77.window.Event(
+      "change",
+      {bubbles:true}
+    )
+  );
+
+check(
+  "v77 rejected file shows a plain message and useful next step",
+  dRejection77
+    .getElementById("programErr")
+    .textContent
+    ===RejectionMessage77.window.eval(
+      "blackpyreTrainingPlanRejectionMessage()"
+    )
+  && /Create a plan with AI/.test(
+       dRejection77
+         .getElementById("programErr")
+         .textContent
+     )
+  && /export the plan from another copy of BlackPyre/.test(
+       dRejection77
+         .getElementById("programErr")
+         .textContent
+     )
+);
+
 // ================= post-v76: suppress timer during training-plan review =================
 const ReviewTimerDock = boot(
   V3_CFG,
@@ -7576,6 +8387,732 @@ check(
 );
 
 ReviewTimerDock.window.eval("cancelRest()");
+
+
+// ================= v77 minimal missing-duration repair =================
+
+const ManualPlankRepair77 = boot(
+  EXISTING_CFG,
+  EMPTY_DATA,
+  null,
+  TEST_PROGRAM
+);
+
+const dManualPlankRepair77 =
+  ManualPlankRepair77.window.document;
+
+const manualPlankStorageBefore77 =
+  ManualPlankRepair77.window.eval(`
+    JSON.stringify(
+      Object.keys(localStorage)
+        .sort()
+        .map(key=>[
+          key,
+          localStorage.getItem(key)
+        ])
+    )
+  `);
+
+const manualPlankExerciseId77 =
+  ManualPlankRepair77.window.eval(`
+    exerciseModelEntryForName("Plank").id
+  `);
+
+ManualPlankRepair77.window.eval(`
+  openTrainingPlanReview({
+    format:"blackpyre-training-plan",
+    version:1,
+    program:{
+      name:"Manual Plank Repair",
+      days:[{
+        id:"D1",
+        title:"Core",
+        exercises:[{
+          name:"Unsupported Core Hold 77",
+          trackingShape:"lift",
+          prescription:{
+            sets:3,
+            reps:1
+          }
+        }]
+      }]
+    }
+  })
+`);
+
+const manualPlankSelect77 =
+  dManualPlankRepair77.querySelector(
+    'select[data-review-key="0:0"]'
+  );
+
+check(
+  "v77 manual Plank test finds the canonical Plank selection",
+  !!manualPlankExerciseId77
+  && !!manualPlankSelect77
+  && Array.from(
+       manualPlankSelect77.options
+     ).some(
+       option=>
+         option.value===manualPlankExerciseId77
+     )
+);
+
+manualPlankSelect77.value =
+  manualPlankExerciseId77;
+
+manualPlankSelect77.dispatchEvent(
+  new ManualPlankRepair77.window.Event(
+    "change",
+    {bubbles:true}
+  )
+);
+
+const manualPlankEditor77 =
+  dManualPlankRepair77.querySelector(
+    '.training-plan-prescription-editor[data-review-key="0:0"]'
+  );
+
+const manualPlankFieldNames77 =
+  manualPlankEditor77
+    ? Array.from(
+        manualPlankEditor77.querySelectorAll(
+          "[data-prescription-field]"
+        )
+      )
+        .map(
+          element=>
+            element.dataset.prescriptionField
+        )
+        .sort()
+    : [];
+
+check(
+  "v77 manual Plank match asks only for sets and time per set",
+  !!manualPlankEditor77
+  && /How long is each plank\?/.test(
+       manualPlankEditor77.textContent
+     )
+  && /The imported plan says 3 sets, but it does not include a duration\./
+       .test(
+         manualPlankEditor77.textContent
+       )
+  && JSON.stringify(
+       manualPlankFieldNames77
+     )===JSON.stringify([
+       "durationMinutes",
+       "durationSeconds",
+       "intervals"
+     ])
+  && manualPlankEditor77
+       .querySelector(
+         '[data-prescription-field="intervals"]'
+       )
+       .value==="3"
+  && !manualPlankEditor77
+       .querySelector(
+         '[data-prescription-field="distance"]'
+       )
+  && !manualPlankEditor77
+       .querySelector(
+         '[data-prescription-field="recoverySeconds"]'
+       )
+  && !manualPlankEditor77
+       .querySelector(
+         '[data-prescription-field="restSeconds"]'
+       )
+  && !manualPlankEditor77
+       .querySelector(
+         '[data-prescription-field="notes"]'
+       )
+  && !dManualPlankRepair77
+       .querySelector(
+         'select[data-review-key="0:0"]'
+       )
+  && dManualPlankRepair77
+       .getElementById(
+         "trainingPlanReviewConfirmBtn"
+       )
+       .disabled===true
+);
+
+manualPlankEditor77.querySelector(
+  '[data-prescription-action="apply"]'
+).click();
+
+check(
+  "v77 Plank repair stays blocked until time per set is entered",
+  dManualPlankRepair77
+    .getElementById(
+      "trainingPlanReviewConfirmBtn"
+    )
+    .disabled===true
+  && /Enter the time for each set\./.test(
+       manualPlankEditor77
+         .querySelector(
+           ".training-plan-review-inline-error"
+         )
+         .textContent
+     )
+  && ManualPlankRepair77.window.eval(`
+       !trainingPlanReviewState
+          .prescriptionOverrides["0:0"]
+     `)
+);
+
+const manualPlankSeconds77 =
+  manualPlankEditor77.querySelector(
+    '[data-prescription-field="durationSeconds"]'
+  );
+
+manualPlankSeconds77.value = "45";
+
+manualPlankEditor77.querySelector(
+  '[data-prescription-action="apply"]'
+).click();
+
+check(
+  "v77 Plank duration repair preserves three sets, canonical identity, and only compatible fields",
+  ManualPlankRepair77.window.eval(`
+    (()=>{
+      const state =
+        trainingPlanReviewState;
+
+      const exercise =
+        state.prepared
+          .candidate
+          .days[0]
+          .exercises[0];
+
+      const prescription =
+        exercise.prescription;
+
+      const model =
+        exerciseModelEntryForId(
+          exercise.exerciseId
+        );
+
+      return (
+        state.prepared.canConfirm
+        && state.prepared.blockers===0
+        && exercise.exerciseId
+           ===${JSON.stringify(manualPlankExerciseId77)}
+        && exercise.name==="Plank"
+        && model
+        && model.shape==="timeDist"
+        && prescription.intervals===3
+        && prescription.durationSeconds===45
+        && !Object.prototype.hasOwnProperty.call(
+             prescription,
+             "sets"
+           )
+        && !Object.prototype.hasOwnProperty.call(
+             prescription,
+             "reps"
+           )
+        && Object.keys(
+             state.prescriptionOverrides["0:0"]
+           ).sort().join(",")
+           ==="durationSeconds,intervals"
+      );
+    })()
+  `)
+  && dManualPlankRepair77
+       .getElementById(
+         "trainingPlanReviewConfirmBtn"
+       )
+       .disabled===false
+  && !dManualPlankRepair77
+       .querySelector(
+         '.training-plan-prescription-editor[data-review-key="0:0"]'
+       )
+  && /Adjusted to Plank's time tracking: 3 sets of 45 seconds\./
+       .test(
+         dManualPlankRepair77
+           .getElementById(
+             "trainingPlanReviewList"
+           )
+           .textContent
+       )
+  && ManualPlankRepair77.window.eval(`
+       JSON.stringify(
+         Object.keys(localStorage)
+           .sort()
+           .map(key=>[
+             key,
+             localStorage.getItem(key)
+           ])
+       )
+     `)===manualPlankStorageBefore77
+);
+
+dManualPlankRepair77
+  .getElementById(
+    "trainingPlanReviewCancelBtn"
+  )
+  .click();
+
+check(
+  "v77 canceling repaired Plank import preserves the current program and data",
+  ManualPlankRepair77.window.eval(`
+    trainingPlanReviewState===null
+    && program.name
+       ===${JSON.stringify(TEST_PROGRAM.name)}
+  `)
+  && ManualPlankRepair77.window.eval(`
+       JSON.stringify(
+         Object.keys(localStorage)
+           .sort()
+           .map(key=>[
+             key,
+             localStorage.getItem(key)
+           ])
+       )
+     `)===manualPlankStorageBefore77
+  && dManualPlankRepair77
+       .getElementById(
+         "trainingPlanReviewOverlay"
+       )
+       .classList.contains("hidden")
+);
+
+
+
+// ================= v77 alias and compact review UX =================
+
+const AliasCompactReview77 = boot(
+  V3_CFG,
+  V2_DATA,
+  null,
+  TEST_PROGRAM
+);
+
+const dAliasCompactReview77 =
+  AliasCompactReview77.window.document;
+
+AliasCompactReview77.window.eval(`
+  openTrainingPlanReview({
+    name:"Alias Review",
+    days:[{
+      id:"D1",
+      title:"Upper Body",
+      exercises:[
+        {
+          name:"Barbell Bench Press",
+          scheme:"5 × 5"
+        },
+        {
+          name:"Seated Dumbbell Shoulder Press",
+          scheme:"3 × 10"
+        },
+        {
+          name:"Cable Triceps Pressdown",
+          scheme:"3 × 12"
+        },
+        {
+          name:"Weighted Pull-Up",
+          scheme:"4 × 6"
+        },
+        {
+          name:"EZ Bar Curl",
+          scheme:"3 × 12"
+        },
+        {
+          name:"Chest Supported Row",
+          scheme:"3 × 12"
+        }
+      ]
+    }]
+  })
+`);
+
+const aliasCompactDetails77 =
+  dAliasCompactReview77.querySelectorAll(
+    ".training-plan-custom-exercise-details"
+  );
+
+const aliasCompactSelects77 =
+  dAliasCompactReview77.querySelectorAll(
+    'select[data-review-key]'
+  );
+
+check(
+  "v77 review safely auto-matches five common names and leaves only the ambiguous row unresolved",
+  (()=>{
+    const reviewData77 =
+      JSON.parse(JSON.stringify(EMPTY_DATA));
+
+    reviewData77.myExercises = {};
+    reviewData77.activeWorkoutDraft = null;
+
+    const reviewApp77 = boot(
+      EXISTING_CFG,
+      reviewData77,
+      null,
+      TEST_PROGRAM
+    );
+
+    const reviewPlan77 = {
+      format:"blackpyre-training-plan",
+      version:1,
+      program:{
+        name:"Resolver review regression",
+        days:[{
+          id:"D1",
+          title:"Review",
+          exercises:[
+            {
+              name:"Barbell Bench Press",
+              prescription:{sets:5,reps:5}
+            },
+            {
+              name:"Seated Dumbbell Shoulder Press",
+              prescription:{sets:3,reps:10}
+            },
+            {
+              name:"Cable Triceps Pressdown",
+              prescription:{sets:3,reps:12}
+            },
+            {
+              name:"Weighted Pull-Up",
+              prescription:{sets:4,reps:6}
+            },
+            {
+              name:"EZ Bar Curl",
+              prescription:{sets:3,reps:12}
+            },
+            {
+              name:"Chest Supported Row",
+              prescription:{sets:3,reps:10}
+            }
+          ]
+        }]
+      }
+    };
+
+    const rows = JSON.parse(
+      reviewApp77.window.eval(`
+        JSON.stringify(
+          prepareTrainingPlanImport(
+            ${JSON.stringify(reviewPlan77)}
+          ).review.map(row=>({
+            importedName:row.importedName,
+            exerciseId:row.exerciseId,
+            suggestions:row.suggestions
+          }))
+        )
+      `)
+    );
+
+    return (
+      rows.length===6
+      && rows
+           .slice(0,5)
+           .map(row=>row.exerciseId)
+           .join("|")
+         ===[
+           "bp:bench-press",
+           "bp:dumbbell-shoulder-press",
+           "bp:triceps-pushdown",
+           "bp:pull-up",
+           "bp:biceps-curl"
+         ].join("|")
+      && rows[5].exerciseId===null
+      && rows[5].suggestions.length>0
+      && rows[5].suggestions[0].id
+         ==="bp:chest-supported-dumbbell-row"
+    );
+  })()
+);
+
+const CompleteTimedSummary77 = boot(
+  V3_CFG,
+  V2_DATA,
+  null,
+  TEST_PROGRAM
+);
+
+const dCompleteTimedSummary77 =
+  CompleteTimedSummary77.window.document;
+
+CompleteTimedSummary77.window.eval(`
+  openTrainingPlanReview({
+    format:"blackpyre-training-plan",
+    version:1,
+    program:{
+      name:"Complete Timed Summary",
+      days:[{
+        id:"D1",
+        title:"Conditioning",
+        exercises:[{
+          name:"Sprinting",
+          scheme:"8 intervals",
+          trackingShape:"timeDist",
+          prescription:{
+            intervals:8,
+            durationSeconds:15,
+            recoverySeconds:75
+          }
+        }]
+      }]
+    }
+  })
+`);
+
+const completeTimedSummaryText77 =
+  dCompleteTimedSummary77
+    .getElementById(
+      "trainingPlanReviewList"
+    )
+    .textContent;
+
+check(
+  "v77 timed review summary shows intervals, duration, and recovery",
+  /Prescription: 8 intervals · 15 sec each · 75 sec recovery/
+    .test(
+      completeTimedSummaryText77
+    )
+  && /Matched to Sprinting\./.test(
+       completeTimedSummaryText77
+     )
+  && CompleteTimedSummary77.window.eval(`
+       (()=>{
+         const prepared =
+           trainingPlanReviewState.prepared;
+
+         const exercise =
+           prepared.candidate
+             .days[0]
+             .exercises[0];
+
+         return (
+           prepared.canConfirm
+           && prepared.blockers===0
+           && exercise.exerciseId
+              ==="bp:sprinting"
+           && exercise.prescription.intervals
+              ===8
+           && exercise.prescription.durationSeconds
+              ===15
+           && exercise.prescription.recoverySeconds
+              ===75
+         );
+       })()
+     `)
+  && dCompleteTimedSummary77
+       .getElementById(
+         "trainingPlanReviewConfirmBtn"
+       )
+       .disabled===false
+);
+
+
+// BLACKPYRE_V77_SYSTEMIC_RESOLVER_REPAIR — review UX and full flow
+const systemicResolverData77 =
+  JSON.parse(JSON.stringify(EMPTY_DATA));
+systemicResolverData77.myExercises = {};
+systemicResolverData77.activeWorkoutDraft = null;
+
+const SystemicResolverReview77 = boot(
+  EXISTING_CFG,
+  systemicResolverData77,
+  null,
+  TEST_PROGRAM
+);
+
+const dSystemicResolverReview77 =
+  SystemicResolverReview77.window.document;
+
+const systemicResolverProgramBefore77 =
+  SystemicResolverReview77.window.eval(
+    "JSON.stringify(program)"
+  );
+
+const systemicResolverDataBefore77 =
+  SystemicResolverReview77.window.eval(
+    "JSON.stringify(data)"
+  );
+
+const SYSTEMIC_RESOLVER_REVIEW_PLAN_77 = {
+  format:"blackpyre-training-plan",
+  version:1,
+  program:{
+    name:"Systemic Resolver Review",
+    days:[{
+      id:"D1",
+      title:"Review",
+      exercises:[
+        {
+          name:"Barbell Bench Press",
+          prescription:{sets:5,reps:5}
+        },
+        {
+          name:"Seated Dumbbell Shoulder Press",
+          prescription:{sets:3,reps:10}
+        },
+        {
+          name:"Cable Triceps Pressdown",
+          prescription:{sets:3,reps:12}
+        },
+        {
+          name:"Weighted Pull-Up",
+          prescription:{sets:4,reps:6}
+        },
+        {
+          name:"EZ Bar Curl",
+          prescription:{sets:3,reps:12}
+        },
+        {
+          name:"Chest Supported Row",
+          prescription:{sets:3,reps:10}
+        },
+        {
+          exerciseId:"bp:sprinting",
+          name:"Sprinting",
+          trackingShape:"timeDist",
+          scheme:"8 intervals",
+          prescription:{
+            intervals:8,
+            durationSeconds:15,
+            recoverySeconds:75
+          }
+        }
+      ]
+    }]
+  }
+};
+
+SystemicResolverReview77.window.eval(`
+  openTrainingPlanReview(
+    ${JSON.stringify(SYSTEMIC_RESOLVER_REVIEW_PLAN_77)}
+  )
+`);
+
+const systemicResolverRows77 = JSON.parse(
+  SystemicResolverReview77.window.eval(`
+    JSON.stringify(
+      trainingPlanReviewState.prepared.review.map(row=>({
+        importedName:row.importedName,
+        exerciseId:row.exerciseId,
+        shape:row.shape,
+        suggestions:row.suggestions
+      }))
+    )
+  `)
+);
+
+check(
+  "v77 systemic resolver handles normal AI-generated naming variations",
+  systemicResolverRows77
+    .slice(0,5)
+    .map(row=>row.exerciseId)
+    .join("|")
+  ===[
+    "bp:bench-press",
+    "bp:dumbbell-shoulder-press",
+    "bp:triceps-pushdown",
+    "bp:pull-up",
+    "bp:biceps-curl"
+  ].join("|")
+);
+
+check(
+  "v77 ambiguous equipment reduction remains blocked with ranked choices",
+  systemicResolverRows77[5].exerciseId===null
+  && systemicResolverRows77[5].suggestions[0].id
+     ==="bp:chest-supported-dumbbell-row"
+  && dSystemicResolverReview77
+       .getElementById("trainingPlanReviewConfirmBtn")
+       .disabled===true
+);
+
+const systemicCustomToggle77 =
+  dSystemicResolverReview77.querySelector(
+    'button[data-custom-toggle-key="0:5"]'
+  );
+
+check(
+  "v77 unresolved exercise keeps custom creation collapsed by default",
+  !!systemicCustomToggle77
+  && systemicCustomToggle77.textContent
+     ==="Create a custom exercise instead"
+  && systemicCustomToggle77.getAttribute(
+       "aria-expanded"
+     )==="false"
+  && !dSystemicResolverReview77.querySelector(
+       '.training-plan-custom-exercise-editor'
+     )
+);
+
+systemicCustomToggle77.dispatchEvent(
+  new SystemicResolverReview77.window.Event(
+    "click",
+    {bubbles:true}
+  )
+);
+
+check(
+  "v77 custom exercise form expands only after the small control is used",
+  !!dSystemicResolverReview77.querySelector(
+    '.training-plan-custom-exercise-editor'
+  )
+  && !!dSystemicResolverReview77.querySelector(
+    'input[data-custom-review-key="0:5"]'
+  )
+);
+
+const systemicResolverReviewText77 =
+  dSystemicResolverReview77
+    .getElementById("trainingPlanReviewList")
+    .textContent;
+
+check(
+  "v77 review prefers the complete structured timed prescription",
+  /Prescription: 8 intervals · 15 sec each · 75 sec recovery/
+    .test(systemicResolverReviewText77)
+  && !/Prescription: 8 intervals(?:\s|$)/
+       .test(
+         systemicResolverReviewText77.replace(
+           "Prescription: 8 intervals · 15 sec each · 75 sec recovery",
+           ""
+         )
+       )
+);
+
+check(
+  "v77 unresolved review uses common language instead of internal terms",
+  /Choose the matching BlackPyre exercise\./
+    .test(systemicResolverReviewText77)
+  && /Needs attention:/.test(
+       systemicResolverReviewText77
+     )
+  && !/No canonical BlackPyre exercise is selected/
+       .test(systemicResolverReviewText77)
+  && !/Blocking:/.test(systemicResolverReviewText77)
+);
+
+dSystemicResolverReview77
+  .getElementById("trainingPlanReviewCancelBtn")
+  .dispatchEvent(
+    new SystemicResolverReview77.window.Event(
+      "click",
+      {bubbles:true}
+    )
+  );
+
+await wait(10);
+
+check(
+  "v77 cancel after systemic review preserves the current program and data",
+  SystemicResolverReview77.window.eval(
+    "JSON.stringify(program)"
+  )===systemicResolverProgramBefore77
+  && SystemicResolverReview77.window.eval(
+       "JSON.stringify(data)"
+     )===systemicResolverDataBefore77
+  && SystemicResolverReview77.window.eval(
+       "trainingPlanReviewState===null"
+     )===true
+);
 
 summary("INTEGRATION");
 })().catch(e=>{ console.error(e); process.exit(1); });
