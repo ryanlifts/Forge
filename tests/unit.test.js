@@ -228,5 +228,430 @@ check("under target = in-progress, not red", !bar("cal",1500,1800).includes("ove
 check("todayStr is YYYY-MM-DD", /^\d{4}-\d{2}-\d{2}$/.test(E("todayStr()")));
 check("todayStr matches local date", E("todayStr()")===dstr(0));
 
+
+// ---------- v77 training-plan interchange v1 ----------
+const TRAINING_PLAN_FIXTURE_V1={
+  format:"blackpyre-training-plan",
+  version:1,
+  program:{
+    name:"Interchange Shape Coverage",
+    days:[
+      {
+        id:"D1",
+        title:"Strength and Speed",
+        exercises:[
+          {
+            exerciseId:"bp:bench-press",
+            name:"Bench Press",
+            trackingShape:"lift",
+            scheme:"4 × 5",
+            prescription:{
+              sets:4,
+              reps:{min:5,max:5},
+              restSeconds:180
+            }
+          },
+          {
+            name:"Pull-Up",
+            trackingShape:"reps",
+            scheme:"3 × 6–10",
+            prescription:{
+              sets:3,
+              reps:{min:6,max:10}
+            }
+          },
+          {
+            exerciseId:"bp:sprinting",
+            name:"Sprinting",
+            trackingShape:"timeDist",
+            scheme:"6 × 20 sec",
+            prescription:{
+              intervals:6,
+              durationSeconds:20,
+              recoverySeconds:100
+            }
+          }
+        ]
+      },
+      {
+        id:"D2",
+        title:"Carries and Conditioning",
+        exercises:[
+          {
+            name:"Farmer Carry",
+            trackingShape:"carry",
+            scheme:"3 × 40 ft",
+            prescription:{
+              sets:3,
+              weight:80,
+              weightUnit:"lb",
+              distance:40,
+              distanceUnit:"ft"
+            }
+          },
+          {
+            name:"Sprint Intervals",
+            trackingShape:"rounds",
+            scheme:"8 rounds",
+            prescription:{
+              rounds:8,
+              workSeconds:20,
+              recoverySeconds:100
+            }
+          },
+          {
+            name:"Mobility Flow",
+            trackingShape:"text",
+            scheme:"Mobility",
+            prescription:{
+              instructions:"Complete the full mobility sequence."
+            }
+          }
+        ]
+      }
+    ]
+  }
+};
+
+check(
+  "training-plan v1 document parses",
+  E(
+    `inspectTrainingPlanDocument(
+      ${JSON.stringify(TRAINING_PLAN_FIXTURE_V1)}
+    ).ok`
+  )===true
+);
+
+check(
+  "wrong training-plan format is rejected",
+  E(
+    `inspectTrainingPlanDocument({
+      format:"not-blackpyre",
+      version:1,
+      program:{name:"X",days:[]}
+    }).code`
+  )==="wrong-format"
+);
+
+check(
+  "newer training-plan version is blocked safely",
+  E(
+    `inspectTrainingPlanDocument({
+      format:"blackpyre-training-plan",
+      version:2,
+      program:{name:"X",days:[]}
+    }).newer`
+  )===true
+);
+
+check(
+  "malformed training-plan JSON is rejected",
+  E(
+    `inspectTrainingPlanDocument("{broken").code`
+  )==="invalid-json"
+);
+
+check(
+  "canonical library contains 203 exercises including Sprinting",
+  E(
+    `EXERCISE_LIBRARY.length===203
+      && trainingPlanEntryById("bp:sprinting").shape==="timeDist"`
+  )===true
+);
+
+check(
+  "exact built-in exercise id resolves first",
+  E(
+    `resolveTrainingPlanExercise({
+      exerciseId:"bp:bench-press",
+      name:"Bench Press"
+    }).method`
+  )==="exact-built-in-id"
+);
+
+check(
+  "exact canonical exercise name resolves",
+  E(
+    `resolveTrainingPlanExercise({
+      name:"Back Squat"
+    }).method`
+  )==="exact-name"
+);
+
+check(
+  "exercise alias resolves",
+  E(
+    `resolveTrainingPlanExercise({
+      name:"running"
+    }).method`
+  )==="alias"
+);
+
+check(
+  "safe normalization resolves case and spacing",
+  E(
+    `resolveTrainingPlanExercise({
+      name:"  BACK   SQUAT  "
+    }).method`
+  )==="normalized"
+);
+
+check(
+  "fuzzy matching ranks suggestions without auto-selection",
+  E(
+    `(()=>{
+      const result=resolveTrainingPlanExercise({
+        name:"Sprintng"
+      });
+
+      return (
+        !result.ok
+        && result.code==="unknown"
+        && result.suggestions[0].id==="bp:sprinting"
+      );
+    })()`
+  )===true
+);
+
+const trainingPlanOriginalExercises=
+  E(`JSON.stringify(data.myExercises||{})`);
+
+E(
+  `data.myExercises[
+    "u:training-plan-former"
+  ]={
+    id:"u:training-plan-former",
+    name:"Tempo Step Pattern",
+    shape:"rounds",
+    tags:["conditioning"],
+    aliases:["tempo steps"],
+    formerNames:["old tempo steps"],
+    muscles:{primary:["legs"],secondary:[]},
+    equipment:["step"],
+    unilateral:false,
+    bodyweight:true,
+    deprecated:false
+  }`
+);
+
+check(
+  "former custom exercise name resolves",
+  E(
+    `resolveTrainingPlanExercise({
+      name:"old tempo steps"
+    }).method`
+  )==="former-name"
+);
+
+E(
+  `data.myExercises[
+    "u:training-plan-ambiguous"
+  ]={
+    id:"u:training-plan-ambiguous",
+    name:"Bench-Press",
+    shape:"lift",
+    tags:["strength"],
+    aliases:[],
+    formerNames:[],
+    muscles:{primary:["chest"],secondary:[]},
+    equipment:["barbell"],
+    unilateral:false,
+    bodyweight:false,
+    deprecated:false
+  }`
+);
+
+check(
+  "ambiguous normalized identity never auto-resolves",
+  E(
+    `(()=>{
+      const result=resolveTrainingPlanExercise({
+        name:"bench press"
+      });
+
+      return (
+        !result.ok
+        && result.code==="ambiguous"
+        && result.suggestions.length===2
+      );
+    })()`
+  )===true
+);
+
+E(
+  `data.myExercises=JSON.parse(
+    ${JSON.stringify(trainingPlanOriginalExercises)}
+  )`
+);
+
+const preparedTrainingPlanV1=
+  E(
+    `prepareTrainingPlanImport(
+      ${JSON.stringify(TRAINING_PLAN_FIXTURE_V1)}
+    )`
+  );
+
+check(
+  "valid public training plan is confirmable",
+  preparedTrainingPlanV1.ok
+  && preparedTrainingPlanV1.canConfirm
+  && preparedTrainingPlanV1.blockers===0
+);
+
+check(
+  "all six tracking shapes survive preparation",
+  [
+    "lift",
+    "reps",
+    "timeDist",
+    "carry",
+    "rounds",
+    "text"
+  ].every(
+    shape=>
+      preparedTrainingPlanV1.review.some(
+        row=>row.shape===shape
+      )
+  )
+);
+
+check(
+  "explicit Sprinting id remains time-distance",
+  (()=>{
+    const row=preparedTrainingPlanV1.review.find(
+      item=>item.importedName==="Sprinting"
+    );
+
+    return (
+      row
+      && row.exerciseId==="bp:sprinting"
+      && row.shape==="timeDist"
+      && row.resolutionMethod==="exact-built-in-id"
+    );
+  })()
+);
+
+check(
+  "name-only Sprinting remains canonical time-distance",
+  E(
+    `(()=>{
+      const result=prepareTrainingPlanImport({
+        format:"blackpyre-training-plan",
+        version:1,
+        program:{
+          name:"Canonical sprint",
+          days:[{
+            id:"D1",
+            title:"Speed",
+            exercises:[{
+              name:"Sprinting",
+              trackingShape:"timeDist",
+              prescription:{
+                intervals:6,
+                durationSeconds:20,
+                recoverySeconds:100
+              }
+            }]
+          }]
+        }
+      });
+
+      const row=result.review[0];
+
+      return (
+        result.canConfirm
+        && row.errors.length===0
+        && row.exerciseId==="bp:sprinting"
+        && row.canonicalName==="Sprinting"
+        && row.shape==="timeDist"
+        && row.resolutionMethod==="exact-name"
+        && row.prescription.intervals===6
+        && row.prescription.durationSeconds===20
+        && row.prescription.recoverySeconds===100
+      );
+    })()`
+  )===true
+);
+
+check(
+  "canonical tracking-shape conflict blocks confirmation",
+  E(
+    `(()=>{
+      const plan=
+        ${JSON.stringify(TRAINING_PLAN_FIXTURE_V1)};
+
+      plan.program.days[0]
+        .exercises[0]
+        .trackingShape="timeDist";
+
+      const result=prepareTrainingPlanImport(plan);
+
+      return (
+        !result.canConfirm
+        && result.blockers===1
+        && result.review[0].errors.some(
+          message=>message.includes("conflicts")
+        )
+      );
+    })()`
+  )===true
+);
+
+check(
+  "legacy name and scheme import remains compatible",
+  E(
+    `(()=>{
+      const result=prepareTrainingPlanImport({
+        name:"Legacy Plan",
+        days:[{
+          id:"D1",
+          title:"Legacy Day",
+          exercises:[
+            {name:"Bench Press",scheme:"3 × 8"},
+            {name:"Sprinting",scheme:"6 × 20 sec"}
+          ]
+        }]
+      });
+
+      return (
+        result.canConfirm
+        && result.review[0].shape==="lift"
+        && result.review[1].shape==="timeDist"
+      );
+    })()`
+  )===true
+);
+
+check(
+  "unknown exercise never defaults to strength",
+  E(
+    `(()=>{
+      const result=prepareTrainingPlanImport({
+        format:"blackpyre-training-plan",
+        version:1,
+        program:{
+          name:"Unknown",
+          days:[{
+            id:"D1",
+            title:"Day",
+            exercises:[{
+              name:"Totally Unknown Movement",
+              trackingShape:"lift",
+              prescription:{sets:3,reps:8}
+            }]
+          }]
+        }
+      });
+
+      return (
+        !result.canConfirm
+        && result.review[0].shape===null
+        && result.review[0].exerciseId===null
+      );
+    })()`
+  )===true
+);
+
+
 summary("UNIT");
 })().catch(e=>{ console.error(e); process.exit(1); });

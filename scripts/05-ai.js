@@ -251,6 +251,427 @@ function applySwap(base,currentShown,target){
   renderWorkoutDraftCard();
   return true;
 }
+function sessionReplacementEntry(target){
+  if(target && typeof target==="object"){
+    return target;
+  }
+
+  const value=String(target||"").trim();
+
+  if(!value)return null;
+
+  return (
+    exerciseById(value)
+    ||exerciseDescriptor(value,null)
+  );
+}
+
+function sessionContainsReplacementIdentity(
+  entryOrName,
+  exceptBaseName
+){
+  const wanted=
+    exerciseIdentityKey(entryOrName);
+
+  const except=exceptBaseName==null
+    ? null
+    : normalizeExerciseName(
+        displayExerciseName(exceptBaseName)
+      );
+
+  return sessionList().some(entry=>{
+    const activeBase=
+      normalizeExerciseName(
+        displayExerciseName(
+          entry.__orig||entry.name
+        )
+      );
+
+    if(
+      except!==null
+      && activeBase===except
+    ){
+      return false;
+    }
+
+    return exerciseIdentityKey(entry)
+      ===wanted;
+  });
+}
+
+function sessionReplacementOptions(
+  base,
+  currentShown,
+  query
+){
+  const currentEntry=
+    exerciseDescriptor(currentShown,null);
+
+  const source=String(query||"").trim()
+    ? searchExercises(query,1000)
+    : allExerciseEntries(false)
+        .slice()
+        .sort(
+          (a,b)=>
+            shapeGroupLabel(a.shape)
+              .localeCompare(
+                shapeGroupLabel(b.shape)
+              )
+            ||a.name.localeCompare(b.name)
+        );
+
+  return source.filter(entry=>
+    entry
+    && !entry.legacy
+    && entry.shape!=="unknown"
+    && exerciseIdentityKey(entry)
+      !==exerciseIdentityKey(currentEntry)
+  );
+}
+
+function populateSessionReplacementSelect(
+  select,
+  base,
+  currentShown,
+  query
+){
+  const options=sessionReplacementOptions(
+    base,
+    currentShown,
+    query
+  );
+
+  const originalEntry=
+    exerciseDescriptor(base,null);
+
+  select.innerHTML="";
+
+  const grouped={};
+
+  options.forEach(entry=>{
+    const shape=entry.shape||"text";
+
+    if(!grouped[shape]){
+      grouped[shape]=[];
+    }
+
+    grouped[shape].push(entry);
+  });
+
+  EXERCISE_SHAPES.forEach(shape=>{
+    const entries=(grouped[shape]||[])
+      .slice()
+      .sort(
+        (a,b)=>a.name.localeCompare(b.name)
+      );
+
+    if(!entries.length)return;
+
+    const group=document.createElement(
+      "optgroup"
+    );
+
+    group.label=shapeGroupLabel(shape);
+
+    entries.forEach(entry=>{
+      const option=document.createElement(
+        "option"
+      );
+
+      const alreadyInSession=
+        sessionContainsReplacementIdentity(
+          entry,
+          base
+        );
+
+      option.value=entry.id;
+      option.disabled=alreadyInSession;
+      option.dataset.blocked=
+        alreadyInSession
+          ? "true"
+          : "false";
+
+      option.textContent=
+        entry.name
+        +(
+          alreadyInSession
+            ? " — already in this session"
+            : exerciseIdentityKey(entry)
+                ===exerciseIdentityKey(
+                  originalEntry
+                )
+              ? " (original)"
+              : ""
+        );
+
+      group.appendChild(option);
+    });
+
+    select.appendChild(group);
+  });
+
+  if(!options.length){
+    const empty=document.createElement(
+      "option"
+    );
+
+    empty.value="";
+    empty.textContent=
+      "No matching exercises";
+
+    select.appendChild(empty);
+  }else{
+    const choose=document.createElement(
+      "option"
+    );
+
+    choose.value="";
+    choose.textContent=
+      "Choose a replacement";
+    choose.selected=true;
+
+    select.insertBefore(
+      choose,
+      select.firstChild
+    );
+  }
+
+  select.value="";
+  return options;
+}
+
+function offerSessionReplacement(
+  base,
+  currentShown,
+  container
+){
+  const menu=document.createElement("div");
+  menu.className="session-replace-menu";
+
+  const title=document.createElement("div");
+  title.className="session-replace-title";
+  title.textContent=
+    "Replace "
+    +displayExerciseName(currentShown)
+    +" for this session";
+
+  const note=document.createElement("div");
+  note.className="session-replace-note";
+  note.textContent=
+    "This changes only the open workout. Your saved program stays unchanged.";
+
+  const search=document.createElement("input");
+  search.type="search";
+  search.className="sessionReplacementSearch";
+  search.placeholder=
+    "Search name, alias, former name, tag, muscle, or equipment";
+  search.setAttribute(
+    "aria-label",
+    "Search replacements for "
+    +displayExerciseName(currentShown)
+  );
+
+  const select=document.createElement("select");
+  select.className="sessionReplacementSelect";
+  select.setAttribute(
+    "aria-label",
+    "Replacement for "
+    +displayExerciseName(currentShown)
+  );
+
+  const actions=document.createElement("div");
+  actions.className=
+    "session-replace-actions";
+
+  const use=document.createElement("button");
+  use.type="button";
+  use.className=
+    "xbtn sessionReplacementUseButton";
+  use.textContent="Use replacement";
+  use.disabled=true;
+
+  const cancel=document.createElement("button");
+  cancel.type="button";
+  cancel.className="xbtn";
+  cancel.textContent="Cancel";
+
+  const refresh=()=>{
+    populateSessionReplacementSelect(
+      select,
+      base,
+      currentShown,
+      search.value
+    );
+
+    use.disabled=true;
+  };
+
+  search.addEventListener("input",refresh);
+
+  select.addEventListener("change",()=>{
+    const selected=select.selectedOptions[0];
+
+    use.disabled=
+      !select.value
+      ||!!(
+        selected
+        && selected.disabled
+      );
+  });
+
+  use.addEventListener("click",()=>{
+    if(!select.value)return;
+
+    const applied=applySessionReplacement(
+      base,
+      currentShown,
+      select.value
+    );
+
+    if(applied){
+      menu.remove();
+    }
+  });
+
+  cancel.addEventListener(
+    "click",
+    ()=>menu.remove()
+  );
+
+  actions.appendChild(use);
+  actions.appendChild(cancel);
+
+  menu.appendChild(title);
+  menu.appendChild(note);
+  menu.appendChild(search);
+  menu.appendChild(select);
+  menu.appendChild(actions);
+
+  container.appendChild(menu);
+  refresh();
+
+  return menu;
+}
+
+function applySessionReplacement(
+  base,
+  currentShown,
+  target
+){
+  const currentEntry=
+    exerciseDescriptor(currentShown,null);
+
+  const targetEntry=
+    sessionReplacementEntry(target);
+
+  if(
+    !targetEntry
+    || targetEntry.legacy
+    || targetEntry.shape==="unknown"
+  ){
+    showWorkoutError(
+      "Choose a BlackPyre exercise.",
+      null
+    );
+
+    return false;
+  }
+
+  if(
+    exerciseIdentityKey(currentEntry)
+    ===exerciseIdentityKey(targetEntry)
+  ){
+    return true;
+  }
+
+  if(
+    sessionContainsReplacementIdentity(
+      targetEntry,
+      base
+    )
+  ){
+    showWorkoutError(
+      targetEntry.name
+      +" is already in this session.",
+      null
+    );
+
+    return false;
+  }
+
+  if(typeof syncVisibleSessionInputs==="function"){
+    syncVisibleSessionInputs(currentShown);
+  }
+
+  const currentKey=Object.keys(
+    sessionState||{}
+  ).find(key=>
+    exerciseIdentityKey(key)
+      ===exerciseIdentityKey(currentEntry)
+    ||normalizeExerciseName(key)
+      ===normalizeExerciseName(currentShown)
+  );
+
+  const currentState=currentKey
+    ? sessionState[currentKey]
+    : null;
+
+  if(
+    currentState
+    && hasUnsavedEntry(currentState)
+    && !confirm(
+      "Discard the entered result for "
+      +displayExerciseName(currentEntry.name)
+      +" and replace it with "
+      +displayExerciseName(targetEntry.name)
+      +"?"
+    )
+  ){
+    return false;
+  }
+
+  const runtime=openSessionRuntimeSnapshot();
+
+  if(currentKey){
+    delete sessionState[currentKey];
+  }
+
+  if(
+    exerciseIdentityKey(targetEntry)
+    ===exerciseIdentityKey(base)
+  ){
+    delete sessionSwaps[base];
+  }else{
+    sessionSwaps[base]=targetEntry.name;
+  }
+
+  initSessionStateFor(targetEntry.name);
+
+  if(workoutDraftLoaded){
+    data.activeWorkoutDraft=
+      buildWorkoutDraft();
+
+    if(!save()){
+      restoreOpenSessionRuntime(runtime);
+      renderSessionInputs();
+      renderWorkoutDraftCard();
+
+      showWorkoutError(
+        "The replacement could not be saved. Your completed result was kept.",
+        null
+      );
+
+      return false;
+    }
+  }
+
+  clearWorkoutError();
+  renderSessionInputs();
+  renderWorkoutDraftCard();
+
+  return true;
+}
+
 function initSessionStateFor(exName){
   const entry=exerciseDescriptor(exName,null);
   const hit=latestExerciseHistoryHit(entry);

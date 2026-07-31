@@ -318,7 +318,36 @@
   .bex { display:flex; align-items:center; gap:6px; margin-bottom:8px; }
   .bex input { padding:9px 8px; }
   .bex .bname { flex:2; } .bex .bscheme { flex:1; }
+  .builder-exercise-identity {
+    flex:2;
+    min-width:0;
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+  }
+  .builder-exercise-identity .bname {
+    width:100%;
+    flex:0 0 auto;
+  }
+  .builder-tracking-chip {
+    align-self:flex-start;
+    max-width:100%;
+    padding:3px 8px;
+    border:1px solid var(--border);
+    border-radius:999px;
+    background:var(--panel);
+    color:var(--dim);
+    font-size:11px;
+    line-height:1.25;
+    font-weight:600;
+  }
   @media (max-width:520px) {
+    .builder-exercise-row { flex-wrap:wrap; }
+    .builder-exercise-identity { flex:1 1 100%; }
+    .builder-exercise-row .bscheme {
+      flex:1 1 150px;
+      min-width:150px;
+    }
     .srow { flex-wrap:wrap; }
     .srow .slabel { flex:1 1 100%; width:auto; font-size:11px; }
     .srow > .step, .srow > .snum, .srow > .sx { order:2; }
@@ -347,6 +376,250 @@
   .my-exercise-row:last-child { border-bottom:0; }
   .builder-add-exercise { flex-wrap:wrap; align-items:end; }
   .builder-add-exercise > select, .builder-add-exercise > input { min-width:130px; }
+  .builder-add-exercise .builderExerciseSearch {
+    flex:1 1 100%;
+    width:100%;
+    margin-bottom:0;
+  }
+
+  .session-replace-holder {
+    margin:10px 0;
+  }
+
+  .session-replace-menu {
+    display:grid;
+    gap:8px;
+    padding:10px;
+    border:1px solid var(--border);
+    border-radius:10px;
+    background:rgba(31,35,42,.46);
+  }
+
+  .session-replace-title {
+    font-size:12px;
+    font-weight:700;
+    line-height:1.4;
+  }
+
+  .session-replace-menu input,
+  .session-replace-menu select {
+    width:100%;
+  }
+
+  .session-replace-actions {
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+  }
+
+  .session-replace-note {
+    font-size:11px;
+    line-height:1.45;
+    color:var(--dim);
+  }
+
+  body.training-plan-review-open {
+    overflow:hidden;
+  }
+
+  body.training-plan-review-open #restDock {
+    display:none !important;
+  }
+
+  .training-plan-review-overlay {
+    position:fixed;
+    inset:0;
+    z-index:230;
+    background:var(--bg);
+    overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
+    overscroll-behavior:contain;
+    padding:
+      calc(14px + env(safe-area-inset-top))
+      14px
+      calc(24px + env(safe-area-inset-bottom));
+  }
+
+  .training-plan-review-shell {
+    width:100%;
+    max-width:720px;
+    margin:0 auto;
+  }
+
+  .training-plan-review-head {
+    position:sticky;
+    top:calc(-14px - env(safe-area-inset-top));
+    z-index:2;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:12px;
+    padding:
+      calc(14px + env(safe-area-inset-top))
+      0
+      12px;
+    background:var(--bg);
+  }
+
+  .training-plan-review-title {
+    font-family:'Oswald',sans-serif;
+    font-size:16px;
+    font-weight:700;
+    letter-spacing:.04em;
+    text-transform:uppercase;
+  }
+
+  .training-plan-review-summary {
+    margin:0 0 12px;
+    font-size:13px;
+    color:var(--dim);
+    line-height:1.45;
+  }
+
+  .training-plan-review-list {
+    display:grid;
+    gap:10px;
+  }
+
+  .training-plan-review-item {
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:12px;
+    background:var(--card);
+  }
+
+  .training-plan-review-item.is-blocked {
+    border-color:var(--bad);
+  }
+
+  .training-plan-review-item.has-warning {
+    border-color:var(--warn);
+  }
+
+  .training-plan-review-item-head {
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap:10px;
+  }
+
+  .training-plan-review-name {
+    min-width:0;
+    font-size:14px;
+    font-weight:700;
+    overflow-wrap:anywhere;
+  }
+
+  .training-plan-review-status {
+    flex:0 0 auto;
+    font-size:12px;
+    color:var(--dim);
+    text-align:right;
+  }
+
+  .training-plan-review-meta,
+  .training-plan-review-message,
+  .training-plan-review-suggestions {
+    margin-top:7px;
+    font-size:12px;
+    line-height:1.4;
+    color:var(--dim);
+  }
+
+  .training-plan-review-message.is-error {
+    color:var(--bad);
+  }
+
+  .training-plan-review-message.is-warning {
+    color:var(--warn);
+  }
+
+  .training-plan-review-resolution {
+    display:grid;
+    gap:8px;
+    margin-top:10px;
+    padding-top:10px;
+    border-top:1px solid var(--line);
+  }
+
+  .training-plan-review-resolution-row {
+    display:flex;
+    flex-wrap:wrap;
+    align-items:end;
+    gap:8px;
+  }
+
+  .training-plan-review-resolution-field {
+    flex:1 1 190px;
+    min-width:0;
+  }
+
+  .training-plan-review-resolution-field label {
+    display:block;
+    margin-bottom:4px;
+    font-size:11px;
+    color:var(--dim);
+  }
+
+  .training-plan-review-resolution-field input,
+  .training-plan-review-resolution-field select {
+    width:100%;
+  }
+
+  .training-plan-review-resolution-row .xbtn {
+    flex:0 0 auto;
+  }
+
+  .training-plan-review-custom {
+    display:grid;
+    gap:8px;
+    padding:10px;
+    border:1px solid var(--line);
+    border-radius:10px;
+    background:var(--bg);
+  }
+
+  .training-plan-review-inline-error {
+    font-size:12px;
+    line-height:1.4;
+    color:var(--bad);
+  }
+
+  .training-plan-review-pending {
+    margin-top:8px;
+    font-size:12px;
+    line-height:1.4;
+    color:var(--warn);
+  }
+
+  .training-plan-review-removed {
+    border:1px dashed var(--line);
+    border-radius:10px;
+    padding:10px;
+    margin-bottom:10px;
+    font-size:12px;
+    line-height:1.4;
+    color:var(--dim);
+  }
+
+  .training-plan-review-actions {
+    position:sticky;
+    bottom:
+      calc(-24px - env(safe-area-inset-bottom));
+    z-index:2;
+    display:flex;
+    gap:10px;
+    margin-top:14px;
+    padding:
+      12px
+      0
+      calc(24px + env(safe-area-inset-bottom));
+    background:var(--bg);
+  }
+
+  .training-plan-review-actions .btn {
+    flex:1;
+  }
   @media (max-width:520px) {
     .shape-grid, .time-grid, .distance-grid, .carry-grid, .rounds-grid, #customExerciseFields { grid-template-columns:1fr; }
     .exercise-library-tools { grid-template-columns:1fr; }
@@ -787,6 +1060,70 @@
       <input type="file" id="importFile" aria-label="Program file to load" accept=".json,application/json" class="hidden">
       <div class="err hidden" id="programErr" role="alert" aria-live="assertive"></div>
       <div class="note">Load any program file (.json) — from any AI, a coach, a friend — or build your own right here.</div>
+    </div>
+
+    <div
+      id="trainingPlanReviewOverlay"
+      class="training-plan-review-overlay hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="trainingPlanReviewTitle"
+      aria-describedby="trainingPlanReviewSummary"
+      tabindex="-1"
+    >
+      <div class="training-plan-review-shell">
+        <div class="training-plan-review-head">
+          <div
+            class="training-plan-review-title"
+            id="trainingPlanReviewTitle"
+          >
+            Review training program
+          </div>
+          <button
+            class="xbtn"
+            id="trainingPlanReviewCloseBtn"
+            type="button"
+            aria-label="Close training-program review"
+          >
+            ✕ Close
+          </button>
+        </div>
+
+        <div
+          class="training-plan-review-summary"
+          id="trainingPlanReviewSummary"
+          aria-live="polite"
+        ></div>
+
+        <div
+          class="training-plan-review-list"
+          id="trainingPlanReviewList"
+        ></div>
+
+        <div
+          class="err hidden"
+          id="trainingPlanReviewErr"
+          role="alert"
+          aria-live="assertive"
+        ></div>
+
+        <div class="training-plan-review-actions">
+          <button
+            class="btn ghost"
+            id="trainingPlanReviewCancelBtn"
+            type="button"
+          >
+            Cancel
+          </button>
+          <button
+            class="btn"
+            id="trainingPlanReviewConfirmBtn"
+            type="button"
+          >
+            Confirm import
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- program builder -->
