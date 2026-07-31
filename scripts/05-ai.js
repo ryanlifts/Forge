@@ -105,33 +105,216 @@ function sessionList(){
 function openFormVideo(name){
   window.open("https://www.youtube.com/results?search_query="+encodeURIComponent(name.replace("[Cardio] ","")+" proper form how to"), "_blank");
 }
-function offerSwap(origName, currentShown, container){
-  const base = origName;
-  const opts = (ALT_MAP[base]||[]).filter(a=>a!==currentShown);
-  if (currentShown!==base) opts.unshift(base+" (original)");
-  const menu = document.createElement("div");
-  menu.style.cssText = "margin:6px 0 10px; display:flex; flex-direction:column; gap:6px;";
-  opts.forEach(o=>{
-    const label = o;
-    const target = o.endsWith(" (original)") ? base : o;
-    const b = document.createElement("button");
-    b.className = "xbtn";
-    b.textContent = "\u21C4 " + label;
-    b.addEventListener("click", ()=>{
-      const shownOld = sessionSwaps[base] || base;
-      delete sessionState[shownOld];
-      if (target===base) delete sessionSwaps[base];
-      else sessionSwaps[base] = target;
-      initSessionStateFor(target===base ? base : target);
-      renderSessionInputs();
+function applySessionExerciseReplacement(
+  origName,
+  currentShown,
+  target
+){
+  const cleanTarget =
+    String(target||"").trim();
+
+  if (!cleanTarget){
+    return {
+      ok:false,
+      reason:"Choose a replacement exercise."
+    };
+  }
+
+  const targetEntry =
+    exerciseModelEntryForName(cleanTarget);
+
+  if (!targetEntry){
+    return {
+      ok:false,
+      reason:"That replacement exercise is unavailable."
+    };
+  }
+
+  const duplicate =
+    sessionList().some(ex=>{
+      const sourceName =
+        ex.__orig || ex.name;
+
+      return (
+        sourceName!==origName
+        && normalizeExerciseName(ex.name)
+          ===normalizeExerciseName(
+            targetEntry.name
+          )
+      );
     });
-    menu.appendChild(b);
+
+  if (duplicate){
+    return {
+      ok:false,
+      reason:
+        targetEntry.name
+        +" is already in this session."
+    };
+  }
+
+  const shownOld =
+    sessionSwaps[origName] || origName;
+
+  if (shownOld===targetEntry.name){
+    return {
+      ok:true,
+      unchanged:true
+    };
+  }
+
+  const oldState = sessionState[shownOld];
+
+  if (
+    oldState
+    && hasUnsavedEntry(oldState)
+    && !confirm(
+      "Replace "
+        +shownOld.replace("[Cardio] ","")
+        +" and discard its unsaved entries?"
+    )
+  ){
+    return {
+      ok:false,
+      cancelled:true
+    };
+  }
+
+  delete sessionState[shownOld];
+
+  if (targetEntry.name===origName){
+    delete sessionSwaps[origName];
+  } else {
+    sessionSwaps[origName] =
+      targetEntry.name;
+  }
+
+  initSessionStateFor(targetEntry.name);
+  clearWorkoutError();
+  renderSessionInputs();
+
+  return {
+    ok:true,
+    name:targetEntry.name,
+    shape:targetEntry.shape
+  };
+}
+
+function offerSwap(origName,currentShown,container){
+  const menu = document.createElement("div");
+
+  menu.style.cssText =
+    "margin:6px 0 10px;"
+    +" display:flex;"
+    +" flex-direction:column;"
+    +" gap:6px;";
+
+  const search = document.createElement("input");
+
+  search.type = "search";
+  search.placeholder = "Search replacement exercises";
+  search.autocomplete = "off";
+  search.dataset.replacementSearch = origName;
+
+  search.setAttribute(
+    "aria-label",
+    "Search replacement exercises for "
+      +currentShown.replace("[Cardio] ","")
+  );
+
+  const select = document.createElement("select");
+
+  select.dataset.replacementSelect = origName;
+
+  select.setAttribute(
+    "aria-label",
+    "Replacement exercise for "
+      +currentShown.replace("[Cardio] ","")
+  );
+
+  const renderOptions = ()=>{
+    populateUnifiedExercisePicker(
+      select,
+      {
+        query:search.value,
+        includeCustom:false
+      }
+    );
+
+    if (
+      !search.value.trim()
+      && [...select.options]
+        .some(
+          option=>
+            option.value===currentShown
+        )
+    ){
+      select.value = currentShown;
+    }
+  };
+
+  search.addEventListener(
+    "input",
+    renderOptions
+  );
+
+  renderOptions();
+
+  const error = document.createElement("div");
+
+  error.style.cssText =
+    "font-size:12px;"
+    +" line-height:1.45;"
+    +" color:var(--warn);";
+
+  const apply = document.createElement("button");
+
+  apply.type = "button";
+  apply.className = "xbtn";
+  apply.textContent = "Use replacement";
+  apply.dataset.replacementApply = origName;
+
+  apply.addEventListener("click",()=>{
+    const result =
+      applySessionExerciseReplacement(
+        origName,
+        currentShown,
+        select.value
+      );
+
+    if (!result.ok){
+      if (!result.cancelled){
+        error.textContent =
+          result.reason
+          || "The exercise could not be replaced.";
+
+        showWorkoutError(
+          error.textContent,
+          null
+        );
+      }
+
+      return;
+    }
   });
+
   const cancel = document.createElement("button");
+
+  cancel.type = "button";
   cancel.className = "xbtn";
   cancel.textContent = "Cancel";
-  cancel.addEventListener("click", ()=>menu.remove());
+
+  cancel.addEventListener(
+    "click",
+    ()=>menu.remove()
+  );
+
+  menu.appendChild(search);
+  menu.appendChild(select);
+  menu.appendChild(error);
+  menu.appendChild(apply);
   menu.appendChild(cancel);
+
   container.appendChild(menu);
 }
 function initSessionStateFor(exName){
@@ -143,10 +326,14 @@ function initSessionStateFor(exName){
     const hist = data.workouts.slice().reverse().find(w=>w.sets && w.sets[exName.replace("[Cardio] ","")]);
     if (hist) lastVal = hist.sets[exName.replace("[Cardio] ","")];
   }
-  const pf = prefillRows({name:exName, scheme:""}, lastVal);
-  sessionState[exName] = exName.indexOf("[Cardio] ")===0
-    ? {mode:"text", rows:[], text:"", auto:false}
-    : {mode:"rows", rows:pf.rows, text:"", auto:pf.auto};
+  sessionState[exName] =
+    makePlanSessionState(
+      {
+        name:exName,
+        scheme:""
+      },
+      lastVal
+    );
 }
 
 // ---------- recents search ----------
@@ -655,7 +842,7 @@ function extractAIPayloads(text){
   blocks.forEach(b=>{
     try {
       const j = JSON.parse(b.body);
-      if (j && Array.isArray(j.days)){ out.program = j; out.display = out.display.replace(b.raw, "").trim(); }
+      if (isTrainingPlanDocumentCandidate(j)){ out.program = j; out.display = out.display.replace(b.raw, "").trim(); }
       else if (j && j.bpTargets){ out.targets = j.bpTargets; out.display = out.display.replace(b.raw, "").trim(); }
     } catch(e){ /* not JSON — leave it visible */ }
   });
@@ -668,7 +855,7 @@ function coachSystem(){
   return "You are the user's personal fitness coach inside the BlackPyre app. Be direct, specific, and evidence-based — no generic filler. Their live data follows.\n\n"
     + aiReport()
     + "\n\n---\nResponse contract:\n"
-    + "- If you propose a new or edited training program, include EXACTLY ONE ```json code block containing the COMPLETE program: {\"name\":..., \"days\":[{\"id\":\"D1\",\"title\":...,\"exercises\":[{\"name\":...,\"scheme\":...}]}]}. Keep exercise names the user is progressing on unchanged so their history stays connected. Schemes like \"4×5\" power the app's auto-progression.\n"
+    + "- If you propose a new or edited training program, include EXACTLY ONE ```json code block containing valid JSON in this COMPLETE public format: {\"format\":\"blackpyre-training-plan\",\"version\":1,\"program\":{\"name\":...,\"days\":[{\"id\":\"D1\",\"title\":...,\"exercises\":[{\"name\":...,\"scheme\":...,\"prescription\":{...}}]}]}}. Use BlackPyre exercise names when possible. Do not invent exerciseId values. BlackPyre resolves canonical identity and tracking shape; unknown exercise names require review. Prescription fields: lift/reps use sets, reps, optional weight/weightUnit, restSeconds, effort, notes; time or distance work uses intervals, durationSeconds, recoverySeconds, distance, distanceUnit, pace, effort, notes; carries use sets or trips, weight, distance or durationSeconds; rounds use rounds, workSeconds, recoverySeconds, movements and notes; text work uses instructions, completionTarget or notes.\n"
     + "- If you propose new nutrition targets, include a ```json block: {\"bpTargets\":{\"calTarget\":...,\"proTarget\":...,\"carbGoal\":...,\"fatGoal\":...}} — exact daily numbers, not ranges.\n"
     + "- Otherwise reply in plain prose. Keep replies under 300 words unless asked for detail.";
 }
@@ -702,18 +889,66 @@ function addCoachBubble(role, text, payloads){
   div.textContent = text;
   if (payloads && payloads.program){
     const b = document.createElement("button");
+    const proposal =
+      payloads.program
+      && isPlainObject(payloads.program.program)
+        ? payloads.program.program
+        : payloads.program;
+
     b.className = "act";
-    b.textContent = "Load program: " + (payloads.program.name || "Updated program");
+    b.textContent =
+      "Review program: "
+      +(proposal.name || "Updated program");
+
     b.addEventListener("click", ()=>{
-      const replaced = replaceActiveProgram(payloads.program);
-      if (replaced.ok){
-        b.textContent = "✓ Loaded — it's your active program";
-        b.disabled = true;
-        flashSave("Program loaded ✓");
-      } else if (!replaced.cancelled){
-        flashSave("Program invalid: "+(replaced.reason||"could not be saved"), true);
+      const inspected =
+        inspectTrainingPlanDocument(
+          payloads.program
+        );
+
+      if (!inspected.ok){
+        flashSave(
+          "Program invalid: "
+          +(inspected.message || "could not be reviewed"),
+          true
+        );
+        return;
+      }
+
+      const coachOverlay =
+        document.getElementById("coachOverlay");
+
+      const coachWasOpen =
+        !coachOverlay.classList.contains("hidden");
+
+      if (coachWasOpen){
+        coachOverlay.classList.add("hidden");
+        unlockScroll();
+      }
+
+      const opened =
+        openTrainingPlanReview(
+          payloads.program,
+          {
+            source:"coach",
+            successMessage:"Program loaded ✓",
+            onImported:()=>{
+              b.textContent =
+                "✓ Loaded — it's your active program";
+              b.disabled = true;
+            }
+          }
+        );
+
+      if (!opened.ok){
+        flashSave(
+          "Program invalid: "
+          +(opened.message || "could not be reviewed"),
+          true
+        );
       }
     });
+
     div.appendChild(b);
   }
   if (payloads && payloads.targets){
@@ -782,28 +1017,60 @@ document.getElementById("checkinBtn").addEventListener("click", ()=>{
 // ================== PASTE PROGRAM FROM AI ==================
 document.getElementById("pasteProgBtn").addEventListener("click", async ()=>{
   let text = "";
+
   try {
-    if (navigator.clipboard && navigator.clipboard.readText) text = await navigator.clipboard.readText();
-  } catch(e){ /* permission denied */ }
-  if (!text) text = prompt("Paste the AI's reply (or just the JSON program) here:") || "";
+    if (
+      navigator.clipboard
+      && navigator.clipboard.readText
+    ){
+      text = await navigator.clipboard.readText();
+    }
+  } catch(e){
+    // Clipboard permission denied; use manual paste fallback.
+  }
+
+  if (!text){
+    text =
+      prompt(
+        "Paste the AI's reply or JSON training plan here:"
+      )
+      || "";
+  }
+
   if (!text.trim()) return;
-  let prog = null;
-  const p = extractAIPayloads(text);
-  if (p.program) prog = p.program;
-  if (!prog){
-    try { const j = JSON.parse(text.trim()); if (j && Array.isArray(j.days)) prog = j; } catch(e){}
+
+  const documentValue =
+    extractTrainingPlanDocumentFromText(text);
+
+  if (!documentValue){
+    flashSave(
+      "No BlackPyre program was found in that text",
+      true
+    );
+    return;
   }
-  if (!prog){
-    const m = text.match(/\{[\s\S]*"days"[\s\S]*\}/);
-    if (m){ try { const j = JSON.parse(m[0]); if (Array.isArray(j.days)) prog = j; } catch(e){} }
-  }
-  if (!prog){ flashSave("No program found in that text", true); return; }
-  const replaced = replaceActiveProgram(prog);
-  if (replaced.ok){
-    ackBtn("pasteProgBtn", "✓ Loaded: "+(program.name||"program"));
-    flashSave("Program loaded ✓");
-  } else if (!replaced.cancelled){
-    flashSave("Program invalid: "+(replaced.reason||"could not be saved"), true);
+
+  const opened =
+    openTrainingPlanReview(
+      documentValue,
+      {
+        source:"AI paste",
+        successMessage:"Program loaded ✓",
+        onImported:()=>{
+          ackBtn(
+            "pasteProgBtn",
+            "✓ Loaded: "+(program.name||"program")
+          );
+        }
+      }
+    );
+
+  if (!opened.ok){
+    flashSave(
+      "Program invalid: "
+      +(opened.message || "could not be reviewed"),
+      true
+    );
   }
 });
 

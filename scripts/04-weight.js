@@ -734,20 +734,46 @@ document.getElementById("restCustomSet").addEventListener("click", ()=>{
   setRestOptionsOpen(false);
 });
 
-// ================== SHARE PROGRAM ==================
+// ================== SHARE PUBLIC TRAINING PLAN ==================
 document.getElementById("shareBtn").addEventListener("click", async ()=>{
-  const json = JSON.stringify(program,null,2);
-  const fname = (program.name||"blackpyre-program").replace(/[^a-z0-9]+/gi,"-").toLowerCase()+".json";
+  const publicPlan =
+    trainingPlanInterchangeFromProgram(program);
+
+  const json =
+    JSON.stringify(publicPlan,null,2);
+
+  const fname =
+    blackpyreTrainingPlanFilename(program.name);
+
   try {
     if (navigator.canShare && window.File){
-      const file = new File([json], fname, {type:"application/json"});
+      const file =
+        new File(
+          [json],
+          fname,
+          {type:"application/json"}
+        );
+
       if (navigator.canShare({files:[file]})){
-        await navigator.share({files:[file], title:program.name});
+        await navigator.share({
+          files:[file],
+          title:program.name
+        });
         return;
       }
     }
-    if (navigator.share){ await navigator.share({title:program.name, text:json}); return; }
-  } catch(e){ /* user cancelled or unsupported */ }
-  download(fname, json); // fallback
+
+    if (navigator.share){
+      await navigator.share({
+        title:program.name,
+        text:json
+      });
+      return;
+    }
+  } catch(e){
+    // User cancellation and unsupported share targets use fallback.
+  }
+
+  download(fname,json);
 });
 

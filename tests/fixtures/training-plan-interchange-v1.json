@@ -1,0 +1,91 @@
+{
+  "format": "blackpyre-training-plan",
+  "version": 1,
+  "program": {
+    "name": "Interchange Shape Coverage",
+    "author": "BlackPyre Test Fixture",
+    "days": [
+      {
+        "id": "D1",
+        "title": "Strength and Speed",
+        "exercises": [
+          {
+            "exerciseId": "bp:bench-press",
+            "name": "Bench Press",
+            "trackingShape": "lift",
+            "scheme": "4 × 5",
+            "prescription": {
+              "sets": 4,
+              "reps": {
+                "min": 5,
+                "max": 5
+              },
+              "restSeconds": 180
+            }
+          },
+          {
+            "name": "Pull-Up",
+            "trackingShape": "reps",
+            "scheme": "3 × 6–10",
+            "prescription": {
+              "sets": 3,
+              "reps": {
+                "min": 6,
+                "max": 10
+              },
+              "restSeconds": 120
+            }
+          },
+          {
+            "exerciseId": "bp:sprinting",
+            "name": "Sprinting",
+            "trackingShape": "timeDist",
+            "scheme": "6 × 20 sec",
+            "prescription": {
+              "intervals": 6,
+              "durationSeconds": 20,
+              "recoverySeconds": 100
+            }
+          }
+        ]
+      },
+      {
+        "id": "D2",
+        "title": "Carries and Conditioning",
+        "exercises": [
+          {
+            "name": "Farmer Carry",
+            "trackingShape": "carry",
+            "scheme": "3 × 40 ft",
+            "prescription": {
+              "sets": 3,
+              "weight": 80,
+              "weightUnit": "lb",
+              "distance": 40,
+              "distanceUnit": "ft",
+              "restSeconds": 90
+            }
+          },
+          {
+            "name": "Sprint Intervals",
+            "trackingShape": "rounds",
+            "scheme": "8 rounds",
+            "prescription": {
+              "rounds": 8,
+              "workSeconds": 20,
+              "recoverySeconds": 100
+            }
+          },
+          {
+            "name": "Mobility Flow",
+            "trackingShape": "text",
+            "scheme": "Complete the full mobility sequence",
+            "prescription": {
+              "instructions": "Complete the full mobility sequence with controlled breathing."
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

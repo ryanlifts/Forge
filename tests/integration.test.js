@@ -1888,7 +1888,13 @@ check(
 check(
   "v76 My Exercises uses the 16px card-heading level while Save Exercise keeps the selected accent",
   rawIndex.includes(".my-exercises-launch-title { font-family:'Oswald',sans-serif; font-size:16px;")
-  && rawIndex.includes(".saveExBtn { background:var(--ember); border-color:var(--ember); color:#101215; font-weight:700;")
+  && rawIndex.includes(".xbtn.saveExBtn { background:var(--ember); border-color:var(--ember); color:#101215; font-weight:700;")
+  && /\.xbtn\.saveExBtn \{[^}]*background:var\(--ember\)[^}]*border-color:var\(--ember\)[^}]*color:#101215/.test(
+       rawIndex
+     )
+  && /\.xbtn \{[^}]*background:transparent/.test(
+       rawIndex
+     )
 );
 
 check(
@@ -3410,6 +3416,98 @@ check(
 );
 
 check(
+  "v76 all 203 canonical exercises produce their stored editor mode contract",
+  T76Fresh.window.eval(`
+    (()=>{
+      const expected = {
+        lift:["rows","lift"],
+        reps:["rows","reps"],
+        timeDist:["timeDist",null],
+        carry:["carry",null],
+        rounds:["rounds",null],
+        text:["text",null]
+      };
+
+      return (
+        EXERCISE_LIBRARY.length===203
+        && EXERCISE_LIBRARY.every(
+          entry=>{
+            const state =
+              makePlanSessionState(
+                {
+                  exerciseId:entry.id,
+                  name:entry.name,
+                  scheme:""
+                },
+                null
+              );
+
+            const contract =
+              expected[entry.shape];
+
+            return (
+              !!contract
+              && state.mode===contract[0]
+              && state.rowShape===contract[1]
+            );
+          }
+        )
+      );
+    })()
+  `)
+);
+
+const T76Substitution = boot(
+  V3_CFG,
+  Object.assign(
+    {},
+    EMPTY_DATA,
+    {
+      workouts:[],
+      activeWorkoutDraft:null
+    }
+  ),
+  null,
+  V76_PROGRAM
+);
+
+T76Substitution.window.eval(`
+  [
+    "Bench Press",
+    "Pull-Up",
+    "Run",
+    "Farmer Carry",
+    "Sprint Intervals",
+    "Mobility Flow"
+  ].forEach(
+    name=>{
+      delete sessionState[name];
+      initSessionStateFor(name);
+    }
+  )
+`);
+
+check(
+  "v76 exercise substitutions use canonical lift reps timeDist carry rounds and text editors",
+  T76Substitution.window.eval(`
+    sessionState["Bench Press"].mode==="rows"
+    && sessionState["Bench Press"].rowShape
+       ==="lift"
+    && sessionState["Pull-Up"].mode==="rows"
+    && sessionState["Pull-Up"].rowShape
+       ==="reps"
+    && sessionState["Run"].mode
+       ==="timeDist"
+    && sessionState["Farmer Carry"].mode
+       ==="carry"
+    && sessionState["Sprint Intervals"].mode
+       ==="rounds"
+    && sessionState["Mobility Flow"].mode
+       ==="text"
+  `)
+);
+
+check(
   "v76 fresh typed editors render fields without a guided rounds timer",
   !!card76(dT76Fresh,"Run").querySelector("select")
   && !!card76(dT76Fresh,"Run").querySelector('input[aria-label="Run minutes"]')
@@ -3895,8 +3993,8 @@ const freestyleUsers76 =
   )];
 
 check(
-  "v76 Freestyle picker exposes all 202 canonical built-ins by display name",
-  freestyleBuiltIns76.length===202
+  "post-v76 Freestyle picker exposes all 203 canonical built-ins by display name",
+  freestyleBuiltIns76.length===203
   && freestyleBuiltIns76.every(o=>
     o.value.length>0
     && o.textContent===o.value
@@ -3920,6 +4018,11 @@ check(
     o.value==="Run"
     && o.dataset.exerciseShape==="timeDist"
     && /^bp:/.test(o.dataset.exerciseId)
+  )
+  && freestyleBuiltIns76.some(o=>
+    o.value==="Sprinting"
+    && o.dataset.exerciseId==="bp:sprinting"
+    && o.dataset.exerciseShape==="timeDist"
   )
   && freestyleBuiltIns76.some(o=>
     o.value==="Farmer Carry"
@@ -4008,15 +4111,15 @@ const builderPicker76 =
     .find(s=>
       s.querySelectorAll(
         'option[data-exercise-source="builtin"]'
-      ).length===202
+      ).length===203
     );
 
 check(
-  "v76 Program Builder exposes all 202 canonical built-in exercise names",
+  "post-v76 Program Builder exposes all 203 canonical built-in exercise names",
   !!builderPicker76
   && builderPicker76.querySelectorAll(
     'option[data-exercise-source="builtin"]'
-  ).length===202
+  ).length===203
   && [...builderPicker76.querySelectorAll(
     'option[data-exercise-source="builtin"]'
   )].every(o=>
@@ -4086,8 +4189,8 @@ check(
   "v76 Freestyle shape sections contain all 202 built-ins exactly once",
   (()=>{
     const options=builtInGroups76.flatMap(group=>[...group.querySelectorAll("option")]);
-    return options.length===202
-      && new Set(options.map(option=>option.dataset.exerciseId)).size===202
+    return options.length===203
+      && new Set(options.map(option=>option.dataset.exerciseId)).size===203
       && options.every(option=>option.dataset.exerciseSource==="builtin");
   })()
 );
@@ -4212,6 +4315,386 @@ check(
   && mobilityInput76.placeholder==="Enter what you completed"
 );
 
+
+
+// ---------- searchable exercise pickers + universal planned replacement ----------
+const SEARCH_REPLACE_PROGRAM_76 = {
+  name:"Search Replace Test",
+  days:[{
+    id:"D1",
+    title:"Main",
+    exercises:[{
+      name:"Bench Press",
+      scheme:"3×5"
+    }]
+  }]
+};
+
+const SearchReplace76 = boot(
+  V3_CFG,
+  Object.assign(
+    {},
+    EMPTY_DATA,
+    {
+      workouts:[],
+      activeWorkoutDraft:null,
+      myExercises:{}
+    }
+  ),
+  null,
+  SEARCH_REPLACE_PROGRAM_76
+);
+
+const dSearchReplace76 =
+  SearchReplace76.window.document;
+
+SearchReplace76.window.eval(`
+  wDaySel.value="D1";
+  initSessionState();
+  renderSessionInputs();
+  renderLibraryOptions();
+`);
+
+const workoutSearch76 =
+  dSearchReplace76.getElementById(
+    "addExSearch"
+  );
+
+const workoutPickerSearch76 =
+  dSearchReplace76.getElementById(
+    "addExSel"
+  );
+
+workoutSearch76.value =
+  "sprint intervals";
+
+workoutSearch76.dispatchEvent(
+  new SearchReplace76.window.Event(
+    "input",
+    {bubbles:true}
+  )
+);
+
+const searchedBuiltIns76 =
+  [
+    ...workoutPickerSearch76
+      .querySelectorAll(
+        'option[data-exercise-source="builtin"]'
+      )
+  ];
+
+check(
+  "searchable workout exercise picker filters the canonical library live",
+  workoutSearch76.placeholder
+    ==="Search exercises"
+  && searchedBuiltIns76.length===1
+  && searchedBuiltIns76[0].value
+    ==="Sprint Intervals"
+  && searchedBuiltIns76[0]
+       .dataset.exerciseShape==="rounds"
+);
+
+workoutSearch76.value = "";
+
+workoutSearch76.dispatchEvent(
+  new SearchReplace76.window.Event(
+    "input",
+    {bubbles:true}
+  )
+);
+
+check(
+  "clearing workout exercise search restores all canonical and custom options",
+  workoutPickerSearch76
+    .querySelectorAll(
+      'option[data-exercise-source="builtin"]'
+    ).length===203
+  && [...workoutPickerSearch76.options]
+       .some(
+         option=>
+           option.value==="__CUSTOM__"
+       )
+);
+
+SearchReplace76.window.eval(`
+  builderProg={
+    name:"Builder Search",
+    days:[{
+      id:"",
+      title:"Day 1",
+      exercises:[]
+    }]
+  };
+
+  renderBuilder();
+`);
+
+const builderSearch76 =
+  dSearchReplace76.querySelector(
+    ".bexercise-search"
+  );
+
+const builderPickerSearch76 =
+  builderSearch76
+    ? builderSearch76
+        .closest(".bex")
+        .querySelector("select")
+    : null;
+
+if (builderSearch76){
+  builderSearch76.value =
+    "farmer carry";
+
+  builderSearch76.dispatchEvent(
+    new SearchReplace76.window.Event(
+      "input",
+      {bubbles:true}
+    )
+  );
+}
+
+check(
+  "Program Builder uses the same searchable canonical exercise picker",
+  !!builderSearch76
+  && !!builderPickerSearch76
+  && [
+       ...builderPickerSearch76
+         .querySelectorAll(
+           'option[data-exercise-source="builtin"]'
+         )
+     ].length===1
+  && builderPickerSearch76.value
+    ==="Farmer Carry"
+);
+
+function exerciseCardByName76(
+  doc,
+  name
+){
+  return [
+    ...doc.querySelectorAll(
+      "#exerciseInputs .exercise"
+    )
+  ].find(card=>{
+    const heading =
+      card.querySelector(".x-head b");
+
+    return (
+      heading
+      && heading.textContent===name
+    );
+  }) || null;
+}
+
+let replacementCard76 =
+  exerciseCardByName76(
+    dSearchReplace76,
+    "Bench Press"
+  );
+
+let replaceButton76 =
+  replacementCard76
+    ? [...replacementCard76
+        .querySelectorAll("button")]
+        .find(
+          button=>
+            button.textContent==="Replace"
+        )
+    : null;
+
+if (replaceButton76){
+  replaceButton76.click();
+}
+
+let replacementSearch76 =
+  replacementCard76
+    ? replacementCard76.querySelector(
+        'input[data-replacement-search="Bench Press"]'
+      )
+    : null;
+
+let replacementSelect76 =
+  replacementCard76
+    ? replacementCard76.querySelector(
+        'select[data-replacement-select="Bench Press"]'
+      )
+    : null;
+
+let replacementApply76 =
+  replacementCard76
+    ? replacementCard76.querySelector(
+        'button[data-replacement-apply="Bench Press"]'
+      )
+    : null;
+
+if (
+  replacementSearch76
+  && replacementSelect76
+  && replacementApply76
+){
+  replacementSearch76.value="Run";
+
+  replacementSearch76.dispatchEvent(
+    new SearchReplace76.window.Event(
+      "input",
+      {bubbles:true}
+    )
+  );
+
+  replacementSelect76.value="Run";
+  replacementApply76.click();
+}
+
+check(
+  "every planned exercise exposes searchable replacement and Run uses time-distance fields",
+  !!replaceButton76
+  && SearchReplace76.window.eval(`
+       sessionSwaps["Bench Press"]==="Run"
+       && sessionState["Run"].mode
+          ==="timeDist"
+     `)
+  && !!dSearchReplace76.querySelector(
+       'input[aria-label="Run minutes"]'
+     )
+  && !!dSearchReplace76.querySelector(
+       'input[aria-label="Run seconds"]'
+     )
+);
+
+replacementCard76 =
+  exerciseCardByName76(
+    dSearchReplace76,
+    "Run"
+  );
+
+replaceButton76 =
+  replacementCard76
+    ? [...replacementCard76
+        .querySelectorAll("button")]
+        .find(
+          button=>
+            button.textContent==="Replace"
+        )
+    : null;
+
+if (replaceButton76){
+  replaceButton76.click();
+}
+
+replacementSearch76 =
+  replacementCard76
+    ? replacementCard76.querySelector(
+        'input[data-replacement-search="Bench Press"]'
+      )
+    : null;
+
+replacementSelect76 =
+  replacementCard76
+    ? replacementCard76.querySelector(
+        'select[data-replacement-select="Bench Press"]'
+      )
+    : null;
+
+replacementApply76 =
+  replacementCard76
+    ? replacementCard76.querySelector(
+        'button[data-replacement-apply="Bench Press"]'
+      )
+    : null;
+
+if (
+  replacementSearch76
+  && replacementSelect76
+  && replacementApply76
+){
+  replacementSearch76.value =
+    "Sprint Intervals";
+
+  replacementSearch76.dispatchEvent(
+    new SearchReplace76.window.Event(
+      "input",
+      {bubbles:true}
+    )
+  );
+
+  replacementSelect76.value =
+    "Sprint Intervals";
+
+  replacementApply76.click();
+}
+
+check(
+  "replacing again with Sprint Intervals uses the rounds editor",
+  SearchReplace76.window.eval(`
+    sessionSwaps["Bench Press"]
+      ==="Sprint Intervals"
+    && sessionState["Sprint Intervals"]
+         .mode==="rounds"
+  `)
+  && !!exerciseCardByName76(
+       dSearchReplace76,
+       "Sprint Intervals"
+     )
+);
+
+const DUPLICATE_REPLACE_PROGRAM_76 = {
+  name:"Duplicate Replace Test",
+  days:[{
+    id:"D1",
+    title:"Main",
+    exercises:[
+      {
+        name:"Bench Press",
+        scheme:"3×5"
+      },
+      {
+        name:"Run",
+        scheme:"20 min"
+      }
+    ]
+  }]
+};
+
+const DuplicateReplace76 = boot(
+  V3_CFG,
+  Object.assign(
+    {},
+    EMPTY_DATA,
+    {
+      workouts:[],
+      activeWorkoutDraft:null,
+      myExercises:{}
+    }
+  ),
+  null,
+  DUPLICATE_REPLACE_PROGRAM_76
+);
+
+const duplicateReplaceResult76 =
+  JSON.parse(
+    DuplicateReplace76.window.eval(`
+      JSON.stringify(
+        applySessionExerciseReplacement(
+          "Bench Press",
+          "Bench Press",
+          "Run"
+        )
+      )
+    `)
+  );
+
+check(
+  "exercise replacement refuses duplicate exercises without changing the session",
+  duplicateReplaceResult76.ok===false
+  && /already in this session/i.test(
+       duplicateReplaceResult76.reason
+     )
+  && DuplicateReplace76.window.eval(`
+       Object.keys(sessionSwaps).length===0
+       && !!sessionState["Bench Press"]
+       && !!sessionState["Run"]
+     `)
+);
 
 // ---------- v76 persistent custom exercises ----------
 const T76Custom = boot(
@@ -5853,6 +6336,1246 @@ check(
        'sessionState["Tempo Step Intervals"].mode'
      )==="rounds"
 );
+
+// ================= post-v76: reviewed training-plan import and public I/O =================
+const TRAINING_PLAN_REVIEW_FIXTURE =
+  JSON.parse(
+    fs.readFileSync(
+      path.join(
+        __dirname,
+        "fixtures",
+        "training-plan-interchange-v1.json"
+      ),
+      "utf8"
+    )
+  );
+
+const ReviewCancel = boot(
+  V3_CFG,
+  V2_DATA,
+  null,
+  TEST_PROGRAM
+);
+
+const dReviewCancel =
+  ReviewCancel.window.document;
+
+const reviewCancelOpen =
+  ReviewCancel.window.eval(
+    `openTrainingPlanReview(
+      ${JSON.stringify(TRAINING_PLAN_REVIEW_FIXTURE)},
+      {successMessage:"Program loaded ✓"}
+    )`
+  );
+
+check(
+  "training-plan review opens without changing the current program",
+  reviewCancelOpen.ok===true
+  && !dReviewCancel
+       .getElementById("trainingPlanReviewOverlay")
+       .classList.contains("hidden")
+  && dReviewCancel.body.classList.contains("locked")
+  && ReviewCancel.window.eval("program.name")
+     ===TEST_PROGRAM.name
+  && dReviewCancel
+       .getElementById("trainingPlanReviewConfirmBtn")
+       .disabled===false
+  && /Prescription: 6 × 20 sec/.test(
+       dReviewCancel
+         .getElementById("trainingPlanReviewList")
+         .textContent
+     )
+);
+
+dReviewCancel
+  .getElementById("trainingPlanReviewCancelBtn")
+  .dispatchEvent(
+    new ReviewCancel.window.Event(
+      "click",
+      {bubbles:true}
+    )
+  );
+
+await wait(10);
+
+check(
+  "canceling training-plan review leaves active data untouched",
+  dReviewCancel
+    .getElementById("trainingPlanReviewOverlay")
+    .classList.contains("hidden")
+  && !dReviewCancel.body.classList.contains("locked")
+  && ReviewCancel.window.eval("program.name")
+     ===TEST_PROGRAM.name
+  && ReviewCancel.window.eval(
+       "data.workouts.length"
+     )===0
+);
+
+const ReviewSemanticSprint = boot(
+  V3_CFG,
+  V2_DATA,
+  null,
+  TEST_PROGRAM
+);
+
+const dReviewSemanticSprint =
+  ReviewSemanticSprint.window.document;
+
+ReviewSemanticSprint.window.eval(`
+  openTrainingPlanReview({
+    name:"Legacy Sprint Semantics",
+    days:[{
+      id:"D1",
+      title:"Speed",
+      exercises:[{
+        name:"Sprinting",
+        scheme:"6 × 20 sec"
+      }]
+    }]
+  })
+`);
+
+const semanticReviewText =
+  dReviewSemanticSprint
+    .getElementById(
+      "trainingPlanReviewList"
+    )
+    .textContent;
+
+check(
+  "training-plan review transparently shows repeated Sprinting remapped to Sprint Intervals",
+  /Sprint Intervals/.test(
+    semanticReviewText
+  )
+  && /Repeated sprint prescription resolved as Sprint Intervals\./
+       .test(
+         semanticReviewText
+       )
+  && ReviewSemanticSprint.window.eval(`
+       trainingPlanReviewState
+         .prepared
+         .review[0]
+         .exerciseId
+         ==="bp:sprint-intervals"
+     `)
+  && ReviewSemanticSprint.window.eval(`
+       trainingPlanReviewState
+         .prepared
+         .review[0]
+         .shape
+         ==="rounds"
+     `)
+  && ReviewSemanticSprint.window.eval(`
+       trainingPlanReviewState
+         .prepared
+         .candidate
+         .days[0]
+         .exercises[0]
+         .prescription
+         .rounds===6
+     `)
+  && ReviewSemanticSprint.window.eval(`
+       trainingPlanReviewState
+         .prepared
+         .candidate
+         .days[0]
+         .exercises[0]
+         .prescription
+         .workSeconds===20
+     `)
+);
+
+const ReviewUnknown = boot(
+  V3_CFG,
+  V2_DATA,
+  null,
+  TEST_PROGRAM
+);
+
+const dReviewUnknown =
+  ReviewUnknown.window.document;
+
+ReviewUnknown.window.eval(`
+  openTrainingPlanReview({
+    name:"Manual Resolution",
+    days:[{
+      id:"D1",
+      title:"Speed",
+      exercises:[{
+        name:"Sprintng",
+        scheme:"6 × 20 sec"
+      }]
+    }]
+  })
+`);
+
+const unknownSelect =
+  dReviewUnknown.querySelector(
+    '#trainingPlanReviewList select[data-review-key="0:0"]'
+  );
+
+check(
+  "unknown imported exercise blocks confirmation and offers manual choices",
+  !!unknownSelect
+  && unknownSelect.value===""
+  && [
+       ...unknownSelect.options
+     ].some(
+       option=>option.value==="bp:sprinting"
+     )
+  && dReviewUnknown
+       .getElementById("trainingPlanReviewConfirmBtn")
+       .disabled===true
+  && ReviewUnknown.window.eval(
+       "trainingPlanReviewState.prepared.candidate"
+     )===null
+);
+
+unknownSelect.value = "bp:sprinting";
+
+unknownSelect.dispatchEvent(
+  new ReviewUnknown.window.Event(
+    "change",
+    {bubbles:true}
+  )
+);
+
+check(
+  "manual mapping resolves unknown Sprinting without fuzzy auto-selection",
+  dReviewUnknown
+    .getElementById("trainingPlanReviewConfirmBtn")
+    .disabled===false
+  && ReviewUnknown.window.eval(
+       "trainingPlanReviewState.prepared.canConfirm"
+     )===true
+  && ReviewUnknown.window.eval(`
+       trainingPlanReviewState
+         .prepared
+         .candidate
+         .days[0]
+         .exercises[0]
+         .exerciseId
+         ==="bp:sprinting"
+     `)
+  && ReviewUnknown.window.eval(`
+       trainingPlanReviewState
+         .prepared
+         .candidate
+         .days[0]
+         .exercises[0]
+         .prescription
+         .durationSeconds
+         ===20
+     `)
+);
+
+const ReviewConfirm = boot(
+  V3_CFG,
+  V2_DATA,
+  null,
+  TEST_PROGRAM
+);
+
+const dReviewConfirm =
+  ReviewConfirm.window.document;
+
+ReviewConfirm.window.eval(`
+  window.__trainingPlanBrowserConfirmCalls=0;
+  confirm=()=>{
+    window.__trainingPlanBrowserConfirmCalls++;
+    return false;
+  };
+
+  openTrainingPlanReview(
+    ${JSON.stringify(TRAINING_PLAN_REVIEW_FIXTURE)},
+    {successMessage:"Program loaded ✓"}
+  );
+`);
+
+dReviewConfirm
+  .getElementById("trainingPlanReviewConfirmBtn")
+  .dispatchEvent(
+    new ReviewConfirm.window.Event(
+      "click",
+      {bubbles:true}
+    )
+  );
+
+await wait(10);
+
+const confirmedStoredProgram =
+  JSON.parse(
+    ReviewConfirm.window.localStorage.getItem(
+      "forge:program"
+    )
+  );
+
+check(
+  "review confirmation imports exactly once without a second browser confirm",
+  ReviewConfirm.window.eval(
+    "window.__trainingPlanBrowserConfirmCalls"
+  )===0
+  && ReviewConfirm.window.eval("program.name")
+     ==="Interchange Shape Coverage"
+  && confirmedStoredProgram.name
+     ==="Interchange Shape Coverage"
+  && confirmedStoredProgram.days[0]
+       .exercises.some(
+         exercise=>
+           exercise.exerciseId==="bp:sprinting"
+           && exercise.prescription
+           && exercise.prescription.durationSeconds===20
+       )
+  && dReviewConfirm
+       .getElementById("trainingPlanReviewOverlay")
+       .classList.contains("hidden")
+);
+
+
+const CUSTOM_EXERCISE_REVIEW_FIXTURE = {
+  name:"Custom Exercise Import",
+  days:[{
+    id:"D1",
+    title:"Speed",
+    exercises:[{
+      name:"Progressive Accelerations",
+      scheme:"3 × 10 sec"
+    }]
+  }]
+};
+
+function customReviewControls(doc){
+  return {
+    name:doc.querySelector(
+      'input[data-custom-review-key="0:0"]'
+    ),
+    shape:doc.querySelector(
+      'select[data-custom-shape-key="0:0"]'
+    ),
+    use:doc.querySelector(
+      'button[data-custom-use-key="0:0"]'
+    )
+  };
+}
+
+const ReviewCustomCancel = boot(
+  V3_CFG,
+  Object.assign(
+    {},
+    EMPTY_DATA,
+    {
+      workouts:[],
+      activeWorkoutDraft:null,
+      myExercises:{}
+    }
+  ),
+  null,
+  TEST_PROGRAM
+);
+
+const dReviewCustomCancel =
+  ReviewCustomCancel.window.document;
+
+const customCancelDataBefore =
+  ReviewCustomCancel.window.localStorage
+    .getItem("forge:data");
+
+ReviewCustomCancel.window.eval(`
+  openTrainingPlanReview(
+    ${JSON.stringify(CUSTOM_EXERCISE_REVIEW_FIXTURE)}
+  );
+`);
+
+const cancelCustomControls =
+  customReviewControls(dReviewCustomCancel);
+
+check(
+  "unknown import offers pending custom-exercise controls",
+  !!cancelCustomControls.name
+  && cancelCustomControls.name.value
+     ==="Progressive Accelerations"
+  && !!cancelCustomControls.shape
+  && cancelCustomControls.shape.value===""
+  && !!cancelCustomControls.use
+  && !!cancelCustomControls.name
+       .getAttribute("aria-label")
+  && !!cancelCustomControls.shape
+       .getAttribute("aria-label")
+  && dReviewCustomCancel
+       .getElementById(
+         "trainingPlanReviewConfirmBtn"
+       )
+       .disabled===true
+);
+
+cancelCustomControls.shape.value="rounds";
+
+cancelCustomControls.use.dispatchEvent(
+  new ReviewCustomCancel.window.Event(
+    "click",
+    {bubbles:true}
+  )
+);
+
+const cancelPendingId =
+  ReviewCustomCancel.window.eval(`
+    Object.values(
+      trainingPlanReviewState.customExercises
+    )[0].id
+  `);
+
+check(
+  "pending custom exercise resolves review without early persistence",
+  /^u:progressive-accelerations/.test(
+    cancelPendingId
+  )
+  && ReviewCustomCancel.window.eval(`
+       trainingPlanReviewState
+         .prepared
+         .canConfirm===true
+       && trainingPlanReviewState
+            .prepared
+            .candidate
+            .days[0]
+            .exercises[0]
+            .exerciseId
+          ===${JSON.stringify(cancelPendingId)}
+       && trainingPlanReviewState
+            .prepared
+            .review[0]
+            .shape==="rounds"
+       && Object.values(data.myExercises||{})
+            .every(
+              entry=>
+                entry.name!=="Progressive Accelerations"
+            )
+     `)
+  && ReviewCustomCancel.window.localStorage
+       .getItem("forge:data")
+     ===customCancelDataBefore
+);
+
+dReviewCustomCancel
+  .getElementById("trainingPlanReviewCancelBtn")
+  .dispatchEvent(
+    new ReviewCustomCancel.window.Event(
+      "click",
+      {bubbles:true}
+    )
+  );
+
+check(
+  "canceling review discards pending custom exercise",
+  ReviewCustomCancel.window.eval(`
+    trainingPlanReviewState===null
+    && trainingPlanPendingExerciseEntries.length===0
+    && Object.values(data.myExercises||{})
+         .every(
+           entry=>
+             entry.name!=="Progressive Accelerations"
+         )
+  `)
+  && ReviewCustomCancel.window.localStorage
+       .getItem("forge:data")
+     ===customCancelDataBefore
+  && ReviewCustomCancel.window.eval("program.name")
+     ===TEST_PROGRAM.name
+);
+
+const ReviewCustomConfirm = boot(
+  V3_CFG,
+  Object.assign(
+    {},
+    EMPTY_DATA,
+    {
+      workouts:[],
+      activeWorkoutDraft:null,
+      myExercises:{}
+    }
+  ),
+  null,
+  TEST_PROGRAM
+);
+
+const dReviewCustomConfirm =
+  ReviewCustomConfirm.window.document;
+
+ReviewCustomConfirm.window.eval(`
+  openTrainingPlanReview(
+    ${JSON.stringify(CUSTOM_EXERCISE_REVIEW_FIXTURE)}
+  );
+`);
+
+const confirmCustomControls =
+  customReviewControls(dReviewCustomConfirm);
+
+confirmCustomControls.shape.value="rounds";
+
+confirmCustomControls.use.dispatchEvent(
+  new ReviewCustomConfirm.window.Event(
+    "click",
+    {bubbles:true}
+  )
+);
+
+const confirmedCustomId =
+  ReviewCustomConfirm.window.eval(`
+    Object.values(
+      trainingPlanReviewState.customExercises
+    )[0].id
+  `);
+
+dReviewCustomConfirm
+  .getElementById("trainingPlanReviewConfirmBtn")
+  .dispatchEvent(
+    new ReviewCustomConfirm.window.Event(
+      "click",
+      {bubbles:true}
+    )
+  );
+
+const confirmedCustomData =
+  JSON.parse(
+    ReviewCustomConfirm.window.localStorage
+      .getItem("forge:data")
+  );
+
+const confirmedCustomProgram =
+  JSON.parse(
+    ReviewCustomConfirm.window.localStorage
+      .getItem("forge:program")
+  );
+
+check(
+  "confirming review saves custom exercise and program together",
+  confirmedCustomData
+    .myExercises[confirmedCustomId]
+    .name==="Progressive Accelerations"
+  && confirmedCustomData
+       .myExercises[confirmedCustomId]
+       .shape==="rounds"
+  && confirmedCustomProgram.name
+     ==="Custom Exercise Import"
+  && confirmedCustomProgram
+       .days[0]
+       .exercises[0]
+       .exerciseId===confirmedCustomId
+  && confirmedCustomProgram
+       .days[0]
+       .exercises[0]
+       .name==="Progressive Accelerations"
+  && ReviewCustomConfirm.window.eval(`
+       exerciseShapeForName(
+         "Progressive Accelerations"
+       )==="rounds"
+       && trainingPlanPendingExerciseEntries.length===0
+     `)
+);
+
+const ReviewCustomSwitch = boot(
+  V3_CFG,
+  Object.assign(
+    {},
+    EMPTY_DATA,
+    {
+      workouts:[],
+      activeWorkoutDraft:null,
+      myExercises:{}
+    }
+  ),
+  null,
+  TEST_PROGRAM
+);
+
+const dReviewCustomSwitch =
+  ReviewCustomSwitch.window.document;
+
+ReviewCustomSwitch.window.eval(`
+  openTrainingPlanReview(
+    ${JSON.stringify(CUSTOM_EXERCISE_REVIEW_FIXTURE)}
+  );
+`);
+
+const switchControls =
+  customReviewControls(dReviewCustomSwitch);
+
+switchControls.shape.value="rounds";
+
+switchControls.use.dispatchEvent(
+  new ReviewCustomSwitch.window.Event(
+    "click",
+    {bubbles:true}
+  )
+);
+
+const switchSelect =
+  dReviewCustomSwitch.querySelector(
+    'select[data-review-key="0:0"]'
+  );
+
+const sprintIntervalsOption =
+  [...switchSelect.options]
+    .find(option=>
+      option.textContent
+        .startsWith("Sprint Intervals ·")
+    );
+
+switchSelect.value =
+  sprintIntervalsOption
+    ? sprintIntervalsOption.value
+    : "";
+
+switchSelect.dispatchEvent(
+  new ReviewCustomSwitch.window.Event(
+    "change",
+    {bubbles:true}
+  )
+);
+
+check(
+  "choosing an existing exercise discards the unused pending custom exercise",
+  !!sprintIntervalsOption
+  && ReviewCustomSwitch.window.eval(`
+       Object.keys(
+         trainingPlanReviewState.customExercises
+       ).length===0
+       && trainingPlanPendingExerciseEntries.length===0
+       && trainingPlanReviewState
+            .prepared
+            .candidate
+            .days[0]
+            .exercises[0]
+            .exerciseId
+          ==="bp:sprint-intervals"
+     `)
+);
+
+const ReviewCustomDataFailure = boot(
+  V3_CFG,
+  Object.assign(
+    {},
+    EMPTY_DATA,
+    {
+      workouts:[],
+      activeWorkoutDraft:null,
+      myExercises:{}
+    }
+  ),
+  null,
+  TEST_PROGRAM
+);
+
+const dReviewCustomDataFailure =
+  ReviewCustomDataFailure.window.document;
+
+ReviewCustomDataFailure.window.eval(`
+  openTrainingPlanReview(
+    ${JSON.stringify(CUSTOM_EXERCISE_REVIEW_FIXTURE)}
+  );
+`);
+
+const dataFailureControls =
+  customReviewControls(
+    dReviewCustomDataFailure
+  );
+
+dataFailureControls.shape.value="rounds";
+
+dataFailureControls.use.dispatchEvent(
+  new ReviewCustomDataFailure.window.Event(
+    "click",
+    {bubbles:true}
+  )
+);
+
+ReviewCustomDataFailure.window.eval(`
+  save=()=>false;
+`);
+
+dReviewCustomDataFailure
+  .getElementById("trainingPlanReviewConfirmBtn")
+  .dispatchEvent(
+    new ReviewCustomDataFailure.window.Event(
+      "click",
+      {bubbles:true}
+    )
+  );
+
+check(
+  "custom-exercise save failure leaves active program unchanged",
+  ReviewCustomDataFailure.window.eval("program.name")
+     ===TEST_PROGRAM.name
+  && ReviewCustomDataFailure.window.eval(`
+       Object.values(data.myExercises||{})
+         .every(
+           entry=>
+             entry.name!=="Progressive Accelerations"
+         )
+     `)
+  && !dReviewCustomDataFailure
+       .getElementById(
+         "trainingPlanReviewOverlay"
+       )
+       .classList.contains("hidden")
+  && /custom exercises could not be saved/i.test(
+       dReviewCustomDataFailure
+         .getElementById(
+           "trainingPlanReviewError"
+         )
+         .textContent
+     )
+);
+
+const ReviewCustomProgramFailure = boot(
+  V3_CFG,
+  Object.assign(
+    {},
+    EMPTY_DATA,
+    {
+      workouts:[],
+      activeWorkoutDraft:null,
+      myExercises:{}
+    }
+  ),
+  null,
+  TEST_PROGRAM
+);
+
+const dReviewCustomProgramFailure =
+  ReviewCustomProgramFailure.window.document;
+
+ReviewCustomProgramFailure.window.eval(`
+  openTrainingPlanReview(
+    ${JSON.stringify(CUSTOM_EXERCISE_REVIEW_FIXTURE)}
+  );
+`);
+
+const programFailureControls =
+  customReviewControls(
+    dReviewCustomProgramFailure
+  );
+
+programFailureControls.shape.value="rounds";
+
+programFailureControls.use.dispatchEvent(
+  new ReviewCustomProgramFailure.window.Event(
+    "click",
+    {bubbles:true}
+  )
+);
+
+ReviewCustomProgramFailure.window.eval(`
+  saveProgram=()=>false;
+`);
+
+dReviewCustomProgramFailure
+  .getElementById("trainingPlanReviewConfirmBtn")
+  .dispatchEvent(
+    new ReviewCustomProgramFailure.window.Event(
+      "click",
+      {bubbles:true}
+    )
+  );
+
+check(
+  "program save failure rolls pending custom exercise back",
+  ReviewCustomProgramFailure.window.eval("program.name")
+     ===TEST_PROGRAM.name
+  && ReviewCustomProgramFailure.window.eval(`
+       Object.values(data.myExercises||{})
+         .every(
+           entry=>
+             entry.name!=="Progressive Accelerations"
+         )
+     `)
+  && !dReviewCustomProgramFailure
+       .getElementById(
+         "trainingPlanReviewOverlay"
+       )
+       .classList.contains("hidden")
+  && /No custom exercises were kept/i.test(
+       dReviewCustomProgramFailure
+         .getElementById(
+           "trainingPlanReviewError"
+         )
+         .textContent
+     )
+);
+
+const ReviewSaveFailure = boot(
+  V3_CFG,
+  V2_DATA,
+  null,
+  TEST_PROGRAM
+);
+
+const dReviewSaveFailure =
+  ReviewSaveFailure.window.document;
+
+ReviewSaveFailure.window.eval(`
+  saveProgram=()=>false;
+
+  openTrainingPlanReview(
+    ${JSON.stringify(TRAINING_PLAN_REVIEW_FIXTURE)}
+  );
+`);
+
+dReviewSaveFailure
+  .getElementById("trainingPlanReviewConfirmBtn")
+  .dispatchEvent(
+    new ReviewSaveFailure.window.Event(
+      "click",
+      {bubbles:true}
+    )
+  );
+
+check(
+  "training-plan save failure rolls back and keeps review open",
+  ReviewSaveFailure.window.eval("program.name")
+     ===TEST_PROGRAM.name
+  && !dReviewSaveFailure
+       .getElementById("trainingPlanReviewOverlay")
+       .classList.contains("hidden")
+  && /could not be saved/i.test(
+       dReviewSaveFailure
+         .getElementById("trainingPlanReviewError")
+         .textContent
+     )
+);
+
+const FileReview = boot(
+  V3_CFG,
+  V2_DATA,
+  null,
+  TEST_PROGRAM
+);
+
+const dFileReview =
+  FileReview.window.document;
+
+FileReview.window.FileReader = class {
+  readAsText(file){
+    this.result = file.contents;
+    this.onload();
+  }
+};
+
+Object.defineProperty(
+  dFileReview.getElementById("importFile"),
+  "files",
+  {
+    configurable:true,
+    value:[{
+      contents:
+        JSON.stringify(
+          TRAINING_PLAN_REVIEW_FIXTURE
+        )
+    }]
+  }
+);
+
+dFileReview
+  .getElementById("importFile")
+  .dispatchEvent(
+    new FileReview.window.Event(
+      "change",
+      {bubbles:true}
+    )
+  );
+
+check(
+  "program file load routes to review before replacement",
+  !dFileReview
+    .getElementById("trainingPlanReviewOverlay")
+    .classList.contains("hidden")
+  && FileReview.window.eval("program.name")
+     ===TEST_PROGRAM.name
+);
+
+const PasteReview = boot(
+  V3_CFG,
+  V2_DATA,
+  null,
+  TEST_PROGRAM
+);
+
+const dPasteReview =
+  PasteReview.window.document;
+
+Object.defineProperty(
+  PasteReview.window.navigator,
+  "clipboard",
+  {
+    configurable:true,
+    value:{
+      readText:async()=>(
+        "Here is the program:\n```json\n"
+        +JSON.stringify(
+          TRAINING_PLAN_REVIEW_FIXTURE
+        )
+        +"\n```"
+      )
+    }
+  }
+);
+
+dPasteReview
+  .getElementById("pasteProgBtn")
+  .dispatchEvent(
+    new PasteReview.window.Event(
+      "click",
+      {bubbles:true}
+    )
+  );
+
+await wait(20);
+
+check(
+  "pasted AI program routes to review before replacement",
+  !dPasteReview
+    .getElementById("trainingPlanReviewOverlay")
+    .classList.contains("hidden")
+  && PasteReview.window.eval("program.name")
+     ===TEST_PROGRAM.name
+);
+
+const ExportReview = boot(
+  V3_CFG,
+  V2_DATA,
+  null,
+  TEST_PROGRAM
+);
+
+const dExportReview =
+  ExportReview.window.document;
+
+ExportReview.window.eval(`
+  program=
+    prepareTrainingPlanImport(
+      ${JSON.stringify(TRAINING_PLAN_REVIEW_FIXTURE)}
+    ).candidate;
+
+  window.__trainingPlanDownload=null;
+
+  download=(name,content)=>{
+    window.__trainingPlanDownload={
+      name:name,
+      content:content
+    };
+  };
+`);
+
+dExportReview
+  .getElementById("exportBtn")
+  .dispatchEvent(
+    new ExportReview.window.Event(
+      "click",
+      {bubbles:true}
+    )
+  );
+
+const exportedTrainingPlan =
+  JSON.parse(
+    ExportReview.window.eval(
+      "window.__trainingPlanDownload.content"
+    )
+  );
+
+check(
+  "Save file exports the public versioned interchange instead of internal storage",
+  exportedTrainingPlan.format
+     ==="blackpyre-training-plan"
+  && exportedTrainingPlan.version===1
+  && exportedTrainingPlan.program.name
+     ==="Interchange Shape Coverage"
+  && /-training-plan\.json$/.test(
+       ExportReview.window.eval(
+         "window.__trainingPlanDownload.name"
+       )
+     )
+);
+
+const ShareReview = boot(
+  V3_CFG,
+  V2_DATA,
+  null,
+  TEST_PROGRAM
+);
+
+const dShareReview =
+  ShareReview.window.document;
+
+ShareReview.window.eval(`
+  program=
+    prepareTrainingPlanImport(
+      ${JSON.stringify(TRAINING_PLAN_REVIEW_FIXTURE)}
+    ).candidate;
+
+  window.__trainingPlanShareDownload=null;
+
+  download=(name,content)=>{
+    window.__trainingPlanShareDownload={
+      name:name,
+      content:content
+    };
+  };
+
+  try {
+    Object.defineProperty(
+      navigator,
+      "share",
+      {
+        configurable:true,
+        value:undefined
+      }
+    );
+
+    Object.defineProperty(
+      navigator,
+      "canShare",
+      {
+        configurable:true,
+        value:undefined
+      }
+    );
+  } catch(error){}
+`);
+
+dShareReview
+  .getElementById("shareBtn")
+  .dispatchEvent(
+    new ShareReview.window.Event(
+      "click",
+      {bubbles:true}
+    )
+  );
+
+await wait(20);
+
+const sharedTrainingPlan =
+  JSON.parse(
+    ShareReview.window.eval(
+      "window.__trainingPlanShareDownload.content"
+    )
+  );
+
+check(
+  "Share fallback uses the same public versioned interchange",
+  sharedTrainingPlan.format
+     ==="blackpyre-training-plan"
+  && sharedTrainingPlan.version===1
+  && sharedTrainingPlan.program.days.length===2
+);
+
+const AIReview = boot(
+  Object.assign(
+    {},
+    V3_CFG,
+    {
+      anthropicKey:"sk-test",
+      aiProvider:"anthropic"
+    }
+  ),
+  V2_DATA,
+  null,
+  TEST_PROGRAM
+);
+
+const dAIReview =
+  AIReview.window.document;
+
+const extractedPublicPlan =
+  AIReview.window.eval(`
+    extractAIPayloads(
+      ${JSON.stringify(
+        "```json\n"
+        +JSON.stringify(
+          TRAINING_PLAN_REVIEW_FIXTURE
+        )
+        +"\n```"
+      )}
+    ).program
+  `);
+
+check(
+  "AI payload extraction recognizes the public training-plan wrapper",
+  extractedPublicPlan.format
+     ==="blackpyre-training-plan"
+  && extractedPublicPlan.version===1
+);
+
+check(
+  "Coach instructions teach the public format and forbid invented exercise IDs",
+  AIReview.window.eval(`
+    coachSystem().includes(
+      '"format":"blackpyre-training-plan"'
+    )
+    && coachSystem().includes(
+      "Do not invent exerciseId"
+    )
+    && coachSystem().includes(
+      "unknown exercise names require review"
+    )
+  `)
+);
+
+AIReview.window.eval(`
+  addCoachBubble(
+    "ai",
+    "I built a reviewed training plan.",
+    {
+      program:
+        ${JSON.stringify(TRAINING_PLAN_REVIEW_FIXTURE)}
+    }
+  );
+`);
+
+const coachProgramButton =
+  [
+    ...dAIReview.querySelectorAll(
+      "#coachMsgs button.act"
+    )
+  ].find(
+    button=>
+      /Review program/.test(button.textContent)
+  );
+
+check(
+  "Coach program proposal exposes a review action",
+  !!coachProgramButton
+);
+
+if (coachProgramButton){
+  coachProgramButton.dispatchEvent(
+    new AIReview.window.Event(
+      "click",
+      {bubbles:true}
+    )
+  );
+}
+
+check(
+  "Coach program action opens review instead of replacing immediately",
+  !!coachProgramButton
+  && !dAIReview
+       .getElementById("trainingPlanReviewOverlay")
+       .classList.contains("hidden")
+  && AIReview.window.eval("program.name")
+     ===TEST_PROGRAM.name
+);
+
+const allReviewControls =
+  [
+    ...dAIReview
+      .getElementById("trainingPlanReviewOverlay")
+      .querySelectorAll(
+        "input,select,textarea,button"
+      )
+  ];
+
+check(
+  "training-plan review controls all have accessible names",
+  allReviewControls.length>=3
+  && allReviewControls.every(control=>{
+    if (
+      control.getAttribute("aria-label")
+      && control.getAttribute("aria-label").trim()
+    ) return true;
+
+    if (
+      control.getAttribute("aria-labelledby")
+      && control.getAttribute("aria-labelledby").trim()
+    ) return true;
+
+    return control.tagName==="BUTTON"
+      && !!control.textContent.trim();
+  })
+);
+
+
+// ================= post-v76: suppress timer during training-plan review =================
+const ReviewTimerDock = boot(
+  V3_CFG,
+  V2_DATA,
+  null,
+  TEST_PROGRAM
+);
+
+const dReviewTimerDock =
+  ReviewTimerDock.window.document;
+
+ReviewTimerDock.window.eval(
+  'activateView("work",null,false)'
+);
+
+dReviewTimerDock
+  .getElementById("restStartBtn")
+  .dispatchEvent(
+    new ReviewTimerDock.window.Event(
+      "click",
+      {bubbles:true}
+    )
+  );
+
+ReviewTimerDock.window.eval(`
+  openTrainingPlanReview(
+    ${JSON.stringify(TRAINING_PLAN_REVIEW_FIXTURE)}
+  )
+`);
+
+check(
+  "training-plan review hides the rest timer and removes its reserved space",
+  dReviewTimerDock
+    .getElementById("restDock")
+    .classList.contains("hidden")
+  && !dReviewTimerDock.body.classList.contains(
+       "rest-dock-visible"
+     )
+  && !dReviewTimerDock.body.classList.contains(
+       "rest-options-open"
+     )
+);
+
+check(
+  "hidden review timer continues running without being reset",
+  ReviewTimerDock.window.eval(
+    "restRunning===true && restPaused===false"
+  )
+  && JSON.parse(
+       ReviewTimerDock.window.localStorage.getItem(
+         "forge:rest-timer"
+       )
+     ).status==="running"
+);
+
+dReviewTimerDock
+  .getElementById("trainingPlanReviewCancelBtn")
+  .dispatchEvent(
+    new ReviewTimerDock.window.Event(
+      "click",
+      {bubbles:true}
+    )
+  );
+
+await wait(10);
+
+check(
+  "closing training-plan review restores the Train timer dock",
+  !dReviewTimerDock
+    .getElementById("restDock")
+    .classList.contains("hidden")
+  && dReviewTimerDock.body.classList.contains(
+       "rest-dock-visible"
+     )
+  && !dReviewTimerDock.body.classList.contains(
+       "rest-options-open"
+     )
+  && ReviewTimerDock.window.eval(
+       "restRunning===true"
+     )
+);
+
+ReviewTimerDock.window.eval("cancelRest()");
 
 summary("INTEGRATION");
 })().catch(e=>{ console.error(e); process.exit(1); });

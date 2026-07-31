@@ -221,5 +221,802 @@ check("under target = in-progress, not red", !bar("cal",1500,1800).includes("ove
 check("todayStr is YYYY-MM-DD", /^\d{4}-\d{2}-\d{2}$/.test(E("todayStr()")));
 check("todayStr matches local date", E("todayStr()")===dstr(0));
 
+// ---------- versioned training-plan interchange core ----------
+const trainingPlanFixturePath =
+  path.join(
+    __dirname,
+    "fixtures",
+    "training-plan-interchange-v1.json"
+  );
+
+const TRAINING_PLAN_FIXTURE =
+  JSON.parse(
+    fs.readFileSync(
+      trainingPlanFixturePath,
+      "utf8"
+    )
+  );
+
+check(
+  "training-plan v1 fixture parses",
+  E(
+    `inspectTrainingPlanDocument(
+      ${JSON.stringify(TRAINING_PLAN_FIXTURE)}
+    ).ok`
+  )===true
+);
+
+check(
+  "training-plan wrong format is rejected",
+  E(
+    `inspectTrainingPlanDocument({
+      format:"not-blackpyre",
+      version:1,
+      program:{name:"X",days:[]}
+    }).code`
+  )==="wrong-format"
+);
+
+check(
+  "training-plan newer version is rejected safely",
+  E(
+    `inspectTrainingPlanDocument({
+      format:"blackpyre-training-plan",
+      version:2,
+      program:{name:"X",days:[]}
+    }).newer`
+  )===true
+);
+
+check(
+  "training-plan missing required structure is rejected",
+  E(
+    `inspectTrainingPlanDocument({
+      format:"blackpyre-training-plan",
+      version:1,
+      program:{name:"X"}
+    }).ok`
+  )===false
+);
+
+check(
+  "invalid training-plan JSON is rejected without mutation",
+  E(
+    `inspectTrainingPlanDocument("{broken").code`
+  )==="invalid-json"
+);
+
+check(
+  "Sprinting is a canonical time-distance exercise",
+  E(
+    `exerciseModelEntryForId(
+      "bp:sprinting"
+    ).shape`
+  )==="timeDist"
+);
+
+check(
+  "exact built-in exercise id resolves first",
+  E(
+    `resolveTrainingPlanExercise({
+      exerciseId:"bp:bench-press",
+      name:"Bench Press"
+    }).method`
+  )==="exact-built-in-id"
+);
+
+check(
+  "exact exercise name resolves",
+  E(
+    `resolveTrainingPlanExercise({
+      name:"Back Squat"
+    }).method`
+  )==="exact-name"
+);
+
+check(
+  "exercise alias resolves",
+  E(
+    `resolveTrainingPlanExercise({
+      name:"running"
+    }).method`
+  )==="alias"
+);
+
+check(
+  "safe case and whitespace normalization resolves",
+  E(
+    `resolveTrainingPlanExercise({
+      name:"  BACK   SQUAT  "
+    }).method`
+  )==="normalized"
+);
+
+check(
+  "fuzzy suggestions rank but never auto-select",
+  E(
+    `(()=>{
+      const r=
+        resolveTrainingPlanExercise({
+          name:"Sprintng"
+        });
+      return (
+        !r.ok
+        && r.code==="unknown"
+        && r.suggestions[0].id
+           ==="bp:sprinting"
+      );
+    })()`
+  )
+);
+
+const originalMyExercisesTP =
+  E(`JSON.stringify(data.myExercises||{})`);
+
+E(
+  `data.myExercises[
+    "u:training-plan-test"
+  ]={
+    id:"u:training-plan-test",
+    name:"Tempo Step Pattern",
+    shape:"rounds",
+    tags:["conditioning"],
+    aliases:["tempo steps"],
+    formerNames:["old tempo steps"],
+    muscles:{
+      primary:["legs"],
+      secondary:[]
+    },
+    equipment:["step"],
+    unilateral:false,
+    bodyweight:true,
+    deprecated:false
+  };`
+);
+
+check(
+  "exact user exercise id resolves",
+  E(
+    `resolveTrainingPlanExercise({
+      exerciseId:"u:training-plan-test",
+      name:"Tempo Step Pattern"
+    }).method`
+  )==="exact-user-id"
+);
+
+check(
+  "former custom exercise name resolves",
+  E(
+    `resolveTrainingPlanExercise({
+      name:"old tempo steps"
+    }).method`
+  )==="former-name"
+);
+
+E(
+  `data.myExercises[
+    "u:ambiguous-plan-test"
+  ]={
+    id:"u:ambiguous-plan-test",
+    name:"Bench-Press",
+    shape:"lift",
+    tags:["strength"],
+    aliases:[],
+    formerNames:[],
+    muscles:{
+      primary:["chest"],
+      secondary:[]
+    },
+    equipment:["barbell"],
+    unilateral:false,
+    bodyweight:false,
+    deprecated:false
+  };`
+);
+
+check(
+  "ambiguous safe-normalized name never auto-resolves",
+  E(
+    `(()=>{
+      const r=
+        resolveTrainingPlanExercise({
+          name:"bench press"
+        });
+      return (
+        !r.ok
+        && r.code==="ambiguous"
+        && r.suggestions.length===2
+      );
+    })()`
+  )
+);
+
+E(
+  `data.myExercises=
+    JSON.parse(
+      ${JSON.stringify(originalMyExercisesTP)}
+    )`
+);
+
+const preparedTrainingPlan =
+  E(
+    `prepareTrainingPlanImport(
+      ${JSON.stringify(TRAINING_PLAN_FIXTURE)}
+    )`
+  );
+
+check(
+  "valid training-plan fixture is confirmable",
+  preparedTrainingPlan.ok
+  && preparedTrainingPlan.canConfirm
+  && preparedTrainingPlan.blockers===0
+);
+
+check(
+  "Sprinting resolves to timeDist with explicit interval prescription",
+  (()=>{
+    const row =
+      preparedTrainingPlan.review.find(
+        item=>
+          item.importedName==="Sprinting"
+      );
+
+    return (
+      row
+      && row.importedExerciseId
+         ==="bp:sprinting"
+      && row.exerciseId==="bp:sprinting"
+      && row.shape==="timeDist"
+      && row.resolutionMethod
+         ==="exact-built-in-id"
+    );
+  })()
+);
+
+check(
+  "all six canonical tracking shapes survive public import preparation",
+  [
+    "lift",
+    "reps",
+    "timeDist",
+    "carry",
+    "rounds",
+    "text"
+  ].every(
+    shape=>
+      preparedTrainingPlan.review.some(
+        row=>row.shape===shape
+      )
+  )
+);
+
+check(
+  "additional safe prescription fields are ignored without corrupting import",
+  E(
+    `(()=>{
+      const p=
+        ${JSON.stringify(TRAINING_PLAN_FIXTURE)};
+
+      p.program.days[0]
+        .exercises[0]
+        .prescription
+        .futureMetadata={
+          source:"AI"
+        };
+
+      const r=
+        prepareTrainingPlanImport(p);
+
+      return (
+        r.canConfirm
+        && r.warningCount>0
+      );
+    })()`
+  )
+);
+
+check(
+  "canonical shape conflict blocks confirmation",
+  E(
+    `(()=>{
+      const p=
+        ${JSON.stringify(TRAINING_PLAN_FIXTURE)};
+
+      p.program.days[0]
+        .exercises
+        .find(
+          x=>x.name==="Sprinting"
+        )
+        .trackingShape="lift";
+
+      const r=
+        prepareTrainingPlanImport(p);
+
+      return (
+        !r.canConfirm
+        && r.review.some(
+          x=>
+            x.importedName==="Sprinting"
+            && x.status
+               ==="Conflicting prescription"
+        )
+      );
+    })()`
+  )
+);
+
+check(
+  "unsafe weight field on Sprinting blocks confirmation",
+  E(
+    `(()=>{
+      const p=
+        ${JSON.stringify(TRAINING_PLAN_FIXTURE)};
+
+      p.program.days[0]
+        .exercises
+        .find(
+          x=>x.name==="Sprinting"
+        )
+        .prescription
+        .weight=100;
+
+      const r=
+        prepareTrainingPlanImport(p);
+
+      return !r.canConfirm;
+    })()`
+  )
+);
+
+check(
+  "unknown imported exercise never defaults to lift",
+  E(
+    `(()=>{
+      const r=
+        prepareTrainingPlanImport({
+          name:"Unknown",
+          days:[{
+            id:"D1",
+            title:"Day",
+            exercises:[{
+              name:"Mystery Movement",
+              scheme:"3 × 8"
+            }]
+          }]
+        });
+
+      return (
+        r.ok
+        && !r.canConfirm
+        && r.review[0].shape===null
+        && r.candidate===null
+      );
+    })()`
+  )
+);
+
+check(
+  "legacy repeated Sprinting remaps to Sprint Intervals rounds",
+  E(
+    `(()=>{
+      const r=
+        prepareTrainingPlanImport({
+          name:"Legacy",
+          days:[{
+            id:"D1",
+            title:"Day",
+            exercises:[{
+              name:"Sprinting",
+              scheme:"6 × 20 sec"
+            }]
+          }]
+        });
+
+      const row = r.review[0];
+      const exercise =
+        r.candidate.days[0]
+          .exercises[0];
+      const p = exercise.prescription;
+
+      return (
+        r.canConfirm
+        && row.importedName==="Sprinting"
+        && row.canonicalName
+           ==="Sprint Intervals"
+        && row.exerciseId
+           ==="bp:sprint-intervals"
+        && row.shape==="rounds"
+        && row.resolutionMethod
+           ==="semantic-sprint-intervals"
+        && row.warnings.includes(
+             "Repeated sprint prescription resolved as Sprint Intervals."
+           )
+        && exercise.exerciseId
+           ==="bp:sprint-intervals"
+        && exercise.name
+           ==="Sprint Intervals"
+        && p.rounds===6
+        && p.workSeconds===20
+        && !Object.prototype.hasOwnProperty.call(
+             p,
+             "intervals"
+           )
+        && !Object.prototype.hasOwnProperty.call(
+             p,
+             "durationSeconds"
+           )
+        && !Object.prototype.hasOwnProperty.call(
+             p,
+             "reps"
+           )
+        && !Object.prototype.hasOwnProperty.call(
+             p,
+             "weight"
+           )
+      );
+    })()`
+  )
+);
+
+check(
+  "single legacy Sprinting duration remains timeDist",
+  E(
+    `(()=>{
+      const r=
+        prepareTrainingPlanImport({
+          name:"Single Sprint",
+          days:[{
+            id:"D1",
+            title:"Day",
+            exercises:[{
+              name:"Sprinting",
+              scheme:"20 sec"
+            }]
+          }]
+        });
+
+      const row = r.review[0];
+      const p =
+        r.candidate.days[0]
+          .exercises[0]
+          .prescription;
+
+      return (
+        r.canConfirm
+        && row.exerciseId==="bp:sprinting"
+        && row.shape==="timeDist"
+        && p.durationSeconds===20
+        && !Object.prototype.hasOwnProperty.call(
+             p,
+             "rounds"
+           )
+        && !Object.prototype.hasOwnProperty.call(
+             p,
+             "workSeconds"
+           )
+      );
+    })()`
+  )
+);
+
+check(
+  "single legacy Sprinting distance remains timeDist",
+  E(
+    `(()=>{
+      const r=
+        prepareTrainingPlanImport({
+          name:"Distance Sprint",
+          days:[{
+            id:"D1",
+            title:"Day",
+            exercises:[{
+              name:"Sprinting",
+              scheme:"100 m"
+            }]
+          }]
+        });
+
+      const row = r.review[0];
+      const p =
+        r.candidate.days[0]
+          .exercises[0]
+          .prescription;
+
+      return (
+        r.canConfirm
+        && row.exerciseId==="bp:sprinting"
+        && row.shape==="timeDist"
+        && p.distance===100
+        && p.distanceUnit==="m"
+        && !Object.prototype.hasOwnProperty.call(
+             p,
+             "rounds"
+           )
+      );
+    })()`
+  )
+);
+
+check(
+  "legacy Sprinting work-recovery prescription remaps to rounds",
+  E(
+    `(()=>{
+      const r=
+        prepareTrainingPlanImport({
+          name:"Recovered Sprints",
+          days:[{
+            id:"D1",
+            title:"Day",
+            exercises:[{
+              name:"Sprinting",
+              scheme:
+                "6 rounds, 20 sec work / 40 sec recovery"
+            }]
+          }]
+        });
+
+      const row = r.review[0];
+      const p =
+        r.candidate.days[0]
+          .exercises[0]
+          .prescription;
+
+      return (
+        r.canConfirm
+        && row.exerciseId
+           ==="bp:sprint-intervals"
+        && row.shape==="rounds"
+        && p.rounds===6
+        && p.workSeconds===20
+        && p.recoverySeconds===40
+      );
+    })()`
+  )
+);
+
+check(
+  "name-only structured repeated Sprinting remaps safely",
+  E(
+    `(()=>{
+      const r=
+        prepareTrainingPlanImport({
+          name:"Structured",
+          days:[{
+            id:"D1",
+            title:"Day",
+            exercises:[{
+              name:"Sprinting",
+              trackingShape:"timeDist",
+              prescription:{
+                intervals:6,
+                durationSeconds:20,
+                recoverySeconds:40
+              }
+            }]
+          }]
+        });
+
+      const row = r.review[0];
+      const p =
+        r.candidate.days[0]
+          .exercises[0]
+          .prescription;
+
+      return (
+        r.canConfirm
+        && row.exerciseId
+           ==="bp:sprint-intervals"
+        && row.shape==="rounds"
+        && p.rounds===6
+        && p.workSeconds===20
+        && p.recoverySeconds===40
+        && row.warnings.some(
+             warning=>
+               /trackingShape was replaced/.test(
+                 warning
+               )
+           )
+      );
+    })()`
+  )
+);
+
+
+check(
+  "legacy strength scheme remains strength prescription",
+  E(
+    `(()=>{
+      const r=
+        prepareTrainingPlanImport({
+          name:"Legacy",
+          days:[{
+            id:"D1",
+            title:"Day",
+            exercises:[{
+              name:"Bench Press",
+              scheme:"4 x 8–12"
+            }]
+          }]
+        });
+
+      const p=
+        r.candidate.days[0]
+          .exercises[0]
+          .prescription;
+
+      return (
+        r.canConfirm
+        && p.sets===4
+        && p.reps.min===8
+        && p.reps.max===12
+      );
+    })()`
+  )
+);
+
+check(
+  "unparseable legacy scheme is preserved without fabricated lift values",
+  E(
+    `(()=>{
+      const r=
+        prepareTrainingPlanImport({
+          name:"Legacy",
+          days:[{
+            id:"D1",
+            title:"Day",
+            exercises:[{
+              name:"Bench Press",
+              scheme:"Work up carefully"
+            }]
+          }]
+        });
+
+      const p=
+        r.candidate.days[0]
+          .exercises[0]
+          .prescription;
+
+      return (
+        r.canConfirm
+        && p.notes
+           ==="Work up carefully"
+        && !Object.prototype
+             .hasOwnProperty.call(
+               p,
+               "reps"
+             )
+        && !Object.prototype
+             .hasOwnProperty.call(
+               p,
+               "weight"
+             )
+      );
+    })()`
+  )
+);
+
+check(
+  "stored canonical exerciseId controls workout editor shape",
+  E(
+    `makePlanSessionState({
+      exerciseId:"bp:sprinting",
+      name:"Old Sprint Label",
+      scheme:"6 × 20 sec"
+    },null).mode`
+  )==="timeDist"
+);
+
+check(
+  "public export and re-import round-trip is confirmable",
+  E(
+    `(()=>{
+      const first=
+        prepareTrainingPlanImport(
+          ${JSON.stringify(TRAINING_PLAN_FIXTURE)}
+        );
+
+      const exported=
+        trainingPlanInterchangeFromProgram(
+          first.candidate
+        );
+
+      const second=
+        prepareTrainingPlanImport(
+          exported
+        );
+
+      return (
+        second.canConfirm
+        && second.review.length
+           ===first.review.length
+        && second.review.every(
+          x=>!!x.exerciseId
+        )
+      );
+    })()`
+  )
+);
+
+check(
+  "all 203 canonical built-ins route to their stored editor contract",
+  E(
+    `(()=>{
+      const expected = {
+        lift:{
+          mode:"rows",
+          rowShape:"lift"
+        },
+        reps:{
+          mode:"rows",
+          rowShape:"reps"
+        },
+        timeDist:{
+          mode:"timeDist",
+          rowShape:null
+        },
+        carry:{
+          mode:"carry",
+          rowShape:null
+        },
+        rounds:{
+          mode:"rounds",
+          rowShape:null
+        },
+        text:{
+          mode:"text",
+          rowShape:null
+        }
+      };
+
+      return (
+        EXERCISE_LIBRARY.length===203
+        && EXERCISE_LIBRARY.every(
+          entry=>{
+            const state =
+              makePlanSessionState(
+                {
+                  exerciseId:entry.id,
+                  name:entry.name,
+                  scheme:""
+                },
+                null
+              );
+
+            const contract =
+              expected[entry.shape];
+
+            return (
+              !!contract
+              && state.mode
+                 ===contract.mode
+              && state.rowShape
+                 ===contract.rowShape
+            );
+          }
+        )
+      );
+    })()`
+  )
+);
+
+check(
+  "every canonical name and id resolve to the same stored shape",
+  E(
+    `EXERCISE_LIBRARY.length===203
+     && EXERCISE_LIBRARY.every(
+       entry=>
+         exerciseModelEntryForId(
+           entry.id
+         )===entry
+         && exerciseModelEntryForName(
+              entry.name
+            )===entry
+         && exerciseShapeForName(
+              entry.name
+            )===entry.shape
+     )`
+  )
+);
+
 summary("UNIT");
 })().catch(e=>{ console.error(e); process.exit(1); });

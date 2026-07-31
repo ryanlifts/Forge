@@ -5147,6 +5147,36 @@ const EXERCISE_LIBRARY = [
     "deprecated": false
   },
   {
+    "id": "bp:sprinting",
+    "name": "Sprinting",
+    "shape": "timeDist",
+    "tags": [
+      "cardio",
+      "conditioning",
+      "power"
+    ],
+    "aliases": [
+      "sprint"
+    ],
+    "formerNames": [],
+    "muscles": {
+      "primary": [
+        "legs"
+      ],
+      "secondary": [
+        "core"
+      ]
+    },
+    "equipment": [
+      "road",
+      "track",
+      "treadmill"
+    ],
+    "unilateral": false,
+    "bodyweight": false,
+    "deprecated": false
+  },
+  {
     "id": "bp:sprint-intervals",
     "name": "Sprint Intervals",
     "shape": "rounds",
