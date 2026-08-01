@@ -7,5 +7,6 @@ npm ci --silent
 cd ..
 node tests/unit.test.js
 node tests/integration.test.js
+node tests/card-profiles.test.js
 echo ""
 echo "GAUNTLET GREEN — safe to ship."
