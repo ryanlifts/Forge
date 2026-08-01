@@ -570,6 +570,17 @@ function backupSafeCfg(){
 function normalBackupText(){
   return JSON.stringify({cfg:backupSafeCfg(),program:program,data:data},null,2);
 }
+function verifiedNormalBackupText(){
+  const text = normalBackupText();
+  let envelope;
+  try { envelope = JSON.parse(text); }
+  catch(e){ throw new Error("The backup could not be verified as JSON."); }
+  const candidate = prepareRecoveryBackupEnvelope(envelope);
+  if (!candidate.ok){
+    throw new Error(candidate.reason || "The backup could not be verified for restore.");
+  }
+  return text;
+}
 function recordBackupAttempt(kind){
   const meta = currentBackupMeta();
   meta.lastBackupAttemptAt = new Date().toISOString();
@@ -599,11 +610,23 @@ function backupCanShareFile(file){
     return false;
   }
 }
-function backupReadyMessage(btnId){
-  ackBtn(btnId,"✓ Backup ready");
-  flashSave("Backup ready. Save the file somewhere you can access later.");
+function backupDownloadMessage(btnId, fallback){
+  ackBtn(btnId,"✓ Download started");
+  flashSave(
+    (fallback ? "Sharing was unavailable, so a verified backup download started. " : "Verified backup download started. ")+
+    "Check your browser or device's Downloads location."
+  );
 }
-async function doBackup(btnId){
+function backupShareMessage(btnId){
+  ackBtn(btnId,"✓ Backup ready");
+  flashSave("Backup ready. Confirm where you saved or shared the file.");
+}
+function backupFailureMessage(btnId){
+  ackBtn(btnId,"✕ Backup failed");
+  flashSave("Backup could not be created. Your existing data is unchanged.", true);
+}
+async function doBackup(btnId, shareAfterSave){
+  const shareRequested = shareAfterSave===true;
   if (protectedMode){
     const ok = confirm("This export contains only what BlackPyre could read — it may be incomplete and is NOT a normal backup. Your original data remains preserved on this device. Export anyway?");
     if (!ok) return false;
@@ -613,23 +636,54 @@ async function doBackup(btnId){
       program:JSON.parse(protectedSnapshotStrings.program)
     } : {cfg:cfg, data:data, program:program};
     const cfgPartial = Object.assign({}, snap.cfg); delete cfgPartial.anthropicKey; delete cfgPartial.openaiKey;
-    download("blackpyre-PARTIAL-"+todayStr()+".json", JSON.stringify({cfg:cfgPartial, program:snap.program, data:snap.data}, null, 2));
+    const partialName = "blackpyre-PARTIAL-"+todayStr()+".json";
+    const partialText = JSON.stringify({cfg:cfgPartial, program:snap.program, data:snap.data}, null, 2);
+    let partialFile = null;
+    if (shareRequested && typeof File==="function"){
+      try { partialFile = new File([partialText],partialName,{type:"application/json"}); }
+      catch(e){}
+    }
+    if (shareRequested && backupCanShareFile(partialFile)){
+      try {
+        await navigator.share({files:[partialFile],title:"BlackPyre partial recovery export",text:"BlackPyre partial recovery export"});
+        ackBtn(btnId, "✓ Partial export");
+        flashSave("Partial recovery export ready. Confirm where you saved or shared it.");
+        return true;
+      } catch(error){
+        if (error && error.name==="AbortError"){
+          flashSave("Partial recovery export sharing canceled. Your original data remains unchanged.");
+          return false;
+        }
+      }
+    }
+    try { download(partialName,partialText); }
+    catch(e){ backupFailureMessage(btnId); return false; }
     ackBtn(btnId, "✓ Partial export");
+    flashSave(shareRequested
+      ? "Sharing was unavailable, so the partial recovery export download started."
+      : "Partial recovery export download started.");
     return true;
   }
 
   const filename = "blackpyre-backup-"+todayStr()+".json";
-  recordBackupAttempt("share");
-  save();
+  let backupText;
+  try { backupText = verifiedNormalBackupText(); }
+  catch(e){
+    renderBackup();
+    backupFailureMessage(btnId);
+    return false;
+  }
 
   let file = null;
-  if (typeof File==="function"){
+  if (shareRequested && typeof File==="function"){
     try {
-      file = new File([normalBackupText()],filename,{type:"application/json"});
+      file = new File([backupText],filename,{type:"application/json"});
     } catch(e){}
   }
 
-  if (backupCanShareFile(file)){
+  if (shareRequested && backupCanShareFile(file)){
+    recordBackupAttempt("share");
+    save();
     try {
       await navigator.share({
         files:[file],
@@ -639,7 +693,7 @@ async function doBackup(btnId){
       recordBackupActivity("share");
       save();
       renderBackup();
-      backupReadyMessage(btnId);
+      backupShareMessage(btnId);
       return true;
     } catch(error){
       if (error && error.name==="AbortError"){
@@ -651,12 +705,18 @@ async function doBackup(btnId){
     }
   }
 
+  try {
+    download(filename,backupText);
+  } catch(e){
+    renderBackup();
+    backupFailureMessage(btnId);
+    return false;
+  }
   recordBackupAttempt("download");
   recordBackupActivity("download");
   save();
-  download(filename,normalBackupText());
   renderBackup();
-  backupReadyMessage(btnId);
+  backupDownloadMessage(btnId,shareRequested);
   return true;
 }
 function remindBackupLater(){
@@ -669,8 +729,9 @@ function remindBackupLater(){
   flashSave("Backup reminder postponed for "+BACKUP_REMINDER_SNOOZE_DAYS+" days.");
   return true;
 }
-document.getElementById("exportDataBtn").addEventListener("click", ()=>doBackup("exportDataBtn"));
-document.getElementById("backupNowBtn").addEventListener("click", ()=>doBackup("backupNowBtn"));
+document.getElementById("exportDataBtn").addEventListener("click", ()=>doBackup("exportDataBtn",false));
+document.getElementById("shareDataBtn").addEventListener("click", ()=>doBackup("shareDataBtn",true));
+document.getElementById("backupNowBtn").addEventListener("click", ()=>doBackup("backupNowBtn",false));
 document.getElementById("backupLaterBtn").addEventListener("click", remindBackupLater);
 function exportRawRecoveryOriginals(){
   const payload = makeRawRecoveryEnvelope();
@@ -832,7 +893,7 @@ function renderBackup(){
     } else if (activity.kind==="download-started"){
       line.textContent =
         "Last backup download started: "+age+
-        ". The browser cannot confirm where the file was saved; keep a copy somewhere you can access later.";
+        ". Your browser or device controls its configured Downloads location, and BlackPyre cannot confirm the final save; keep another copy somewhere you can access later.";
     } else {
       line.textContent =
         "Last recorded backup activity: "+age+
@@ -975,4 +1036,3 @@ document.getElementById("dashWtBtn").addEventListener("click", ()=>{
   ackBtn("dashWtBtn", "✓");
   checkWeightAdjust(v);
 });
-

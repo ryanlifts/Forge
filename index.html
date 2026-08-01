@@ -1581,7 +1581,10 @@
       <div class="disclosure-body">
     <div class="card">
       <div class="label" style="margin-bottom:10px;">Data</div>
-      <button class="btn ghost small" id="exportDataBtn">Back up all data (.json)</button>
+      <button class="btn ghost small" id="exportDataBtn">BACK UP ON THIS DEVICE</button>
+      <div style="height:10px;"></div>
+      <button class="btn ghost small" id="shareDataBtn">SHARE OR SAVE ELSEWHERE…</button>
+      <div class="note" style="margin-top:8px;"><b>BACK UP ON THIS DEVICE</b> creates a verified .json file and starts a download without opening Share. A web app cannot choose the folder: your browser or device uses its configured Downloads location. On iPhone or iPad, check the Files app at Safari’s Downloads location; on desktop, check your browser’s Downloads. <b>SHARE OR SAVE ELSEWHERE…</b> opens the platform share/save choices when file sharing is supported, with the same verified download as a fallback. Keep another copy elsewhere.</div>
       <div class="note" id="storageUseNote" style="margin-top:8px;"></div>
       <div style="height:10px;"></div>
       <button class="btn ghost small" id="importDataBtn">Restore from backup</button>
@@ -1602,7 +1605,7 @@
         </div>
       </div>
       <input type="file" id="importDataFile" aria-label="BlackPyre backup file to restore" accept=".json,application/json" class="hidden">
-      <div class="note">BlackPyre stores data on this device. Use backup/restore to move data between devices. True cross-device sync would require optional cloud/account support in a future version.</div>
+      <div class="note">BlackPyre’s live data and recovery snapshots stay in this browser/PWA’s site storage and can be lost if that storage or the installed PWA is removed. Downloaded backup files are separate, but a copy kept only on this device can still be lost if the device is lost, erased, or replaced.</div>
     </div>
       </div>
     </details>

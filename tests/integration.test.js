@@ -71,12 +71,33 @@ check("saved accent (steel) preserved", B.window.document.documentElement.style.
 check("weight page trend + goal line render", B.window.document.getElementById("chartLabel").textContent==="Trend · 225 → 175" && B.window.document.getElementById("chart").innerHTML.includes("GOAL 175"));
 
 // backup / restore round-trip
+check("web backup actions use distinct platform-appropriate labels and honest destinations",
+  B.window.document.getElementById("exportDataBtn").textContent==="BACK UP ON THIS DEVICE"
+  && B.window.document.getElementById("shareDataBtn").textContent==="SHARE OR SAVE ELSEWHERE…"
+  && /configured Downloads location/.test(B.window.document.getElementById("exportDataBtn").parentElement.textContent)
+  && /Safari’s Downloads location/.test(B.window.document.getElementById("exportDataBtn").parentElement.textContent)
+  && /browser’s Downloads/.test(B.window.document.getElementById("exportDataBtn").parentElement.textContent)
+  && !/On My iPhone\s*→\s*BlackPyre/.test(B.window.document.getElementById("exportDataBtn").parentElement.textContent));
+
+const webBackupFaq = B.window.eval(`FAQ.find(item=>item.q==="Where are my backups saved?")`);
+check("backup FAQ explains both actions, actual web storage, and same-device loss risks",
+  !!webBackupFaq
+  && /BACK UP ON THIS DEVICE/.test(webBackupFaq.a)
+  && /SHARE OR SAVE ELSEWHERE…/.test(webBackupFaq.a)
+  && /configured Downloads location/.test(webBackupFaq.a)
+  && /site storage/.test(webBackupFaq.a)
+  && /lost, erased, or replaced/.test(webBackupFaq.a)
+  && /Keep another copy elsewhere/.test(webBackupFaq.a)
+  && !/On My iPhone\s*→\s*BlackPyre/.test(webBackupFaq.a));
+
 B.window.eval(`cfg.anthropicKey="sk-test-A"; cfg.openaiKey="sk-test-O"; cfg.usdaKey="usda-keep"; cfg.aiProvider="anthropic"; saveCfg();
-window.__dl=null; download=(n,c)=>{window.__dl=c;}; doBackup("exportDataBtn");`);
+window.__dl=null; download=(n,c)=>{window.__dl=c;}; doBackup("exportDataBtn",false);`);
 check("normal backup excludes Anthropic and OpenAI keys but retains the USDA key",
   !B.window.eval("window.__dl").includes("sk-test-A")
   && !B.window.eval("window.__dl").includes("sk-test-O")
   && B.window.eval("window.__dl").includes("usda-keep"));
+check("downloaded normal backup passes the existing restore-envelope verifier",
+  B.window.eval(`prepareRecoveryBackupEnvelope(JSON.parse(window.__dl)).ok`)===true);
 B.window.eval(`
   const b = JSON.parse(window.__dl);
   delete b.cfg.calTarget; delete b.cfg.proTarget; b.cfg.calLo=1500; b.cfg.calHi=1700; b.cfg.proLo=160; b.cfg.proHi=180;
@@ -148,7 +169,7 @@ BackupReminder.window.eval(`
   window.__backupMessage=null;
   download=(name,text)=>{window.__backupDownload={name,text};};
   flashSave=(message,bad)=>{window.__backupMessage={message,bad};};
-  doBackup("backupNowBtn");
+  doBackup("exportDataBtn",false);
 `);
 const browserDownloadBackup =
   JSON.parse(BackupReminder.window.eval("window.__backupDownload.text"));
@@ -162,7 +183,19 @@ check("browser backup download keeps USDA, strips private AI keys, and uses hone
   browserDownloadBackup.cfg.usdaKey==="keep-usda"
   && browserDownloadBackup.cfg.anthropicKey===undefined
   && browserDownloadBackup.cfg.openaiKey===undefined
-  && BackupReminder.window.eval("window.__backupMessage.message")==="Backup ready. Save the file somewhere you can access later.");
+  && BackupReminder.window.eval("window.__backupMessage.message")==="Verified backup download started. Check your browser or device's Downloads location."
+  && BackupReminder.window.eval(`prepareRecoveryBackupEnvelope(JSON.parse(window.__backupDownload.text)).ok`)===true);
+
+BackupReminder.window.eval(`window.__backupDownload=null; window.__backupMessage=null;`);
+const unsupportedShareResult = await BackupReminder.window.eval(`doBackup("shareDataBtn",true)`);
+check("unsupported file sharing safely falls back to the same verified download",
+  unsupportedShareResult===true
+  && !!BackupReminder.window.__backupDownload
+  && BackupReminder.window.eval("data.meta.lastBackupAttemptKind")==="download"
+  && BackupReminder.window.eval(`prepareRecoveryBackupEnvelope(JSON.parse(window.__backupDownload.text)).ok`)===true
+  && /^Sharing was unavailable, so a verified backup download started/.test(
+    BackupReminder.window.eval("window.__backupMessage.message")
+  ));
 
 const ShareBackup = bootRaw({
   cfg:RAW_V2_CFG,
@@ -181,9 +214,19 @@ const ShareBackup = bootRaw({
 });
 ShareBackup.window.eval(`
   window.__backupMessage=null;
+  window.__backupDownload=null;
+  download=(name,text)=>{window.__backupDownload={name,text};};
   flashSave=(message,bad)=>{window.__backupMessage={message,bad};};
 `);
-await ShareBackup.window.eval(`doBackup("backupNowBtn")`);
+await ShareBackup.window.eval(`doBackup("exportDataBtn",false)`);
+
+check("BACK UP ON THIS DEVICE never opens Web Share even when file sharing is supported",
+  typeof ShareBackup.window.__sharedBackup==="undefined"
+  && !!ShareBackup.window.__backupDownload
+  && ShareBackup.window.eval(`prepareRecoveryBackupEnvelope(JSON.parse(window.__backupDownload.text)).ok`)===true);
+
+ShareBackup.window.eval(`window.__backupDownload=null; window.__backupMessage=null;`);
+await ShareBackup.window.eval(`doBackup("shareDataBtn",true)`);
 
 check("resolved Web Share records attempt and completed browser activity separately",
   ShareBackup.window.eval("data.meta.lastBackupAttemptKind")==="share"
@@ -193,9 +236,37 @@ check("resolved Web Share records attempt and completed browser activity separat
   && /blackpyre-backup-/.test(ShareBackup.window.__sharedBackup.files[0].name));
 
 check("resolved Web Share still uses non-durability backup language",
-  ShareBackup.window.eval("window.__backupMessage.message")==="Backup ready. Save the file somewhere you can access later."
+  ShareBackup.window.eval("window.__backupMessage.message")==="Backup ready. Confirm where you saved or shared the file."
   && /does not guarantee durable or offsite storage/.test(
     ShareBackup.window.document.getElementById("backupMetaLine").textContent
+  ));
+
+const FailedShareBackup = bootRaw({
+  cfg:RAW_V2_CFG,
+  data:JSON.stringify(backupReminderSeed),
+  program:RAW_PROGRAM,
+  install:backupOldInstall
+},w=>{
+  Object.defineProperty(w.navigator,"canShare",{configurable:true,value:()=>true});
+  Object.defineProperty(w.navigator,"share",{
+    configurable:true,
+    value:async ()=>{throw new Error("Share service unavailable");}
+  });
+});
+FailedShareBackup.window.eval(`
+  window.__backupDownload=null;
+  window.__backupMessage=null;
+  download=(name,text)=>{window.__backupDownload={name,text};};
+  flashSave=(message,bad)=>{window.__backupMessage={message,bad};};
+`);
+const failedShareResult = await FailedShareBackup.window.eval(`doBackup("shareDataBtn",true)`);
+check("failed file sharing safely falls back to a verified download",
+  failedShareResult===true
+  && !!FailedShareBackup.window.__backupDownload
+  && FailedShareBackup.window.eval("data.meta.lastBackupAttemptKind")==="download"
+  && FailedShareBackup.window.eval(`prepareRecoveryBackupEnvelope(JSON.parse(window.__backupDownload.text)).ok`)===true
+  && /^Sharing was unavailable, so a verified backup download started/.test(
+    FailedShareBackup.window.eval("window.__backupMessage.message")
   ));
 
 const CancelBackup = bootRaw({
@@ -221,11 +292,13 @@ const CancelBackup = bootRaw({
 });
 CancelBackup.window.eval(`
   window.__backupMessage=null;
+  window.__backupDownload=null;
+  download=(name,text)=>{window.__backupDownload={name,text};};
   flashSave=(message,bad)=>{window.__backupMessage={message,bad};};
 `);
 const cancelFoodBefore =
   CancelBackup.window.eval("JSON.stringify(data.food)");
-await CancelBackup.window.eval(`doBackup("backupNowBtn")`);
+await CancelBackup.window.eval(`doBackup("shareDataBtn",true)`);
 
 check("canceled Web Share records only the attempt and does not imply data loss",
   CancelBackup.window.eval("data.meta.lastBackupAttemptKind")==="share"
@@ -236,8 +309,30 @@ check("canceled Web Share records only the attempt and does not imply data loss"
   && /existing logs and settings are unchanged/.test(
     CancelBackup.window.eval("window.__backupMessage.message")
   )
+  && CancelBackup.window.__backupDownload===null
   && !CancelBackup.window.document
     .getElementById("backupCard").classList.contains("hidden"));
+
+const FailedVerificationBackup = bootRaw({
+  cfg:RAW_V2_CFG,
+  data:JSON.stringify(backupReminderSeed),
+  program:RAW_PROGRAM,
+  install:backupOldInstall
+});
+FailedVerificationBackup.window.eval(`
+  window.__backupDownload=null;
+  window.__backupMessage=null;
+  download=(name,text)=>{window.__backupDownload={name,text};};
+  flashSave=(message,bad)=>{window.__backupMessage={message,bad};};
+  prepareRecoveryBackupEnvelope=()=>({ok:false,reason:"Verification rejected"});
+`);
+const failedVerificationResult = await FailedVerificationBackup.window.eval(`doBackup("exportDataBtn",false)`);
+check("verification failure stops the download and reports a safe failure",
+  failedVerificationResult===false
+  && FailedVerificationBackup.window.__backupDownload===null
+  && !FailedVerificationBackup.window.eval("data.meta.lastBackupAttemptAt")
+  && FailedVerificationBackup.window.eval("window.__backupMessage.bad")===true
+  && /could not be created/.test(FailedVerificationBackup.window.eval("window.__backupMessage.message")));
 
 const sacredBytes = dom=>({
   cfg:dom.window.localStorage.getItem("forge:cfg"),
@@ -1916,7 +2011,7 @@ check("v62 a catalog suggestion opens its exact listed serving for review", dC62
 check("v62 review shows the USDA per-100g values and correctly scaled serving", /USDA reference · SR28/.test(dC62.getElementById("selName").textContent) && /165 kcal/.test(dC62.getElementById("selPer100").textContent) && dC62.getElementById("calcCal").textContent==="186" && dC62.getElementById("calcPro").textContent==="35");
 check("v62 reviewing a broad-catalog suggestion never auto-logs it", C62.window.eval(`(data.food[todayStr()]||[]).length`)===beforeReview62);
 check("v62 FAQ explains USDA sourcing, exact servings, and real-world variation", C62.window.eval(`FAQ.some(x=>x.q==="How accurate are suggested-food calories and macros?"&&/per 100 grams/.test(x.a)&&/exact gram weight/.test(x.a)&&/NDB number/.test(x.a)&&/brand/.test(x.a)) && FAQ.some(x=>x.q==="How do food suggestions work?"&&/120 common foods/.test(x.a)&&/familiar foods receive a bonus but are not required/.test(x.a)&&/does not call USDA or an AI/.test(x.a))`));
-check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v78-native-parity-6"'); })());
+check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v78-native-parity-7"'); })());
 check("v62 keeps primary schemaVersion 3", C62.window.eval("SCHEMA_VERSION")===3);
 
 // ================= ChatGPT handoff paste flow =================
@@ -2252,8 +2347,8 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache key matches the BlackPyre v78 release",
-  /const CACHE = "blackpyre-v78-native-parity-6";/.test(sw));
-check("v78 service-worker cache is refreshed", sw.includes('const CACHE = "blackpyre-v78-native-parity-6"'));
+  /const CACHE = "blackpyre-v78-native-parity-7";/.test(sw));
+check("v78 service-worker cache is refreshed", sw.includes('const CACHE = "blackpyre-v78-native-parity-7"'));
 
 await wait(0);
 releaseTestWindows([
@@ -7620,7 +7715,7 @@ check(
   V78ServiceWorker.includes('"./data-exercise-card-profiles.js"')
   && V78ServiceWorker.includes('"./scripts/03-card-profiles.js"')
   && V78ServiceWorker.includes(
-    'const CACHE = "blackpyre-v78-native-parity-6"'
+    'const CACHE = "blackpyre-v78-native-parity-7"'
   )
 );
 
