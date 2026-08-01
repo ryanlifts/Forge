@@ -1916,7 +1916,7 @@ check("v62 a catalog suggestion opens its exact listed serving for review", dC62
 check("v62 review shows the USDA per-100g values and correctly scaled serving", /USDA reference · SR28/.test(dC62.getElementById("selName").textContent) && /165 kcal/.test(dC62.getElementById("selPer100").textContent) && dC62.getElementById("calcCal").textContent==="186" && dC62.getElementById("calcPro").textContent==="35");
 check("v62 reviewing a broad-catalog suggestion never auto-logs it", C62.window.eval(`(data.food[todayStr()]||[]).length`)===beforeReview62);
 check("v62 FAQ explains USDA sourcing, exact servings, and real-world variation", C62.window.eval(`FAQ.some(x=>x.q==="How accurate are suggested-food calories and macros?"&&/per 100 grams/.test(x.a)&&/exact gram weight/.test(x.a)&&/NDB number/.test(x.a)&&/brand/.test(x.a)) && FAQ.some(x=>x.q==="How do food suggestions work?"&&/120 common foods/.test(x.a)&&/familiar foods receive a bonus but are not required/.test(x.a)&&/does not call USDA or an AI/.test(x.a))`));
-check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v78-native-parity-5"'); })());
+check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v78-native-parity-6"'); })());
 check("v62 keeps primary schemaVersion 3", C62.window.eval("SCHEMA_VERSION")===3);
 
 // ================= ChatGPT handoff paste flow =================
@@ -2252,8 +2252,8 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache key matches the BlackPyre v78 release",
-  /const CACHE = "blackpyre-v78-native-parity-5";/.test(sw));
-check("v78 service-worker cache is refreshed", sw.includes('const CACHE = "blackpyre-v78-native-parity-5"'));
+  /const CACHE = "blackpyre-v78-native-parity-6";/.test(sw));
+check("v78 service-worker cache is refreshed", sw.includes('const CACHE = "blackpyre-v78-native-parity-6"'));
 
 await wait(0);
 releaseTestWindows([
@@ -7599,6 +7599,14 @@ const V78Index=fs.readFileSync("index.html","utf8");
 const V78ServiceWorker=fs.readFileSync("sw.js","utf8");
 
 check(
+  "v78 home weight and goal metrics retain native emphasis",
+  /\.big\s*\{[^}]*font-size:50px/s.test(V78Index)
+  && /\.big small\s*\{[^}]*font-size:20px/s.test(V78Index)
+  && (V78Index.match(/class="big(?: ember-text)?"/g)||[])
+    .length===2
+);
+
+check(
   "v78 profile data and engine load before Train",
   V78Index.indexOf('src="data-exercise-card-profiles.js"')>=0
   && V78Index.indexOf('src="scripts/03-card-profiles.js"')
@@ -7612,7 +7620,7 @@ check(
   V78ServiceWorker.includes('"./data-exercise-card-profiles.js"')
   && V78ServiceWorker.includes('"./scripts/03-card-profiles.js"')
   && V78ServiceWorker.includes(
-    'const CACHE = "blackpyre-v78-native-parity-5"'
+    'const CACHE = "blackpyre-v78-native-parity-6"'
   )
 );
 
@@ -8588,8 +8596,13 @@ const NativeParityIndex77=
     "utf8"
   );
 
+const NativeParityRegularText77=
+  NativeParityIndex77
+    .replace(/\.big\s*\{[^}]*\}/s,"")
+    .replace(/\.big small\s*\{[^}]*\}/s,"");
+
 const NativeParityOversizeFonts77=[
-  ...NativeParityIndex77.matchAll(
+  ...NativeParityRegularText77.matchAll(
     /font-size\s*:\s*([0-9]+(?:\.[0-9]+)?)px/gi
   )
 ].filter(
@@ -8597,7 +8610,7 @@ const NativeParityOversizeFonts77=[
 );
 
 check(
-  "v77 interface text remains capped at 16px",
+  "v77 normal interface text remains capped at 16px",
   NativeParityOversizeFonts77.length===0
 );
 
