@@ -6,6 +6,7 @@
     "jsdom": "26.1.0"
   },
   "scripts": {
-    "test": "cd .. && node tests/unit.test.js && node tests/integration.test.js && node tests/card-profiles.test.js"
+    "test:nutrition-safety": "cd .. && node tests/phase1-nutrition-safety.test.js",
+    "test": "cd .. && node tests/phase1-nutrition-safety.test.js && node tests/unit.test.js && node tests/integration.test.js && node tests/card-profiles.test.js"
   }
 }

@@ -43,6 +43,12 @@ check("invalid macro calculation does not show green tap feedback", !dA.getEleme
 setvA("cAge","42"); setvA("cFt","5"); setvA("cIn","11"); setvA("cWt","225");
 clickA("calcMacrosBtn");
 check("valid macro calculation briefly turns Calculate green", dA.getElementById("calcMacrosBtn").classList.contains("acked") && dA.getElementById("calcMacrosBtn").textContent==="✓ Calculated");
+check("valid macro calculation persists its independent weight input", A.window.eval("cfg.calcInputs.lb===225"));
+const AReload = boot(
+  JSON.parse(A.window.localStorage.getItem("forge:cfg")),
+  JSON.parse(A.window.localStorage.getItem("forge:data"))
+);
+check("calculator weight survives a complete app relaunch", Number(AReload.window.document.getElementById("cWt").value)===225);
 
 setvA("sCalTarget","1800"); setvA("sProTarget","170"); setvA("sCarb","180"); setvA("sFat","55");
 clickA("saveSettingsBtn");
@@ -60,6 +66,7 @@ check("auto-balance lands exactly on budget", [0,1,2,3,4,5,6].reduce((a,i)=>a+Nu
 // ================= existing user preserved =================
 const B = boot(EXISTING_CFG, { food:{}, workouts:[], weights:[{date:"2026-07-01",lbs:220}], meta:{lastBackup:null,logsSince:0} });
 check("existing values intact", B.window.eval("cfg.calTarget")===1800 && B.window.eval("cfg.startWt")===225);
+check("legacy settings without a calculator weight use the latest weigh-in", Number(B.window.document.getElementById("cWt").value)===220);
 check("saved accent (steel) preserved", B.window.document.documentElement.style.getPropertyValue("--ember")==="#4D9DE0");
 check("weight page trend + goal line render", B.window.document.getElementById("chartLabel").textContent==="Trend · 225 → 175" && B.window.document.getElementById("chart").innerHTML.includes("GOAL 175"));
 
@@ -1665,6 +1672,7 @@ check("QUOTES loads from data-quotes.js", P.window.eval("Array.isArray(QUOTES) &
 check("LOCAL_DB loads from data-foods.js", P.window.eval("Array.isArray(LOCAL_DB) && LOCAL_DB.length > 100"));
 check("ALT_MAP loads from data-foods.js", P.window.eval("typeof ALT_MAP==='object' && Object.keys(ALT_MAP).length > 10"));
 check("FAQ loads from data-faq.js", P.window.eval("Array.isArray(FAQ) && FAQ.length > 10"));
+check("FAQ documents complete teen calculator access and youth guidance", P.window.eval(`FAQ.some(x=>x.q==="Can teenagers use the calorie and macro calculator?"&&x.a.includes("complete calculator")&&x.a.includes("20% protein / 55% carbohydrate / 25% fat")&&x.a.includes("without locking the controls"))`));
 check("FAQ explains exercise-level Save/Completed/Edit flow", P.window.eval(`FAQ.some(x=>x.q&&/Unsaved, Completed/.test(x.q)&&/Save Exercise/.test(x.a)&&/Log session/.test(x.a))`));
 check("FAQ no longer instructs per-set checkmarks", P.window.eval(`!FAQ.some(x=>x.a&&(x.a.includes("tap <b>✓</b>")||x.a.includes("Checking ✓")))`));
 check("FAQ documents optional automatic progression and assisted direction", P.window.eval(`FAQ.some(x=>x.q==="How does automatic progression work?"&&x.a.includes("Settings → Training")&&x.a.includes("5 lb less assistance")&&x.a.includes("New users start with it off")&&x.a.includes("Existing users retain")&&x.a.includes("carries the last logged weights forward unchanged"))`));
@@ -1686,7 +1694,7 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+"/.test(sw));
-check("v77 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v77"'));
+check("v80 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v80"'));
 
 const nativePrep76 = fs.readFileSync(
   path.join(__dirname,"..","tools","prepare-native.sh"),

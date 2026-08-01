@@ -7,7 +7,8 @@
     "test": "tests"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test:nutrition-safety": "node tests/phase1-nutrition-safety.test.js",
+    "test": "node tests/phase1-nutrition-safety.test.js && node tests/unit.test.js && node tests/integration.test.js && node tests/card-profiles.test.js"
   },
   "repository": {
     "type": "git",

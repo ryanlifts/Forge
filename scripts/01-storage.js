@@ -8,6 +8,18 @@ const SCHEMA_VERSION = 3, RECOVERY_FORMAT_VERSION = 1;
 const REST_TIMER_FORMAT_VERSION = 1;
 const AI_CFG_FIELDS = ["anthropicKey","openaiKey","aiProvider","aiModelAnth","aiModelOai","foodHandoffOn"];
 
+// Nutrition guidance is for self-directed adult use. The lower bound follows
+// NIDDK guidance that eating under 1,200 kcal/day is not advised; the upper
+// bound is a supported-input sanity limit, not a clinical recommendation.
+const MIN_DAILY_CALORIE_TARGET = 1200;
+const MAX_DAILY_CALORIE_TARGET = 10000;
+const MIN_DAILY_CALORIE_LABEL = "1,200";
+const NUTRITION_CALCULATOR_LIMITS = Object.freeze({
+  minAge:13, maxAge:100, minHeightIn:48, maxHeightIn:96, minWeightLb:50, maxWeightLb:700
+});
+const SUPPORTED_ACTIVITY_LEVELS = Object.freeze([1.2,1.375,1.55,1.725,1.9]);
+const SUPPORTED_GOAL_ADJUSTMENTS = Object.freeze([-1000,-500,-250,0,250]);
+
 const DEFAULT_CFG = { startWt:0, goalWt:0, calTarget:0, proTarget:0, carbGoal:0, fatGoal:0, accent:"gold", aiProvider:"handoff", foodHandoffOn:true, autoProgressionOn:false, foodSuggestionsOn:false, foodSuggestionsWeightLoss:true, foodSuggestionsAvoid:"" };
 const ACCENT_KEYS = ["ember","steel","emerald","crimson","violet","gold","pink"];
 
@@ -47,6 +59,21 @@ function isPlainObject(v){
   return p===Object.prototype || p===null;
 }
 function cloneJSON(v){ return JSON.parse(JSON.stringify(v)); }
+function calorieTargetSafety(value){
+  const target=Number(value);
+  if (!Number.isFinite(target)) return {ok:false, message:"Enter a valid daily calorie target."};
+  if (target<MIN_DAILY_CALORIE_TARGET) return {ok:false, message:"Daily calorie targets must be at least "+MIN_DAILY_CALORIE_LABEL+" kcal for self-directed use."};
+  if (target>MAX_DAILY_CALORIE_TARGET) return {ok:false, message:"Enter a daily calorie target no higher than "+MAX_DAILY_CALORIE_TARGET+" kcal."};
+  return {ok:true, value:Math.round(target)};
+}
+function calorieScheduleSafety(days){
+  if (!Array.isArray(days) || days.length!==7) return {ok:false, message:"Fill all seven daily calorie targets."};
+  for (let i=0;i<days.length;i++){
+    const check=calorieTargetSafety(days[i]);
+    if (!check.ok) return {ok:false, dayIndex:i, message:"Every scheduled day must be between "+MIN_DAILY_CALORIE_LABEL+" and "+MAX_DAILY_CALORIE_TARGET+" kcal."};
+  }
+  return {ok:true, values:days.map(v=>Math.round(Number(v)))};
+}
 // ================== exercise model contract ==================
 const EXERCISE_SHAPES = ["lift","reps","timeDist","carry","rounds","text"];
 const EXERCISE_TAGS = ["strength","push","pull","squat","hinge","lunge","core","carry","conditioning","cardio","mobility","power","olympic","strongman","bodyweight","machine","isolation","upper","lower","full-body","recovery","sport","rehab"];
@@ -2124,13 +2151,15 @@ if (_bootNeedsNativeRecovery){
 }
 // exact calorie target for a given date (schedule-aware); presets always rebalance to the same weekly total
 // days are Sun..Sat (JS getDay order)
-function presetDays(mode){
-  const b = cfg.calTarget;
+function calorieSchedulePreset(base, mode){
+  const b = Number(base);
+  if (!Number.isFinite(b) || b<=0) return null;
   if (mode==="frisat")    return [b-100, b-100, b-100, b-100, b-100, b+250, b+250]; // 5×(−100) = 2×(+250)
   if (mode==="satsun")    return [b+250, b-100, b-100, b-100, b-100, b-100, b+250];
   if (mode==="frisatsun") return [b+200, b-150, b-150, b-150, b-150, b+200, b+200]; // 4×(−150) = 3×(+200)
   return null;
 }
+function presetDays(mode){ return calorieSchedulePreset(cfg.calTarget, mode); }
 function schedDays(){
   const m = cfg.calSchedMode || "same";
   if (m==="custom") return (Array.isArray(cfg.calSchedDays) && cfg.calSchedDays.length===7) ? cfg.calSchedDays : null;
@@ -2517,4 +2546,3 @@ primaryTabs.forEach((btn,index)=>{
     primaryTabs[next].click();
   });
 });
-

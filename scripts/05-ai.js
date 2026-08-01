@@ -629,12 +629,22 @@ function schedNote(){
   if (mode!=="custom"){
     const d = presetDays(mode);
     const hi = Math.max.apply(null,d), lo = Math.min.apply(null,d);
+    if(!calorieScheduleSafety(d).ok){
+      note.style.color="var(--warn)";
+      note.textContent="This schedule would put a day below "+MIN_DAILY_CALORIE_LABEL+" kcal. Choose Same target every day or raise the base target.";
+      return;
+    }
     note.style.color="";
     note.textContent = "Higher days "+hi+" kcal · lower days "+lo+" kcal · weekly total unchanged at "+budget+" kcal.";
     return;
   }
   const total = schedReadInputs().reduce((a,x)=>a+x,0);
   const diff = budget - total;
+  if(!calorieScheduleSafety(schedReadInputs()).ok){
+    note.style.color="var(--warn)";
+    note.textContent="Every scheduled day must be at least "+MIN_DAILY_CALORIE_LABEL+" kcal.";
+    return;
+  }
   if (diff > 0){
     note.style.color="";
     note.textContent = "Weekly budget "+budget+" · scheduled "+total+" · remaining "+diff+" kcal (≈"+Math.round(diff/7)+"/day if spread across the week).";
@@ -2300,4 +2310,3 @@ function renderMeasure(){
     });
   }));
 }
-

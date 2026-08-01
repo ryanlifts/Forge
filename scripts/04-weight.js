@@ -186,18 +186,35 @@ function lastSessionFor(dayId){
 }
 
 // ================== ADAPTIVE TDEE ==================
+const ADAPTIVE_TDEE_LOOKBACK_DAYS = 28;
+const ADAPTIVE_TDEE_MIN_WEIGHT_ENTRIES = 4;
+const ADAPTIVE_TDEE_MIN_SPAN_DAYS = 14;
+const ADAPTIVE_TDEE_MIN_CALORIE_DAYS = 10;
+const ADAPTIVE_TDEE_MIN_CALORIE_COVERAGE = 0.70;
+const ADAPTIVE_TDEE_MAX_ABS_WEEKLY_CHANGE = 3;
+function adaptiveTDEERequiredCalorieDays(spanDays){
+  return Math.max(ADAPTIVE_TDEE_MIN_CALORIE_DAYS,Math.ceil(Number(spanDays)*ADAPTIVE_TDEE_MIN_CALORIE_COVERAGE));
+}
+function adaptiveTargetProposal(tdee, goalAdjustment){
+  const estimate=Number(tdee), adjustment=SUPPORTED_GOAL_ADJUSTMENTS.includes(Number(goalAdjustment)) ? Number(goalAdjustment) : 0;
+  if(!Number.isFinite(estimate) || estimate<MIN_DAILY_CALORIE_TARGET || estimate>MAX_DAILY_CALORIE_TARGET) return {ok:false, target:null, message:"The log-derived estimate is outside BlackPyre’s supported range."};
+  const target=Math.round(estimate+adjustment);
+  const safety=calorieTargetSafety(target);
+  return {ok:safety.ok, target:target, message:safety.ok?"":safety.message};
+}
 function computeTDEE(){
   const today = new Date();
-  const cutoff = new Date(today.getTime() - 28*86400000);
+  const cutoff = new Date(today.getTime() - ADAPTIVE_TDEE_LOOKBACK_DAYS*86400000);
   const cutStr = cutoff.getFullYear()+"-"+String(cutoff.getMonth()+1).padStart(2,"0")+"-"+String(cutoff.getDate()).padStart(2,"0");
-  const wts = data.weights.filter(w=>w.date>=cutStr).sort((a,b)=>a.date.localeCompare(b.date));
-  if (wts.length<4) return null;
+  const wts = data.weights.filter(w=>w.date>=cutStr && Number.isFinite(Number(w.lbs)) && Number(w.lbs)>=NUTRITION_CALCULATOR_LIMITS.minWeightLb && Number(w.lbs)<=NUTRITION_CALCULATOR_LIMITS.maxWeightLb).sort((a,b)=>a.date.localeCompare(b.date));
+  if (wts.length<ADAPTIVE_TDEE_MIN_WEIGHT_ENTRIES) return null;
   const spanDays = (new Date(wts[wts.length-1].date) - new Date(wts[0].date))/86400000;
-  if (spanDays<10) return null;
+  if (spanDays<ADAPTIVE_TDEE_MIN_SPAN_DAYS) return null;
   const tStr = todayStr();
   const calDays = Object.keys(data.food).filter(d=>d>=wts[0].date && d<=wts[wts.length-1].date && d<tStr)
     .map(d=>daySums(d).cal).filter(c=>c>800);
-  if (calDays.length<7) return null;
+  const requiredDays=adaptiveTDEERequiredCalorieDays(spanDays);
+  if (calDays.length<requiredDays) return null;
   const avgCal = calDays.reduce((s,c)=>s+c,0)/calDays.length;
   // least-squares slope of weight in lb/day
   const t0 = new Date(wts[0].date).getTime();
@@ -209,31 +226,51 @@ function computeTDEE(){
   if (!denom) return null;
   const slope = (n*sxy - sx*sy)/denom; // lb per day
   const tdee = avgCal - slope*3500;
-  return { tdee:Math.round(tdee), avgCal:Math.round(avgCal), weeklyChange:Math.round(slope*7*10)/10, days:calDays.length };
+  const weeklyChange=Math.round(slope*7*10)/10;
+  if(!Number.isFinite(tdee) || Math.abs(weeklyChange)>ADAPTIVE_TDEE_MAX_ABS_WEEKLY_CHANGE || !adaptiveTargetProposal(tdee,0).ok) return null;
+  return { tdee:Math.round(tdee), avgCal:Math.round(avgCal), weeklyChange:weeklyChange, days:calDays.length, requiredDays:requiredDays, spanDays:Math.round(spanDays) };
 }
 let lastTDEE = null;
 function renderTDEE(){
   const card = document.getElementById("tdeeCard");
   lastTDEE = computeTDEE();
   if(!lastTDEE){ card.classList.add("hidden"); return; }
+  const configuredAdjustment=Number(cfg.calcInputs&&cfg.calcInputs.goal);
+  const fallbackAdjustment=cfg.goalWt&&cfg.startWt&&cfg.goalWt<cfg.startWt ? -500 : 0;
+  lastTDEE.goalAdjustment=SUPPORTED_GOAL_ADJUSTMENTS.includes(configuredAdjustment) ? configuredAdjustment : fallbackAdjustment;
+  lastTDEE.proposal=adaptiveTargetProposal(lastTDEE.tdee,lastTDEE.goalAdjustment);
   card.classList.remove("hidden");
   document.getElementById("tdeeText").innerHTML =
-    'Measured TDEE: <b class="ember-text">'+lastTDEE.tdee+' kcal/day</b><br>'
-    +'Based on '+lastTDEE.days+' logged days, avg '+lastTDEE.avgCal+' kcal, trending '
-    +(lastTDEE.weeklyChange<=0? lastTDEE.weeklyChange : "+"+lastTDEE.weeklyChange)+' lb/week';
+    'Estimated TDEE from your logs: <b class="ember-text">'+lastTDEE.tdee+' kcal/day</b><br>'
+    +'Based on '+lastTDEE.days+' sufficiently logged days across '+lastTDEE.spanDays+' days, avg '+lastTDEE.avgCal+' kcal, trending '
+    +(lastTDEE.weeklyChange<=0? lastTDEE.weeklyChange : "+"+lastTDEE.weeklyChange)+' lb/week'
+    +(lastTDEE.proposal.ok?'<br>Suggested target to review: <b>'+lastTDEE.proposal.target+' kcal/day</b>':'');
+  const btn=document.getElementById("tdeeApplyBtn");
+  btn.disabled=!lastTDEE.proposal.ok;
+  btn.setAttribute("aria-disabled",String(!lastTDEE.proposal.ok));
+  const note=document.getElementById("tdeeSafetyText");
+  note.textContent=lastTDEE.proposal.ok
+    ? "This is a trend-based estimate, not a measurement or medical prescription. Review it in Settings before saving."
+    : "BlackPyre will not suggest this target because it would fall below the "+MIN_DAILY_CALORIE_LABEL+" kcal safety floor.";
+  note.style.color=lastTDEE.proposal.ok?"":"var(--warn)";
 }
 document.getElementById("tdeeApplyBtn").addEventListener("click", ()=>{
-  if(!lastTDEE) return;
-  const currentDeficit = cfg.calTarget - lastTDEE.tdee; // negative = deficit intent preserved? use target rate instead:
-  // preserve the user's current intended rate: assume they want the same deficit they originally set vs formula; simplest robust move: keep a 500 deficit if losing, else maintain
-  const losing = cfg.goalWt < cfg.startWt;
-  const target = lastTDEE.tdee + (losing ? -500 : 0);
-  cfg.calTarget = target;
-  const sortedW = data.weights.slice().sort((a,b)=>a.date.localeCompare(b.date));
-  cfg.lastTargetWt = sortedW.length ? sortedW[sortedW.length-1].lbs : cfg.lastTargetWt || cfg.startWt;
-  delete cfg.adjustPromptedAt;
-  saveCfg(); renderAll(); flashSave("Targets recalibrated ✓");
-  ackBtn("tdeeApplyBtn", "✓ Recalibrated");
+  if(!lastTDEE || !lastTDEE.proposal || !lastTDEE.proposal.ok){ flashSave("No safe target is available to review.",true); return; }
+  const target=lastTDEE.proposal.target;
+  const priorCal=Number(cfg.calTarget);
+  activateView("settings",null,false);
+  document.getElementById("settingsGoalsDetails").open=true;
+  document.getElementById("sCalTarget").value=target;
+  if(priorCal>0){
+    const ratio=target/priorCal;
+    if(Number(cfg.proTarget)>0) document.getElementById("sProTarget").value=Math.max(1,Math.round(cfg.proTarget*ratio));
+    if(Number(cfg.carbGoal)>0) document.getElementById("sCarb").value=Math.max(1,Math.round(cfg.carbGoal*ratio));
+    if(Number(cfg.fatGoal)>0) document.getElementById("sFat").value=Math.max(1,Math.round(cfg.fatGoal*ratio));
+  }
+  const field=document.getElementById("sCalTarget");
+  if(field.scrollIntoView) field.scrollIntoView({behavior:"smooth",block:"center"});
+  flashSave("Review the suggested target, then tap Save settings to apply it.");
+  ackBtn("tdeeApplyBtn", "✓ Ready to review");
 });
 
 // ================== STREAK ==================
@@ -776,4 +813,3 @@ document.getElementById("shareBtn").addEventListener("click", async ()=>{
 
   download(fname,json);
 });
-

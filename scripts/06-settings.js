@@ -1,5 +1,24 @@
 "use strict";
 // ================== FIRST-RUN SETUP WIZARD ==================
+const ADULT_CALCULATOR_ACTIVITY_LABELS = {
+  "1.2":"Sedentary (desk job, little exercise)",
+  "1.375":"Light (1–3 workouts/week)",
+  "1.55":"Moderate (3–5 workouts/week)",
+  "1.725":"Very active (6–7 workouts/week or physical job)",
+  "1.9":"Athlete (2-a-days or heavy labor + training)"
+};
+const TEEN_CALCULATOR_ACTIVITY_LABELS = {
+  "1.2":"Inactive (mostly seated; minimal daily movement)",
+  "1.375":"Low active (some daily walking and activity)",
+  "1.55":"Low active + exercise (daily movement and 3–5 workouts/week)",
+  "1.725":"Active (high daily movement and frequent exercise)",
+  "1.9":"Very active (vigorous daily work or hard training)"
+};
+function setCalculatorActivityLabels(selectId,isTeen){
+  const select=document.getElementById(selectId); if(!select) return;
+  const labels=isTeen?TEEN_CALCULATOR_ACTIVITY_LABELS:ADULT_CALCULATOR_ACTIVITY_LABELS;
+  Array.from(select.options).forEach(option=>{ if(labels[option.value]) option.textContent=labels[option.value]; });
+}
 let setupStep = 0;
 const SETUP_STEPS = 8;
 const setupChoice = {
@@ -79,9 +98,10 @@ function validateSetupStep(){
   }
   if (setupStep===1){
     const x=setupChoice.calcInputs||{};
-    if(!x.age || !x.ft){ flashSave("Fill age and height", true); return false; }
-    setupChoice.calc=calcMacros(x.sex,x.age,x.ft,x.inches,cfg.startWt,x.act,x.goal);
-    cfg.calcInputs={sex:x.sex,age:x.age,ft:x.ft,inches:x.inches,act:x.act,goal:x.goal};
+    const safe=safeMacroCalculation(x.sex,x.age,x.ft,x.inches,cfg.startWt,x.act,x.goal);
+    if(!safe.ok){ setupChoice.calc=null; flashSave(safe.message, true); return false; }
+    setupChoice.calc=safe.value;
+    cfg.calcInputs={sex:x.sex,age:x.age,ft:x.ft,inches:x.inches,lb:cfg.startWt,act:x.act,goal:x.goal};
     saveCfg();
   }
   if (setupStep===2){
@@ -96,11 +116,17 @@ function validateSetupStep(){
     if(!cfg.calTarget){ flashSave("Set nutrition targets first", true); return false; }
     if(setupChoice.schedMode==="custom"){
       const days=setupChoice.schedDays||[];
-      if(days.length!==7 || days.some(v=>!Number.isFinite(v)||v<=0)){ flashSave("Fill all seven daily calorie targets", true); return false; }
+      const safety=calorieScheduleSafety(days);
+      if(!safety.ok){ flashSave(safety.message, true); return false; }
       const total=days.reduce((a,x)=>a+x,0), budget=cfg.calTarget*7;
       if(total>budget){ flashSave("Over weekly budget by "+(total-budget)+" calories", true); return false; }
-      cfg.calSchedMode="custom"; cfg.calSchedDays=days.slice();
-    } else { cfg.calSchedMode=setupChoice.schedMode; cfg.calSchedDays=null; }
+      cfg.calSchedMode="custom"; cfg.calSchedDays=safety.values;
+    } else {
+      const preset=setupScheduleDays(setupChoice.schedMode);
+      const safety=calorieScheduleSafety(preset);
+      if(!safety.ok){ flashSave("That schedule would put a day below "+MIN_DAILY_CALORIE_LABEL+" kcal. Choose Same target every day or raise the base target.", true); return false; }
+      cfg.calSchedMode=setupChoice.schedMode; cfg.calSchedDays=null;
+    }
     saveCfg();
   }
   if (setupStep===4){ cfg.measureOn=!!setupChoice.measureOn; cfg.waterOn=!!setupChoice.waterOn; saveCfg(); }
@@ -146,27 +172,25 @@ function renderSetupSplit(){
     document.getElementById("suSpF").addEventListener("change",()=>rebalance("f"));
   }
   const g=setupSplitGrams(), s=setupChoice.split;
-  const label=s.mode==="rec"?"0.9g/lb protein · 25% fat · carbs from the rest":s.p+"% / "+s.c+"% / "+s.f+"%";
+  const label=s.mode==="rec"?(setupChoice.calc.isTeen?"Youth starting split · 20% protein / 55% carbs / 25% fat":"0.9g/lb protein · 25% fat · carbs from the rest"):s.p+"% / "+s.c+"% / "+s.f+"%";
   document.getElementById("suSplitGrams").innerHTML=label+' → <b class="ember-text">'+g.pro+'g P</b> · <b>'+g.carb+'g C</b> · <b>'+g.fat+'g F</b>';
   const warn=document.getElementById("suSplitWarn");
-  if(g.pro<cfg.startWt*0.7){ warn.textContent="This split gives only "+g.pro+"g protein. For muscle retention, choose a higher-protein split."; warn.classList.remove("hidden"); }
+  if(!setupChoice.calc.isTeen&&g.pro<cfg.startWt*0.7){ warn.textContent="This split gives only "+g.pro+"g protein. For muscle retention, choose a higher-protein split."; warn.classList.remove("hidden"); }
   else warn.classList.add("hidden");
 }
 function setupScheduleDays(mode){
-  const b=cfg.calTarget;
-  if(mode==="frisat") return [b-100,b-100,b-100,b-100,b-100,b+250,b+250];
-  if(mode==="satsun") return [b+250,b-100,b-100,b-100,b-100,b-100,b+250];
-  if(mode==="frisatsun") return [b+200,b-150,b-150,b-150,b-150,b+200,b+200];
-  return [b,b,b,b,b,b,b];
+  return calorieSchedulePreset(cfg.calTarget,mode) || [0,1,2,3,4,5,6].map(()=>cfg.calTarget);
 }
 function renderSetupSchedNote(){
   const note=document.getElementById("suSchedNote"), budget=cfg.calTarget*7;
   if(setupChoice.schedMode!=="custom"){
     const d=setupScheduleDays(setupChoice.schedMode), hi=Math.max(...d), lo=Math.min(...d);
+    if(!calorieScheduleSafety(d).ok){ note.style.color="var(--warn)"; note.textContent="This schedule would put a day below "+MIN_DAILY_CALORIE_LABEL+" kcal. Choose Same target every day or raise the base target."; return; }
     note.style.color=""; note.textContent=setupChoice.schedMode==="same"?"Weekly budget: "+budget+" kcal ("+cfg.calTarget+" every day).":"Higher days "+hi+" kcal · lower days "+lo+" kcal · weekly total "+budget+" kcal."; return;
   }
   const days=[0,1,2,3,4,5,6].map(i=>Number(document.getElementById("suSched"+i).value)||0);
   setupChoice.schedDays=days; const total=days.reduce((a,x)=>a+x,0), diff=budget-total;
+  if(!calorieScheduleSafety(days).ok){ note.style.color="var(--warn)"; note.textContent="Every day must be at least "+MIN_DAILY_CALORIE_LABEL+" kcal."; return; }
   note.style.color=diff<0?"var(--warn)":"";
   note.textContent=diff>0?"Weekly budget "+budget+" · scheduled "+total+" · remaining "+diff+" kcal.":diff<0?"Over weekly budget by "+(-diff)+" calories.":"Weekly budget "+budget+" · balanced ✓";
 }
@@ -187,13 +211,17 @@ function renderSetupStep(){
   if(setupStep===1){
     const ci=setupChoice.calcInputs||cfg.calcInputs||{};
     body.innerHTML='<div class="card"><div class="label">Step 2 · Calorie calculator</div><div class="row" style="margin:10px 0 10px;">'
-      +'<div><div class="label">Sex</div><select id="suSex"><option value="m">Male</option><option value="f">Female</option></select></div><div><div class="label">Age</div><input type="number" id="suAge" inputmode="numeric" placeholder="years"></div></div>'
-      +'<div class="row" style="margin-bottom:10px;"><div><div class="label">Height (ft)</div><input type="number" id="suFt" inputmode="numeric" placeholder="ft"></div><div><div class="label">Height (in)</div><input type="number" id="suIn" inputmode="numeric" placeholder="in"></div></div>'
+      +'<div><div class="label">Sex</div><select id="suSex"><option value="m">Male</option><option value="f">Female</option></select></div><div><div class="label">Age</div><input type="number" id="suAge" inputmode="numeric" min="13" max="100" placeholder="years"></div></div>'
+      +'<div class="row" style="margin-bottom:10px;"><div><div class="label">Height (ft)</div><input type="number" id="suFt" inputmode="numeric" min="4" max="8" placeholder="ft"></div><div><div class="label">Height (in)</div><input type="number" id="suIn" inputmode="numeric" min="0" max="11" placeholder="in"></div></div>'
       +'<div class="label">Activity level</div><select id="suAct" style="margin-bottom:10px;"><option value="1.2">Sedentary (desk job, little exercise)</option><option value="1.375">Light (1–3 workouts/week)</option><option value="1.55">Moderate (3–5 workouts/week)</option><option value="1.725">Very active (6–7 workouts/week or physical job)</option><option value="1.9">Athlete (2-a-days or heavy labor + training)</option></select>'
       +'<div class="label">Goal</div><select id="suGoal" style="margin-bottom:10px;"><option value="-1000">Lose 2 lb/week (aggressive)</option><option value="-500">Lose 1 lb/week</option><option value="-250">Lose 0.5 lb/week</option><option value="0">Maintain</option><option value="250">Gain 0.5 lb/week (lean bulk)</option></select>'
-      +'<div id="suCalcPreview" style="font-size:13px;line-height:1.8;margin-top:8px;"></div><div class="note">Uses the same Mifflin-St Jeor calculator and goal choices as Settings.</div></div>';
+      +'<div class="note hidden" id="suTeenModeNote" style="margin-bottom:10px;color:var(--warn);">Ages 13–17 use a youth-specific equation and youth starting macro split. Teen activity means total daily movement, not workouts alone. Review weight-change goals with a parent or guardian and pediatrician or registered dietitian.</div><div id="suCalcPreview" style="font-size:13px;line-height:1.8;margin-top:8px;"></div><div class="note">Supports ages 13+. Teen estimates require parent/guardian and pediatric guidance. Not for pregnancy or breastfeeding.</div></div>';
     document.getElementById("suSex").value=ci.sex||"m"; document.getElementById("suAge").value=ci.age||""; document.getElementById("suFt").value=ci.ft||""; document.getElementById("suIn").value=ci.inches||""; document.getElementById("suAct").value=String(ci.act||1.55); document.getElementById("suGoal").value=String(ci.goal!=null?ci.goal:-500);
-    if(setupChoice.calc) document.getElementById("suCalcPreview").innerHTML='Maintenance: <b>'+setupChoice.calc.tdee+'</b> kcal · Target: <b class="ember-text">'+setupChoice.calc.cal+' kcal</b>';
+    const syncTeenMode=()=>{ const age=Number(document.getElementById("suAge").value), teen=age>=13&&age<18; document.getElementById("suGoal").disabled=false; document.getElementById("suTeenModeNote").classList.toggle("hidden",!teen); setCalculatorActivityLabels("suAct",teen); };
+    document.getElementById("suAge").addEventListener("input",syncTeenMode); syncTeenMode();
+    if(setupChoice.calc) document.getElementById("suCalcPreview").innerHTML=setupChoice.calc.isTeen
+      ? 'Teen maintenance: <b>'+setupChoice.calc.tdee+'</b> kcal · Youth activity: <b>'+teenActivityCategoryLabel(setupChoice.calc.activityCategory)+'</b> · Selected target: <b class="ember-text">'+setupChoice.calc.cal+' kcal</b>'
+      : 'Maintenance: <b>'+setupChoice.calc.tdee+'</b> kcal · Target: <b class="ember-text">'+setupChoice.calc.cal+' kcal</b>';
   }
   if(setupStep===2){
     body.innerHTML='<div class="card"><div class="label">Step 3 · Macro split</div><div class="note" style="margin:8px 0 10px;">Choose the same macro split available in Settings.</div><div id="suSplitChips" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;"></div>'
@@ -203,8 +231,8 @@ function renderSetupStep(){
   }
   if(setupStep===3){
     body.innerHTML='<div class="card"><div class="label">Step 4 · Calorie schedule</div><select id="suSched" style="margin:10px 0;"><option value="same">Same target every day</option><option value="frisat">Higher Friday & Saturday</option><option value="satsun">Higher Saturday & Sunday</option><option value="frisatsun">Higher Friday–Sunday</option><option value="custom">Custom daily targets</option></select><div id="suSchedCustom" class="hidden">'
-      +'<div class="row" style="margin-bottom:8px;">'+[0,1,2,3].map((i)=>'<div><div class="label">'+["Sun","Mon","Tue","Wed"][i]+'</div><input type="number" id="suSched'+i+'" inputmode="numeric"></div>').join("")+'</div>'
-      +'<div class="row">'+[4,5,6].map((i)=>'<div><div class="label">'+["Thu","Fri","Sat"][i-4]+'</div><input type="number" id="suSched'+i+'" inputmode="numeric"></div>').join("")+'<div></div></div><button class="btn ghost small mt10" id="suSchedAuto" style="width:100%;">Auto-balance to weekly budget</button></div><div class="note" id="suSchedNote"></div></div>';
+      +'<div class="row" style="margin-bottom:8px;">'+[0,1,2,3].map((i)=>'<div><div class="label">'+["Sun","Mon","Tue","Wed"][i]+'</div><input type="number" id="suSched'+i+'" inputmode="numeric" min="1200" max="10000"></div>').join("")+'</div>'
+      +'<div class="row">'+[4,5,6].map((i)=>'<div><div class="label">'+["Thu","Fri","Sat"][i-4]+'</div><input type="number" id="suSched'+i+'" inputmode="numeric" min="1200" max="10000"></div>').join("")+'<div></div></div><button class="btn ghost small mt10" id="suSchedAuto" style="width:100%;">Auto-balance to weekly budget</button></div><div class="note" id="suSchedNote"></div></div>';
     const sel=document.getElementById("suSched"); sel.value=setupChoice.schedMode||"same";
     const custom=document.getElementById("suSchedCustom"); custom.classList.toggle("hidden",sel.value!=="custom");
     if(sel.value==="custom"){
@@ -324,6 +352,76 @@ function calcMacros(sex, age, ft, inches, lb, activity, goalAdj){
   const carb = Math.max(0, Math.round((cal - pro*4 - fat*9)/4));
   return { bmr:Math.round(bmr), tdee:Math.round(tdee), cal:cal, pro:pro, fat:fat, carb:carb };
 }
+function teenActivityCategory(activity){
+  const value=Number(activity);
+  if(value===1.2) return "inactive";
+  if(value===1.375||value===1.55) return "low";
+  if(value===1.725) return "active";
+  if(value===1.9) return "very";
+  return null;
+}
+function teenActivityCategoryLabel(category){
+  return {inactive:"Inactive",low:"Low active",active:"Active",very:"Very active"}[category]||"Unknown";
+}
+function calcTeenMacros(sex, age, ft, inches, lb, activity, goalAdj){
+  const kg=Number(lb)*0.4536, cm=(Number(ft)*12+Number(inches))*2.54;
+  const category=teenActivityCategory(activity);
+  const growth=Number(age)<14 ? (sex==="m"?25:30) : 20;
+  const male={
+    inactive:[-447.51,3.68,13.01,13.15], low:[19.12,3.68,8.62,20.28],
+    active:[-388.19,3.68,12.66,20.46], very:[-671.75,3.68,15.38,23.25]
+  };
+  const female={
+    inactive:[55.59,-22.25,8.43,17.07], low:[-297.54,-22.25,12.77,14.73],
+    active:[-189.55,-22.25,11.74,18.34], very:[-709.59,-22.25,18.22,14.25]
+  };
+  const c=(sex==="m"?male:female)[category];
+  const estimate=Math.round(c[0]+c[1]*Number(age)+c[2]*cm+c[3]*kg+growth);
+  const target=Math.round(estimate+Number(goalAdj));
+  return {bmr:null,tdee:estimate,cal:target,pro:Math.round(target*0.20/4),fat:Math.round(target*0.25/9),carb:Math.round(target*0.55/4),isTeen:true,formula:"DRI-2023",activityCategory:category};
+}
+function validateMacroCalculatorInputs(sex, age, ft, inches, lb, activity, goalAdj){
+  const heightIn=Number(ft)*12+Number(inches);
+  if (sex!=="m" && sex!=="f") return {ok:false, field:"sex", message:"Choose the sex used for the calorie estimate."};
+  if (!Number.isInteger(age) || age<NUTRITION_CALCULATOR_LIMITS.minAge || age>NUTRITION_CALCULATOR_LIMITS.maxAge) return {ok:false, field:"age", message:"The calculator supports ages 13–100. It is not designed for children under 13."};
+  if (!Number.isFinite(heightIn) || heightIn<NUTRITION_CALCULATOR_LIMITS.minHeightIn || heightIn>NUTRITION_CALCULATOR_LIMITS.maxHeightIn || Number(inches)<0 || Number(inches)>11) return {ok:false, field:"height", message:"Enter a height from 4 ft 0 in to 8 ft 0 in."};
+  if (!Number.isFinite(lb) || lb<NUTRITION_CALCULATOR_LIMITS.minWeightLb || lb>NUTRITION_CALCULATOR_LIMITS.maxWeightLb) return {ok:false, field:"weight", message:"Enter a weight from 50 to 700 lb."};
+  if (!SUPPORTED_ACTIVITY_LEVELS.includes(Number(activity))) return {ok:false, field:"activity", message:"Choose a supported activity level."};
+  if (!SUPPORTED_GOAL_ADJUSTMENTS.includes(Number(goalAdj))) return {ok:false, field:"goal", message:"Choose a supported weight goal."};
+  return {ok:true};
+}
+function safeMacroCalculation(sex, age, ft, inches, lb, activity, goalAdj){
+  const inputs=validateMacroCalculatorInputs(sex,age,ft,inches,lb,activity,goalAdj);
+  if(!inputs.ok) return inputs;
+  if(Number(age)<18){
+    const value=calcTeenMacros(sex,age,ft,inches,lb,activity,goalAdj);
+    const target=calorieTargetSafety(value.cal);
+    if(!target.ok) return {ok:false,field:"goal",value:value,message:value.cal<MIN_DAILY_CALORIE_TARGET?"That goal estimates "+value.cal+" kcal/day, below BlackPyre’s "+MIN_DAILY_CALORIE_LABEL+" kcal safety floor. Choose a slower goal and review it with a parent or guardian and pediatrician or registered dietitian.":target.message};
+    return {ok:true,value:value};
+  }
+  const value=calcMacros(sex,age,ft,inches,lb,activity,goalAdj);
+  const target=calorieTargetSafety(value.cal);
+  if(!target.ok){
+    return {ok:false, field:"goal", value:value, message:value.cal<MIN_DAILY_CALORIE_TARGET ? "That goal estimates "+value.cal+" kcal/day, below BlackPyre’s "+MIN_DAILY_CALORIE_LABEL+" kcal safety floor. Choose a slower goal or talk with a qualified clinician." : target.message};
+  }
+  return {ok:true, value:value};
+}
+function setInlineValidation(id,message){
+  const el=document.getElementById(id); if(!el) return;
+  el.textContent=message||""; el.classList.toggle("hidden",!message);
+}
+function renderMainCalculatorAgeMode(){
+  const age=Number(document.getElementById("cAge").value), teen=age>=13&&age<18;
+  document.getElementById("cGoal").disabled=false;
+  document.getElementById("calcTeenModeNote").classList.toggle("hidden",!teen);
+  setCalculatorActivityLabels("cAct",teen);
+}
+function showCalculatorValidationError(result){
+  ["cSex","cAge","cFt","cIn","cWt","cAct","cGoal"].forEach(id=>document.getElementById(id).removeAttribute("aria-invalid"));
+  setInlineValidation("calcValidationError",result&&result.message);
+  const ids={sex:["cSex"],age:["cAge"],height:["cFt","cIn"],weight:["cWt"],activity:["cAct"],goal:["cGoal"]};
+  (ids[result&&result.field]||[]).forEach(id=>document.getElementById(id).setAttribute("aria-invalid","true"));
+}
 let lastCalc = null;
 let splitState = { mode:"rec", p:40, c:30, f:30 }; // mode: rec | preset | custom
 const SPLIT_PRESETS = [
@@ -372,14 +470,14 @@ function renderSplit(){
   const g = splitGrams();
   if (!g) return;
   const label = splitState.mode==="rec"
-    ? "0.9g/lb protein · 25% fat · carbs from the rest"
+    ? (lastCalc.isTeen ? "Youth starting split · 20% protein / 55% carbs / 25% fat" : "0.9g/lb protein · 25% fat · carbs from the rest")
     : splitState.p+"% / "+splitState.c+"% / "+splitState.f+"%";
   document.getElementById("splitGrams").innerHTML =
     label+' → <b class="ember-text">'+g.pro+'g P</b> · <b>'+g.carb+'g C</b> · <b>'+g.fat+'g F</b>';
   // protein floor sanity check
   const wt = Number(document.getElementById("cWt").value) || cfg.startWt;
   const warn = document.getElementById("splitWarn");
-  if (g.pro < wt*0.7){
+  if (!lastCalc.isTeen&&g.pro < wt*0.7){
     warn.textContent = "This split gives only "+g.pro+"g protein ("+(Math.round(g.pro/wt*100)/100)+" g/lb). For muscle retention while losing weight, research supports a higher protein share.";
     warn.classList.remove("hidden");
   } else {
@@ -414,14 +512,29 @@ document.getElementById("calcMacrosBtn").addEventListener("click", ()=>{
   const lb = Number(document.getElementById("cWt").value);
   const act = Number(document.getElementById("cAct").value);
   const goal = Number(document.getElementById("cGoal").value);
-  if(!age || !ft || !lb) { flashSave("Fill age, height, weight", true); return; }
-  lastCalc = calcMacros(sex, age, ft, inches, lb, act, goal);
-  cfg.calcInputs = {sex:sex, age:age, ft:ft, inches:inches, act:act, goal:goal};
+  const safe=safeMacroCalculation(sex,age,ft,inches,lb,act,goal);
+  if(!safe.ok){
+    lastCalc=null;
+    document.getElementById("calcOut").classList.add("hidden");
+    showCalculatorValidationError(safe);
+    flashSave(safe.message,true);
+    return;
+  }
+  showCalculatorValidationError(null);
+  lastCalc = safe.value;
+  cfg.calcInputs = {sex:sex, age:age, ft:ft, inches:inches, lb:lb, act:act, goal:goal};
   saveCfg();
-  document.getElementById("calcOutText").innerHTML =
-    'Maintenance (TDEE): <b>'+lastCalc.tdee+'</b> kcal/day<br>'
-    +'Your target: <b class="ember-text">'+lastCalc.cal+' kcal</b>';
+  document.getElementById("calcOutText").innerHTML = lastCalc.isTeen
+    ? 'Teen maintenance (EER): <b>'+lastCalc.tdee+'</b> kcal/day<br>Youth activity category: <b>'+teenActivityCategoryLabel(lastCalc.activityCategory)+'</b><br>Your selected target: <b class="ember-text">'+lastCalc.cal+' kcal</b>'
+    : 'Maintenance (TDEE): <b>'+lastCalc.tdee+'</b> kcal/day<br>'+'Your target: <b class="ember-text">'+lastCalc.cal+' kcal</b>';
   document.getElementById("calcOut").classList.remove("hidden");
+  document.getElementById("calcMacroControls").classList.remove("hidden");
+  const safetyNote=document.getElementById("calcSafetyNote");
+  const safetyMessage=lastCalc.isTeen
+    ? "Ages 13–17 should review nutrition and weight goals with a parent or guardian and pediatrician or registered dietitian."
+    : goal===-1000 ? "A 2 lb/week goal is aggressive. CDC guidance favors gradual, steady loss; individual needs vary." : "";
+  safetyNote.classList.toggle("hidden",!safetyMessage);
+  safetyNote.textContent=safetyMessage;
   renderSplit();
   ackBtn("calcMacrosBtn", "✓ Calculated");
 });
@@ -437,6 +550,7 @@ document.getElementById("applyMacrosBtn").addEventListener("click", ()=>{
   saveCfg(); renderAll(); flashSave("Targets applied ✓");
   ackBtn("applyMacrosBtn", "✓ Targets applied");
 });
+["cSex","cAge","cFt","cIn","cWt","cAct","cGoal"].forEach(id=>document.getElementById(id).addEventListener("input",()=>{ showCalculatorValidationError(null); if(id==="cAge") renderMainCalculatorAgeMode(); }));
 
 // ---- weight-change adjustment prompt ----
 function checkWeightAdjust(newWt){
@@ -506,11 +620,31 @@ function renderSettings(){
     document.getElementById("cGoal").value = String(ci.goal!=null ? ci.goal : -500);
   }
   const sorted = data.weights.slice().sort((a,b)=>a.date.localeCompare(b.date));
-  document.getElementById("cWt").value = sorted.length ? sorted[sorted.length-1].lbs : shown(cfg.startWt);
+  const savedCalcWt=Number(ci&&ci.lb);
+  const fallbackCalcWt=sorted.length ? sorted[sorted.length-1].lbs : shown(cfg.startWt);
+  document.getElementById("cWt").value = Number.isFinite(savedCalcWt)
+    && savedCalcWt>=NUTRITION_CALCULATOR_LIMITS.minWeightLb
+    && savedCalcWt<=NUTRITION_CALCULATOR_LIMITS.maxWeightLb
+      ? savedCalcWt : fallbackCalcWt;
   if (cfg.splitState) splitState = Object.assign({}, cfg.splitState);
+  renderMainCalculatorAgeMode();
   renderSched();
   renderFoodSuggestionSettings();
   renderAutoProgressionSetting();
+}
+const SETTINGS_VALIDATION_FIELDS = [
+  "sStartWt","sGoalWt","sCalTarget","sProTarget","sCarb","sFat","sCalSched",
+  "sSched0","sSched1","sSched2","sSched3","sSched4","sSched5","sSched6"
+];
+function showSettingsValidationError(message,fieldIds){
+  SETTINGS_VALIDATION_FIELDS.forEach(id=>document.getElementById(id).removeAttribute("aria-invalid"));
+  setInlineValidation("settingsValidationError",message);
+  (fieldIds||[]).forEach(id=>document.getElementById(id).setAttribute("aria-invalid","true"));
+}
+function rejectSettings(message,fieldIds){
+  showSettingsValidationError(message,fieldIds);
+  flashSave(message,true);
+  return false;
 }
 document.getElementById("autoProgressionToggleBtn").addEventListener("click", ()=>{
   cfg.autoProgressionOn = !(cfg.autoProgressionOn !== false);
@@ -519,38 +653,53 @@ document.getElementById("autoProgressionToggleBtn").addEventListener("click", ()
   flashSave(cfg.autoProgressionOn ? "Automatic progression enabled ✓" : "Automatic progression disabled");
 });
 document.getElementById("saveSettingsBtn").addEventListener("click", ()=>{
+  showSettingsValidationError(null,[]);
   const g = id=>Number(document.getElementById(id).value);
   let schedSaveMsg = null;
-  cfg = Object.assign({}, cfg, {
+  const draft = Object.assign({}, cfg, {
     startWt: g("sStartWt")||cfg.startWt, goalWt: g("sGoalWt")||cfg.goalWt,
     calTarget: g("sCalTarget")||cfg.calTarget,
     proTarget: g("sProTarget")||cfg.proTarget,
     carbGoal: g("sCarb")||cfg.carbGoal, fatGoal: g("sFat")||cfg.fatGoal,
   });
+  const calSafety=calorieTargetSafety(draft.calTarget);
+  if(!calSafety.ok){ rejectSettings(calSafety.message,["sCalTarget"]); return; }
+  if(draft.startWt && (draft.startWt<50 || draft.startWt>700)){ rejectSettings("Starting weight must be between 50 and 700 lb.",["sStartWt"]); return; }
+  if(draft.goalWt && (draft.goalWt<50 || draft.goalWt>700)){ rejectSettings("Goal weight must be between 50 and 700 lb.",["sGoalWt"]); return; }
+  if(![draft.proTarget,draft.carbGoal,draft.fatGoal].every(v=>Number.isFinite(Number(v)) && Number(v)>0)){ rejectSettings("Enter valid protein, carbohydrate, and fat targets.",["sProTarget","sCarb","sFat"]); return; }
   const schedMode = document.getElementById("sCalSched").value;
   if (schedMode==="custom"){
-    const days = [0,1,2,3,4,5,6].map(i=>Number(document.getElementById("sSched"+i).value)||cfg.calTarget);
+    const days = [0,1,2,3,4,5,6].map(i=>Number(document.getElementById("sSched"+i).value)||draft.calTarget);
+    const safety=calorieScheduleSafety(days);
+    if(!safety.ok){ schedNote(); rejectSettings(safety.message+" Schedule not saved.",["sSched"+safety.dayIndex]); return; }
     const total = days.reduce((a,x)=>a+x,0);
-    const budget = cfg.calTarget*7;
+    const budget = draft.calTarget*7;
     if (total > budget){
       schedNote();
-      flashSave("Over weekly budget by "+(total-budget)+" calories — schedule not saved", true);
+      rejectSettings("Over weekly budget by "+(total-budget)+" calories — schedule not saved",["sSched0","sSched1","sSched2","sSched3","sSched4","sSched5","sSched6"]);
       return; // block: never exceed the weekly budget
     }
-    cfg.calSchedMode = "custom";
-    cfg.calSchedDays = days;
+    draft.calSchedMode = "custom";
+    draft.calSchedDays = safety.values;
     if (total < budget){
       schedSaveMsg = "Saved — this week is under your normal weekly budget by "+(budget-total)+" calories";
     }
   } else {
-    cfg.calSchedMode = schedMode;
-    cfg.calSchedDays = null; // presets derive live from the calorie target
+    const days=calorieSchedulePreset(draft.calTarget,schedMode) || [0,1,2,3,4,5,6].map(()=>draft.calTarget);
+    if(!calorieScheduleSafety(days).ok){ rejectSettings("That schedule would put a day below "+MIN_DAILY_CALORIE_LABEL+" kcal. Choose Same target every day or raise the base target.",["sCalTarget","sCalSched"]); return; }
+    draft.calSchedMode = schedMode;
+    draft.calSchedDays = null; // presets derive live from the calorie target
   }
   const sortedW2 = data.weights.slice().sort((a,b)=>a.date.localeCompare(b.date));
-  cfg.lastTargetWt = sortedW2.length ? sortedW2[sortedW2.length-1].lbs : cfg.lastTargetWt || cfg.startWt;
-  delete cfg.adjustPromptedAt;
+  draft.lastTargetWt = sortedW2.length ? sortedW2[sortedW2.length-1].lbs : draft.lastTargetWt || draft.startWt;
+  delete draft.adjustPromptedAt;
+  cfg=draft;
   saveCfg(); renderAll(); flashSave(schedSaveMsg || "Settings saved ✓");
   ackBtn("saveSettingsBtn", "✓ Saved");
+});
+SETTINGS_VALIDATION_FIELDS.forEach(id=>{
+  const el=document.getElementById(id);
+  ["input","change"].forEach(type=>el.addEventListener(type,()=>showSettingsValidationError(null,[])));
 });
 const OFFSITE_SHARE_REMINDER_DAYS = 14;
 const OFFSITE_SHARE_ATTEMPT_GRACE_DAYS = 7;
