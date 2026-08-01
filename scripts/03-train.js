@@ -1428,17 +1428,41 @@ function removeUnsavedExtraExercise(name){
 
 let activeSessionType = null;
 function sessionDraftHasMeaningfulWork(){
-  if (typeof editingWorkoutIdx!=="undefined" && editingWorkoutIdx!=null) return true;
+  if (
+    typeof editingWorkoutIdx!=="undefined"
+    && editingWorkoutIdx!=null
+  ) return true;
+
   if (document.getElementById("wNotes").value.trim()) return true;
-  if (document.getElementById("cardioMin").value || document.getElementById("cardioDetail").value.trim()) return true;
-  if (extraExercises.length || Object.keys(sessionSwaps).length) return true;
+
+  if (
+    document.getElementById("cardioMin").value
+    || document.getElementById("cardioDetail").value.trim()
+  ) return true;
+
+  if (
+    extraExercises.length
+    || Object.keys(sessionSwaps).length
+  ) return true;
+
   return Object.keys(sessionState).some(name=>{
-    const st = sessionState[name];
+    const st=sessionState[name];
     if (st.saved!=null) return true;
-    if (st.mode==="text") return !!st.textTouched && !!st.text.trim();
-    if (st.mode==="timeDist" || st.mode==="carry" || st.mode==="rounds") return !!st.typedTouched;
+    if (st.mode==="text"){
+      return !!st.textTouched && !!st.text.trim();
+    }
+    if (
+      st.profile
+      && BP_WORKOUT_PROFILES
+      && !BP_WORKOUT_PROFILES.isRowProfile(st.profile)
+    ){
+      return !!st.typedTouched;
+    }
     if (st.mode==="future") return false;
-    return st.rows.some(r=>r.touched && (r.w!=="" || r.r!==""));
+    return st.rows.some(row=>
+      row.touched
+      && (row.w!=="" || row.r!=="")
+    );
   });
 }
 function clearSessionDraftFields(){
@@ -1852,13 +1876,337 @@ function isTypedWorkoutValue(val){
     && !!val.t;
 }
 
+
+const BP_WORKOUT_PROFILES =
+  globalThis.BLACKPYRE_WORKOUT_PROFILES || null;
+
+function bpWorkoutProfileResolutionForExercise(ex){
+  if (!BP_WORKOUT_PROFILES) return null;
+  const entry =
+    exerciseModelEntryForReference(ex)
+    || (
+      ex && typeof ex==="object"
+        ? {
+            id:ex.exerciseId || ex.id || "",
+            name:ex.name || "",
+            shape:exerciseShapeForName(ex.name || "")
+          }
+        : null
+    );
+  return BP_WORKOUT_PROFILES.resolve(entry);
+}
+
+function bpWorkoutProfileResolutionForName(exName){
+  if (!BP_WORKOUT_PROFILES) return null;
+  const cleanName=String(exName||"").replace("[Cardio] ","");
+  const entry =
+    exerciseModelEntryForReference({name:cleanName})
+    || {
+      id:"",
+      name:cleanName,
+      shape:exerciseShapeForName(cleanName)
+    };
+  return BP_WORKOUT_PROFILES.resolve(entry);
+}
+
+function bpWorkoutProfilePrescription(ex){
+  if (!ex || typeof ex!=="object") return {};
+  if (isPlainObject(ex.prescription)) return cloneJSON(ex.prescription);
+
+  const entry=exerciseModelEntryForReference(ex);
+  const shape=entry ? entry.shape : exerciseShapeForName(ex.name || "");
+  const legacy=parseLegacySchemeForShape(ex.scheme,shape);
+
+  return legacy && legacy.ok && isPlainObject(legacy.value)
+    ? cloneJSON(legacy.value)
+    : {};
+}
+
+function appendLegacyWorkoutTextEditor(div,ex,st){
+  const row=document.createElement("div");
+  row.className="srow";
+
+  const lab=document.createElement("span");
+  lab.className="slabel";
+  lab.textContent="Details / notes (required)";
+
+  const inp=document.createElement("input");
+  inp.setAttribute(
+    "aria-label",
+    ex.name.replace("[Cardio] ","")+" details or notes"
+  );
+  inp.setAttribute("aria-required","true");
+  inp.placeholder="Enter what you completed";
+  inp.value=st.text;
+  inp.style.flex="1";
+  inp.style.minWidth="0";
+  inp.addEventListener("input",()=>{
+    st.text=inp.value;
+    st.textTouched=true;
+    st.status="unsaved";
+    markUnsavedChip(div);
+    clearWorkoutError();
+  });
+
+  row.appendChild(lab);
+  row.appendChild(inp);
+  div.appendChild(row);
+}
+
+function appendWorkoutSetRows(div,ex,st){
+  const options=st.profileOptions || {};
+  const weightPolicy =
+    st.profile==="strengthSets"
+      ? "required"
+      : String(options.weightPolicy || "optional");
+  const weightLabel=String(options.weightLabel || "Weight");
+
+  st.rows.forEach((row,ri)=>{
+    const rdiv=document.createElement("div");
+    rdiv.className="srow";
+    rdiv.innerHTML='<span class="slabel">Set '+(ri+1)+'</span>';
+
+    const mkStep=(txt,label,fn)=>{
+      const button=document.createElement("button");
+      button.className="step";
+      button.textContent=txt;
+      button.setAttribute("aria-label",label);
+      button.addEventListener("click",fn);
+      return button;
+    };
+
+    let weightInput=null;
+
+    if (weightPolicy!=="hidden"){
+      weightInput=document.createElement("input");
+      weightInput.type="number";
+      weightInput.className="snum";
+      weightInput.inputMode="decimal";
+      weightInput.min="0";
+      weightInput.placeholder=
+        weightPolicy==="required"
+          ? (weightLabel==="Assistance" ? "assist" : "lb")
+          : (weightLabel==="Assistance" ? "assist opt." : "lb opt.");
+      weightInput.value=
+        row.w===undefined || row.w===null
+          ? ""
+          : row.w;
+      weightInput.dataset.exercise=ex.name;
+      weightInput.dataset.row=String(ri);
+      weightInput.dataset.field="weight";
+      weightInput.setAttribute(
+        "aria-label",
+        ex.name.replace("[Cardio] ","")+" set "+(ri+1)+" "
+          +weightLabel.toLowerCase()+" in pounds"
+      );
+      if (weightPolicy==="required"){
+        weightInput.setAttribute("aria-required","true");
+      }
+      weightInput.addEventListener("input",()=>{
+        row.w=weightInput.value==="" ? "" : Number(weightInput.value);
+        row.touched=true;
+        st.status="unsaved";
+        markUnsavedChip(div);
+        clearWorkoutError();
+      });
+
+      rdiv.appendChild(
+        mkStep(
+          "−5",
+          "Decrease "+ex.name.replace("[Cardio] ","")+" set "+(ri+1)
+            +" "+weightLabel.toLowerCase()+" by 5 pounds",
+          ()=>{
+            row.w=Math.max(0,(Number(row.w)||0)-5);
+            row.touched=true;
+            st.status="unsaved";
+            markUnsavedChip(div);
+            weightInput.value=row.w;
+            clearWorkoutError();
+          }
+        )
+      );
+      rdiv.appendChild(weightInput);
+      rdiv.appendChild(
+        mkStep(
+          "+5",
+          "Increase "+ex.name.replace("[Cardio] ","")+" set "+(ri+1)
+            +" "+weightLabel.toLowerCase()+" by 5 pounds",
+          ()=>{
+            row.w=(Number(row.w)||0)+5;
+            row.touched=true;
+            st.status="unsaved";
+            markUnsavedChip(div);
+            weightInput.value=row.w;
+            clearWorkoutError();
+          }
+        )
+      );
+
+      const multiply=document.createElement("span");
+      multiply.className="sx";
+      multiply.textContent="×";
+      rdiv.appendChild(multiply);
+    }
+
+    const repsInput=document.createElement("input");
+    repsInput.type="number";
+    repsInput.className="snum";
+    repsInput.inputMode="numeric";
+    repsInput.min="0";
+    repsInput.placeholder="reps";
+    repsInput.value=row.r;
+    repsInput.dataset.exercise=ex.name;
+    repsInput.dataset.row=String(ri);
+    repsInput.dataset.field="reps";
+    repsInput.setAttribute(
+      "aria-label",
+      ex.name.replace("[Cardio] ","")+" set "+(ri+1)+" repetitions"
+    );
+    repsInput.setAttribute("aria-required","true");
+    repsInput.addEventListener("input",()=>{
+      row.r=repsInput.value==="" ? "" : Number(repsInput.value);
+      row.touched=true;
+      st.status="unsaved";
+      markUnsavedChip(div);
+      clearWorkoutError();
+    });
+
+    rdiv.appendChild(
+      mkStep(
+        "−1",
+        "Decrease "+ex.name.replace("[Cardio] ","")+" set "+(ri+1)
+          +" repetitions by 1",
+        ()=>{
+          row.r=Math.max(0,(Number(row.r)||0)-1);
+          row.touched=true;
+          st.status="unsaved";
+          markUnsavedChip(div);
+          repsInput.value=row.r;
+          clearWorkoutError();
+        }
+      )
+    );
+    rdiv.appendChild(repsInput);
+    rdiv.appendChild(
+      mkStep(
+        "+1",
+        "Increase "+ex.name.replace("[Cardio] ","")+" set "+(ri+1)
+          +" repetitions by 1",
+        ()=>{
+          row.r=(Number(row.r)||0)+1;
+          row.touched=true;
+          st.status="unsaved";
+          markUnsavedChip(div);
+          repsInput.value=row.r;
+          clearWorkoutError();
+        }
+      )
+    );
+
+    div.appendChild(rdiv);
+  });
+
+  const addRow=document.createElement("button");
+  addRow.className="xbtn";
+  addRow.textContent="+ Add set";
+  addRow.style.marginTop="2px";
+  addRow.addEventListener("click",()=>{
+    const previous=
+      st.rows.slice().reverse().find(row=>
+        Number(row.r)>0
+        || (weightPolicy!=="hidden" && row.w!=="")
+      )
+      || st.rows[st.rows.length-1];
+
+    st.rows.push(
+      previous
+        ? {
+            w:weightPolicy==="hidden" ? "" : previous.w,
+            r:previous.r,
+            done:false,
+            touched:true
+          }
+        : {w:"",r:"",done:false,touched:true}
+    );
+    st.status="unsaved";
+    clearWorkoutError();
+    renderSessionInputs();
+  });
+  div.appendChild(addRow);
+}
+
+function appendWorkoutProfileEditor(div,ex,st){
+  if (
+    st.profile==="strengthSets"
+    || st.profile==="repetitionSets"
+  ){
+    appendWorkoutSetRows(div,ex,st);
+    return;
+  }
+
+  if (
+    BP_WORKOUT_PROFILES
+    && st.profile
+    && BP_WORKOUT_PROFILES.canRender(st.profile)
+  ){
+    const rendered=BP_WORKOUT_PROFILES.appendEditor(
+      div,
+      ex,
+      st,
+      ()=>{
+        st.typedTouched=true;
+        st.status="unsaved";
+        markUnsavedChip(div);
+        clearWorkoutError();
+      }
+    );
+
+    if (rendered){
+      return;
+    }
+  }
+
+  if (st.mode==="text"){
+    appendLegacyWorkoutTextEditor(div,ex,st);
+    return;
+  }
+
+  if (st.mode==="future"){
+    const notice=document.createElement("div");
+    notice.className="note";
+    notice.textContent=
+      st.saved
+        ? newerWorkoutValueNotice(st.saved)
+        : "This exercise does not have a supported workout card profile.";
+    div.appendChild(notice);
+    return;
+  }
+
+  const notice=document.createElement("div");
+  notice.className="note";
+  notice.textContent=
+    "This exercise does not have a supported workout card profile.";
+  div.appendChild(notice);
+}
+
 function workoutValueKind(val){
   if (Array.isArray(val)) return "rows";
-  if (typeof val === "string") return "legacyText";
-  if (isTypedWorkoutValue(val)){
-    return KNOWN_TYPED_WORKOUT_VALUE_TYPES.has(val.t) ? val.t : "future";
+  if (typeof val==="string") return "legacyText";
+
+  if (
+    BP_WORKOUT_PROFILES
+    && BP_WORKOUT_PROFILES.kind(val)
+  ){
+    return BP_WORKOUT_PROFILES.kind(val);
   }
-  if (val == null) return "empty";
+
+  if (isTypedWorkoutValue(val)){
+    return KNOWN_TYPED_WORKOUT_VALUE_TYPES.has(val.t)
+      ? val.t
+      : "future";
+  }
+
+  if (val==null) return "empty";
   return "unknown";
 }
 
@@ -1917,7 +2265,7 @@ function formatWorkoutSeconds(value){
 }
 
 function formatSets(val){
-  const kind = workoutValueKind(val);
+  const kind=workoutValueKind(val);
 
   if (kind==="rows"){
     return val.map(formatWorkoutRow).filter(Boolean).join(", ");
@@ -1925,9 +2273,18 @@ function formatSets(val){
 
   if (kind==="legacyText") return val;
 
+  if (BP_WORKOUT_PROFILES){
+    const formatted=BP_WORKOUT_PROFILES.formatStored(val);
+    if (formatted!==null) return formatted;
+  }
+
   if (kind==="timeDist"){
-    const parts = [formatWorkoutSeconds(val.secs)];
-    if (val.dist!==undefined && val.dist!==null && val.dist!==""){
+    const parts=[formatWorkoutSeconds(val.secs)];
+    if (
+      val.dist!==undefined
+      && val.dist!==null
+      && val.dist!==""
+    ){
       parts.push(val.dist+" "+val.distUnit);
     }
     return parts.filter(Boolean).join(" · ");
@@ -1938,17 +2295,19 @@ function formatSets(val){
   }
 
   if (kind==="rounds"){
-    let out = val.rounds+" rounds · "+val.workSecs+"s work / "+val.recSecs+"s recovery";
-    if (val.note) out += " · "+val.note;
+    let out=
+      val.rounds+" rounds · "
+      +val.workSecs+"s work / "
+      +val.recSecs+"s recovery";
+    if (val.note) out+=" · "+val.note;
     return out;
   }
 
   if (kind==="future") return newerWorkoutValueNotice(val);
   if (kind==="empty") return "";
-
-  // Invalid/unsupported objects are deliberately never stringified.
-  if (val && typeof val === "object") return "Unsupported saved workout entry";
-
+  if (val && typeof val==="object"){
+    return "Unsupported saved workout entry";
+  }
   return String(val);
 }
 
@@ -7591,36 +7950,30 @@ function editableWorkoutValueKind(kind){
     || kind==="legacyText"
     || kind==="timeDist"
     || kind==="carry"
-    || kind==="rounds";
+    || kind==="rounds"
+    || (
+      BP_WORKOUT_PROFILES
+      && BP_WORKOUT_PROFILES.isEditableSavedType(kind)
+    );
 }
 
-function makePlanSessionState(ex, lastVal){
-  const modelEntry = exerciseModelEntryForReference(ex);
-  const shape = modelEntry ? modelEntry.shape : null;
-  const lastKind = workoutValueKind(lastVal);
-  const typedShape = ["timeDist","carry","rounds"].includes(shape)
-    ? shape
-    : (["timeDist","carry","rounds"].includes(lastKind) ? lastKind : null);
+function makePlanSessionState(ex,lastVal){
+  const resolution=bpWorkoutProfileResolutionForExercise(ex);
+  const modelEntry=exerciseModelEntryForReference(ex);
+  const shape=
+    modelEntry
+      ? modelEntry.shape
+      : exerciseShapeForName(
+          ex && typeof ex==="object"
+            ? ex.name || ""
+            : ""
+        );
 
-  if (typedShape){
+  if (!resolution){
     return {
-      mode:typedShape,
-      rowShape:null,
-      rows:[],
-      text:"",
-      textTouched:false,
-      typed:blankTypedWorkoutValue(typedShape),
-      typedTouched:false,
-      auto:false,
-      autoDelta:0,
-      saved:null,
-      status:"plan"
-    };
-  }
-
-  if (shape==="text" || ex.name.indexOf("[Cardio] ")===0){
-    return {
-      mode:"text",
+      mode:"future",
+      profile:null,
+      profileOptions:{},
       rowShape:null,
       rows:[],
       text:"",
@@ -7634,25 +7987,163 @@ function makePlanSessionState(ex, lastVal){
     };
   }
 
-  const pf = prefillRows(ex, lastVal);
+  const profile=resolution.profile;
+  const options=resolution.options || {};
+
+  if (
+    profile==="strengthSets"
+    || profile==="repetitionSets"
+  ){
+    const pf=prefillRows(ex,lastVal);
+
+    const hasStructuredPrescription=
+      isPlainObject(
+        ex && ex.prescription
+      )
+      && Object.keys(
+        ex.prescription
+      ).length>0;
+
+    const prescription=
+      hasStructuredPrescription
+        ? ex.prescription
+        : null;
+
+    const prescribedSets=
+      Number(
+        prescription
+        && prescription.sets
+      );
+
+    const prescribedReps=
+      Number(
+        prescription
+        && prescription.reps
+      );
+
+    if (
+      Number.isInteger(prescribedSets)
+      && prescribedSets>0
+      && Number.isInteger(prescribedReps)
+      && prescribedReps>0
+    ){
+      const hasPrescribedWeight=
+        prescription.weight!==""
+        && prescription.weight!==null
+        && prescription.weight!==undefined
+        && Number.isFinite(
+          Number(prescription.weight)
+        )
+        && Number(prescription.weight)>0;
+
+      const prescribedWeight=
+        hasPrescribedWeight
+          ? Number(prescription.weight)
+          : null;
+
+      const prescribedRows=[];
+
+      for (
+        let index=0;
+        index<prescribedSets;
+        index+=1
+      ){
+        const existing=
+          pf.rows[index] || {};
+
+        const row={
+          w:
+            Object.prototype
+              .hasOwnProperty.call(
+                existing,
+                "w"
+              )
+              ? existing.w
+              : "",
+          r:prescribedReps,
+          touched:false
+        };
+
+        if (hasPrescribedWeight){
+          row.w=prescribedWeight;
+        }
+
+        prescribedRows.push(row);
+      }
+
+      pf.rows=prescribedRows;
+
+      if (hasPrescribedWeight){
+        pf.auto=false;
+        pf.autoDelta=0;
+      }
+    }
+
+    return {
+      mode:"rows",
+      profile:profile,
+      profileOptions:options,
+      rowShape:
+        profile==="repetitionSets"
+          ? "reps"
+          : rowShapeForValue(ex.name,lastVal),
+      rows:pf.rows,
+      text:"",
+      textTouched:false,
+      typed:null,
+      typedTouched:false,
+      auto:pf.auto,
+      autoDelta:pf.autoDelta,
+      saved:null,
+      status:"plan"
+    };
+  }
+
+  const prescription=bpWorkoutProfilePrescription(ex);
+  const typed=
+    BP_WORKOUT_PROFILES.prefill(profile,prescription)
+    || BP_WORKOUT_PROFILES.blank(profile);
+
+  const legacyMode=
+    ["timeDist","carry","rounds","text"].includes(shape)
+      ? shape
+      : "future";
+
   return {
-    mode:"rows",
-    rowShape:shape==="reps" ? "reps" : rowShapeForValue(ex.name,lastVal),
-    rows:pf.rows,
+    mode:legacyMode,
+    profile:profile,
+    profileOptions:options,
+    rowShape:null,
+    rows:[],
     text:"",
     textTouched:false,
-    typed:null,
+    typed:typed,
     typedTouched:false,
-    auto:pf.auto,
-    autoDelta:pf.autoDelta,
+    auto:false,
+    autoDelta:0,
     saved:null,
     status:"plan"
   };
 }
 
-function makeSavedSessionState(exName, val){
-  const kind = workoutValueKind(val);
-  const base = {
+function makeSavedSessionState(exName,val){
+  const kind=workoutValueKind(val);
+  const resolution=bpWorkoutProfileResolutionForName(exName);
+  const cleanName=String(exName||"").replace("[Cardio] ","");
+  const modelEntry=
+    exerciseModelEntryForReference({name:cleanName});
+  const shape=
+    modelEntry
+      ? modelEntry.shape
+      : exerciseShapeForName(cleanName);
+  const legacyMode=
+    ["timeDist","carry","rounds","text"].includes(shape)
+      ? shape
+      : "future";
+
+  const base={
+    profile:resolution ? resolution.profile : null,
+    profileOptions:resolution ? resolution.options || {} : {},
     rowShape:null,
     rows:[],
     text:"",
@@ -7666,65 +8157,139 @@ function makeSavedSessionState(exName, val){
   };
 
   if (kind==="rows"){
-    base.mode = "rows";
-    base.rowShape = rowShapeForValue(exName,val);
+    base.mode="rows";
+    base.profile=
+      base.profile==="repetitionSets"
+        ? "repetitionSets"
+        : "strengthSets";
+    base.rowShape=rowShapeForValue(exName,val);
     return base;
+  }
+
+  if (
+    base.profile
+    && BP_WORKOUT_PROFILES
+    && !BP_WORKOUT_PROFILES.isRowProfile(base.profile)
+  ){
+    const draft=
+      BP_WORKOUT_PROFILES.fromStored(base.profile,val);
+
+    if (draft){
+      base.mode=legacyMode;
+      base.typed=draft;
+      return base;
+    }
   }
 
   if (kind==="legacyText"){
-    base.mode = "text";
+    base.profile=null;
+    base.profileOptions={};
+    base.mode="text";
+    base.text=val;
     return base;
   }
 
-  if (kind==="timeDist" || kind==="carry" || kind==="rounds"){
-    base.mode = kind;
-    base.typed = cloneWorkoutValue(val);
+  if (
+    kind==="timeDist"
+    || kind==="carry"
+    || kind==="rounds"
+  ){
+    base.profile=null;
+    base.profileOptions={};
+    base.mode=kind;
+    base.typed=cloneWorkoutValue(val);
     return base;
   }
 
-  // Unknown future typed objects are deliberately kept in the saved state
-  // and never exposed through a writable editor.
-  base.mode = "future";
+  base.mode="future";
   return base;
 }
 
-function loadWorkoutValueIntoEditableState(st, exName, val){
-  const kind = workoutValueKind(val);
+function loadWorkoutValueIntoEditableState(st,exName,val){
+  const kind=workoutValueKind(val);
+  const resolution=bpWorkoutProfileResolutionForName(exName);
+  const cleanName=String(exName||"").replace("[Cardio] ","");
+  const modelEntry=
+    exerciseModelEntryForReference({name:cleanName});
+  const shape=
+    modelEntry
+      ? modelEntry.shape
+      : exerciseShapeForName(cleanName);
+  const legacyMode=
+    ["timeDist","carry","rounds","text"].includes(shape)
+      ? shape
+      : "future";
 
-  st.auto = false;
-  st.autoDelta = 0;
-  st.textTouched = false;
-  st.typedTouched = false;
+  st.auto=false;
+  st.autoDelta=0;
+  st.textTouched=false;
+  st.typedTouched=false;
+  st.profile=resolution ? resolution.profile : st.profile || null;
+  st.profileOptions=
+    resolution
+      ? resolution.options || {}
+      : st.profileOptions || {};
 
   if (kind==="rows"){
-    st.mode = "rows";
-    st.rowShape = rowShapeForValue(exName,val);
-    st.rows = toRows(val).map(r=>({
-      w:r.w,
-      r:r.r,
+    st.mode="rows";
+    st.profile=
+      st.profile==="repetitionSets"
+        ? "repetitionSets"
+        : "strengthSets";
+    st.rowShape=rowShapeForValue(exName,val);
+    st.rows=toRows(val).map(row=>({
+      w:row.w,
+      r:row.r,
       done:false,
       touched:true
     }));
-    st.typed = null;
+    st.typed=null;
     return true;
+  }
+
+  if (
+    st.profile
+    && BP_WORKOUT_PROFILES
+    && !BP_WORKOUT_PROFILES.isRowProfile(st.profile)
+  ){
+    const draft=
+      BP_WORKOUT_PROFILES.fromStored(st.profile,val);
+
+    if (draft){
+      st.mode=legacyMode;
+      st.rowShape=null;
+      st.rows=[];
+      st.text="";
+      st.typed=draft;
+      st.typedTouched=true;
+      return true;
+    }
   }
 
   if (kind==="legacyText"){
-    st.mode = "text";
-    st.rowShape = null;
-    st.text = val;
-    st.textTouched = true;
-    st.typed = null;
+    st.profile=null;
+    st.profileOptions={};
+    st.mode="text";
+    st.rowShape=null;
+    st.text=val;
+    st.textTouched=true;
+    st.typed=null;
     return true;
   }
 
-  if (kind==="timeDist" || kind==="carry" || kind==="rounds"){
-    st.mode = kind;
-    st.rowShape = null;
-    st.rows = [];
-    st.text = "";
-    st.typed = cloneWorkoutValue(val);
-    st.typedTouched = true;
+  if (
+    kind==="timeDist"
+    || kind==="carry"
+    || kind==="rounds"
+  ){
+    st.profile=null;
+    st.profileOptions={};
+    st.mode=kind;
+    st.rowShape=null;
+    st.rows=[];
+    st.text="";
+    st.typed=cloneWorkoutValue(val);
+    st.typedTouched=true;
     return true;
   }
 
@@ -7794,145 +8359,274 @@ function enteredRows(st){
   return st.rows.map((r,i)=>({r:r, i:i})).filter(x=>x.r.touched && (x.r.w!=="" || x.r.r!==""));
 }
 function validateExerciseEntry(st){
+  if (!st || typeof st!=="object"){
+    return {
+      ok:false,
+      message:"workout entry is unavailable."
+    };
+  }
+
+  if (st.mode==="rows"){
+    if (
+      BP_WORKOUT_PROFILES
+      && typeof BP_WORKOUT_PROFILES.validateRows==="function"
+    ){
+      return BP_WORKOUT_PROFILES.validateRows(
+        st.profile || (
+          st.rowShape==="reps"
+            ? "repetitionSets"
+            : "strengthSets"
+        ),
+        st.rows,
+        st.profileOptions || {}
+      );
+    }
+
+    const entered=enteredRows(st);
+
+    if (!entered.length){
+      return {ok:true,value:null};
+    }
+
+    const repsOnly=st.rowShape==="reps";
+    const sets=[];
+
+    for (const item of entered){
+      const reps=Number(item.r.r);
+
+      if (!(reps>0)){
+        return {
+          ok:false,
+          rowIndex:item.i,
+          field:"reps",
+          message:
+            "enter reps for Set "+(item.i+1)
+            +", or clear it, before saving."
+        };
+      }
+
+      if (repsOnly){
+        const row={r:reps};
+        const hasWeight=
+          item.r.w!==undefined
+          && item.r.w!==null
+          && item.r.w!=="";
+
+        if (hasWeight){
+          const weight=Number(item.r.w);
+
+          if (!(weight>=0)){
+            return {
+              ok:false,
+              rowIndex:item.i,
+              field:"weight",
+              message:
+                "enter a valid optional weight for Set "
+                +(item.i+1)+", or clear it."
+            };
+          }
+
+          row.w=weight;
+        }
+
+        sets.push(row);
+        continue;
+      }
+
+      if (!(Number(item.r.w)>0)){
+        return {
+          ok:false,
+          rowIndex:item.i,
+          field:"weight",
+          message:
+            "enter weight and reps for Set "+(item.i+1)
+            +", or clear it, before saving."
+        };
+      }
+
+      sets.push({
+        w:Number(item.r.w),
+        r:reps
+      });
+    }
+
+    return {ok:true,value:sets};
+  }
+
+  if (
+    st.profile
+    && BP_WORKOUT_PROFILES
+    && !BP_WORKOUT_PROFILES.isRowProfile(st.profile)
+  ){
+    if (!st.typedTouched){
+      return {ok:true,value:null};
+    }
+
+    return BP_WORKOUT_PROFILES.validate(
+      st.profile,
+      st.typed || {}
+    );
+  }
+
   if (st.mode==="text"){
-    const t = (st.textTouched && st.text.trim()) ? st.text.trim() : null;
-    return {ok:true, value:t};
+    const text=
+      st.textTouched
+      && String(st.text||"").trim()
+        ? String(st.text||"").trim()
+        : null;
+
+    return {ok:true,value:text};
   }
 
   if (st.mode==="timeDist"){
-    if (!st.typedTouched) return {ok:true, value:null};
-    const raw = st.typed || {};
-    const secs = Number(raw.secs);
+    if (!st.typedTouched){
+      return {ok:true,value:null};
+    }
+
+    const raw=st.typed || {};
+    const secs=Number(raw.secs);
+
     if (!(secs>0)){
-      return {ok:false, message:"enter a duration greater than 0 before saving."};
+      return {
+        ok:false,
+        message:
+          "enter a duration greater than 0 before saving."
+      };
     }
 
-    const hasDist = raw.dist!==undefined && raw.dist!==null && raw.dist!=="";
-    const value = {t:"timeDist", secs:secs};
+    const value={
+      t:"timeDist",
+      secs:secs
+    };
 
-    if (hasDist){
-      const dist = Number(raw.dist);
-      if (!(dist>0)){
-        return {ok:false, message:"enter a distance greater than 0, or clear the distance."};
+    const hasDistance=
+      raw.dist!==undefined
+      && raw.dist!==null
+      && raw.dist!=="";
+
+    if (hasDistance){
+      const distance=Number(raw.dist);
+
+      if (!(distance>0)){
+        return {
+          ok:false,
+          message:
+            "enter a distance greater than 0, or clear it."
+        };
       }
+
       if (!EXERCISE_DISTANCE_UNITS.includes(raw.distUnit)){
-        return {ok:false, message:"choose a valid distance unit."};
+        return {
+          ok:false,
+          message:"choose a valid distance unit."
+        };
       }
-      value.dist = dist;
-      value.distUnit = raw.distUnit;
+
+      value.dist=distance;
+      value.distUnit=raw.distUnit;
     }
 
-    return {ok:true, value:value};
+    return {ok:true,value:value};
   }
 
   if (st.mode==="carry"){
-    if (!st.typedTouched) return {ok:true, value:null};
-    const raw = st.typed || {};
-    const lbs = Number(raw.lbs);
-    const dist = Number(raw.dist);
+    if (!st.typedTouched){
+      return {ok:true,value:null};
+    }
 
-    if (!(lbs>0)){
-      return {ok:false, message:"enter a carry weight greater than 0 lb before saving."};
+    const raw=st.typed || {};
+    const pounds=Number(raw.lbs);
+    const distance=Number(raw.dist);
+
+    if (!(pounds>0)){
+      return {
+        ok:false,
+        message:
+          "enter a carry weight greater than 0 lb before saving."
+      };
     }
-    if (!(dist>0)){
-      return {ok:false, message:"enter a carry distance greater than 0 before saving."};
+
+    if (!(distance>0)){
+      return {
+        ok:false,
+        message:
+          "enter a carry distance greater than 0 before saving."
+      };
     }
+
     if (!EXERCISE_DISTANCE_UNITS.includes(raw.distUnit)){
-      return {ok:false, message:"choose a valid carry distance unit."};
+      return {
+        ok:false,
+        message:"choose a valid carry distance unit."
+      };
     }
 
     return {
       ok:true,
-      value:{t:"carry", lbs:lbs, dist:dist, distUnit:raw.distUnit}
+      value:{
+        t:"carry",
+        lbs:pounds,
+        dist:distance,
+        distUnit:raw.distUnit
+      }
     };
   }
 
   if (st.mode==="rounds"){
-    if (!st.typedTouched) return {ok:true, value:null};
-    const raw = st.typed || {};
-    const rounds = Number(raw.rounds);
-    const workSecs = Number(raw.workSecs);
-    const recSecs = Number(raw.recSecs);
+    if (!st.typedTouched){
+      return {ok:true,value:null};
+    }
+
+    const raw=st.typed || {};
+    const rounds=Number(raw.rounds);
+    const work=Number(raw.workSecs);
+    const recovery=Number(raw.recSecs);
 
     if (!(Number.isInteger(rounds) && rounds>0)){
-      return {ok:false, message:"enter a whole number of rounds greater than 0."};
-    }
-    if (!(Number.isInteger(workSecs) && workSecs>0)){
-      return {ok:false, message:"enter whole work seconds greater than 0."};
-    }
-    if (!(Number.isInteger(recSecs) && recSecs>=0)){
-      return {ok:false, message:"enter whole recovery seconds of 0 or more."};
+      return {
+        ok:false,
+        message:
+          "enter a whole number of rounds greater than 0."
+      };
     }
 
-    const value = {
+    if (!(Number.isInteger(work) && work>0)){
+      return {
+        ok:false,
+        message:
+          "enter whole work seconds greater than 0."
+      };
+    }
+
+    if (!(Number.isInteger(recovery) && recovery>=0)){
+      return {
+        ok:false,
+        message:
+          "enter whole recovery seconds of 0 or more."
+      };
+    }
+
+    const value={
       t:"rounds",
       rounds:rounds,
-      workSecs:workSecs,
-      recSecs:recSecs
+      workSecs:work,
+      recSecs:recovery
     };
-    if (typeof raw.note==="string" && raw.note.trim()){
-      value.note = raw.note.trim();
+
+    const note=String(raw.note||"").trim();
+
+    if (note){
+      value.note=note;
     }
-    return {ok:true, value:value};
+
+    return {ok:true,value:value};
   }
 
-  if (st.mode==="future"){
-    return {
-      ok:false,
-      message:"this entry was saved by a newer BlackPyre version and is read-only."
-    };
-  }
-
-  const entered = enteredRows(st);
-  if (!entered.length) return {ok:true, value:null};
-
-  const sets = [];
-  const repsOnly = st.rowShape==="reps";
-
-  for (const x of entered){
-    const reps = Number(x.r.r);
-    const hasWeight = x.r.w!==undefined && x.r.w!==null && x.r.w!=="";
-
-    if (!(reps>0)){
-      return {
-        ok:false,
-        rowIndex:x.i,
-        field:"reps",
-        message:"enter reps for Set "+(x.i+1)+", or clear it, before saving."
-      };
-    }
-
-    if (repsOnly){
-      const row = {r:reps};
-      if (hasWeight){
-        const weight = Number(x.r.w);
-        if (!(weight>=0)){
-          return {
-            ok:false,
-            rowIndex:x.i,
-            field:"weight",
-            message:"enter a valid optional weight for Set "+(x.i+1)+", or clear it."
-          };
-        }
-        row.w = weight;
-      }
-      sets.push(row);
-      continue;
-    }
-
-    if (!(Number(x.r.w)>0)){
-      return {
-        ok:false,
-        rowIndex:x.i,
-        field:"weight",
-        message:"enter weight and reps for Set "+(x.i+1)+", or clear it, before saving."
-      };
-    }
-
-    sets.push({w:Number(x.r.w), r:reps});
-  }
-
-  return {ok:true, value:sets};
+  return {
+    ok:false,
+    message:
+      "this exercise does not have a supported workout card."
+  };
 }
 function saveExercise(exName){
   const st = sessionState[exName];
@@ -7967,11 +8661,26 @@ function saveExercise(exName){
   return {ok:true};
 }
 function hasUnsavedEntry(st){
-  if (st.status!=="unsaved") return false;
-  if (st.mode==="text") return !!st.textTouched && !!st.text.trim();
-  if (st.mode==="timeDist" || st.mode==="carry" || st.mode==="rounds") return !!st.typedTouched;
+  if (!st || st.status==="saved") return false;
+
+  if (st.mode==="text"){
+    return !!st.textTouched && !!String(st.text||"").trim();
+  }
+
+  if (
+    st.profile
+    && BP_WORKOUT_PROFILES
+    && !BP_WORKOUT_PROFILES.isRowProfile(st.profile)
+  ){
+    return !!st.typedTouched;
+  }
+
   if (st.mode==="future") return false;
-  return enteredRows(st).length>0;
+
+  return Array.isArray(st.rows) && st.rows.some(row=>
+    row.touched
+    && (row.w!=="" || row.r!=="")
+  );
 }
 function unsavedExerciseNames(){
   return Object.keys(sessionState).filter(n=>hasUnsavedEntry(sessionState[n]));
@@ -8377,7 +9086,23 @@ function renderSessionInputs(){
         : null;
       sessionState[ex.name] = makePlanSessionState(ex,historical);
     }
-    const st = sessionState[ex.name];
+    let st = sessionState[ex.name];
+    const expectedProfile =
+      bpWorkoutProfileResolutionForExercise(ex);
+    if (
+      st
+      && st.profile
+      && expectedProfile
+      && BP_WORKOUT_PROFILES
+      && !BP_WORKOUT_PROFILES.compatible(
+        st.profile,
+        expectedProfile.profile
+      )
+    ){
+      sessionState[ex.name] =
+        makePlanSessionState(ex,null);
+      st = sessionState[ex.name];
+    }
     const prevVal = last && last.sets ? last.sets[ex.name.replace("[Cardio] ","")] : null;
     const div = document.createElement("div");
     div.className = "exercise";
@@ -8556,77 +9281,7 @@ function renderSessionInputs(){
       div.appendChild(lastLine);
     }
 
-    if (st.mode==="text"){
-      const row = document.createElement("div");
-      row.className = "srow";
-
-      const lab = document.createElement("span");
-      lab.className = "slabel";
-      lab.textContent = "Details / notes (required)";
-
-      const inp = document.createElement("input");
-      inp.setAttribute(
-        "aria-label",
-        ex.name.replace("[Cardio] ","")+" details or notes"
-      );
-      inp.placeholder = "Enter what you completed";
-      inp.value = st.text;
-      inp.addEventListener("input",()=>{
-        st.text = inp.value;
-        st.textTouched = true;
-        st.status = "unsaved";
-        markUnsavedChip(div);
-        clearWorkoutError();
-      });
-
-      row.appendChild(lab);
-      row.appendChild(inp);
-      div.appendChild(row);
-    } else if (st.mode==="timeDist" || st.mode==="carry" || st.mode==="rounds"){
-      appendTypedWorkoutEditor(div,ex,st);
-    } else if (st.mode==="future"){
-      const notice = document.createElement("div");
-      notice.className = "note";
-      notice.textContent = newerWorkoutValueNotice(st.saved);
-      div.appendChild(notice);
-    } else {
-      st.rows.forEach((row, ri)=>{
-        const rdiv = document.createElement("div");
-        rdiv.className = "srow";
-        rdiv.innerHTML = '<span class="slabel">Set '+(ri+1)+'</span>';
-        const mkStep = (txt, label, fn)=>{ const b=document.createElement("button"); b.className="step"; b.textContent=txt; b.setAttribute("aria-label",label); b.addEventListener("click", fn); return b; };
-        const wIn = document.createElement("input");
-        wIn.type="number"; wIn.className="snum"; wIn.inputMode="decimal"; wIn.placeholder=st.rowShape==="reps" ? "lb opt." : "lb"; wIn.value=(row.w===undefined || row.w===null) ? "" : row.w;
-        wIn.dataset.exercise=ex.name; wIn.dataset.row=String(ri); wIn.dataset.field="weight";
-        wIn.setAttribute("aria-label",ex.name.replace("[Cardio] ","")+" set "+(ri+1)+" weight in pounds");
-        wIn.addEventListener("input", ()=>{ row.w = wIn.value===""?"":Number(wIn.value); row.touched=true; st.status="unsaved"; markUnsavedChip(div); clearWorkoutError(); });
-        const rIn = document.createElement("input");
-        rIn.type="number"; rIn.className="snum"; rIn.inputMode="numeric"; rIn.placeholder="reps"; rIn.value=row.r;
-        rIn.dataset.exercise=ex.name; rIn.dataset.row=String(ri); rIn.dataset.field="reps";
-        rIn.setAttribute("aria-label",ex.name.replace("[Cardio] ","")+" set "+(ri+1)+" repetitions");
-        rIn.addEventListener("input", ()=>{ row.r = rIn.value===""?"":Number(rIn.value); row.touched=true; st.status="unsaved"; markUnsavedChip(div); clearWorkoutError(); });
-        rdiv.appendChild(mkStep("\u22125", "Decrease "+ex.name.replace("[Cardio] ","")+" set "+(ri+1)+" weight by 5 pounds", ()=>{ row.w = Math.max(0,(Number(row.w)||0)-5); row.touched=true; st.status="unsaved"; markUnsavedChip(div); wIn.value=row.w; clearWorkoutError(); }));
-        rdiv.appendChild(wIn);
-        rdiv.appendChild(mkStep("+5", "Increase "+ex.name.replace("[Cardio] ","")+" set "+(ri+1)+" weight by 5 pounds", ()=>{ row.w = (Number(row.w)||0)+5; row.touched=true; st.status="unsaved"; markUnsavedChip(div); wIn.value=row.w; clearWorkoutError(); }));
-        const x = document.createElement("span"); x.className="sx"; x.textContent="\u00d7"; rdiv.appendChild(x);
-        rdiv.appendChild(mkStep("\u22121", "Decrease "+ex.name.replace("[Cardio] ","")+" set "+(ri+1)+" repetitions by 1", ()=>{ row.r = Math.max(0,(Number(row.r)||0)-1); row.touched=true; st.status="unsaved"; markUnsavedChip(div); rIn.value=row.r; clearWorkoutError(); }));
-        rdiv.appendChild(rIn);
-        rdiv.appendChild(mkStep("+1", "Increase "+ex.name.replace("[Cardio] ","")+" set "+(ri+1)+" repetitions by 1", ()=>{ row.r = (Number(row.r)||0)+1; row.touched=true; st.status="unsaved"; markUnsavedChip(div); rIn.value=row.r; clearWorkoutError(); }));
-        div.appendChild(rdiv);
-      });
-      const addRow = document.createElement("button");
-      addRow.className = "xbtn"; addRow.textContent = "+ Add set";
-      addRow.style.marginTop = "2px";
-      addRow.addEventListener("click", ()=>{
-        const filled = st.rows.slice().reverse().find(r=>Number(r.w)>0);
-        const prev = filled || st.rows[st.rows.length-1];
-        st.rows.push(prev ? {w:prev.w, r:prev.r, done:false, touched:true} : {w:"", r:"", done:false, touched:true});
-        st.status = "unsaved";
-        clearWorkoutError();
-        renderSessionInputs();
-      });
-      div.appendChild(addRow);
-    }
+    appendWorkoutProfileEditor(div,ex,st);
     const foot = document.createElement("div");
     foot.className = "exFoot";
     const saveBtn = document.createElement("button");
@@ -9158,6 +9813,7 @@ document.getElementById("saveToMyFoodsBtn").addEventListener("click", ()=>{
 // ---- program builder ----
 let builderProg = null;
 function openBuilder(fromCurrent){
+  builderPrescriptionOpenKey=null;
   builderProg = fromCurrent
     ? JSON.parse(JSON.stringify(program))
     : {name:"My Program", days:[{id:"D1", title:"Day 1", exercises:[]}]};
@@ -9197,106 +9853,1089 @@ document.getElementById("bSaveBtn").addEventListener("click", ()=>{
   flashSave("Program saved ✓");
 });
 
+let builderPrescriptionOpenKey=null;
+
+function builderPrescriptionProfile(ex){
+  const resolution=
+    bpWorkoutProfileResolutionForExercise(ex);
+
+  if (!resolution){
+    return null;
+  }
+
+  return {
+    profile:resolution.profile,
+    options:resolution.options || {}
+  };
+}
+
+function builderPositiveInteger(value){
+  const number=Number(value);
+
+  return (
+    Number.isInteger(number)
+    && number>0
+  )
+    ? number
+    : null;
+}
+
+function builderPositiveNumber(value){
+  const number=Number(value);
+
+  return (
+    Number.isFinite(number)
+    && number>0
+  )
+    ? number
+    : null;
+}
+
+function builderPrescriptionSource(ex){
+  const prescription=
+    bpWorkoutProfilePrescription(ex);
+
+  return (
+    prescription
+    && typeof prescription==="object"
+  )
+    ? prescription
+    : {};
+}
+
+function builderHasPrescription(ex){
+  return (
+    isPlainObject(ex && ex.prescription)
+    && Object.keys(ex.prescription).length>0
+  )
+  || !!String((ex && ex.scheme) || "").trim();
+}
+
+function builderPrescriptionSummary(ex){
+  const p=builderPrescriptionSource(ex);
+  const parts=[];
+
+  if (
+    Number(p.sets)>0
+    && Number(p.reps)>0
+  ){
+    parts.push(
+      Number(p.sets)+" × "+Number(p.reps)
+    );
+  }else if (
+    Number(p.intervals)>0
+    && Number(p.durationSeconds)>0
+  ){
+    parts.push(
+      Number(p.intervals)
+      +" intervals · "
+      +formatWorkoutSeconds(
+        Number(p.durationSeconds)
+      )
+    );
+  }else if (
+    Number(p.rounds)>0
+    && Number(p.workSeconds)>0
+  ){
+    parts.push(
+      Number(p.rounds)
+      +" rounds · "
+      +formatWorkoutSeconds(
+        Number(p.workSeconds)
+      )
+      +" work"
+    );
+  }else if (Number(p.durationSeconds)>0){
+    parts.push(
+      formatWorkoutSeconds(
+        Number(p.durationSeconds)
+      )
+    );
+  }
+
+  if (Number(p.distance)>0){
+    parts.push(
+      Number(p.distance)
+      +" "
+      +String(p.distanceUnit || "")
+    );
+  }
+
+  if (Number(p.weight)>0){
+    parts.push(
+      Number(p.weight)
+      +" "
+      +String(p.weightUnit || "lb")
+    );
+  }
+
+  if (
+    !parts.length
+    && (
+      p.notes
+      || p.instructions
+      || p.completionTarget
+    )
+  ){
+    parts.push("Details set");
+  }
+
+  if (
+    !parts.length
+    && String((ex && ex.scheme) || "").trim()
+  ){
+    parts.push(
+      String(ex.scheme).trim()
+    );
+  }
+
+  return parts.slice(0,2).join(" · ");
+}
+
+function builderPrescriptionField(
+  labelText,
+  key,
+  type,
+  value,
+  config
+){
+  const options=config || {};
+  const field=document.createElement("label");
+
+  field.className=
+    "builder-prescription-field"
+    +(options.wide ? " wide" : "");
+
+  const label=document.createElement("span");
+  label.textContent=labelText;
+
+  let input;
+
+  if (type==="select"){
+    input=document.createElement("select");
+
+    (options.options || []).forEach(option=>{
+      const element=
+        document.createElement("option");
+
+      element.value=option;
+      element.textContent=option;
+      input.appendChild(element);
+    });
+  }else{
+    input=document.createElement("input");
+    input.type=type || "text";
+
+    if (input.type==="number"){
+      input.min="0";
+      input.inputMode=
+        options.inputMode || "numeric";
+
+      if (options.componentSeconds){
+        input.max="59";
+      }
+    }
+  }
+
+  input.value=
+    value===undefined
+    || value===null
+      ? ""
+      : value;
+
+  input.dataset.builderPrescriptionField=key;
+
+  input.setAttribute(
+    "aria-label",
+    labelText
+  );
+
+  if (options.required){
+    input.setAttribute(
+      "aria-required",
+      "true"
+    );
+  }
+
+  field.appendChild(label);
+  field.appendChild(input);
+
+  return field;
+}
+
+function builderPrescriptionFromWorkoutValue(
+  profile,
+  value
+){
+  const out={};
+
+  switch(profile){
+    case "timedHold":
+      out.intervals=value.holds;
+      out.durationSeconds=value.holdSecs;
+
+      if (value.recSecs!==undefined){
+        out.recoverySeconds=value.recSecs;
+      }
+
+      return out;
+
+    case "steadyTimeDistance":
+      out.durationSeconds=value.secs;
+
+      if (value.dist!==undefined){
+        out.distance=value.dist;
+        out.distanceUnit=value.distUnit;
+      }
+
+      if (value.pace){
+        out.pace=value.pace;
+      }
+
+      if (value.effort){
+        out.effort=value.effort;
+      }
+
+      return out;
+
+    case "durationActivity":
+      out.durationSeconds=value.secs;
+
+      if (value.note){
+        out.notes=value.note;
+      }
+
+      return out;
+
+    case "timedIntervals":
+      out.intervals=value.intervals;
+      out.durationSeconds=value.workSecs;
+
+      if (value.recSecs!==undefined){
+        out.recoverySeconds=value.recSecs;
+      }
+
+      if (value.dist!==undefined){
+        out.distance=value.dist;
+        out.distanceUnit=value.distUnit;
+      }
+
+      if (value.effort){
+        out.effort=value.effort;
+      }
+
+      return out;
+
+    case "distanceIntervals":
+      out.intervals=value.repeats;
+      out.distance=value.dist;
+      out.distanceUnit=value.distUnit;
+
+      if (value.workSecs!==undefined){
+        out.durationSeconds=value.workSecs;
+      }
+
+      if (value.recSecs!==undefined){
+        out.recoverySeconds=value.recSecs;
+      }
+
+      if (value.effort){
+        out.effort=value.effort;
+      }
+
+      return out;
+
+    case "loadedDistance":
+      if (value.count!==undefined){
+        out.trips=value.count;
+      }
+
+      out.weight=value.lbs;
+      out.weightUnit="lb";
+      out.distance=value.dist;
+      out.distanceUnit=value.distUnit;
+
+      if (value.secs!==undefined){
+        out.durationSeconds=value.secs;
+      }
+
+      if (value.recSecs!==undefined){
+        out.recoverySeconds=value.recSecs;
+      }
+
+      if (value.effort){
+        out.effort=value.effort;
+      }
+
+      return out;
+
+    case "conditioningRounds":
+      out.rounds=value.rounds;
+      out.workSeconds=value.workSecs;
+
+      if (value.recSecs!==undefined){
+        out.recoverySeconds=value.recSecs;
+      }
+
+      if (value.note){
+        out.notes=value.note;
+      }
+
+      return out;
+
+    case "activityNotes":
+      if (value.secs!==undefined){
+        out.durationSeconds=value.secs;
+      }
+
+      out.notes=value.note;
+
+      return out;
+
+    default:
+      return null;
+  }
+}
+
+function builderReadPrescription(
+  panel,
+  profile,
+  options
+){
+  const read=key=>{
+    const element=
+      panel.querySelector(
+        '[data-builder-prescription-field="'
+        +key+'"]'
+      );
+
+    return element
+      ? element.value
+      : "";
+  };
+
+  if (
+    profile==="strengthSets"
+    || profile==="repetitionSets"
+  ){
+    const sets=
+      builderPositiveInteger(
+        read("sets")
+      );
+
+    const reps=
+      builderPositiveInteger(
+        read("reps")
+      );
+
+    if (sets===null){
+      return {
+        ok:false,
+        field:"sets",
+        message:"Enter the planned number of sets."
+      };
+    }
+
+    if (reps===null){
+      return {
+        ok:false,
+        field:"reps",
+        message:"Enter the planned repetitions."
+      };
+    }
+
+    const prescription={
+      sets:sets,
+      reps:reps
+    };
+
+    const weightValue=read("weight");
+
+    if (weightValue!==""){
+      const weight=
+        builderPositiveNumber(
+          weightValue
+        );
+
+      if (weight===null){
+        return {
+          ok:false,
+          field:"weight",
+          message:
+            "Enter a valid target "
+            +String(
+              options.weightLabel || "weight"
+            ).toLowerCase()
+            +", or leave it blank."
+        };
+      }
+
+      prescription.weight=weight;
+      prescription.weightUnit="lb";
+    }
+
+    return {
+      ok:true,
+      value:prescription
+    };
+  }
+
+  const draft=
+    BP_WORKOUT_PROFILES.blank(profile);
+
+  if (!draft){
+    return {
+      ok:false,
+      message:
+        "This exercise does not have a supported prescription editor."
+    };
+  }
+
+  BP_WORKOUT_PROFILES
+    .fields(profile,options)
+    .forEach(spec=>{
+      draft[spec.key]=read(spec.key);
+    });
+
+  const validated=
+    BP_WORKOUT_PROFILES.validate(
+      profile,
+      draft
+    );
+
+  if (!validated.ok){
+    return validated;
+  }
+
+  const prescription=
+    builderPrescriptionFromWorkoutValue(
+      profile,
+      validated.value
+    );
+
+  if (!prescription){
+    return {
+      ok:false,
+      message:
+        "This exercise does not have a supported prescription contract."
+    };
+  }
+
+  return {
+    ok:true,
+    value:prescription
+  };
+}
+
+function buildBuilderPrescriptionEditor(
+  ex,
+  key
+){
+  const resolved=
+    builderPrescriptionProfile(ex);
+
+  if (!resolved){
+    return null;
+  }
+
+  const profile=resolved.profile;
+  const options=resolved.options || {};
+  const panel=document.createElement("div");
+
+  panel.className=
+    "builder-prescription-editor";
+
+  panel.dataset.builderPrescriptionEditor=
+    key;
+
+  panel.dataset.profile=profile;
+
+  const title=
+    document.createElement("div");
+
+  title.className=
+    "builder-prescription-title";
+
+  title.textContent=
+    "Workout details for "
+    +String(ex.name || "exercise");
+
+  const help=
+    document.createElement("div");
+
+  help.className=
+    "builder-prescription-help";
+
+  help.textContent=
+    "Set the planned target here. "
+    +"You will record what you actually complete in the workout.";
+
+  const grid=
+    document.createElement("div");
+
+  grid.className=
+    "builder-prescription-grid";
+
+  const source=
+    builderPrescriptionSource(ex);
+
+  if (
+    profile==="strengthSets"
+    || profile==="repetitionSets"
+  ){
+    grid.appendChild(
+      builderPrescriptionField(
+        "Sets (required)",
+        "sets",
+        "number",
+        source.sets || "",
+        {
+          required:true,
+          inputMode:"numeric"
+        }
+      )
+    );
+
+    grid.appendChild(
+      builderPrescriptionField(
+        "Repetitions (required)",
+        "reps",
+        "number",
+        source.reps || "",
+        {
+          required:true,
+          inputMode:"numeric"
+        }
+      )
+    );
+
+    const weightPolicy=
+      profile==="strengthSets"
+        ? "optional"
+        : String(
+            options.weightPolicy
+            || "optional"
+          );
+
+    if (weightPolicy!=="hidden"){
+      grid.appendChild(
+        builderPrescriptionField(
+          String(
+            options.weightLabel
+            || "Weight"
+          )
+          +" in pounds (optional)",
+          "weight",
+          "number",
+          source.weight || "",
+          {
+            inputMode:"decimal"
+          }
+        )
+      );
+    }
+  }else{
+    const draft=
+      BP_WORKOUT_PROFILES.prefill(
+        profile,
+        source
+      )
+      || BP_WORKOUT_PROFILES.blank(
+        profile
+      );
+
+    BP_WORKOUT_PROFILES
+      .fields(profile,options)
+      .forEach(spec=>{
+        const wide=
+          spec.type==="text"
+          || spec.key==="note"
+          || spec.key==="pace"
+          || spec.key==="effort";
+
+        const componentSeconds=[
+          "seconds",
+          "holdSeconds",
+          "workSeconds",
+          "durationSeconds"
+        ].includes(spec.key);
+
+        grid.appendChild(
+          builderPrescriptionField(
+            spec.label,
+            spec.key,
+            spec.type,
+            draft
+              ? draft[spec.key]
+              : "",
+            {
+              options:spec.options,
+              required:!!spec.required,
+              inputMode:spec.inputMode,
+              wide:wide,
+              componentSeconds:
+                componentSeconds
+            }
+          )
+        );
+      });
+  }
+
+  const error=
+    document.createElement("div");
+
+  error.className=
+    "builder-prescription-error hidden";
+
+  error.setAttribute(
+    "role",
+    "alert"
+  );
+
+  const actions=
+    document.createElement("div");
+
+  actions.className=
+    "builder-prescription-actions";
+
+  const apply=
+    document.createElement("button");
+
+  apply.className="btn small";
+  apply.textContent="Apply details";
+  apply.dataset.builderPrescriptionAction=
+    "apply";
+
+  apply.addEventListener("click",()=>{
+    const result=
+      builderReadPrescription(
+        panel,
+        profile,
+        options
+      );
+
+    if (!result.ok){
+      error.textContent=
+        result.message
+        || "Check the workout details.";
+
+      error.classList.remove("hidden");
+
+      if (result.field){
+        const field=
+          panel.querySelector(
+            '[data-builder-prescription-field="'
+            +result.field+'"]'
+          );
+
+        if (field && field.focus){
+          field.focus();
+        }
+      }
+
+      return;
+    }
+
+    ex.prescription=
+      cloneJSON(result.value);
+
+    delete ex.scheme;
+
+    builderPrescriptionOpenKey=null;
+    renderBuilder();
+  });
+
+  const clear=
+    document.createElement("button");
+
+  clear.className="btn ghost small";
+  clear.textContent="Clear details";
+  clear.dataset.builderPrescriptionAction=
+    "clear";
+
+  clear.addEventListener("click",()=>{
+    delete ex.prescription;
+    delete ex.scheme;
+    builderPrescriptionOpenKey=null;
+    renderBuilder();
+  });
+
+  actions.appendChild(apply);
+  actions.appendChild(clear);
+
+  panel.appendChild(title);
+  panel.appendChild(help);
+  panel.appendChild(grid);
+  panel.appendChild(error);
+  panel.appendChild(actions);
+
+  return panel;
+}
+
 function renderBuilder(){
-  const wrap = document.getElementById("bDays");
-  wrap.innerHTML = "";
-  builderProg.days.forEach((day, di)=>{
-    const dd = document.createElement("div");
-    dd.className = "bday";
-    // day header: title + tools
-    const head = document.createElement("div");
-    head.className = "row";
-    head.style.marginBottom = "10px";
-    const tIn = document.createElement("input");
-    tIn.value = day.title || "";
-    tIn.setAttribute("aria-label","Program day "+(di+1)+" name");
-    tIn.placeholder = "Day name (e.g. Push, Lower A)";
-    tIn.addEventListener("input", ()=>{ day.title = tIn.value; });
-    head.appendChild(tIn);
-    const dup = document.createElement("button");
-    dup.className = "xbtn"; dup.textContent = "⧉"; dup.title = "Duplicate day";
-    dup.style.flex = "0 0 auto";
-    dup.addEventListener("click", ()=>{
-      day.title = tIn.value;
-      const copy = JSON.parse(JSON.stringify(day));
-      copy.title = (copy.title||"Day")+" copy";
-      builderProg.days.splice(di+1, 0, copy);
-      renderBuilder();
-    });
-    head.appendChild(dup);
-    const del = document.createElement("button");
-    del.className = "xbtn"; del.textContent = "✕"; del.title = "Remove day";
-    del.style.flex = "0 0 auto"; del.style.color = "var(--warn)";
-    del.addEventListener("click", ()=>{ builderProg.days.splice(di,1); renderBuilder(); });
-    head.appendChild(del);
-    dd.appendChild(head);
-    // exercises
-    day.exercises.forEach((ex, xi)=>{
-      const row = document.createElement("div");
-      row.className = "bex";
-      const nIn = document.createElement("input");
-      nIn.className = "bname"; nIn.value = ex.name; nIn.placeholder = "Exercise";
-      nIn.setAttribute("aria-label",(day.title||("Day "+(di+1)))+" exercise "+(xi+1)+" name");
-      nIn.addEventListener("input", ()=>{ ex.name = nIn.value; });
-      const sIn = document.createElement("input");
-      sIn.className = "bscheme"; sIn.value = ex.scheme||""; sIn.placeholder = "e.g. 4×5";
-      sIn.setAttribute("aria-label",(day.title||("Day "+(di+1)))+" exercise "+(xi+1)+" set and rep scheme");
-      sIn.addEventListener("input", ()=>{ ex.scheme = sIn.value; });
-      const up = document.createElement("button");
-      up.className = "xbtn"; up.textContent = "↑"; up.setAttribute("aria-label","Move "+ex.name+" up");
-      up.addEventListener("click", ()=>{
-        if (xi>0){ day.exercises.splice(xi-1,0,day.exercises.splice(xi,1)[0]); renderBuilder(); }
-      });
-      const dn = document.createElement("button");
-      dn.className = "xbtn"; dn.textContent = "↓"; dn.setAttribute("aria-label","Move "+ex.name+" down");
-      dn.addEventListener("click", ()=>{
-        if (xi<day.exercises.length-1){ day.exercises.splice(xi+1,0,day.exercises.splice(xi,1)[0]); renderBuilder(); }
-      });
-      const rm = document.createElement("button");
-      rm.className = "xbtn"; rm.textContent = "✕"; rm.setAttribute("aria-label","Remove "+ex.name); rm.style.color = "var(--warn)";
-      rm.addEventListener("click", ()=>{ day.exercises.splice(xi,1); renderBuilder(); });
-      row.appendChild(nIn); row.appendChild(sIn); row.appendChild(up); row.appendChild(dn); row.appendChild(rm);
-      dd.appendChild(row);
-    });
-    // add-exercise row: library select + custom entry
-    const addRow = document.createElement("div");
-    addRow.className = "bex";
-    const search =
+  const wrap=
+    document.getElementById("bDays");
+
+  wrap.innerHTML="";
+
+  builderProg.days.forEach((day,di)=>{
+    const dd=
+      document.createElement("div");
+
+    dd.className="bday";
+
+    const head=
+      document.createElement("div");
+
+    head.className="row";
+    head.style.marginBottom="10px";
+
+    const tIn=
       document.createElement("input");
 
-    search.type = "search";
-    search.className = "bexercise-search";
-    search.placeholder = "Search exercises";
-    search.autocomplete = "off";
+    tIn.value=day.title || "";
+
+    tIn.setAttribute(
+      "aria-label",
+      "Program day "+(di+1)+" name"
+    );
+
+    tIn.placeholder=
+      "Day name (e.g. Push, Lower A)";
+
+    tIn.addEventListener("input",()=>{
+      day.title=tIn.value;
+    });
+
+    head.appendChild(tIn);
+
+    const dup=
+      document.createElement("button");
+
+    dup.className="xbtn";
+    dup.textContent="⧉";
+    dup.title="Duplicate day";
+    dup.style.flex="0 0 auto";
+
+    dup.addEventListener("click",()=>{
+      day.title=tIn.value;
+
+      const copy=
+        JSON.parse(
+          JSON.stringify(day)
+        );
+
+      copy.title=
+        (copy.title || "Day")
+        +" copy";
+
+      builderProg.days.splice(
+        di+1,
+        0,
+        copy
+      );
+
+      builderPrescriptionOpenKey=null;
+      renderBuilder();
+    });
+
+    head.appendChild(dup);
+
+    const del=
+      document.createElement("button");
+
+    del.className="xbtn";
+    del.textContent="✕";
+    del.title="Remove day";
+    del.style.flex="0 0 auto";
+    del.style.color="var(--warn)";
+
+    del.addEventListener("click",()=>{
+      builderProg.days.splice(di,1);
+      builderPrescriptionOpenKey=null;
+      renderBuilder();
+    });
+
+    head.appendChild(del);
+    dd.appendChild(head);
+
+    day.exercises.forEach((ex,xi)=>{
+      const key=di+":"+xi;
+
+      const block=
+        document.createElement("div");
+
+      block.className=
+        "builder-exercise";
+
+      block.dataset.exerciseName=
+        ex.name;
+
+      const row=
+        document.createElement("div");
+
+      row.className="bex bex-main";
+
+      const originalName=
+        ex.name;
+
+      const nIn=
+        document.createElement("input");
+
+      nIn.className="bname";
+      nIn.value=ex.name;
+      nIn.placeholder="Exercise";
+
+      nIn.setAttribute(
+        "aria-label",
+        (day.title || ("Day "+(di+1)))
+        +" exercise "
+        +(xi+1)
+        +" name"
+      );
+
+      nIn.addEventListener("input",()=>{
+        ex.name=nIn.value;
+        block.dataset.exerciseName=
+          nIn.value;
+      });
+
+      nIn.addEventListener("change",()=>{
+        const cleanName=
+          nIn.value.trim();
+
+        if (!cleanName){
+          nIn.value=originalName;
+          ex.name=originalName;
+          return;
+        }
+
+        ex.name=cleanName;
+
+        if (
+          normalizeExerciseName(cleanName)
+          !==normalizeExerciseName(
+            originalName
+          )
+        ){
+          delete ex.prescription;
+          delete ex.scheme;
+          builderPrescriptionOpenKey=null;
+          renderBuilder();
+        }
+      });
+
+      const up=
+        document.createElement("button");
+
+      up.className="xbtn";
+      up.textContent="↑";
+
+      up.setAttribute(
+        "aria-label",
+        "Move "+ex.name+" up"
+      );
+
+      up.addEventListener("click",()=>{
+        if (xi>0){
+          day.exercises.splice(
+            xi-1,
+            0,
+            day.exercises.splice(
+              xi,
+              1
+            )[0]
+          );
+
+          builderPrescriptionOpenKey=null;
+          renderBuilder();
+        }
+      });
+
+      const dn=
+        document.createElement("button");
+
+      dn.className="xbtn";
+      dn.textContent="↓";
+
+      dn.setAttribute(
+        "aria-label",
+        "Move "+ex.name+" down"
+      );
+
+      dn.addEventListener("click",()=>{
+        if (
+          xi
+          <day.exercises.length-1
+        ){
+          day.exercises.splice(
+            xi+1,
+            0,
+            day.exercises.splice(
+              xi,
+              1
+            )[0]
+          );
+
+          builderPrescriptionOpenKey=null;
+          renderBuilder();
+        }
+      });
+
+      const rm=
+        document.createElement("button");
+
+      rm.className="xbtn";
+      rm.textContent="✕";
+      rm.style.color="var(--warn)";
+
+      rm.setAttribute(
+        "aria-label",
+        "Remove "+ex.name
+      );
+
+      rm.addEventListener("click",()=>{
+        day.exercises.splice(xi,1);
+        builderPrescriptionOpenKey=null;
+        renderBuilder();
+      });
+
+      row.appendChild(nIn);
+      row.appendChild(up);
+      row.appendChild(dn);
+      row.appendChild(rm);
+      block.appendChild(row);
+
+      const resolved=
+        builderPrescriptionProfile(ex);
+
+      const toggle=
+        document.createElement("button");
+
+      toggle.className=
+        "builder-prescription-toggle";
+
+      toggle.dataset.builderPrescriptionToggle=
+        key;
+
+      const summary=
+        builderPrescriptionSummary(ex);
+
+      if (builderHasPrescription(ex)){
+        toggle.classList.add(
+          "has-details"
+        );
+
+        toggle.textContent=
+          "Edit workout details"
+          +(summary
+            ? " · "+summary
+            : "");
+      }else{
+        toggle.textContent=
+          "Set workout details";
+      }
+
+      if (!resolved){
+        toggle.disabled=true;
+        toggle.textContent=
+          "Workout details unavailable";
+      }else{
+        toggle.addEventListener(
+          "click",
+          ()=>{
+            builderPrescriptionOpenKey=
+              builderPrescriptionOpenKey===key
+                ? null
+                : key;
+
+            renderBuilder();
+          }
+        );
+      }
+
+      block.appendChild(toggle);
+
+      if (
+        builderPrescriptionOpenKey===key
+      ){
+        const editor=
+          buildBuilderPrescriptionEditor(
+            ex,
+            key
+          );
+
+        if (editor){
+          block.appendChild(editor);
+        }
+      }
+
+      dd.appendChild(block);
+    });
+
+    const addRow=
+      document.createElement("div");
+
+    addRow.className=
+      "bex bex-add";
+
+    const search=
+      document.createElement("input");
+
+    search.type="search";
+    search.className=
+      "bexercise-search";
+
+    search.placeholder=
+      "Search exercises";
+
+    search.autocomplete="off";
 
     search.setAttribute(
       "aria-label",
       "Search exercises for "
-        +(day.title||("Day "+(di+1)))
+      +(day.title || ("Day "+(di+1)))
     );
 
-    search.style.cssText =
-      "flex:2 0 100%;";
-
-    const sel = document.createElement("select");
+    const sel=
+      document.createElement("select");
 
     populateUnifiedExercisePicker(sel);
 
     sel.setAttribute(
       "aria-label",
       "Exercise to add to "
-        +(day.title||("Day "+(di+1)))
+      +(day.title || ("Day "+(di+1)))
     );
 
-    sel.style.flex = "2";
+    const custom=
+      document.createElement("input");
 
-    search.addEventListener("input",()=>{
-      populateUnifiedExercisePicker(
-        sel,
-        {query:search.value}
+    custom.placeholder=
+      "Custom exercise name";
+
+    custom.className=
+      "bname hidden";
+
+    custom.setAttribute(
+      "aria-label",
+      "Custom exercise name for "
+      +(day.title || ("Day "+(di+1)))
+    );
+
+    const customShape=
+      makeExerciseShapeSelect(
+        "Custom exercise tracking type for "
+        +(day.title || ("Day "+(di+1)))
       );
 
-      const isCustom =
+    customShape.classList.add(
+      "bshape",
+      "hidden"
+    );
+
+    const updateCustomVisibility=()=>{
+      const isCustom=
         sel.value==="__CUSTOM__";
 
       custom.classList.toggle(
@@ -9308,65 +10947,69 @@ function renderBuilder(){
         "hidden",
         !isCustom
       );
-    });
+    };
 
-    const custom = document.createElement("input");
-    custom.placeholder = "Custom exercise name";
-    custom.className = "bname hidden";
-    custom.setAttribute(
-      "aria-label",
-      "Custom exercise name for "+(day.title||("Day "+(di+1)))
-    );
-
-    const customShape = makeExerciseShapeSelect(
-      "Custom exercise tracking type for "+(day.title||("Day "+(di+1)))
-    );
-    customShape.classList.add("bshape","hidden");
-
-    sel.addEventListener("change",()=>{
-      const isCustom = sel.value==="__CUSTOM__";
-      custom.classList.toggle("hidden",!isCustom);
-      customShape.classList.toggle("hidden",!isCustom);
-    });
-
-    const schIn = document.createElement("input");
-    schIn.className = "bscheme";
-    schIn.placeholder = "e.g. 3×8";
-    schIn.setAttribute(
-      "aria-label",
-      "Set and rep scheme for new exercise"
-    );
-
-    const addBtn = document.createElement("button");
-    addBtn.className = "xbtn";
-    addBtn.textContent = "＋ Add";
-
-    addBtn.addEventListener("click",()=>{
-      let name = sel.value;
-
-      if (name==="__CUSTOM__"){
-        const created = createUserExercise(
-          custom.value,
-          customShape.value
+    search.addEventListener(
+      "input",
+      ()=>{
+        populateUnifiedExercisePicker(
+          sel,
+          {
+            query:search.value
+          }
         );
 
+        updateCustomVisibility();
+      }
+    );
+
+    sel.addEventListener(
+      "change",
+      updateCustomVisibility
+    );
+
+    const addBtn=
+      document.createElement("button");
+
+    addBtn.className="xbtn";
+    addBtn.textContent="＋ Add";
+
+    addBtn.addEventListener("click",()=>{
+      let name=sel.value;
+
+      if (name==="__CUSTOM__"){
+        const created=
+          createUserExercise(
+            custom.value,
+            customShape.value
+          );
+
         if (!created.ok){
-          flashSave(created.reason,true);
+          flashSave(
+            created.reason,
+            true
+          );
+
           return;
         }
 
-        name = created.entry.name;
+        name=created.entry.name;
         renderLibraryOptions();
-        flashSave("Custom exercise saved ✓");
+
+        flashSave(
+          "Custom exercise saved ✓"
+        );
       }
 
-      if (!name) return;
+      if (!name){
+        return;
+      }
 
       day.exercises.push({
-        name:name,
-        scheme:schIn.value.trim()
+        name:name
       });
 
+      builderPrescriptionOpenKey=null;
       renderBuilder();
     });
 
@@ -9374,8 +11017,8 @@ function renderBuilder(){
     addRow.appendChild(sel);
     addRow.appendChild(custom);
     addRow.appendChild(customShape);
-    addRow.appendChild(schIn);
     addRow.appendChild(addBtn);
+
     dd.appendChild(addRow);
     wrap.appendChild(dd);
   });

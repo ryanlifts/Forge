@@ -1716,14 +1716,34 @@ check("no inline app script remains in index.html", !/<script>(?!\s*<)/.test(raw
 check("SW precaches all 7 slices", SLICES.every(f=>sw.includes('"./scripts/'+f+'"')));
 
 // ================= Phase 2 corrections: strict mode, exact order, migration identity =================
-const LOCAL_SCRIPTS = ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].concat(SLICES.map(f=>"scripts/"+f));
+const LOCAL_SCRIPTS = [
+  "data-quotes.js",
+  "data-foods.js",
+  "data-suggestions.js",
+  "data-faq.js",
+  "data-exercises.js",
+  "data-exercise-card-profiles.js",
+  "scripts/01-storage.js",
+  "scripts/02-food.js",
+  "scripts/03-card-profiles.js",
+  "scripts/03-train.js",
+  "scripts/04-weight.js",
+  "scripts/05-ai.js",
+  "scripts/06-settings.js",
+  "scripts/07-boot.js"
+];
 check("every local classic script begins with the strict-mode directive",
   LOCAL_SCRIPTS.every(f=>fs.readFileSync(path.join(__dirname, "..", f), "utf8").startsWith('"use strict";')));
 
 const APPROVED_ORDER = LOCAL_SCRIPTS; // data files, then slices 01..07 — this order is load-bearing
 const scriptTags = [...rawIndex.matchAll(/<script\b[^>]*\bsrc="([^"]+)"[^>]*><\/script>/g)];
-check("exactly the 12 approved scripts, each exactly once, in the approved order",
-  scriptTags.length===12 && scriptTags.every((t,i)=>t[1]===APPROVED_ORDER[i]));
+check(
+  "exactly the 14 approved scripts, each exactly once, in the approved order",
+  scriptTags.length===APPROVED_ORDER.length
+    && scriptTags.every(
+      (tag,index)=>tag[1]===APPROVED_ORDER[index]
+    )
+);
 check("no local script tag uses async, defer, or type=module",
   scriptTags.every(t=>!/\basync\b|\bdefer\b|type="module"/.test(t[0])));
 
@@ -3508,16 +3528,36 @@ check(
 );
 
 check(
-  "v76 fresh typed editors render fields without a guided rounds timer",
-  !!card76(dT76Fresh,"Run").querySelector("select")
-  && !!card76(dT76Fresh,"Run").querySelector('input[aria-label="Run minutes"]')
-  && !!card76(dT76Fresh,"Run").querySelector('input[aria-label="Run seconds"]')
-  && card76(dT76Fresh,"Run").querySelector('input[aria-label="Run seconds"]').max==="59"
-  && card76(dT76Fresh,"Run").querySelectorAll('input[type="number"]').length===3
-  && !!card76(dT76Fresh,"Farmer Carry").querySelector("select")
-  && card76(dT76Fresh,"Farmer Carry").querySelectorAll('input[type="number"]').length===2
-  && card76(dT76Fresh,"Sprint Intervals").querySelectorAll('input[type="number"]').length===3
-  && !/start timer|pause timer|resume timer/i.test(card76(dT76Fresh,"Sprint Intervals").textContent)
+  "v78 fresh profile editors expose every practical field without a guided timer",
+  [
+    "hours","minutes","seconds","distance","distanceUnit","pace","effort"
+  ].every(
+    key=>!!card76(dT76Fresh,"Run").querySelector(
+      '[data-profile-field="'+key+'"]'
+    )
+  )
+  && card76(dT76Fresh,"Run").querySelector(
+    '[data-profile-field="seconds"]'
+  ).max==="59"
+  && [
+    "count","lbs","distance","distanceUnit",
+    "durationMinutes","durationSeconds","recoverySeconds","effort"
+  ].every(
+    key=>!!card76(dT76Fresh,"Farmer Carry").querySelector(
+      '[data-profile-field="'+key+'"]'
+    )
+  )
+  && [
+    "intervals","workMinutes","workSeconds",
+    "recoverySeconds","distance","distanceUnit","effort"
+  ].every(
+    key=>!!card76(dT76Fresh,"Sprint Intervals").querySelector(
+      '[data-profile-field="'+key+'"]'
+    )
+  )
+  && !/start timer|pause timer|resume timer/i.test(
+    card76(dT76Fresh,"Sprint Intervals").textContent
+  )
 );
 
 // 2. Exact fixture semantics for reps rows: bodyweight and weighted reps can coexist.
@@ -3640,26 +3680,31 @@ click76(
 );
 
 let runCard76 = card76(dT76Draft,"Run");
+const runHours76 =
+  runCard76.querySelector('[data-profile-field="hours"]');
 const runMinutes76 =
-  runCard76.querySelector('input[aria-label="Run minutes"]');
+  runCard76.querySelector('[data-profile-field="minutes"]');
 const runSeconds76 =
-  runCard76.querySelector('input[aria-label="Run seconds"]');
-const runNums76 =
-  [...runCard76.querySelectorAll('input[type="number"]')];
+  runCard76.querySelector('[data-profile-field="seconds"]');
 const runDistance76 =
-  runNums76.find(
-    input=>input!==runMinutes76 && input!==runSeconds76
-  );
-const runUnit76 = runCard76.querySelector("select");
+  runCard76.querySelector('[data-profile-field="distance"]');
+const runUnit76 =
+  runCard76.querySelector('[data-profile-field="distanceUnit"]');
+const runPace76 =
+  runCard76.querySelector('[data-profile-field="pace"]');
+const runEffort76 =
+  runCard76.querySelector('[data-profile-field="effort"]');
 
 check(
-  "v76 timeDist Edit exposes minutes, seconds, optional distance, and unit",
-  !!runMinutes76
+  "v78 steady time/distance Edit restores all profile fields",
+  !!runHours76
+  && !!runMinutes76
   && !!runSeconds76
   && runSeconds76.max==="59"
   && !!runDistance76
-  && runNums76.length===3
   && !!runUnit76
+  && !!runPace76
+  && !!runEffort76
 );
 
 input76(T76Draft,runMinutes76,15);
@@ -3698,9 +3743,15 @@ click76(
 let carryCard76 = card76(dT76Draft,"Farmer Carry");
 
 check(
-  "v76 carry Edit exposes weight, distance, and distance unit",
-  carryCard76.querySelectorAll('input[type="number"]').length===2
-  && !!carryCard76.querySelector("select")
+  "v78 loaded-distance Edit restores all required and optional fields",
+  [
+    "count","lbs","distance","distanceUnit",
+    "durationMinutes","durationSeconds","recoverySeconds","effort"
+  ].every(
+    key=>!!carryCard76.querySelector(
+      '[data-profile-field="'+key+'"]'
+    )
+  )
 );
 
 click76(T76Draft,carryCard76.querySelector(".saveExBtn"));
@@ -3725,10 +3776,17 @@ click76(
 let roundsCard76 = card76(dT76Draft,"Tempo Step Intervals");
 
 check(
-  "v76 rounds Edit exposes rounds/work/recovery/note fields only",
-  roundsCard76.querySelectorAll('input[type="number"]').length===3
-  && roundsCard76.querySelectorAll("input").length===4
-  && !/start timer|pause timer|resume timer/i.test(roundsCard76.textContent)
+  "v78 conditioning-rounds Edit restores rounds, work, recovery and notes",
+  [
+    "rounds","workMinutes","workSeconds","recoverySeconds","note"
+  ].every(
+    key=>!!roundsCard76.querySelector(
+      '[data-profile-field="'+key+'"]'
+    )
+  )
+  && !/start timer|pause timer|resume timer/i.test(
+    roundsCard76.textContent
+  )
 );
 
 click76(T76Draft,roundsCard76.querySelector(".saveExBtn"));
@@ -3904,11 +3962,12 @@ click76(
 rollbackProto76.setItem = rollbackSetItem76;
 
 check(
-  "v76 failed typed Save Exercise keeps edited typed fields available for retry",
+  "v78 failed profile Save Exercise keeps edited fields available for retry",
   T76Rollback.window.eval(`
     sessionState["Run"].status==="unsaved"
     && sessionState["Run"].mode==="timeDist"
-    && sessionState["Run"].typed.secs===975
+    && Number(sessionState["Run"].typed.minutes)===16
+    && Number(sessionState["Run"].typed.seconds)===15
   `)
 );
 
@@ -4309,13 +4368,339 @@ const mobilityInput76 =
   );
 
 check(
-  "v76 Free Text visibly identifies its required details field",
-  !!mobilityLabel76
-  && !!mobilityInput76
-  && mobilityInput76.placeholder==="Enter what you completed"
+  "v78 Mobility Flow visibly requires duration and keeps notes optional",
+  !!mobilityCard76
+  && !!mobilityCard76.querySelector(
+    '[data-profile-field="minutes"][aria-required="true"]'
+  )
+  && !!mobilityCard76.querySelector(
+    '[data-profile-field="seconds"]'
+  )
+  && !!mobilityCard76.querySelector(
+    '[data-profile-field="note"]'
+  )
+  && [...mobilityCard76.querySelectorAll(".slabel")]
+    .some(
+      label=>label.textContent==="Minutes (required)"
+    )
+  && [...mobilityCard76.querySelectorAll(".slabel")]
+    .some(
+      label=>label.textContent==="Notes (optional)"
+    )
 );
 
 
+
+// ---------- v78 Program Builder mobile containment ----------
+const builderTrainSource78 =
+  fs.readFileSync(
+    path.join(__dirname,"..","scripts","03-train.js"),
+    "utf8"
+  );
+
+check(
+  "v78 Program Builder add row uses its responsive layout hook",
+  /addRow\.className\s*=\s*"bex bex-add";/
+    .test(builderTrainSource78)
+  && !builderTrainSource78.includes(
+    '"flex:2 0 100%;"'
+  )
+  && !builderTrainSource78.includes(
+    'sel.style.flex = "2";'
+  )
+);
+
+check(
+  "v78 Program Builder mobile add controls remain inside the viewport",
+  (()=>{
+    const compact=
+      rawIndex.replace(/\s+/g,"");
+
+    return (
+      compact.includes(
+        ".bex-add{flex-wrap:wrap;}"
+      )
+      && compact.includes(
+        "@media(max-width:520px){.bex-add{display:grid;grid-template-columns:minmax(0,1fr);align-items:center;}"
+      )
+      && compact.includes(
+        ".bex-add>.bexercise-search,.bex-add>select,.bex-add>input,.bex-add>.xbtn{grid-column:1;width:100%;}"
+      )
+    );
+  })()
+);
+
+// ---------- v78 profile-aware Program Builder ----------
+const BuilderProfiles78=
+  boot(
+    V3_CFG,
+    JSON.parse(
+      JSON.stringify(EMPTY_DATA)
+    )
+  );
+
+BuilderProfiles78.window.eval(`
+  builderProg={
+    name:"Profile Builder",
+    days:[{
+      id:"D1",
+      title:"Day 1",
+      exercises:[
+        {
+          name:"Bench Press",
+          scheme:"3×5"
+        },
+        {
+          name:"Run"
+        },
+        {
+          name:"Plank"
+        }
+      ]
+    }]
+  };
+
+  builderPrescriptionOpenKey=null;
+  renderBuilder();
+`);
+
+const dBuilderProfiles78=
+  BuilderProfiles78.window.document;
+
+const builderExerciseBlock78=name=>
+  [...dBuilderProfiles78.querySelectorAll(
+    ".builder-exercise"
+  )].find(
+    block=>
+      block.dataset.exerciseName===name
+  );
+
+check(
+  "v78 Program Builder removes every generic exercise scheme field",
+  !dBuilderProfiles78.querySelector(
+    ".bscheme"
+  )
+  && !builderTrainSource78.includes(
+    'placeholder = "e.g. 4×5"'
+  )
+  && !builderTrainSource78.includes(
+    'placeholder = "e.g. 3×8"'
+  )
+  && !builderTrainSource78.includes(
+    "schIn"
+  )
+);
+
+check(
+  "v78 Program Builder adds exercises without inventing a generic scheme",
+  (()=>{
+    const addRow=
+      dBuilderProfiles78.querySelector(
+        ".bex-add"
+      );
+
+    const picker=
+      addRow.querySelector("select");
+
+    picker.value="Yoga";
+
+    addRow
+      .querySelector(".xbtn")
+      .click();
+
+    return BuilderProfiles78.window.eval(`
+      (()=>{
+        const exercise=
+          builderProg.days[0]
+            .exercises[
+              builderProg.days[0]
+                .exercises.length-1
+            ];
+
+        return (
+          exercise.name==="Yoga"
+          && !Object.prototype
+            .hasOwnProperty.call(
+              exercise,
+              "scheme"
+            )
+          && !Object.prototype
+            .hasOwnProperty.call(
+              exercise,
+              "prescription"
+            )
+        );
+      })()
+    `);
+  })()
+);
+
+builderExerciseBlock78("Run")
+  .querySelector(
+    "[data-builder-prescription-toggle]"
+  )
+  .click();
+
+const runBuilderPanel78=
+  dBuilderProfiles78.querySelector(
+    '.builder-prescription-editor[data-profile="steadyTimeDistance"]'
+  );
+
+check(
+  "v78 Run builder details use steady time-distance fields",
+  !!runBuilderPanel78
+  && !!runBuilderPanel78.querySelector(
+    '[data-builder-prescription-field="minutes"]'
+  )
+  && !!runBuilderPanel78.querySelector(
+    '[data-builder-prescription-field="distance"]'
+  )
+  && !!runBuilderPanel78.querySelector(
+    '[data-builder-prescription-field="pace"]'
+  )
+  && !runBuilderPanel78.querySelector(
+    '[data-builder-prescription-field="sets"]'
+  )
+  && !runBuilderPanel78.querySelector(
+    '[data-builder-prescription-field="reps"]'
+  )
+);
+
+runBuilderPanel78.querySelector(
+  '[data-builder-prescription-field="minutes"]'
+).value="20";
+
+runBuilderPanel78.querySelector(
+  '[data-builder-prescription-field="distance"]'
+).value="3";
+
+runBuilderPanel78.querySelector(
+  '[data-builder-prescription-action="apply"]'
+).click();
+
+check(
+  "v78 Run builder details save a structured public prescription",
+  BuilderProfiles78.window.eval(`
+    (()=>{
+      const exercise=
+        builderProg.days[0]
+          .exercises[1];
+
+      return (
+        exercise.name==="Run"
+        && exercise.prescription
+        && exercise.prescription
+          .durationSeconds===1200
+        && exercise.prescription
+          .distance===3
+        && exercise.prescription
+          .distanceUnit==="mi"
+        && !Object.prototype
+          .hasOwnProperty.call(
+            exercise,
+            "scheme"
+          )
+      );
+    })()
+  `)
+);
+
+builderExerciseBlock78("Plank")
+  .querySelector(
+    "[data-builder-prescription-toggle]"
+  )
+  .click();
+
+const plankBuilderPanel78=
+  dBuilderProfiles78.querySelector(
+    '.builder-prescription-editor[data-profile="timedHold"]'
+  );
+
+check(
+  "v78 Plank builder details use hold fields without distance",
+  !!plankBuilderPanel78
+  && !!plankBuilderPanel78.querySelector(
+    '[data-builder-prescription-field="holds"]'
+  )
+  && !!plankBuilderPanel78.querySelector(
+    '[data-builder-prescription-field="holdSeconds"]'
+  )
+  && !!plankBuilderPanel78.querySelector(
+    '[data-builder-prescription-field="recoverySeconds"]'
+  )
+  && !plankBuilderPanel78.querySelector(
+    '[data-builder-prescription-field="distance"]'
+  )
+);
+
+builderExerciseBlock78("Bench Press")
+  .querySelector(
+    "[data-builder-prescription-toggle]"
+  )
+  .click();
+
+const benchBuilderPanel78=
+  dBuilderProfiles78.querySelector(
+    '.builder-prescription-editor[data-profile="strengthSets"]'
+  );
+
+check(
+  "v78 strength builder details use sets reps and optional target weight",
+  !!benchBuilderPanel78
+  && benchBuilderPanel78.querySelector(
+    '[data-builder-prescription-field="sets"]'
+  ).value==="3"
+  && benchBuilderPanel78.querySelector(
+    '[data-builder-prescription-field="reps"]'
+  ).value==="5"
+  && !!benchBuilderPanel78.querySelector(
+    '[data-builder-prescription-field="weight"]'
+  )
+);
+
+// ---------- v78 structured strength prescription prefill ----------
+const StructuredRowPrefill78=
+  boot(
+    V3_CFG,
+    JSON.parse(
+      JSON.stringify(EMPTY_DATA)
+    )
+  );
+
+check(
+  "v78 Bench Press structured prescription prefills every planned row",
+  StructuredRowPrefill78.window.eval(`
+    (()=>{
+      const state=
+        makePlanSessionState(
+          {
+            name:"Bench Press",
+            prescription:{
+              sets:4,
+              reps:6,
+              weight:185,
+              weightUnit:"lb"
+            }
+          },
+          null
+        );
+
+      return (
+        state.mode==="rows"
+        && state.profile==="strengthSets"
+        && state.rows.length===4
+        && state.rows.every(
+          row=>
+            row.r===6
+            && row.w===185
+            && row.touched===false
+        )
+        && state.auto===false
+        && state.autoDelta===0
+      );
+    })()
+  `)
+);
 
 // ---------- searchable exercise pickers + universal planned replacement ----------
 const SEARCH_REPLACE_PROGRAM_76 = {

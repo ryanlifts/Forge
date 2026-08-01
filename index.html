@@ -304,10 +304,154 @@
     .rest-dock-inner .xbtn { padding:8px 9px; }
   }
   .bday { border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:12px; }
-  .bex { display:flex; align-items:center; gap:6px; margin-bottom:8px; }
+  .bex { display:flex; align-items:center; gap:6px; margin-bottom:8px; min-width:0; }
+  .bex > * { min-width:0; }
   .bex input { padding:9px 8px; }
-  .bex .bname { flex:2; } .bex .bscheme { flex:1; }
+  .bex .bname { flex:1 1 auto; }
+
+  .builder-exercise {
+    border-bottom:1px solid rgba(255,255,255,.06);
+    padding-bottom:10px;
+    margin-bottom:10px;
+  }
+
+  .builder-exercise:last-of-type {
+    border-bottom:0;
+  }
+
+  .builder-prescription-toggle {
+    width:100%;
+    min-height:44px;
+    padding:10px 12px;
+    border:1px solid var(--border);
+    border-radius:10px;
+    background:rgba(31,35,42,.42);
+    color:var(--text);
+    font-family:'Oswald',sans-serif;
+    font-size:13px;
+    font-weight:600;
+    letter-spacing:.04em;
+    text-align:left;
+  }
+
+  .builder-prescription-toggle.has-details {
+    border-color:rgba(var(--ember-rgb),.55);
+    color:var(--ember);
+  }
+
+  .builder-prescription-editor {
+    margin-top:8px;
+    padding:12px;
+    border:1px solid rgba(var(--ember-rgb),.45);
+    border-radius:12px;
+    background:rgba(var(--ember-rgb),.05);
+  }
+
+  .builder-prescription-title {
+    font-family:'Oswald',sans-serif;
+    font-size:15px;
+    font-weight:650;
+    letter-spacing:.04em;
+    text-transform:uppercase;
+    margin-bottom:4px;
+  }
+
+  .builder-prescription-help {
+    color:var(--dim);
+    font-size:10px;
+    line-height:1.5;
+    margin-bottom:10px;
+  }
+
+  .builder-prescription-grid {
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:8px;
+  }
+
+  .builder-prescription-field {
+    display:block;
+    min-width:0;
+  }
+
+  .builder-prescription-field.wide {
+    grid-column:1 / -1;
+  }
+
+  .builder-prescription-field > span {
+    display:block;
+    color:var(--dim);
+    font-size:10px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    margin:0 0 5px;
+  }
+
+  .builder-prescription-field input,
+  .builder-prescription-field select {
+    width:100%;
+    min-width:0;
+  }
+
+  .builder-prescription-actions {
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+    margin-top:10px;
+  }
+
+  .builder-prescription-error {
+    color:var(--warn);
+    font-size:12px;
+    line-height:1.45;
+    margin-top:8px;
+  }
+
+  .bex-add {
+    flex-wrap:wrap;
+  }
+
+  .bex-add > .bexercise-search {
+    flex:1 1 100%;
+  }
+
+  .bex-add > select {
+    flex:1 1 220px;
+  }
+
+  .bex-add > .xbtn {
+    flex:0 0 auto;
+    white-space:nowrap;
+  }
+
+  .bex-add > input,
+  .bex-add > select {
+    max-width:100%;
+  }
+
   @media (max-width:520px) {
+    .bex-add {
+      display:grid;
+      grid-template-columns:minmax(0,1fr);
+      align-items:center;
+    }
+
+    .bex-add > .bexercise-search,
+    .bex-add > select,
+    .bex-add > input,
+    .bex-add > .xbtn {
+      grid-column:1;
+      width:100%;
+    }
+
+    .builder-prescription-grid {
+      grid-template-columns:repeat(2,minmax(0,1fr));
+    }
+
+    .builder-prescription-field.wide {
+      grid-column:1 / -1;
+    }
+
     .srow { flex-wrap:wrap; }
     .srow .slabel { flex:1 1 100%; width:auto; font-size:11px; }
     .srow > .step, .srow > .snum, .srow > .sx { order:2; }
@@ -1377,8 +1521,10 @@
 <script src="data-suggestions.js"></script>
 <script src="data-faq.js"></script>
 <script src="data-exercises.js"></script>
+<script src="data-exercise-card-profiles.js"></script>
 <script src="scripts/01-storage.js"></script>
 <script src="scripts/02-food.js"></script>
+<script src="scripts/03-card-profiles.js"></script>
 <script src="scripts/03-train.js"></script>
 <script src="scripts/04-weight.js"></script>
 <script src="scripts/05-ai.js"></script>
