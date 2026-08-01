@@ -423,6 +423,7 @@ document.getElementById("calcMacrosBtn").addEventListener("click", ()=>{
     +'Your target: <b class="ember-text">'+lastCalc.cal+' kcal</b>';
   document.getElementById("calcOut").classList.remove("hidden");
   renderSplit();
+  ackBtn("calcMacrosBtn", "✓ Calculated");
 });
 document.getElementById("applyMacrosBtn").addEventListener("click", ()=>{
   if(!lastCalc) return;
@@ -1002,4 +1003,3 @@ document.getElementById("dashWtBtn").addEventListener("click", ()=>{
   ackBtn("dashWtBtn", "✓");
   checkWeightAdjust(v);
 });
-

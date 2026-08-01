@@ -37,6 +37,13 @@ check("finish-day makes no target claims when unset", !/targets? hit/.test(dA.ge
 
 // targets via manual save unlock everything
 const setvA=(id,v)=>{const e=dA.getElementById(id); e.value=v; e.dispatchEvent(new A.window.Event("input",{bubbles:true})); e.dispatchEvent(new A.window.Event("change",{bubbles:true}));};
+// calculator acknowledges only a valid calculation
+clickA("calcMacrosBtn");
+check("invalid macro calculation does not show green tap feedback", !dA.getElementById("calcMacrosBtn").classList.contains("acked"));
+setvA("cAge","42"); setvA("cFt","5"); setvA("cIn","11"); setvA("cWt","225");
+clickA("calcMacrosBtn");
+check("valid macro calculation briefly turns Calculate green", dA.getElementById("calcMacrosBtn").classList.contains("acked") && dA.getElementById("calcMacrosBtn").textContent==="✓ Calculated");
+
 setvA("sCalTarget","1800"); setvA("sProTarget","170"); setvA("sCarb","180"); setvA("sFat","55");
 clickA("saveSettingsBtn");
 check("manual save populates + bars appear", dA.getElementById("dashBars").textContent.includes("/ 1800 kcal"));
