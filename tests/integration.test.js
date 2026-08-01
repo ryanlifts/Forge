@@ -1681,6 +1681,7 @@ check("v56 FAQ documents offline fast-fail and handoff availability", P.window.e
 check("FAQ uses current program identity and Manage labels", P.window.eval(`FAQ.some(x=>x.q==="How do programs work?"&&x.a.includes("Current program")&&x.a.includes("Manage")&&x.a.includes("Save file")&&x.a.includes("Share"))`));
 check("FAQ no longer sends users to the retired Program tools label", P.window.eval(`!FAQ.some(x=>x.a&&x.a.includes("Program tools"))`));
 check("FAQ privacy and storage copy distinguish local data, network requests, and approximate usage", P.window.eval(`FAQ.some(x=>x.q==="Where is my data stored? Is it private?"&&/on this device/.test(x.a)&&/Local food suggestions/.test(x.a)&&/Online food searches/.test(x.a)&&/Optional AI features/.test(x.a)) && FAQ.some(x=>x.q==="How much storage is BlackPyre using?"&&/Settings → Data &amp; recovery/.test(x.a)&&/approximate browser-storage/.test(x.a)&&/Back up before clearing/.test(x.a))`));
+check("native backup FAQ names both actions, the exact Files location, and local deletion risk", P.window.eval(`FAQ.some(x=>x.q==="Where are my backups saved?"&&/BACK UP ON THIS DEVICE/.test(x.a)&&/Files → On My iPhone → BlackPyre/.test(x.a)&&/SHARE OR SAVE ELSEWHERE/.test(x.a)&&/deleted/.test(x.a)&&/another copy/.test(x.a))`));
 check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.some(f=>/chicken breast/i.test(f.n))`));
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
@@ -3104,12 +3105,22 @@ check("backup-share reminder is immediately due without share history and otherw
   && reminderCases.snoozed===false);
 const platformNeutralBackupGuidance = reminderLogic.window.eval(`([
   document.getElementById("backupMetaLine").textContent,
-  document.getElementById("backupText").textContent,
-  document.getElementById("shareDataBtn").nextElementSibling.textContent
+  document.getElementById("backupText").textContent
 ]).join(" ")`);
 check("backup-share guidance is platform-neutral and still directs a separate copy",
   platformNeutralBackupGuidance.includes("outside BlackPyre")
   && !/(iCloud|\bMac\b|email)/i.test(platformNeutralBackupGuidance));
+const nativeBackupDataCardCopy = reminderLogic.window.eval(`({
+  local:document.getElementById("exportDataBtn").textContent,
+  share:document.getElementById("shareDataBtn").textContent,
+  note:document.getElementById("shareDataBtn").nextElementSibling.textContent
+})`);
+check("native Data card clearly separates one-tap device backup from share or save elsewhere",
+  nativeBackupDataCardCopy.local==="BACK UP ON THIS DEVICE"
+  && nativeBackupDataCardCopy.share==="SHARE OR SAVE ELSEWHERE…"
+  && /Files → On My iPhone → BlackPyre/.test(nativeBackupDataCardCopy.note)
+  && /without opening a picker/.test(nativeBackupDataCardCopy.note)
+  && /deleted|lost|erased|replaced/.test(nativeBackupDataCardCopy.note));
 const approvedBackupReminderCopy = reminderLogic.window.eval(`({
   title:document.querySelector("#backupCard .label").textContent,
   titleStyle:document.querySelector("#backupCard .label").getAttribute("style"),
@@ -3174,7 +3185,9 @@ const nativeBackupPayload = JSON.parse(nativeBackupText);
 check("native backup writes a verified JSON file without opening the share sheet",
   nativeBackupOk===true
   && !!nativeBackupName
-  && NativeBackupShares.length===0);
+  && NativeBackupShares.length===0
+  && NativeBackup.window.document.getElementById("exportDataBtn").textContent==="✓ Saved to BlackPyre folder"
+  && NativeBackup.window.document.getElementById("exportDataBtn").classList.contains("acked"));
 check("native backup strips private AI keys but intentionally retains the USDA key",
   !nativeBackupText.includes("native-secret-a")
   && !nativeBackupText.includes("native-secret-o")

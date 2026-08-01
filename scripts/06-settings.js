@@ -734,7 +734,7 @@ function doBackup(btnId,shareAfterSave){
   return writeNativeJson(capability,filename,text)
     .then(file=>{
       recordCompletedLocalBackup(!!shareAfterSave);
-      if (!shareAfterSave){ ackBtn(btnId,"✓ Saved to BlackPyre"); return true; }
+      if (!shareAfterSave){ ackBtn(btnId,"✓ Saved to BlackPyre folder"); return true; }
       return shareNativeJson(capability,file,"BlackPyre backup")
         .then(result=>{
           recordCompletedBackupShare(result);
