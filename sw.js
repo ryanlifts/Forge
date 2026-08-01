@@ -2,8 +2,8 @@
 // NOTE: sw.js deliberately does NOT appear in SHELL. The browser fetches the service
 // worker itself through its own update mechanism (byte-compare on navigation); precaching
 // it would freeze updates and break the cache-bump release ritual. Do not "fix" this.
-const CACHE = "blackpyre-v77-physical-3";
-// BlackPyre v77: canonical training-plan identity, searchable Program Builder, and universal session replacement.
+const CACHE = "blackpyre-v78-native-parity-5";
+// BlackPyre v78: profile-aware exercise cards and native parity.
 const SHELL = [
   "./",
   "./index.html",
@@ -12,8 +12,10 @@ const SHELL = [
   "./data-suggestions.js",
   "./data-faq.js",
   "./data-exercises.js",
+  "./data-exercise-card-profiles.js",
   "./scripts/01-storage.js",
   "./scripts/02-food.js",
+  "./scripts/03-card-profiles.js",
   "./scripts/03-train.js",
   "./scripts/04-weight.js",
   "./scripts/05-ai.js",

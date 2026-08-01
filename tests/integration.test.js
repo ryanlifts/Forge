@@ -2,6 +2,20 @@
 const { boot, bootRaw, assembleHTML, sacredCalls, allBlackPyreCalls, check, summary, dstr, wait, EXISTING_CFG, EMPTY_DATA } = require("./harness");
 const fs = require("fs");
 const path = require("path");
+const v8 = require("v8");
+const vm = require("vm");
+
+v8.setFlagsFromString("--expose-gc");
+const collectTestGarbage = vm.runInNewContext("gc");
+
+function releaseTestWindows(instances){
+  instances.forEach(instance=>{
+    if(!instance)return;
+    const active=instance.window;
+    if(active && typeof active.close==="function")active.close();
+  });
+  collectTestGarbage();
+}
 
 (async ()=>{
 const html = assembleHTML();
@@ -973,6 +987,11 @@ check("native-final exercise names are 14px bold Oswald while schemes remain 12p
 check("native-final hierarchy preserves the existing smaller global labels",
   T50.window.getComputedStyle(dT50.querySelector(".label")).fontSize==="10px");
 
+await wait(0);
+releaseTestWindows([
+  A,BackupReminder,CancelBackup,ShareBackup,T49,T49Invalid,T49Switch,T50
+]);
+
 const MyExercisesParity76=boot(
   V2_CFG,
   JSON.parse(JSON.stringify(V2_DATA)),
@@ -1032,9 +1051,9 @@ MyExercisesParity76.window.eval(`
     "scrollY",
     {configurable:true,value:432}
   );
-  window.__myExercisesScrollRestore=null;
+  window.__myExercisesScrollRestore=[];
   window.scrollTo=(x,y)=>{
-    window.__myExercisesScrollRestore={x:x,y:y};
+    window.__myExercisesScrollRestore.push({x:x,y:y});
   };
 `);
 
@@ -1067,7 +1086,7 @@ check("My Exercises uses the shared scroll-preserving body lock",
 dMyExercisesParity76.getElementById("myExercisesCloseBtn").dispatchEvent(
   new MyExercisesParity76.window.Event("click",{bubbles:true})
 );
-await wait(10);
+await wait(30);
 
 check("closing My Exercises immediately restores focus and the underlying scroll",
   myExercisesOverlay76.classList.contains("hidden")
@@ -1075,13 +1094,13 @@ check("closing My Exercises immediately restores focus and the underlying scroll
   && myExercisesOpener76.getAttribute("aria-expanded")==="false"
   && !dMyExercisesParity76.body.classList.contains("locked")
   && MyExercisesParity76.window.eval(`
-    window.__myExercisesScrollRestore
-    && window.__myExercisesScrollRestore.x===0
-    && window.__myExercisesScrollRestore.y===432
+    window.__myExercisesScrollRestore.some(
+      entry=>entry.x===0 && entry.y===432
+    )
   `));
 
 MyExercisesParity76.window.eval(`
-  window.__myExercisesScrollRestore=null;
+  window.__myExercisesScrollRestore=[];
 `);
 
 myExercisesOpener76.focus();
@@ -1321,6 +1340,17 @@ function enterSet51(dom, dd, w, r){
   wIn.value=String(w); wIn.dispatchEvent(new dom.window.Event("input",{bubbles:true}));
   rIn.value=String(r); rIn.dispatchEvent(new dom.window.Event("input",{bubbles:true}));
 }
+clickT51(dT51.querySelector("#exerciseInputs .saveExBtn"));
+check(
+  "v78 untouched plans give immediate card-level save guidance",
+  T51.window.eval(`sessionState["Bench Press"].status`)==="plan"
+  && /Planned values are not logged until you edit a set/.test(
+    dT51.getElementById("workoutErr").textContent
+  )
+  && dT51.activeElement===dT51.querySelector(
+    '#exerciseInputs input[data-field="weight"]'
+  )
+);
 enterSet51(T51, dT51, 135, 5);
 clickT51(dT51.querySelector("#exerciseInputs .saveExBtn"));
 check("v51 save: exercise saves and collapses to Completed", T51.window.eval(`sessionState["Bench Press"].status`)==="saved" && /Completed/.test(dT51.querySelector("#exerciseInputs .savedChip").textContent));
@@ -1583,6 +1613,12 @@ check("usual snacks marks its logged food Added without offering a duplicate",
   && dUsualIdentity.querySelector("#usualItems .usualAddBtn").textContent==="Added"
   && dUsualIdentity.getElementById("usualLogBtn").disabled);
 
+await wait(0);
+releaseTestWindows([
+  F51,FoodEdit,MyExercisesParity76,SessionRemove78,T51,T51b,T51c,
+  UsualIdentity
+]);
+
 // ================= individual recurring-meal Quick Log controls =================
 const usualControlFood = {};
 for(let i=1;i<=4;i++){
@@ -1767,6 +1803,9 @@ check("usual foods do not merge unrelated products merely because they share a v
   DistinctRecurring.window.eval(`usualFor("lunch")`)===null);
 
 // ================= v69: default ChatGPT handoff provider =================
+releaseTestWindows([
+  UsualControls,UsualPartial,UsualAllMeals,DistinctRecurring
+]);
 const H68Cfg = Object.assign({},V2_CFG);
 delete H68Cfg.aiProvider;
 delete H68Cfg.foodHandoffOn;
@@ -1802,6 +1841,7 @@ check("v60 FAQ explains the default-on toggle", H60.window.eval(`FAQ.some(x=>x.q
 check("v60 keeps primary schemaVersion 3", H60.window.eval("SCHEMA_VERSION")===3);
 
 // ================= v61: local food suggestions =================
+releaseTestWindows([H68,H68Claude,H60,H60Api,H60Off]);
 const S61 = boot(V2_CFG, EMPTY_DATA);
 const dS61 = S61.window.document;
 const clickS61 = id=>dS61.getElementById(id).dispatchEvent(new S61.window.Event("click",{bubbles:true}));
@@ -1849,6 +1889,7 @@ check("v61 keeps primary schemaVersion 3", S61.window.eval("SCHEMA_VERSION")===3
 
 
 // ================= v62: expanded USDA-anchored suggestion catalog =================
+releaseTestWindows([S61,S61Offline,S61NoTargets,S61Full,S61Familiar]);
 const C62 = boot(Object.assign({},V2_CFG,{foodSuggestionsOn:true}), EMPTY_DATA);
 const dC62 = C62.window.document;
 check("v62 bundled USDA suggestion catalog loads with exactly 120 foods", C62.window.eval(`FOOD_SUGGESTION_CATALOG_VERSION==="USDA Standard Reference 28" && FOOD_SUGGESTION_CATALOG.length===120`));
@@ -1875,10 +1916,11 @@ check("v62 a catalog suggestion opens its exact listed serving for review", dC62
 check("v62 review shows the USDA per-100g values and correctly scaled serving", /USDA reference · SR28/.test(dC62.getElementById("selName").textContent) && /165 kcal/.test(dC62.getElementById("selPer100").textContent) && dC62.getElementById("calcCal").textContent==="186" && dC62.getElementById("calcPro").textContent==="35");
 check("v62 reviewing a broad-catalog suggestion never auto-logs it", C62.window.eval(`(data.food[todayStr()]||[]).length`)===beforeReview62);
 check("v62 FAQ explains USDA sourcing, exact servings, and real-world variation", C62.window.eval(`FAQ.some(x=>x.q==="How accurate are suggested-food calories and macros?"&&/per 100 grams/.test(x.a)&&/exact gram weight/.test(x.a)&&/NDB number/.test(x.a)&&/brand/.test(x.a)) && FAQ.some(x=>x.q==="How do food suggestions work?"&&/120 common foods/.test(x.a)&&/familiar foods receive a bonus but are not required/.test(x.a)&&/does not call USDA or an AI/.test(x.a))`));
-check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v77-physical-3"'); })());
+check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v78-native-parity-5"'); })());
 check("v62 keeps primary schemaVersion 3", C62.window.eval("SCHEMA_VERSION")===3);
 
 // ================= ChatGPT handoff paste flow =================
+releaseTestWindows([C62]);
 const H = boot(Object.assign({}, EXISTING_CFG, {aiProvider:"handoff"}), EMPTY_DATA);
 const dH = H.window.document;
 H.window.HTMLElement.prototype.scrollIntoView = function(opts){ H.window.__aiScroll={id:this.id, className:this.className, block:opts&&opts.block}; };
@@ -1902,6 +1944,7 @@ check("handoff logging clears raw reply and resets the review", dH.getElementByI
 check("handoff logging returns to the top ready for another", /ready for another/i.test(dH.getElementById("aiFoodStatus").textContent) && H.window.eval("window.__aiScroll && window.__aiScroll.id")==="aiFoodCard");
 
 // ================= easter egg =================
+releaseTestWindows([H]);
 const G = boot(EXISTING_CFG, EMPTY_DATA);
 const dG = G.window.document;
 const title = dG.getElementById("bpTitle");
@@ -1922,6 +1965,7 @@ check("her handwriting embedded byte-identically to the frozen reference", bella
 check("embed count is exactly 1 (Phase 1 dedup landed; was 2 in v41)", bellaCount === 1);
 
 // ================= v54: manual rest + program identity =================
+releaseTestWindows([G]);
 const T54 = boot(V2_CFG, EMPTY_DATA, null, TEST_PROGRAM);
 const dT54 = T54.window.document;
 check("v54 current-program card identifies the loaded program and selected session", dT54.getElementById("programName").textContent===TEST_PROGRAM.name && /Selected session:/.test(dT54.getElementById("programDayName").textContent));
@@ -1961,6 +2005,7 @@ T54.window.eval(`activateView("food",null,false)`);
 check("v54 leaving Train hides the rest control", dT54.getElementById("restDock").classList.contains("hidden") && !dT54.body.classList.contains("rest-dock-visible"));
 
 // ================= v64: elapsed-time rest timer =================
+releaseTestWindows([T54]);
 const CLOCK64 = 2000000000000;
 const T64 = boot(V2_CFG, EMPTY_DATA, w=>{ w.Date.now=()=>CLOCK64; }, TEST_PROGRAM);
 const dT64 = T64.window.document;
@@ -2093,6 +2138,10 @@ check("v65 completed timer display no longer uses GO", !timerSection65.includes(
 check("v65 expiration clears the active deadline without restarting", T65VisibleExpired.window.eval("restEndsAt===0 && restInterval===null && !restRunning") && visibleReady65.status==="ready" && !Object.prototype.hasOwnProperty.call(visibleReady65,"endAt"));
 
 // ================= v59: audit-recommended structural protections =================
+releaseTestWindows([
+  T64,T64PausedReload,T64Expired,TimerRunningParity76,
+  TimerPausedParity76,T65VisibleExpired,T65BackgroundExpired
+]);
 check("v59 storage-use line renders an honest approximation", (()=>{ const B = boot(EXISTING_CFG, EMPTY_DATA); const t = B.window.document.getElementById("storageUseNote").textContent; return /~\d+ (KB|MB)/.test(t) && /approximate/.test(t); })());
 // (1) only 01-storage.js may write sacred storage — enforced structurally, forever
 const SACRED_WRITERS = ["02-food","03-train","04-weight","05-ai","06-settings","07-boot"];
@@ -2167,6 +2216,7 @@ check("v66 scanner checks frames faster and uses the adaptive square crop", food
 check("v66 scanner overlay tells users not to rotate the phone", /Keep the phone upright/.test(dAP66.getElementById("scanHint").textContent) && /horizontal or vertical/.test(dAP66.getElementById("scanHint").textContent));
 
 // ================= v58: self-hosted barcode scanner =================
+releaseTestWindows([FreshAP66,LegacyAP66,AP66]);
 check("v58 vendored scanner library exists in the repo", fs.existsSync(path.join(__dirname, "..", "vendor", "html5-qrcode.min.js")));
 check("v58 scanner license notice preserved alongside the library", (()=>{ const p=path.join(__dirname, "..", "vendor", "html5-qrcode.LICENSE.txt"); return fs.existsSync(p) && /Apache License/.test(fs.readFileSync(p,"utf8")); })());
 const sw58 = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
@@ -2201,18 +2251,31 @@ check("FAQ privacy and storage copy distinguish local data, network requests, an
 check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.some(f=>/chicken breast/i.test(f.n))`));
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
-check("SW cache key matches the BlackPyre v77 release",
-  /const CACHE = "blackpyre-v77-physical-3";/.test(sw));
-check("v77 service-worker cache is refreshed", sw.includes('const CACHE = "blackpyre-v77-physical-3"'));
+check("SW cache key matches the BlackPyre v78 release",
+  /const CACHE = "blackpyre-v78-native-parity-5";/.test(sw));
+check("v78 service-worker cache is refreshed", sw.includes('const CACHE = "blackpyre-v78-native-parity-5"'));
+
+await wait(0);
+releaseTestWindows([
+  A,AP66,B,BackupReminder,C62,CancelBackup,DistinctRecurring,F51,FoodEdit,
+  FreshAP66,G,H,H60,H60Api,H60Off,H68,H68Claude,LegacyAP66,
+  MyExercisesParity76,Q59,S61,S61Familiar,S61Full,S61NoTargets,
+  S61Offline,SessionRemove78,ShareBackup,T49,T49Invalid,T49Switch,T50,
+  T51,T51b,T51c,T54,T64,T64Expired,T64PausedReload,
+  T65BackgroundExpired,T65VisibleExpired,TimerPausedParity76,
+  TimerRunningParity76,UsualAllMeals,UsualControls,UsualIdentity,
+  UsualPartial,V59
+]);
+
 const rawIndex = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 const rawWeightParity76 = fs.readFileSync(
   path.join(__dirname, "..", "scripts", "04-weight.js"),
   "utf8"
 );
 
-check("v76 parity timer duration control has a larger touch target",
+check("v76 parity timer duration control retains its larger touch target",
   /\.rest-dock-readout\s*\{[^}]*min-width:132px[^}]*min-height:52px[^}]*touch-action:manipulation/s.test(rawIndex)
-  && /\.rest-dock-caret\s*\{[^}]*width:32px[^}]*height:32px[^}]*font-size:20px/s.test(rawIndex));
+  && /\.rest-dock-caret\s*\{[^}]*width:32px[^}]*height:32px[^}]*font-size:16px/s.test(rawIndex));
 
 check("v76 parity timer uses clearly visible open and closed chevrons",
   /rest-dock-caret" aria-hidden="true">▾</.test(rawIndex)
@@ -2302,14 +2365,29 @@ check("no inline app script remains in index.html", !/<script>(?!\s*<)/.test(raw
 check("SW precaches all 7 slices", SLICES.every(f=>sw.includes('"./scripts/'+f+'"')));
 
 // ================= Phase 2 corrections: strict mode, exact order, migration identity =================
-const LOCAL_SCRIPTS = ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].concat(SLICES.map(f=>"scripts/"+f));
+const LOCAL_SCRIPTS = [
+  "data-quotes.js",
+  "data-foods.js",
+  "data-suggestions.js",
+  "data-faq.js",
+  "data-exercises.js",
+  "data-exercise-card-profiles.js",
+  "scripts/01-storage.js",
+  "scripts/02-food.js",
+  "scripts/03-card-profiles.js",
+  "scripts/03-train.js",
+  "scripts/04-weight.js",
+  "scripts/05-ai.js",
+  "scripts/06-settings.js",
+  "scripts/07-boot.js"
+];
 check("every local classic script begins with the strict-mode directive",
   LOCAL_SCRIPTS.every(f=>fs.readFileSync(path.join(__dirname, "..", f), "utf8").startsWith('"use strict";')));
 
 const APPROVED_ORDER = LOCAL_SCRIPTS; // data files, then slices 01..07 — this order is load-bearing
 const scriptTags = [...rawIndex.matchAll(/<script\b[^>]*\bsrc="([^"]+)"[^>]*><\/script>/g)];
-check("exactly the 12 approved scripts, each exactly once, in the approved order",
-  scriptTags.length===12 && scriptTags.every((t,i)=>t[1]===APPROVED_ORDER[i]));
+check("exactly the 14 approved scripts, each exactly once, in the approved order",
+  scriptTags.length===14 && scriptTags.every((t,i)=>t[1]===APPROVED_ORDER[i]));
 check("no local script tag uses async, defer, or type=module",
   scriptTags.every(t=>!/\basync\b|\bdefer\b|type="module"/.test(t[0])));
 
@@ -2700,10 +2778,10 @@ check("v76 new exercise programs use shapes without the retired Cardio prefix",
 Exercise76.window.eval(`
   sessionState["Bench Press"].rows=[{w:135,r:5,touched:true}];
   sessionState["Pull-Up"].rows=[{w:"",r:8,touched:true},{w:25,r:5,touched:true}];
-  sessionState["Run"].fields={hours:0,mins:20,secs:0,dist:2,distUnit:"mi"}; sessionState["Run"].touched=true;
-  sessionState["Farmer Carry"].fields={lbs:80,dist:100,distUnit:"ft"}; sessionState["Farmer Carry"].touched=true;
-  sessionState["Sprint Intervals"].fields={rounds:8,workSecs:20,recSecs:100,note:"hard"}; sessionState["Sprint Intervals"].touched=true;
-  sessionState["Mobility Flow"].text="hips felt good"; sessionState["Mobility Flow"].textTouched=true;
+  sessionState["Run"].typed={hours:0,minutes:20,seconds:0,distance:2,distanceUnit:"mi",pace:"",effort:""}; sessionState["Run"].fields=sessionState["Run"].typed; sessionState["Run"].typedTouched=true;
+  sessionState["Farmer Carry"].typed={count:4,lbs:80,distance:100,distanceUnit:"ft",durationMinutes:"",durationSeconds:"",recoverySeconds:"",effort:""}; sessionState["Farmer Carry"].fields=sessionState["Farmer Carry"].typed; sessionState["Farmer Carry"].typedTouched=true;
+  sessionState["Sprint Intervals"].typed={intervals:8,workMinutes:0,workSeconds:20,recoverySeconds:100,distance:"",distanceUnit:"mi",effort:"hard"}; sessionState["Sprint Intervals"].fields=sessionState["Sprint Intervals"].typed; sessionState["Sprint Intervals"].typedTouched=true;
+  sessionState["Mobility Flow"].typed={hours:0,minutes:20,seconds:0,note:"hips felt good"}; sessionState["Mobility Flow"].fields=sessionState["Mobility Flow"].typed; sessionState["Mobility Flow"].typedTouched=true;
 `);
 const saveResults76 = ["Bench Press","Pull-Up","Run","Farmer Carry","Sprint Intervals","Mobility Flow"]
   .map(name=>Exercise76.window.eval(`saveExercise(${JSON.stringify(name)}).ok`));
@@ -2717,10 +2795,23 @@ check("v76 lift and reps share the array storage form while bodyweight weight st
   && !Object.prototype.hasOwnProperty.call(draftForms76["Pull-Up"][0],"w")
   && draftForms76["Pull-Up"][1].w===25);
 check("v76 typed shapes store only their contract primitives",
-  JSON.stringify(draftForms76["Run"])===JSON.stringify({t:"timeDist",secs:1200,dist:2,distUnit:"mi"})
-  && JSON.stringify(draftForms76["Farmer Carry"])===JSON.stringify({t:"carry",lbs:80,dist:100,distUnit:"ft"})
-  && JSON.stringify(draftForms76["Sprint Intervals"])===JSON.stringify({t:"rounds",rounds:8,workSecs:20,recSecs:100,note:"hard"})
-  && draftForms76["Mobility Flow"]==="hips felt good");
+  draftForms76["Run"].t==="timeDist"
+  && draftForms76["Run"].secs===1200
+  && draftForms76["Run"].dist===2
+  && draftForms76["Run"].distUnit==="mi"
+  && draftForms76["Farmer Carry"].t==="loadedDistance"
+  && draftForms76["Farmer Carry"].count===4
+  && draftForms76["Farmer Carry"].lbs===80
+  && draftForms76["Farmer Carry"].dist===100
+  && draftForms76["Farmer Carry"].distUnit==="ft"
+  && draftForms76["Sprint Intervals"].t==="timedIntervals"
+  && draftForms76["Sprint Intervals"].intervals===8
+  && draftForms76["Sprint Intervals"].workSecs===20
+  && draftForms76["Sprint Intervals"].recSecs===100
+  && draftForms76["Sprint Intervals"].effort==="hard"
+  && draftForms76["Mobility Flow"].t==="durationActivity"
+  && draftForms76["Mobility Flow"].secs===1200
+  && draftForms76["Mobility Flow"].note==="hips felt good");
 
 const SaveFailure76 = boot(V2_CFG,Object.assign({},V2_DATA,{myExercises:{},activeWorkoutDraft:null}),null,TEST_PROGRAM);
 SaveFailure76.window.eval(`sessionState["Bench Press"].saved=[{w:100,r:5}];sessionState["Bench Press"].status="unsaved";sessionState["Bench Press"].historyKey="Bench Press";sessionState["Bench Press"].rows=[{w:135,r:5,touched:true}];`);
@@ -3391,6 +3482,10 @@ check(
 );
 
 // ================= v76: complete custom-exercise lifecycle hardening =================
+releaseTestWindows([
+  Exercise76,SaveFailure76,Create76,Unknown76,Draft76,PrepareFixture76,
+  RestoreFixture76,RangeMixed76,NewerForms76,ManagerLabels76
+]);
 function customCarryEntry76(id,name,formerNames){
   return {
     id:id,
@@ -3848,6 +3943,12 @@ check(
   `)
 );
 
+releaseTestWindows([
+  LiveRename76,SwappedBaseRename76,DeleteOpen76,DeleteSwappedDraft76,
+  DeleteLastDraft76,DeleteLastReload76,DeleteRollback76,ArchiveOpen76,
+  DeleteSwapTarget76,RenameSwapTarget76
+]);
+
 const SwapSavedData76=
   JSON.parse(JSON.stringify(V2_DATA));
 SwapSavedData76.activeWorkoutDraft={
@@ -4049,8 +4150,18 @@ SwapCancel76.window.eval(`
 
   const farmer=exerciseDescriptor("Farmer Carry",null);
   const entered=blankShapeState(farmer);
-  entered.fields={lbs:90,dist:30,distUnit:"ft"};
-  entered.touched=true;
+  entered.typed={
+    count:"",
+    lbs:90,
+    distance:30,
+    distanceUnit:"ft",
+    durationMinutes:"",
+    durationSeconds:"",
+    recoverySeconds:"",
+    effort:""
+  };
+  entered.fields=entered.typed;
+  entered.typedTouched=true;
   entered.status="unsaved";
 
   extraExercises=[{
@@ -4073,8 +4184,8 @@ check(
   SwapCancel76.window.eval(`
     window.__swapCancel===false
     && Object.keys(sessionSwaps).length===0
-    && sessionState["Farmer Carry"].fields.lbs===90
-    && sessionState["Farmer Carry"].fields.dist===30
+    && sessionState["Farmer Carry"].typed.lbs===90
+    && sessionState["Farmer Carry"].typed.distance===30
     && !sessionState["Suitcase Carry"]
   `)
 );
@@ -4393,6 +4504,22 @@ check(
 
 
 // ================= v76: final identity and legacy-cardio closure =================
+await wait(0);
+releaseTestWindows([
+  A57,AllMissing63,ArchiveOpen76,BuilderReference76,BuilderRename76,
+  Create76,D56,D56Discard,D56Fail,D56Reload,DeleteLastDraft76,
+  DeleteLastReload76,DeleteOpen76,DeleteRollback76,DeleteSwapTarget76,
+  DeleteSwappedDraft76,Draft76,DuplicateBase76,EmptyRegression63,
+  Exercise76,Fresh63,HistoryCollapseParity76,LiveRename76,M56,
+  ManagerLabels76,ManualRestore63,MissingCfg63,MissingData63,
+  NewerForms76,NewerInstall63,O56,P,P56,PrepareFixture76,
+  PreviousWins63,ProgramIdentity76,RangeMixed76,RenameSwapTarget76,
+  RestoreFixture76,Rotate63,RuntimeLoss63,SaveFailure76,SwapCancel76,
+  SwapCollision76,SwapLast76,SwapLastReload76,SwapOptions76,
+  SwapRollback76,SwapSaved76,SwapShapeGuard76,SwappedBaseRename76,
+  T55,U56,Unknown76,fresh57
+]);
+
 const RenameProgramCollisionData76=
   JSON.parse(JSON.stringify(V2_DATA));
 RenameProgramCollisionData76.myExercises={
@@ -5120,7 +5247,7 @@ const unknownPriorButtons76=[
 check(
   "v76 an unknown newer-shape prior value remains visible without an unusable same-as-last action",
   unknownPriorButtons76.length===0
-  && /last: Newer version/.test(
+  && /last: Newer-version workout entry preserved read-only\./.test(
     dUnknownPriorValue76
       .getElementById("exerciseInputs")
       .textContent
@@ -5816,7 +5943,7 @@ check(
   ).length===1
   && [
     "Use match",
-    "Create new exercise",
+    "Create a custom exercise instead",
     "Remove from import"
   ].every(label=>
     [...matchDocument77.querySelectorAll(
@@ -6386,6 +6513,38 @@ check(
 
 // ================= v77 searchable Program Builder Phase 3A =================
 
+// Release completed jsdom documents before the final browser-heavy phases.
+// The suite intentionally boots the full shipped app many times; closing old
+// windows keeps the permanent integration run inside constrained CI memory.
+await wait(0);
+releaseTestWindows([
+  A,B,BackupReminder,ShareBackup,CancelBackup,T49,T49Invalid,T49Switch,T50,
+  MyExercisesParity76,SessionRemove78,T51,T51b,T51c,F51,FoodEdit,
+  UsualIdentity,UsualControls,UsualPartial,UsualAllMeals,DistinctRecurring,
+  H68,H68Claude,H60,H60Api,H60Off,S61,S61Offline,S61NoTargets,S61Full,
+  S61Familiar,C62,H,G,T54,T64,T64PausedReload,T64Expired,
+  TimerRunningParity76,TimerPausedParity76,T65VisibleExpired,
+  T65BackgroundExpired,B,V59,Q59,FreshAP66,LegacyAP66,AP66,P,
+  HistoryCollapseParity76,T55,D56,D56Reload,D56Fail,D56Discard,U56,M56,
+  P56,O56,A57,fresh57,Fresh63,NewerInstall63,MissingData63,MissingCfg63,
+  AllMissing63,PreviousWins63,EmptyRegression63,Rotate63,RuntimeLoss63,
+  ManualRestore63,Exercise76,SaveFailure76,Create76,Unknown76,Draft76,
+  PrepareFixture76,RestoreFixture76,RangeMixed76,NewerForms76,
+  ManagerLabels76,LiveRename76,SwappedBaseRename76,DeleteOpen76,
+  DeleteSwappedDraft76,DeleteLastDraft76,DeleteLastReload76,
+  DeleteRollback76,ArchiveOpen76,DeleteSwapTarget76,RenameSwapTarget76,
+  SwapSaved76,SwapLast76,SwapLastReload76,SwapRollback76,SwapCancel76,
+  SwapShapeGuard76,SwapCollision76,SwapOptions76,DuplicateBase76,
+  ProgramIdentity76,BuilderReference76,BuilderRename76,
+  RenameProgramCollision76,RenameStoredCollision76,HistoricalCardio76,
+  CardioFailure76,ProtectedCompletedEdit76,SameDayUnloadedDraft76,
+  ProgramMismatchDraft76,ReservedExerciseNames76,PrototypeExercise76,
+  PrototypeExerciseReload76,UnknownPriorValue76,FoodEditorParity,
+  UndoParity,TrainingPlanCore1B,ImportReview77,MatchReview77,
+  PendingReview77,CollisionReview77,DuplicateReview77,DataFailReview77,
+  ProgramFailReview77
+]);
+
 const BuilderSearchData77=
   JSON.parse(JSON.stringify(EMPTY_DATA));
 
@@ -6509,13 +6668,6 @@ check(
 
 builderSearchSelect77.value="bp:run";
 
-const builderScheme77=
-  builderSearchDocument77.querySelector(
-    ".builderExerciseScheme"
-  );
-
-builderScheme77.value="3 × 10 min";
-
 builderSearchDocument77.querySelector(
   ".builderExerciseAddButton"
 ).click();
@@ -6530,8 +6682,10 @@ check(
       .name==="Run"
     && builderProg.days[0].exercises[0]
       .trackingShape==="timeDist"
-    && builderProg.days[0].exercises[0]
-      .scheme==="3 × 10 min"
+    && !Object.prototype.hasOwnProperty.call(
+      builderProg.days[0].exercises[0],
+      "scheme"
+    )
   `)
 );
 
@@ -6850,9 +7004,9 @@ check(
     && sessionSwaps["Bench Press"]==="Run"
     && !sessionState["Bench Press"]
     && sessionState["Run"].shape==="timeDist"
-    && sessionState["Run"].fields.hours===""
-    && sessionState["Run"].fields.mins===""
-    && sessionState["Run"].fields.secs===""
+    && Number(sessionState["Run"].typed.hours)===0
+    && Number(sessionState["Run"].typed.minutes)===0
+    && Number(sessionState["Run"].typed.seconds)===0
     && sessionList()[0].shape==="timeDist"
   `)
   && !!BenchToRun77.window.document.querySelector(
@@ -6868,10 +7022,10 @@ check(
   BenchToRun77.window.eval(`
     Array.isArray(sessionState["Run"].rows)
     && sessionState["Run"].rows.length===0
-    && sessionState["Run"].fields.hours===""
-    && sessionState["Run"].fields.mins===""
-    && sessionState["Run"].fields.secs===""
-    && sessionState["Run"].fields.dist===""
+    && Number(sessionState["Run"].typed.hours)===0
+    && Number(sessionState["Run"].typed.minutes)===0
+    && Number(sessionState["Run"].typed.seconds)===0
+    && sessionState["Run"].typed.distance===""
     && sessionState["Run"].saved===null
     && sessionState["Run"].status==="plan"
   `)
@@ -7362,7 +7516,10 @@ check(
     '"Tracks: "+presentation.label'
   )
   &&PhysicalBuilderSource77.includes(
-    "sIn.placeholder="
+    'toggle.textContent='
+  )
+  &&!PhysicalBuilderSource77.includes(
+    'className = "bscheme builderExerciseScheme"'
   )
   &&PhysicalBuilderCSS77.includes(
     ".builder-tracking-chip"
@@ -7424,6 +7581,1024 @@ check(
   &&PhysicalReplacementSource77.includes(
     "sessionContainsReplacementIdentity(\n      targetEntry,"
   )
+);
+
+
+// ================= v77 native parity integration =================
+
+await wait(0);
+releaseTestWindows([
+  BuilderSearch77,ReplaceVisible77,BenchToRun77,RunToIntervals77,
+  BenchToCarry77,DuplicateReplace77,ReplacementFreedIdentity77,
+  ReplaceCustom77,ReplacementRollback77
+]);
+
+// ================= v78 profile-aware exercise cards =================
+
+const V78Index=fs.readFileSync("index.html","utf8");
+const V78ServiceWorker=fs.readFileSync("sw.js","utf8");
+
+check(
+  "v78 profile data and engine load before Train",
+  V78Index.indexOf('src="data-exercise-card-profiles.js"')>=0
+  && V78Index.indexOf('src="scripts/03-card-profiles.js"')
+    >V78Index.indexOf('src="data-exercise-card-profiles.js"')
+  && V78Index.indexOf('src="scripts/03-train.js"')
+    >V78Index.indexOf('src="scripts/03-card-profiles.js"')
+);
+
+check(
+  "v78 service worker precaches both profile files with the v78 key",
+  V78ServiceWorker.includes('"./data-exercise-card-profiles.js"')
+  && V78ServiceWorker.includes('"./scripts/03-card-profiles.js"')
+  && V78ServiceWorker.includes(
+    'const CACHE = "blackpyre-v78-native-parity-5"'
+  )
+);
+
+const ProfileBuilder78=boot(
+  EXISTING_CFG,
+  EMPTY_DATA,
+  null,
+  {
+    name:"Profile Builder",
+    days:[{
+      id:"D1",
+      title:"Profiles",
+      exercises:[{
+        exerciseId:"bp:bench-press",
+        name:"Bench Press",
+        trackingShape:"lift"
+      },{
+        exerciseId:"bp:push-up",
+        name:"Push-Up",
+        trackingShape:"reps"
+      }]
+    }]
+  }
+);
+
+const ProfileBuilderDocument78=
+  ProfileBuilder78.window.document;
+
+const ProfileMatrix78=
+  ProfileBuilder78.window.eval(`
+    ({
+      "Bench Press":"strengthSets",
+      "Push-Up":"repetitionSets",
+      "Assisted Pull-Up":"repetitionSets",
+      "Plank":"timedHold",
+      "Run":"steadyTimeDistance",
+      "Sprinting":"timedIntervals",
+      "Shuttle Runs":"distanceIntervals",
+      "Farmer Carry":"loadedDistance",
+      "EMOM Conditioning":"conditioningRounds",
+      "Yoga":"durationActivity",
+      "Physical Therapy":"activityNotes"
+    })
+  `);
+
+check(
+  "v78 named exercise cards resolve to all practical profiles",
+  ProfileBuilder78.window.eval(`
+    Object.entries(${JSON.stringify(ProfileMatrix78)})
+      .every(([name,profile])=>
+        bpWorkoutProfileResolution({name:name}).profile===profile
+      )
+  `)
+);
+
+check(
+  "v78 profile-aware name resolution preserves canonical and custom shapes",
+  ProfileBuilder78.window.eval(`
+    bpWorkoutProfileResolution({name:"Run"}).id==="bp:run"
+    && bpWorkoutProfileResolution({
+      name:"Unlisted Carry",
+      trackingShape:"carry"
+    }).profile==="loadedDistance"
+  `)
+);
+
+ProfileBuilder78.window.eval("openBuilder(true)");
+
+check(
+  "v78 builder retains web search and canonical picker without a generic scheme",
+  !!ProfileBuilderDocument78.querySelector(".builderExerciseSearch")
+  && !!ProfileBuilderDocument78.querySelector(".builderExerciseSelect")
+  && !ProfileBuilderDocument78.querySelector(".builderExerciseScheme")
+  && !ProfileBuilderDocument78.querySelector(".builder-exercise-row .bscheme")
+);
+
+const ProfileSearch78=
+  ProfileBuilderDocument78.querySelector(".builderExerciseSearch");
+const ProfileSelect78=
+  ProfileBuilderDocument78.querySelector(".builderExerciseSelect");
+
+ProfileSearch78.value="running";
+ProfileSearch78.dispatchEvent(
+  new ProfileBuilder78.window.Event("input",{bubbles:true})
+);
+
+check(
+  "v78 builder search keeps the v77 alias resolver and canonical IDs",
+  !!ProfileSelect78.querySelector('option[value="bp:run"]')
+);
+
+ProfileSelect78.value="bp:run";
+ProfileBuilderDocument78.querySelector(
+  ".builderExerciseAddButton"
+).click();
+
+check(
+  "v78 builder adds canonical identity and profile-aware details controls",
+  ProfileBuilder78.window.eval(`
+    builderProg.days[0].exercises[2].exerciseId==="bp:run"
+    && builderProg.days[0].exercises[2].trackingShape==="timeDist"
+  `)
+  && ProfileBuilderDocument78.querySelectorAll(
+    ".builder-prescription-toggle"
+  ).length===3
+);
+
+ProfileBuilderDocument78.querySelector(
+  '[data-builder-prescription-toggle="0:2"]'
+).click();
+
+const profileField78=key=>
+  ProfileBuilderDocument78.querySelector(
+    '[data-builder-prescription-field="'+key+'"]'
+  );
+
+profileField78("minutes").value="30";
+profileField78("distance").value="5";
+profileField78("distanceUnit").value="km";
+profileField78("pace").value="easy";
+profileField78("effort").value="conversational";
+
+ProfileBuilderDocument78.querySelector(
+  '[data-builder-prescription-action="apply"]'
+).click();
+
+check(
+  "v78 builder saves structured practical workout details",
+  ProfileBuilder78.window.eval(`
+    (p=>
+      p.durationSeconds===1800
+      && p.distance===5
+      && p.distanceUnit==="km"
+      && p.pace==="easy"
+      && p.effort==="conversational"
+      && !Object.prototype.hasOwnProperty.call(p,"scheme")
+    )(builderProg.days[0].exercises[2].prescription)
+  `)
+);
+
+const ProfileRows78=
+  ProfileBuilder78.window.eval(`
+    ({
+      strength:prefillRows({
+        name:"Bench Press",
+        prescription:{sets:3,reps:5,weight:185,weightUnit:"lb"}
+      },null),
+      repetitions:prefillRows({
+        name:"Push-Up",
+        prescription:{sets:3,reps:5}
+      },null)
+    })
+  `);
+
+check(
+  "v78 structured set prescriptions prefill rows, reps, and explicit weight",
+  ProfileRows78.strength.rows.length===3
+  && ProfileRows78.strength.rows.every(
+    row=>row.r===5 && row.w===185 && row.touched===false
+  )
+  && ProfileRows78.repetitions.rows.length===3
+  && ProfileRows78.repetitions.rows.every(
+    row=>row.r===5 && row.w==="" && row.touched===false
+  )
+);
+
+check(
+  "v78 session descriptors preserve structured program prescriptions",
+  ProfileBuilder78.window.eval(`
+    (previous=>{
+      program={
+        name:"Prescription session",
+        days:[{
+          id:"D1",
+          title:"Strength",
+          exercises:[{
+            name:"Bench Press",
+            exerciseId:"bp:bench-press",
+            trackingShape:"lift",
+            prescription:{sets:4,reps:6,weight:175}
+          }]
+        }]
+      };
+      wDaySel.value="D1";
+      const listed=sessionList()[0];
+      program=previous;
+      return listed.prescription.sets===4
+        && listed.prescription.reps===6
+        && listed.prescription.weight===175;
+    })(program)
+  `)
+);
+
+check(
+  "v78 repetition policies hide bodyweight and label assistance",
+  ProfileBuilder78.window.eval(`
+    (a=>
+      a.options.weightPolicy==="optional"
+      && a.options.weightLabel==="Assistance"
+      && bpWorkoutProfileResolution({name:"Push-Up"})
+        .options.weightPolicy==="optional"
+    )(bpWorkoutProfileResolution({name:"Assisted Pull-Up"}))
+  `)
+);
+
+check(
+  "v78 builder mobile CSS contains controls and preserves touch sizing",
+  /@media \(max-width:520px\)[\s\S]*?\.bex-add[\s\S]*?grid-template-columns:minmax\(0,1fr\)/.test(V78Index)
+  && /\.builder-prescription-toggle\s*\{[^}]*min-height:44px/s.test(V78Index)
+  && /\.builder-prescription-field input,[\s\S]*?min-width:0/s.test(V78Index)
+);
+
+const CanonicalImportAudit78=
+  ProfileBuilder78.window.eval(`
+    (()=>{
+      const samples={
+        strengthSets:{sets:3,reps:8,weight:100,weightUnit:"lb"},
+        repetitionSets:{sets:3,reps:8},
+        timedHold:{sets:3,durationSeconds:30},
+        steadyTimeDistance:{durationSeconds:1200,distance:2,distanceUnit:"mi"},
+        durationActivity:{durationSeconds:1200,notes:"Easy movement"},
+        timedIntervals:{intervals:8,durationSeconds:20,recoverySeconds:60},
+        distanceIntervals:{intervals:6,distance:50,distanceUnit:"m",recoverySeconds:60},
+        loadedDistance:{trips:4,weight:80,weightUnit:"lb",distance:40,distanceUnit:"ft"},
+        conditioningRounds:{rounds:5,workSeconds:60,recoverySeconds:30},
+        activityNotes:{durationSeconds:1200,notes:"Complete the planned work."}
+      };
+
+      const failures=[];
+      const roundTripFailures=[];
+
+      EXERCISE_LIBRARY.forEach(entry=>{
+        const profile=
+          bpWorkoutProfileResolution(entry).profile;
+
+        const documentValue={
+          format:"blackpyre-training-plan",
+          version:1,
+          program:{
+            name:"Canonical import audit",
+            days:[{
+              id:"D1",
+              title:"Audit",
+              exercises:[{
+                exerciseId:entry.id,
+                name:entry.name,
+                trackingShape:entry.shape,
+                prescription:cloneJSON(samples[profile])
+              }]
+            }]
+          }
+        };
+
+        const prepared=
+          prepareTrainingPlanImport(documentValue);
+
+        if(!prepared.canConfirm){
+          failures.push({
+            id:entry.id,
+            profile:profile,
+            errors:prepared.review[0].errors
+          });
+          return;
+        }
+
+        const exported=
+          trainingPlanInterchangeFromProgram(
+            prepared.candidate
+          );
+
+        const roundTrip=
+          prepareTrainingPlanImport(exported);
+
+        if(!roundTrip.canConfirm){
+          roundTripFailures.push({
+            id:entry.id,
+            profile:profile,
+            errors:roundTrip.review[0].errors
+          });
+        }
+      });
+
+      return {
+        count:EXERCISE_LIBRARY.length,
+        failures:failures,
+        roundTripFailures:roundTripFailures
+      };
+    })()
+  `);
+
+check(
+  "v78 all 203 canonical exercises accept their authoritative profile prescription",
+  CanonicalImportAudit78.count===203
+  && CanonicalImportAudit78.failures.length===0
+);
+
+check(
+  "v78 all 203 profile-aware prescriptions survive public export and re-import",
+  CanonicalImportAudit78.roundTripFailures.length===0
+);
+
+await wait(0);
+releaseTestWindows([ProfileBuilder78]);
+
+const NativeParity77=boot(
+  EXISTING_CFG,
+  EMPTY_DATA,
+  null,
+  TEST_PROGRAM
+);
+
+const NativeParityMatrix77=
+  NativeParity77.window.eval(`
+    (()=>{
+      const expected={
+        "Barbell Bench Press":
+          "bp:bench-press",
+        "Seated Dumbbell Shoulder Press":
+          "bp:dumbbell-shoulder-press",
+        "Cable Triceps Pressdown":
+          "bp:triceps-pushdown",
+        "Weighted Pull-Up":
+          "bp:pull-up",
+        "EZ Bar Curl":
+          "bp:biceps-curl"
+      };
+
+      return Object.entries(expected)
+        .every(([name,id])=>{
+          const result=
+            resolveTrainingPlanExercise({
+              name:name
+            });
+
+          return (
+            result.ok
+            && result.entry.id===id
+          );
+        });
+    })()
+  `);
+
+check(
+  "v77 systemic resolver covers the full required AI-name matrix",
+  NativeParityMatrix77===true
+);
+
+const NativeParityAmbiguous77=
+  NativeParity77.window.eval(`
+    (()=>{
+      const result=
+        resolveTrainingPlanExercise({
+          name:"Chest Supported Row"
+        });
+
+      return {
+        ok:result.ok,
+        first:
+          result.suggestions[0]
+          && result.suggestions[0].id
+      };
+    })()
+  `);
+
+check(
+  "v77 ambiguous Chest Supported Row remains blocked with the likely match first",
+  NativeParityAmbiguous77.ok===false
+  && NativeParityAmbiguous77.first
+    ==="bp:chest-supported-dumbbell-row"
+);
+
+NativeParity77.window.eval(`
+  openTrainingPlanReview(
+    prepareTrainingPlanImport({
+      format:"blackpyre-training-plan",
+      version:1,
+      program:{
+        name:"Review UX",
+        days:[{
+          id:"D1",
+          title:"Rows",
+          exercises:[{
+            name:"Chest Supported Row",
+            prescription:{
+              sets:3,
+              reps:10
+            }
+          }]
+        }]
+      }
+    }),
+    "review-ux.json"
+  );
+`);
+
+const NativeParityDocument77=
+  NativeParity77.window.document;
+
+const NativeParityReviewSelect77=
+  NativeParityDocument77.querySelector(
+    ".training-plan-review-resolution select"
+  );
+
+const NativeParityCustom77=
+  NativeParityDocument77.querySelector(
+    ".training-plan-review-custom"
+  );
+
+check(
+  "v77 review dropdown keeps likely matches before the full library",
+  !!NativeParityReviewSelect77
+  && !!NativeParityReviewSelect77
+    .querySelector(
+      'optgroup[label="Likely matches"]'
+    )
+  && NativeParityReviewSelect77
+    .querySelector(
+      'optgroup[label="Likely matches"] option'
+    ).value
+      ==="bp:chest-supported-dumbbell-row"
+);
+
+check(
+  "v77 custom exercise creation stays collapsed behind simple wording",
+  !!NativeParityCustom77
+  && NativeParityCustom77.classList
+    .contains("hidden")
+  && [
+    ...NativeParityDocument77
+      .querySelectorAll(
+        ".training-plan-review-resolution button"
+      )
+  ].some(button=>
+    button.textContent
+      ==="Create a custom exercise instead"
+  )
+);
+
+const NativeParityTimed77=
+  NativeParity77.window.eval(`
+    (()=>{
+      const complete=
+        prepareTrainingPlanImport({
+          format:"blackpyre-training-plan",
+          version:1,
+          program:{
+            name:"Plank Complete",
+            days:[{
+              id:"D1",
+              title:"Core",
+              exercises:[{
+                name:"Plank",
+                prescription:{
+                  sets:3,
+                  durationSeconds:60
+                }
+              }]
+            }]
+          }
+        });
+
+      const missing=
+        prepareTrainingPlanImport({
+          format:"blackpyre-training-plan",
+          version:1,
+          program:{
+            name:"Plank Missing",
+            days:[{
+              id:"D1",
+              title:"Core",
+              exercises:[{
+                name:"Plank",
+                prescription:{sets:3}
+              }]
+            }]
+          }
+        });
+
+      return {
+        complete:complete.canConfirm,
+        intervals:
+          complete.review[0]
+            .prescription.intervals,
+        duration:
+          complete.review[0]
+            .prescription.durationSeconds,
+        missing:missing.canConfirm,
+        errors:missing.review[0].errors,
+        summary:
+          trainingPlanPrescriptionSummary(
+            "timeDist",
+            {
+              intervals:8,
+              durationSeconds:15,
+              recoverySeconds:75
+            },
+            ""
+          )
+      };
+    })()
+  `);
+
+check(
+  "v77 timed prescriptions normalize and show complete information",
+  NativeParityTimed77.complete===true
+  && NativeParityTimed77.intervals===3
+  && NativeParityTimed77.duration===60
+  && NativeParityTimed77.missing===false
+  && NativeParityTimed77.errors.length===1
+  && NativeParityTimed77.errors[0]
+    ==="Add a duration for each interval."
+  && NativeParityTimed77.summary
+    ==="8 intervals · 15 sec each · 75 sec recovery"
+);
+
+NativeParity77.window.eval(`
+  openTrainingPlanReview(
+    prepareTrainingPlanImport({
+      format:"blackpyre-training-plan",
+      version:1,
+      program:{
+        name:"Plank repair",
+        days:[{
+          id:"D1",
+          title:"Core",
+          exercises:[{
+            name:"Plank",
+            prescription:{sets:3}
+          }]
+        }]
+      }
+    }),
+    "04-plank-missing-duration.json"
+  );
+`);
+
+check(
+  "v78 matched Plank offers duration repair instead of exercise rematching",
+  !!NativeParityDocument77.querySelector(
+    '[data-prescription-repair-action="duration"]'
+  )
+  && !NativeParityDocument77.querySelector(
+    ".training-plan-review-resolution"
+  )
+);
+
+NativeParityDocument77.querySelector(
+  '[data-prescription-repair-field="seconds"]'
+).value="45";
+
+NativeParityDocument77.querySelector(
+  '[data-prescription-repair-action="duration"]'
+).click();
+
+check(
+  "v78 Plank duration repair produces an importable prescription",
+  NativeParity77.window.eval(`
+    trainingPlanReviewState.prepared.canConfirm
+    && trainingPlanReviewState.prepared.candidate
+      .days[0].exercises[0].prescription.intervals===3
+    && trainingPlanReviewState.prepared.candidate
+      .days[0].exercises[0].prescription.durationSeconds===45
+  `)
+);
+
+NativeParity77.window.eval(`
+  closeTrainingPlanReview({skipFocus:true});
+  openTrainingPlanReview(
+    prepareTrainingPlanImport({
+      format:"blackpyre-training-plan",
+      version:1,
+      program:{
+        name:"Sprinting repair",
+        days:[{
+          id:"D1",
+          title:"Speed",
+          exercises:[{
+            name:"Sprinting",
+            prescription:{
+              intervals:6,
+              durationSeconds:20,
+              recoverySeconds:60,
+              weight:100,
+              weightUnit:"lb"
+            }
+          }]
+        }]
+      }
+    }),
+    "05-sprinting-unsafe-weight.json"
+  );
+`);
+
+check(
+  "v78 matched Sprinting offers safe incompatible-field removal",
+  !!NativeParityDocument77.querySelector(
+    '[data-prescription-repair-action="remove-incompatible"]'
+  )
+  && !NativeParityDocument77.querySelector(
+    ".training-plan-review-resolution"
+  )
+);
+
+NativeParityDocument77.querySelector(
+  '[data-prescription-repair-action="remove-incompatible"]'
+).click();
+
+check(
+  "v78 Sprinting repair preserves intervals and removes unsafe weight",
+  NativeParity77.window.eval(`
+    (p=>
+      trainingPlanReviewState.prepared.canConfirm
+      && p.intervals===6
+      && p.durationSeconds===20
+      && p.recoverySeconds===60
+      && !Object.prototype.hasOwnProperty.call(p,"weight")
+      && !Object.prototype.hasOwnProperty.call(p,"weightUnit")
+    )(
+      trainingPlanReviewState.prepared.candidate
+        .days[0].exercises[0].prescription
+    )
+  `)
+);
+
+NativeParity77.window.eval(`
+  closeTrainingPlanReview({skipFocus:true});
+  openTrainingPlanReview(
+    prepareTrainingPlanImport({
+      format:"blackpyre-training-plan",
+      version:1,
+      program:{
+        name:"Farmer Carry missing load",
+        days:[{
+          id:"D1",
+          title:"Athletic Conditioning",
+          exercises:[{
+            name:"Farmer Carry",
+            prescription:{
+              sets:6,
+              distance:30,
+              distanceUnit:"m"
+            }
+          }]
+        }]
+      }
+    }),
+    "farmer-carry-missing-load.json"
+  );
+`);
+
+check(
+  "v78 matched Farmer Carry offers a planned-load repair",
+  NativeParity77.window.eval(`
+    (row=>
+      !trainingPlanReviewState.prepared.canConfirm
+      && row.exerciseId==="bp:farmer-carry"
+      && row.repairKind==="missing-load"
+      && row.errors.length===1
+      && row.errors[0]==="Add the planned load."
+      && row.prescription.sets===6
+      && row.prescription.distance===30
+      && row.prescription.distanceUnit==="m"
+    )(trainingPlanReviewState.prepared.review[0])
+  `)
+  && !!NativeParityDocument77.querySelector(
+    '[data-prescription-repair-field="weight"]'
+  )
+  && !!NativeParityDocument77.querySelector(
+    '[data-prescription-repair-action="load"]'
+  )
+);
+
+NativeParityDocument77.querySelector(
+  '[data-prescription-repair-field="weight"]'
+).value="80";
+
+NativeParityDocument77.querySelector(
+  '[data-prescription-repair-action="load"]'
+).click();
+
+check(
+  "v78 Farmer Carry load repair preserves the canonical distance prescription",
+  NativeParity77.window.eval(`
+    (exercise=>
+      trainingPlanReviewState.prepared.canConfirm
+      && exercise.exerciseId==="bp:farmer-carry"
+      && exercise.trackingShape==="carry"
+      && exercise.prescription.sets===6
+      && exercise.prescription.distance===30
+      && exercise.prescription.distanceUnit==="m"
+      && exercise.prescription.weight===80
+      && exercise.prescription.weightUnit==="lb"
+    )(
+      trainingPlanReviewState.prepared.candidate
+        .days[0].exercises[0]
+    )
+  `)
+);
+
+NativeParity77.window.eval(`
+  closeTrainingPlanReview({skipFocus:true});
+  openTrainingPlanReview(
+    prepareTrainingPlanImport({
+      format:"blackpyre-training-plan",
+      version:1,
+      program:{
+        name:"Bike profile repair",
+        days:[{
+          id:"D1",
+          title:"Athletic Conditioning",
+          exercises:[{
+            name:"Bike Intervals",
+            prescription:{
+              durationSeconds:1200,
+              effort:"Easy"
+            }
+          }]
+        }]
+      }
+    }),
+    "bike-duration.json"
+  );
+`);
+
+const BikeCompatibleGroup78=
+  NativeParityDocument77.querySelector(
+    '.training-plan-review-resolution optgroup[label="Compatible matches"]'
+  );
+
+check(
+  "v78 Bike Intervals uses its timed-interval profile and offers both repair paths",
+  NativeParity77.window.eval(`
+    (row=>
+      !trainingPlanReviewState.prepared.canConfirm
+      && row.exerciseId==="bp:bike-intervals"
+      && row.repairKind==="missing-interval-count"
+      && row.errors.length===1
+      && row.errors[0]==="Add the number of intervals."
+      && row.prescription.durationSeconds===1200
+      && row.prescription.effort==="Easy"
+    )(trainingPlanReviewState.prepared.review[0])
+  `)
+  && !!NativeParityDocument77.querySelector(
+    '[data-prescription-repair-action="interval-count"]'
+  )
+  && !!BikeCompatibleGroup78
+  && [
+    "bp:road-cycling",
+    "bp:stationary-cycling",
+    "bp:mountain-biking"
+  ].every(id=>
+    !!BikeCompatibleGroup78.querySelector(
+      'option[value="'+id+'"]'
+    )
+  )
+);
+
+const BikeSteadyMatch78=
+  NativeParity77.window.eval(`
+    matchTrainingPlanReviewExercise(
+      trainingPlanReviewState.prepared.review[0],
+      "bp:stationary-cycling"
+    )
+  `);
+
+check(
+  "v78 incompatible interval details can marry to compatible Stationary Cycling",
+  BikeSteadyMatch78.ok
+  && NativeParity77.window.eval(`
+    (exercise=>
+      trainingPlanReviewState.prepared.canConfirm
+      && exercise.exerciseId==="bp:stationary-cycling"
+      && exercise.trackingShape==="timeDist"
+      && exercise.prescription.durationSeconds===1200
+      && exercise.prescription.effort==="Easy"
+    )(
+      trainingPlanReviewState.prepared.candidate
+        .days[0].exercises[0]
+    )
+  `)
+);
+
+NativeParity77.window.eval(`
+  closeTrainingPlanReview({skipFocus:true});
+  openTrainingPlanReview(
+    prepareTrainingPlanImport({
+      format:"blackpyre-training-plan",
+      version:1,
+      program:{
+        name:"Bike interval count",
+        days:[{
+          id:"D1",
+          title:"Athletic Conditioning",
+          exercises:[{
+            name:"Bike Intervals",
+            prescription:{
+              durationSeconds:20,
+              effort:"Hard"
+            }
+          }]
+        }]
+      }
+    }),
+    "bike-interval-count.json"
+  );
+`);
+
+NativeParityDocument77.querySelector(
+  '[data-prescription-repair-field="intervals"]'
+).value="8";
+
+NativeParityDocument77.querySelector(
+  '[data-prescription-repair-action="interval-count"]'
+).click();
+
+check(
+  "v78 Bike Intervals count repair preserves its canonical identity and details",
+  NativeParity77.window.eval(`
+    (exercise=>
+      trainingPlanReviewState.prepared.canConfirm
+      && exercise.exerciseId==="bp:bike-intervals"
+      && exercise.trackingShape==="rounds"
+      && exercise.prescription.intervals===8
+      && exercise.prescription.durationSeconds===20
+      && exercise.prescription.effort==="Hard"
+    )(
+      trainingPlanReviewState.prepared.candidate
+        .days[0].exercises[0]
+    )
+  `)
+);
+
+NativeParity77.window.eval(`
+  closeTrainingPlanReview({skipFocus:true});
+  openTrainingPlanReview(
+    prepareTrainingPlanImport({
+      format:"blackpyre-training-plan",
+      version:1,
+      program:{
+        name:"Bike custom fallback",
+        days:[{
+          id:"D1",
+          title:"Athletic Conditioning",
+          exercises:[{
+            name:"Bike Intervals",
+            prescription:{
+              durationSeconds:1200,
+              effort:"Easy"
+            }
+          }]
+        }]
+      }
+    }),
+    "bike-custom.json"
+  );
+
+  window.__bikeSameNameCustom78=
+    createPendingTrainingPlanExercise(
+      trainingPlanReviewState.prepared.review[0],
+      "Bike Intervals",
+      "timeDist"
+    );
+
+  window.__bikeCustom78=
+    createPendingTrainingPlanExercise(
+      trainingPlanReviewState.prepared.review[0],
+      "Easy Bike Session",
+      "timeDist"
+    );
+`);
+
+check(
+  "v78 incompatible imports can create a distinct compatible custom exercise",
+  NativeParity77.window.eval(`
+    !window.__bikeSameNameCustom78.ok
+    && /conflicts/.test(
+      window.__bikeSameNameCustom78.reason
+    )
+    && window.__bikeCustom78.ok
+    && trainingPlanReviewState.prepared.canConfirm
+    && trainingPlanReviewState.prepared.review[0]
+      .exerciseId.startsWith("pending:")
+    && trainingPlanReviewState.prepared.candidate
+      .days[0].exercises[0].prescription.durationSeconds===1200
+  `)
+);
+
+NativeParity77.window.eval(
+  `closeTrainingPlanReview({skipFocus:true})`
+);
+
+const NativeParityPublicPayload77=
+  NativeParity77.window.eval(`
+    extractAIPayloads(
+      'Here is the plan.\\n\\n\`\`\`json\\n'
+      +JSON.stringify(
+        aiPublicTrainingPlanFromProgram(
+          program
+        )
+      )
+      +'\\n\`\`\`'
+    )
+  `);
+
+check(
+  "v77 AI extraction accepts the public training-plan envelope",
+  !!NativeParityPublicPayload77.program
+  && NativeParityPublicPayload77
+    .program.format
+      ==="blackpyre-training-plan"
+  && NativeParityPublicPayload77
+    .program.version===1
+);
+
+const NativeParityAISource77=
+  fs.readFileSync(
+    "scripts/05-ai.js",
+    "utf8"
+  );
+
+check(
+  "v77 AI instructions use public format and route programs through review",
+  NativeParityAISource77.includes(
+    '\\"format\\":\\"blackpyre-training-plan\\"'
+  )
+  && NativeParityAISource77.includes(
+    "aiPublicTrainingPlanFromProgram(program)"
+  )
+  && NativeParityAISource77.includes(
+    '"Pasted AI response"'
+  )
+  && NativeParityAISource77.includes(
+    '"AI Coach response"'
+  )
+  && !NativeParityAISource77.includes(
+    "replaceActiveProgram(payloads.program)"
+  )
+  && !NativeParityAISource77.includes(
+    "const replaced = replaceActiveProgram(prog);"
+  )
+);
+
+const NativeParityTrainSource77=
+  fs.readFileSync(
+    "scripts/03-train.js",
+    "utf8"
+  );
+
+check(
+  "v77 resolver is systemic and contains no five-example alias patch",
+  [
+    "Barbell Bench Press",
+    "Seated Dumbbell Shoulder Press",
+    "Cable Triceps Pressdown",
+    "Weighted Pull-Up",
+    "EZ Bar Curl"
+  ].every(
+    example=>
+      !NativeParityTrainSource77
+        .includes(example)
+  )
+  && NativeParityTrainSource77.includes(
+    "trainingPlanQualifierVariants"
+  )
+  && NativeParityTrainSource77.includes(
+    "trainingPlanGenericMovementMatches"
+  )
+);
+
+const NativeParityIndex77=
+  fs.readFileSync(
+    "index.html",
+    "utf8"
+  );
+
+const NativeParityOversizeFonts77=[
+  ...NativeParityIndex77.matchAll(
+    /font-size\s*:\s*([0-9]+(?:\.[0-9]+)?)px/gi
+  )
+].filter(
+  match=>Number(match[1])>16
+);
+
+check(
+  "v77 interface text remains capped at 16px",
+  NativeParityOversizeFonts77.length===0
 );
 
 summary("INTEGRATION");

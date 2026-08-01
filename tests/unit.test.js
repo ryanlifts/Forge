@@ -653,5 +653,290 @@ check(
 );
 
 
+
+// ================= v77 native parity resolver matrix =================
+
+check(
+  "v77 systemic resolver automatically matches the required AI-name matrix",
+  E(
+    `(()=>{
+      const expected={
+        "Barbell Bench Press":
+          "bp:bench-press",
+        "Seated Dumbbell Shoulder Press":
+          "bp:dumbbell-shoulder-press",
+        "Cable Triceps Pressdown":
+          "bp:triceps-pushdown",
+        "Weighted Pull-Up":
+          "bp:pull-up",
+        "EZ Bar Curl":
+          "bp:biceps-curl"
+      };
+
+      return Object.entries(expected)
+        .every(([name,id])=>{
+          const result=
+            resolveTrainingPlanExercise({
+              name:name
+            });
+
+          return (
+            result.ok
+            && result.entry.id===id
+          );
+        });
+    })()`
+  )===true
+);
+
+check(
+  "v77 systemic resolver handles plural wording and safe word order",
+  E(
+    `(()=>{
+      const entries=[
+        {
+          id:"audit:calf",
+          name:"Audit Calf Raise",
+          shape:"lift",
+          aliases:[],
+          formerNames:[],
+          equipment:["machine"]
+        },
+        {
+          id:"audit:row",
+          name:"Audit Seated Cable Row",
+          shape:"lift",
+          aliases:[],
+          formerNames:[],
+          equipment:["cable"]
+        }
+      ];
+
+      const plural=
+        resolveTrainingPlanExercise(
+          {name:"Audit Calf Raises"},
+          entries
+        );
+
+      const reordered=
+        resolveTrainingPlanExercise(
+          {name:"Audit Cable Seated Row"},
+          entries
+        );
+
+      return (
+        plural.ok
+        && plural.entry.id==="audit:calf"
+        && reordered.ok
+        && reordered.entry.id==="audit:row"
+      );
+    })()`
+  )===true
+);
+
+check(
+  "v77 systemic resolver removes unique qualifiers but not missing equipment",
+  E(
+    `(()=>{
+      const entries=[
+        {
+          id:"audit:press",
+          name:"Audit Dumbbell Shoulder Press",
+          shape:"lift",
+          aliases:[],
+          formerNames:[],
+          equipment:["dumbbell"]
+        },
+        {
+          id:"audit:db-row",
+          name:"Audit Chest-Supported Dumbbell Row",
+          shape:"lift",
+          aliases:[],
+          formerNames:[],
+          equipment:["dumbbell"]
+        },
+        {
+          id:"audit:machine-row",
+          name:"Audit Chest-Supported Machine Row",
+          shape:"lift",
+          aliases:[],
+          formerNames:[],
+          equipment:["machine"]
+        }
+      ];
+
+      const unique=
+        resolveTrainingPlanExercise(
+          {
+            name:
+              "Audit Seated Dumbbell Shoulder Press"
+          },
+          entries
+        );
+
+      const ambiguous=
+        resolveTrainingPlanExercise(
+          {
+            name:
+              "Audit Chest Supported Row"
+          },
+          entries
+        );
+
+      return (
+        unique.ok
+        && unique.entry.id==="audit:press"
+        && !ambiguous.ok
+      );
+    })()`
+  )===true
+);
+
+check(
+  "v77 Chest Supported Row stays unresolved with the likely dumbbell match first",
+  E(
+    `(()=>{
+      const result=
+        resolveTrainingPlanExercise({
+          name:"Chest Supported Row"
+        });
+
+      return (
+        !result.ok
+        && result.suggestions.length>0
+        && result.suggestions[0].id
+          ==="bp:chest-supported-dumbbell-row"
+      );
+    })()`
+  )===true
+);
+
+check(
+  "v77 Plank sets and duration normalize to timed intervals",
+  E(
+    `(()=>{
+      const result=
+        prepareTrainingPlanImport({
+          format:"blackpyre-training-plan",
+          version:1,
+          program:{
+            name:"Timed Plank",
+            days:[{
+              id:"D1",
+              title:"Core",
+              exercises:[{
+                name:"Plank",
+                prescription:{
+                  sets:3,
+                  durationSeconds:60
+                }
+              }]
+            }]
+          }
+        });
+
+      const row=result.review[0];
+
+      return (
+        result.canConfirm
+        && row.exerciseId==="bp:plank"
+        && row.shape==="timeDist"
+        && row.prescription.intervals===3
+        && row.prescription.durationSeconds===60
+      );
+    })()`
+  )===true
+);
+
+check(
+  "v77 timed intervals missing duration receive one focused prompt",
+  E(
+    `(()=>{
+      const result=
+        prepareTrainingPlanImport({
+          format:"blackpyre-training-plan",
+          version:1,
+          program:{
+            name:"Missing Duration",
+            days:[{
+              id:"D1",
+              title:"Core",
+              exercises:[{
+                name:"Plank",
+                prescription:{sets:3}
+              }]
+            }]
+          }
+        });
+
+      return (
+        !result.canConfirm
+        && result.review[0].errors.length===1
+        && result.review[0].errors[0]
+          ==="Add a duration for each interval."
+      );
+    })()`
+  )===true
+);
+
+check(
+  "v77 unsafe Sprinting weight remains blocked",
+  E(
+    `(()=>{
+      const result=
+        prepareTrainingPlanImport({
+          format:"blackpyre-training-plan",
+          version:1,
+          program:{
+            name:"Unsafe Sprint",
+            days:[{
+              id:"D1",
+              title:"Speed",
+              exercises:[{
+                name:"Sprinting",
+                prescription:{
+                  intervals:8,
+                  durationSeconds:15,
+                  recoverySeconds:75,
+                  weight:100,
+                  weightUnit:"lb"
+                }
+              }]
+            }]
+          }
+        });
+
+      const row=result.review[0];
+
+      return (
+        !result.canConfirm
+        && row.exerciseId==="bp:sprinting"
+        && row.shape==="timeDist"
+        && row.errors.some(
+          message=>
+            /Weight is not allowed/.test(
+              message
+            )
+        )
+      );
+    })()`
+  )===true
+);
+
+check(
+  "v77 timed prescription summary shows intervals duration and recovery",
+  E(
+    `trainingPlanPrescriptionSummary(
+      "timeDist",
+      {
+        intervals:8,
+        durationSeconds:15,
+        recoverySeconds:75
+      },
+      ""
+    )`
+  )==="8 intervals · 15 sec each · 75 sec recovery"
+);
+
 summary("UNIT");
 })().catch(e=>{ console.error(e); process.exit(1); });

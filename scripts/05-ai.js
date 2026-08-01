@@ -1117,32 +1117,122 @@ function aiCall(messages, system, maxTokens){
 }
 
 // ---------- payload extraction from AI replies ----------
-function extractAIPayloads(text){
-  const out = { display: text, program: null, targets: null };
-  const blocks = [];
-  const re = /```(?:json)?\s*([\s\S]*?)```/g;
-  let m;
-  while((m = re.exec(text)) !== null) blocks.push({raw:m[0], body:m[1]});
-  blocks.forEach(b=>{
-    try {
-      const j = JSON.parse(b.body);
-      if (j && Array.isArray(j.days)){ out.program = j; out.display = out.display.replace(b.raw, "").trim(); }
-      else if (j && j.bpTargets){ out.targets = j.bpTargets; out.display = out.display.replace(b.raw, "").trim(); }
-    } catch(e){ /* not JSON — leave it visible */ }
+
+function aiTrainingPlanCandidate(value){
+  if(
+    value
+    && value.format===TRAINING_PLAN_FORMAT
+    && value.version===TRAINING_PLAN_VERSION
+    && isPlainObject(value.program)
+  ){
+    return value;
+  }
+
+  if(
+    value
+    && Array.isArray(value.days)
+  ){
+    return value;
+  }
+
+  return null;
+}
+
+function aiTrainingPlanName(value){
+  const candidate=
+    aiTrainingPlanCandidate(value);
+
+  if(!candidate){
+    return "Updated program";
+  }
+
+  const source=
+    candidate.program
+    && Array.isArray(
+      candidate.program.days
+    )
+      ? candidate.program
+      : candidate;
+
+  return source.name||"Updated program";
+}
+
+function aiPublicTrainingPlanFromProgram(
+  sourceProgram
+){
+  const exported=
+    trainingPlanInterchangeFromProgram(
+      sourceProgram
+    );
+
+  exported.program.days.forEach(day=>{
+    day.exercises.forEach(exercise=>{
+      delete exercise.exerciseId;
+      delete exercise.trackingShape;
+    });
   });
+
+  return exported;
+}
+
+function extractAIPayloads(text){
+  const out={
+    display:text,
+    program:null,
+    targets:null
+  };
+
+  const blocks=[];
+  const re=/```(?:json)?\s*([\s\S]*?)```/g;
+  let match;
+
+  while((match=re.exec(text))!==null){
+    blocks.push({
+      raw:match[0],
+      body:match[1]
+    });
+  }
+
+  blocks.forEach(block=>{
+    try{
+      const parsed=JSON.parse(block.body);
+      const program=
+        aiTrainingPlanCandidate(parsed);
+
+      if(program){
+        out.program=program;
+        out.display=out.display
+          .replace(block.raw,"")
+          .trim();
+      }else if(
+        parsed
+        && parsed.bpTargets
+      ){
+        out.targets=parsed.bpTargets;
+        out.display=out.display
+          .replace(block.raw,"")
+          .trim();
+      }
+    }catch(error){
+      // Leave non-JSON code visible.
+    }
+  });
+
   return out;
 }
 
 // ================== COACH CHAT ==================
 let coachHistory = [];
+
 function coachSystem(){
   return "You are the user's personal fitness coach inside the BlackPyre app. Be direct, specific, and evidence-based — no generic filler. Their live data follows.\n\n"
-    + aiReport()
-    + "\n\n---\nResponse contract:\n"
-    + "- If you propose a new or edited training program, include EXACTLY ONE ```json code block containing the COMPLETE program: {\"name\":..., \"days\":[{\"id\":\"D1\",\"title\":...,\"exercises\":[{\"name\":...,\"scheme\":...}]}]}. Keep exercise names the user is progressing on unchanged so their history stays connected. Schemes like \"4×5\" power the app's auto-progression.\n"
-    + "- If you propose new nutrition targets, include a ```json block: {\"bpTargets\":{\"calTarget\":...,\"proTarget\":...,\"carbGoal\":...,\"fatGoal\":...}} — exact daily numbers, not ranges.\n"
-    + "- Otherwise reply in plain prose. Keep replies under 300 words unless asked for detail.";
+    +aiReport()
+    +"\n\n---\nResponse contract:\n"
+    +"- If you propose a new or edited training program, include EXACTLY ONE ```json code block containing the COMPLETE BlackPyre public training-plan file: {\"format\":\"blackpyre-training-plan\",\"version\":1,\"program\":{\"name\":...,\"days\":[{\"id\":\"D1\",\"title\":...,\"exercises\":[{\"name\":...,\"scheme\":...,\"prescription\":{...}}]}]}}. Use exercise names, do not invent exercise IDs, and do not choose tracking types. BlackPyre verifies every exercise and chooses its tracking type during review.\n"
+    +"- If you propose new nutrition targets, include a ```json block: {\"bpTargets\":{\"calTarget\":...,\"proTarget\":...,\"carbGoal\":...,\"fatGoal\":...}} — exact daily numbers, not ranges.\n"
+    +"- Otherwise reply in plain prose. Keep replies under 300 words unless asked for detail.";
 }
+
 function openCoach(prefillSend){
   lockScroll();
   document.getElementById("coachOverlay").classList.remove("hidden");
@@ -1171,22 +1261,55 @@ function addCoachBubble(role, text, payloads){
   const div = document.createElement("div");
   div.className = "cmsg " + (role==="user" ? "user" : "ai");
   div.textContent = text;
-  if (payloads && payloads.program){
-    const b = document.createElement("button");
-    b.className = "act";
-    b.textContent = "Load program: " + (payloads.program.name || "Updated program");
-    b.addEventListener("click", ()=>{
-      const replaced = replaceActiveProgram(payloads.program);
-      if (replaced.ok){
-        b.textContent = "✓ Loaded — it's your active program";
-        b.disabled = true;
-        flashSave("Program loaded ✓");
-      } else if (!replaced.cancelled){
-        flashSave("Program invalid: "+(replaced.reason||"could not be saved"), true);
+
+  if(payloads && payloads.program){
+    const b=document.createElement(
+      "button"
+    );
+
+    b.className="act";
+    b.textContent=
+      "Review program: "
+      +aiTrainingPlanName(
+        payloads.program
+      );
+
+    b.addEventListener("click",()=>{
+      const prepared=
+        prepareTrainingPlanImport(
+          payloads.program
+        );
+
+      if(
+        !prepared
+        || !prepared.ok
+        || !Array.isArray(prepared.review)
+      ){
+        flashSave(
+          "That training program could not be read.",
+          true
+        );
+        return;
       }
+
+      document.getElementById(
+        "coachOverlay"
+      ).classList.add("hidden");
+
+      unlockScroll();
+
+      openTrainingPlanReview(
+        prepared,
+        "AI Coach response"
+      );
+
+      b.textContent="Review opened";
+      b.disabled=true;
     });
+
     div.appendChild(b);
   }
+
   if (payloads && payloads.targets){
     const t = payloads.targets;
     const b = document.createElement("button");
@@ -1250,32 +1373,102 @@ document.getElementById("checkinBtn").addEventListener("click", ()=>{
   openCoach("Give me my weekly review — assess my week, call out what needs fixing, and tell me what to focus on next week.");
 });
 
+
 // ================== PASTE PROGRAM FROM AI ==================
-document.getElementById("pasteProgBtn").addEventListener("click", async ()=>{
-  let text = "";
-  try {
-    if (navigator.clipboard && navigator.clipboard.readText) text = await navigator.clipboard.readText();
-  } catch(e){ /* permission denied */ }
-  if (!text) text = prompt("Paste the AI's reply (or just the JSON program) here:") || "";
-  if (!text.trim()) return;
-  let prog = null;
-  const p = extractAIPayloads(text);
-  if (p.program) prog = p.program;
-  if (!prog){
-    try { const j = JSON.parse(text.trim()); if (j && Array.isArray(j.days)) prog = j; } catch(e){}
+document.getElementById(
+  "pasteProgBtn"
+).addEventListener("click",async ()=>{
+  let text="";
+
+  try{
+    if(
+      navigator.clipboard
+      && navigator.clipboard.readText
+    ){
+      text=
+        await navigator.clipboard.readText();
+    }
+  }catch(error){
+    // Clipboard permission was denied.
   }
-  if (!prog){
-    const m = text.match(/\{[\s\S]*"days"[\s\S]*\}/);
-    if (m){ try { const j = JSON.parse(m[0]); if (Array.isArray(j.days)) prog = j; } catch(e){} }
+
+  if(!text){
+    text=
+      prompt(
+        "Paste the AI's reply or BlackPyre JSON program here:"
+      )
+      || "";
   }
-  if (!prog){ flashSave("No program found in that text", true); return; }
-  const replaced = replaceActiveProgram(prog);
-  if (replaced.ok){
-    ackBtn("pasteProgBtn", "✓ Loaded: "+(program.name||"program"));
-    flashSave("Program loaded ✓");
-  } else if (!replaced.cancelled){
-    flashSave("Program invalid: "+(replaced.reason||"could not be saved"), true);
+
+  if(!text.trim())return;
+
+  let candidate=null;
+  const payloads=extractAIPayloads(text);
+
+  if(payloads.program){
+    candidate=payloads.program;
   }
+
+  if(!candidate){
+    try{
+      candidate=
+        aiTrainingPlanCandidate(
+          JSON.parse(text.trim())
+        );
+    }catch(error){
+      candidate=null;
+    }
+  }
+
+  if(!candidate){
+    const match=text.match(
+      /\{[\s\S]*"days"[\s\S]*\}/
+    );
+
+    if(match){
+      try{
+        candidate=
+          aiTrainingPlanCandidate(
+            JSON.parse(match[0])
+          );
+      }catch(error){
+        candidate=null;
+      }
+    }
+  }
+
+  if(!candidate){
+    flashSave(
+      "No BlackPyre training program was found in that text.",
+      true
+    );
+    return;
+  }
+
+  const prepared=
+    prepareTrainingPlanImport(candidate);
+
+  if(
+    !prepared
+    || !prepared.ok
+    || !Array.isArray(prepared.review)
+  ){
+    flashSave(
+      "That training program could not be read.",
+      true
+    );
+    return;
+  }
+
+  openTrainingPlanReview(
+    prepared,
+    "Pasted AI response"
+  );
+
+  ackBtn(
+    "pasteProgBtn",
+    "Review ready"
+  );
 });
 
 // ================== AI FOOD LOGGING (text + photo) ==================
@@ -1771,7 +1964,7 @@ function aiReport(){
   L.push("1. Assess my rate of progress toward my goal — too fast, too slow, or on track.");
   L.push("2. Flag anything in my nutrition adherence that needs fixing.");
   L.push("3. Review my lift progression and suggest specific training adjustments.");
-  L.push("4. If my program should change, return a COMPLETE updated program as a JSON code block in the exact format shown at the bottom (same structure, keep exercise names I'm progressing on unchanged so my history stays connected). I will load it directly into the app.");
+  L.push("4. If my program should change, return the COMPLETE BlackPyre public training-plan JSON shown at the bottom. Keep exercise names I am progressing on unchanged so my history stays connected. I will review it before importing.");
   L.push("5. Be direct — no generic advice.");
   L.push("");
   L.push("## Goal & weight");
@@ -1790,10 +1983,14 @@ function aiReport(){
   L.push("");
   L.push("## My current program (edit this and return the full updated JSON)");
   L.push("```json");
-  L.push(JSON.stringify(program, null, 2));
+  L.push(JSON.stringify(
+    aiPublicTrainingPlanFromProgram(program),
+    null,
+    2
+  ));
   L.push("```");
   L.push("");
-  L.push("Program format rules: top level {name, days:[...]}; each day {id:\"D1\", title, exercises:[{name, scheme}]}. Use exact exercise names from my library. Tracking shape is defined by the exercise itself; do not add a [Cardio] prefix. Schemes like \"4×5\" or \"3×8-12\" are optional and power lift/reps prefill and auto-progression.");
+  L.push("Program format rules: top level {format:\"blackpyre-training-plan\", version:1, program:{name, days:[...]}}. Each exercise uses its name and structured prescription. Do not invent exercise IDs or choose tracking types. BlackPyre verifies every exercise and chooses its tracking type during review.");
   return L.join("\n");
 }
 document.getElementById("aiDownloadBtn").addEventListener("click", ()=>{

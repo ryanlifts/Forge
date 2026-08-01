@@ -109,27 +109,176 @@ function validSetRows(value){
   });
 }
 function validTypedExerciseValue(value){
-  if (!isPlainObject(value) || typeof value.t!=="string" || !value.t) return false;
+  if (
+    !isPlainObject(value)
+    || typeof value.t!=="string"
+    || !value.t
+  ) return false;
+
+  const keysAllowed=allowed=>
+    Object.keys(value).every(key=>allowed.includes(key));
+  const optionalText=key=>
+    !hasOwn(value,key) || typeof value[key]==="string";
+  const optionalNonNegativeInteger=key=>
+    !hasOwn(value,key)
+    || (
+      Number.isInteger(Number(value[key]))
+      && Number(value[key])>=0
+    );
+  const optionalPositiveInteger=key=>
+    !hasOwn(value,key)
+    || (
+      Number.isInteger(Number(value[key]))
+      && Number(value[key])>0
+    );
+  const optionalPositiveNumber=key=>
+    !hasOwn(value,key)
+    || Number(value[key])>0;
+  const validOptionalDistance=()=>{
+    const hasDist=
+      hasOwn(value,"dist")
+      && value.dist!==null
+      && value.dist!=="";
+
+    if (
+      hasDist
+      && !(
+        Number(value.dist)>0
+        && EXERCISE_DISTANCE_UNITS.includes(value.distUnit)
+      )
+    ) return false;
+
+    if (
+      !hasDist
+      && hasOwn(value,"distUnit")
+      && value.distUnit!==undefined
+      && value.distUnit!==null
+      && value.distUnit!==""
+    ) return false;
+
+    return true;
+  };
+
   if (value.t==="timeDist"){
-    if (!(Number(value.secs)>0)) return false;
-    const hasDist=hasOwn(value,"dist") && value.dist!==null && value.dist!=="";
-    if (hasDist && !(Number(value.dist)>0 && EXERCISE_DISTANCE_UNITS.includes(value.distUnit))) return false;
-    if (!hasDist && hasOwn(value,"distUnit") && value.distUnit!==undefined && value.distUnit!==null && value.distUnit!=="") return false;
-    return Object.keys(value).every(k=>["t","secs","dist","distUnit"].includes(k));
+    return Number(value.secs)>0
+      && validOptionalDistance()
+      && keysAllowed(["t","secs","dist","distUnit"]);
   }
+
   if (value.t==="carry"){
-    return Number(value.lbs)>0 && Number(value.dist)>0 && EXERCISE_DISTANCE_UNITS.includes(value.distUnit)
-      && Object.keys(value).every(k=>["t","lbs","dist","distUnit"].includes(k));
+    return Number(value.lbs)>0
+      && Number(value.dist)>0
+      && EXERCISE_DISTANCE_UNITS.includes(value.distUnit)
+      && keysAllowed(["t","lbs","dist","distUnit"]);
   }
+
   if (value.t==="rounds"){
-    return Number.isInteger(Number(value.rounds)) && Number(value.rounds)>0
-      && Number.isInteger(Number(value.workSecs)) && Number(value.workSecs)>0
-      && Number.isInteger(Number(value.recSecs)) && Number(value.recSecs)>=0
-      && (!hasOwn(value,"note") || typeof value.note==="string")
-      && Object.keys(value).every(k=>["t","rounds","workSecs","recSecs","note"].includes(k));
+    return Number.isInteger(Number(value.rounds))
+      && Number(value.rounds)>0
+      && Number.isInteger(Number(value.workSecs))
+      && Number(value.workSecs)>0
+      && Number.isInteger(Number(value.recSecs))
+      && Number(value.recSecs)>=0
+      && optionalText("note")
+      && keysAllowed([
+        "t","rounds","workSecs","recSecs","note"
+      ]);
   }
-  // Unknown typed values belong to a newer shape version. Preserve them exactly and
-  // let the reader render them read-only instead of rejecting or rewriting them.
+
+  if (value.t==="timedHold"){
+    return Number.isInteger(Number(value.holds))
+      && Number(value.holds)>0
+      && Number.isInteger(Number(value.holdSecs))
+      && Number(value.holdSecs)>0
+      && optionalNonNegativeInteger("recSecs")
+      && keysAllowed([
+        "t","holds","holdSecs","recSecs"
+      ]);
+  }
+
+  if (value.t==="steadyTimeDistance"){
+    return Number.isInteger(Number(value.secs))
+      && Number(value.secs)>0
+      && validOptionalDistance()
+      && optionalText("pace")
+      && optionalText("effort")
+      && keysAllowed([
+        "t","secs","dist","distUnit","pace","effort"
+      ]);
+  }
+
+  if (value.t==="durationActivity"){
+    return Number.isInteger(Number(value.secs))
+      && Number(value.secs)>0
+      && optionalText("note")
+      && keysAllowed(["t","secs","note"]);
+  }
+
+  if (value.t==="timedIntervals"){
+    return Number.isInteger(Number(value.intervals))
+      && Number(value.intervals)>0
+      && Number.isInteger(Number(value.workSecs))
+      && Number(value.workSecs)>0
+      && optionalNonNegativeInteger("recSecs")
+      && validOptionalDistance()
+      && optionalText("effort")
+      && keysAllowed([
+        "t","intervals","workSecs","recSecs",
+        "dist","distUnit","effort"
+      ]);
+  }
+
+  if (value.t==="distanceIntervals"){
+    return Number.isInteger(Number(value.repeats))
+      && Number(value.repeats)>0
+      && Number(value.dist)>0
+      && EXERCISE_DISTANCE_UNITS.includes(value.distUnit)
+      && optionalPositiveInteger("workSecs")
+      && optionalNonNegativeInteger("recSecs")
+      && optionalText("effort")
+      && keysAllowed([
+        "t","repeats","dist","distUnit",
+        "workSecs","recSecs","effort"
+      ]);
+  }
+
+  if (value.t==="loadedDistance"){
+    return Number(value.lbs)>0
+      && Number(value.dist)>0
+      && EXERCISE_DISTANCE_UNITS.includes(value.distUnit)
+      && optionalPositiveInteger("count")
+      && optionalPositiveInteger("secs")
+      && optionalNonNegativeInteger("recSecs")
+      && optionalText("effort")
+      && keysAllowed([
+        "t","count","lbs","dist","distUnit",
+        "secs","recSecs","effort"
+      ]);
+  }
+
+  if (value.t==="conditioningRounds"){
+    return Number.isInteger(Number(value.rounds))
+      && Number(value.rounds)>0
+      && Number.isInteger(Number(value.workSecs))
+      && Number(value.workSecs)>0
+      && Number.isInteger(Number(value.recSecs))
+      && Number(value.recSecs)>=0
+      && optionalText("note")
+      && keysAllowed([
+        "t","rounds","workSecs","recSecs","note"
+      ]);
+  }
+
+  if (value.t==="activityNotes"){
+    return typeof value.note==="string"
+      && !!value.note.trim()
+      && optionalPositiveInteger("secs")
+      && keysAllowed(["t","secs","note"]);
+  }
+
+  // Unknown typed values belong to a newer shape version. Preserve them
+  // exactly and let the reader render them read-only instead of rejecting
+  // or rewriting them.
   return true;
 }
 function validStoredExerciseValue(value){
@@ -1354,7 +1503,11 @@ function initAccessibleDialogs(){
   const returnFocus=new WeakMap();
   function isOpen(d){ return d && !d.classList.contains("hidden"); }
   function focusDialog(d){
-    if (!isOpen(d)) return;
+    if (
+      typeof document==="undefined"
+      || !document
+      || !isOpen(d)
+    ) return;
     const active=document.activeElement;
     if (active && active!==document.body && !d.contains(active)) returnFocus.set(d,active);
     const preferred=d.dataset.initialFocus;
@@ -1367,6 +1520,7 @@ function initAccessibleDialogs(){
   function restoreDialogFocus(d){
     const target=returnFocus.get(d); returnFocus.delete(d);
     requestAnimationFrame(()=>{
+      if(typeof document==="undefined" || !document)return;
       if (dialogs.some(isOpen)) return;
       if (target && document.contains(target) && !target.closest(".hidden")){
         try { target.focus(); } catch(e){}
@@ -1465,4 +1619,3 @@ primaryTabs.forEach((btn,index)=>{
     primaryTabs[next].click();
   });
 });
-
