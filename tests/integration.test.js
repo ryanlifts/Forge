@@ -154,9 +154,9 @@ const protectedGoal = PC.window.eval("cfg.goalWt");
 PC.window.eval(`cfg.goalWt=199; saveCfg();`);
 await wait(15);
 check("protected settings mutation is visibly undone", PC.window.eval("cfg.goalWt")===protectedGoal);
-PC.window.document.getElementById("sUsdaKey").value="blocked-key";
-PC.window.document.getElementById("saveUsdaBtn").dispatchEvent(new PC.window.Event("click",{bubbles:true}));
-check("blocked actions cannot show a false saved acknowledgement", !PC.window.document.getElementById("saveUsdaBtn").classList.contains("acked") && /Not saved/.test(PC.window.document.getElementById("saveState").textContent));
+PC.window.document.getElementById("foodSuggestionsAvoid").value="blocked-change";
+PC.window.document.getElementById("saveFoodSuggestionsBtn").dispatchEvent(new PC.window.Event("click",{bubbles:true}));
+check("blocked actions cannot show a false saved acknowledgement", !PC.window.document.getElementById("saveFoodSuggestionsBtn").classList.contains("acked") && /Not saved/.test(PC.window.document.getElementById("saveState").textContent));
 const protectedProgram = PC.window.eval("program.name");
 PC.window.eval(`program={name:"Blocked",days:[{id:"X",title:"X",exercises:[{name:"Squat"}]}]}; saveProgram();`);
 await wait(15);
@@ -539,15 +539,11 @@ check("recovery quarantine preserves active legacy fallback as evidence", legacy
 check("recovery writes forge:data but never alters legacy fallback", LegacyRecover46.window.localStorage.getItem("forge:data")!==null && LegacyRecover46.window.localStorage.getItem("ryan-cut:data")===legacyRaw && !LegacyRecover46.__storageCalls.some(c=>c.key==="ryan-cut:data"));
 
 // ================= barcode chain =================
-function bootOFF(offResponder, usdaResponder, cfgOverrides){
-  return boot(Object.assign({}, EXISTING_CFG, {usdaKey:"k"}, cfgOverrides||{}),
+function bootOFF(offResponder, cfgOverrides){
+  return boot(Object.assign({}, EXISTING_CFG, cfgOverrides||{}),
     Object.assign({}, EMPTY_DATA, {myFoods:{"111":{name:"Saved thing", brand:"Mine", cal100:100, pro100:10, carb100:5, fat100:2}}}),
     (w)=>{ w.__calls=[]; w.fetch=(url)=>{ w.__calls.push(url);
       if (url.includes("openfoodfacts")) return offResponder(url);
-      if (url.includes("usda")){
-        if (typeof usdaResponder==="function") return usdaResponder(url);
-        return Promise.resolve({ok:true,status:200,json:()=>Promise.resolve({foods:[{description:"USDA Fallback Bar", brandOwner:"USDA Co", servingSize:50, servingSizeUnit:"g", foodNutrients:[{nutrientId:1008,value:400},{nutrientId:1003,value:30},{nutrientId:1005,value:40},{nutrientId:1004,value:12}]}]})});
-      }
       return Promise.resolve({ok:false,status:500,json:()=>Promise.resolve({})});
     };});
 }
@@ -702,8 +698,9 @@ C = bootOFF(()=>{
   return Promise.resolve({ok:false,status:404,json:()=>Promise.resolve({})});
 });
 await scan(C,"333");
-check("v69 confirmed OFF 404 does not retry and uses USDA", notFoundAttempts===1 &&
-  C.window.document.getElementById("selName").textContent.includes("USDA Fallback Bar"));
+check("v81 confirmed OFF 404 does not retry and opens label entry", notFoundAttempts===1 &&
+  !C.window.document.getElementById("customCard").classList.contains("hidden") &&
+  /not found in Open Food Facts/i.test(C.window.document.getElementById("searchErr").textContent));
 
 let networkAttempts = 0;
 C = bootOFF(()=>{
@@ -711,23 +708,25 @@ C = bootOFF(()=>{
   return Promise.reject(new Error("offline"));
 });
 await scan(C,"666");
-check("v69 OFF network failure retries once before USDA", networkAttempts===2 &&
-  C.window.document.getElementById("selName").textContent.includes("USDA Fallback Bar"));
+check("v81 OFF network failure retries once then opens label entry", networkAttempts===2 &&
+  !C.window.document.getElementById("customCard").classList.contains("hidden") &&
+  /could not be reached/i.test(C.window.document.getElementById("searchErr").textContent));
 
 let unavailableAttempts = 0;
 C = bootOFF(()=>{
   unavailableAttempts++;
   return Promise.reject(new Error("OFF unavailable"));
-}, ()=>Promise.reject(new Error("USDA unavailable")));
+});
 await scan(C,"777");
-check("v69 unavailable databases show retry message instead of false not-found form", unavailableAttempts===2 &&
-  C.window.document.getElementById("customCard").classList.contains("hidden") &&
+check("v81 unavailable database offers retry and manual label entry", unavailableAttempts===2 &&
+  !C.window.document.getElementById("customCard").classList.contains("hidden") &&
   !C.window.document.getElementById("searchErr").classList.contains("hidden") &&
   /could not be reached/i.test(C.window.document.getElementById("searchErr").textContent));
 
 C = bootOFF(()=>Promise.resolve({ok:true,status:200,json:()=>Promise.resolve({status:"success", product:{product_name:"Bad", nutriments:{"energy-kcal_100g":"NaN-city","proteins_100g":-5}}})}));
 await scan(C,"555");
-check("malformed nutrition rejected → USDA", C.window.document.getElementById("selName").textContent.includes("USDA Fallback Bar"));
+check("v81 malformed nutrition opens manual label entry", !C.window.document.getElementById("customCard").classList.contains("hidden") &&
+  /does not include usable nutrition/i.test(C.window.document.getElementById("searchErr").textContent));
 
 // ================= v49: training-session integrity =================
 const priorWorkout = {date:"2026-07-01",day:"D1",title:"Day 1",sets:{"Bench Press":[{w:100,r:5},{w:100,r:5},{w:100,r:5}]},notes:""};
@@ -1694,7 +1693,7 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+"/.test(sw));
-check("v80 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v80"'));
+check("v81 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v81"'));
 
 const nativePrep76 = fs.readFileSync(
   path.join(__dirname,"..","tools","prepare-native.sh"),
@@ -1773,7 +1772,7 @@ check("no local script tag uses async, defer, or type=module",
 // below verify different, lasting invariants (order, strict mode, attributes, openers).
 const SLICE_OPENERS = {
   "01-storage.js":"storage keys & defaults", "02-food.js":"bars", "03-train.js":"TRAIN",
-  "04-weight.js":"WEIGHT", "05-ai.js":"USDA SEARCH",
+  "04-weight.js":"WEIGHT", "05-ai.js":"V23: WATER",
   "06-settings.js":"FIRST-RUN SETUP WIZARD", "07-boot.js":"DASH" };
 check("every slice opens with strict mode then its expected section marker",
   SLICES.every(f=>{
@@ -2111,12 +2110,14 @@ check("v57 every dynamically rendered onboarding control has an accessible name"
 
 fresh57.window.eval(`setupStep=6; renderSetupStep();`);
 await wait(20);
-dFresh57.getElementById("suUsda").value="  onboarding-usda-test-key  ";
+check("v81 food-database onboarding requires no key or account",
+  /No food-database account or API key is needed/.test(dFresh57.getElementById("setupBody").textContent) &&
+  !dFresh57.querySelector("#setupBody input"));
 dFresh57.getElementById("setupNext").click();
 await wait(20);
-check("onboarding USDA key saves when advancing without the separate Save button",
-  fresh57.window.eval(`setupStep===7 && cfg.usdaKey==="onboarding-usda-test-key"`) &&
-  JSON.parse(fresh57.window.localStorage.getItem("forge:cfg")).usdaKey==="onboarding-usda-test-key");
+check("v81 keyless food onboarding advances without saving a credential",
+  fresh57.window.eval(`setupStep===7 && !Object.prototype.hasOwnProperty.call(cfg,"usdaKey")`) &&
+  !Object.prototype.hasOwnProperty.call(JSON.parse(fresh57.window.localStorage.getItem("forge:cfg")),"usdaKey"));
 
 check("v57 errors and save/network messages expose live status semantics", dA57.getElementById("searchErr").getAttribute("role")==="alert" && dA57.getElementById("saveState").getAttribute("role")==="status" && dA57.getElementById("offlineBanner").getAttribute("role")==="status");
 A57.window.eval("renderFAQ()");
@@ -3196,10 +3197,11 @@ check("native backup writes a verified JSON file without opening the share sheet
   && NativeBackupShares.length===0
   && NativeBackup.window.document.getElementById("exportDataBtn").textContent==="✓ Saved to BlackPyre folder"
   && NativeBackup.window.document.getElementById("exportDataBtn").classList.contains("acked"));
-check("native backup strips private AI keys but intentionally retains the USDA key",
+check("v81 native backup strips every API credential including legacy USDA keys",
   !nativeBackupText.includes("native-secret-a")
   && !nativeBackupText.includes("native-secret-o")
-  && nativeBackupPayload.cfg.usdaKey==="native-usda-key");
+  && !nativeBackupText.includes("native-usda-key")
+  && !Object.prototype.hasOwnProperty.call(nativeBackupPayload.cfg,"usdaKey"));
 check("native backup records local completion only after verified file creation",
   NativeBackup.window.eval(`
     data.meta.lastBackup===todayStr()

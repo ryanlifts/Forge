@@ -15,6 +15,7 @@ cp \
   icon-512.png \
   data-faq.js \
   data-exercises.js \
+  data-exercise-card-profiles.js \
   data-foods.js \
   data-quotes.js \
   data-suggestions.js \

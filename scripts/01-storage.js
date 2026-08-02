@@ -45,12 +45,6 @@ const CARDIO_TYPES = [
   "Jump Rope","HIIT Circuit","Basketball","Soccer","Tennis/Pickleball","Hiking","Rucking","Sled Push/Pull","Battle Ropes","Other",
 ];
 
-// local whole foods — per 100g: cal, protein, carbs, fat
-
-const DEFAULT_USDA_KEY = "8xMjfBYwxcNbli7OVr7Gb394962FbJQvqDMDmLqi"; // shared community key — add your own in Settings for guaranteed speed
-function effectiveUsdaKey(){ return (cfg.usdaKey && cfg.usdaKey.trim()) || DEFAULT_USDA_KEY; }
-
-
 // ================== helpers (pure) ==================
 function hasOwn(obj, key){ return Object.prototype.hasOwnProperty.call(obj, key); }
 function isPlainObject(v){
@@ -452,6 +446,9 @@ function migrateTargets(obj){
   if (!Number.isFinite(obj.proTarget) && Number.isFinite(obj.proLo) && Number.isFinite(obj.proHi)) obj.proTarget = Math.round((obj.proLo+obj.proHi)/2);
 }
 function migrateCfgObject(obj){
+  // Live USDA access was removed in Phase 2. Scrub any previously saved user
+  // credential instead of leaving an unused secret in device storage or backups.
+  delete obj.usdaKey;
   ["startWt","goalWt","calTarget","proTarget","carbGoal","fatGoal"].forEach(k=>{
     const v = Number(obj[k]);
     obj[k] = Number.isFinite(v) && v>0 ? v : 0;
@@ -538,6 +535,7 @@ function prepareState(rawCfg, rawData, rawProgram, options){
   if (!parsed.program.missing && !isPlainObject(parsed.program.value)) return failedPreparation("Saved program is not an object.", "failure", parsed, originals, makeDiagnostic("validation","program","not-object","Saved program is not an object."));
 
   const rawCfgObj = parsed.cfg.missing ? {} : cloneJSON(parsed.cfg.value);
+  const hadDeprecatedUsdaKey = hasOwn(rawCfgObj,"usdaKey");
   // v66 introduced this setting without changing the primary schema. A truly fresh
   // install has no settings record and starts with progression off. Any pre-v66
   // settings record that lacks the field is an existing install and keeps the old
@@ -558,6 +556,7 @@ function prepareState(rawCfg, rawData, rawProgram, options){
     program:parsed.program.missing ? cloneJSON(DEFAULT_PROGRAM) : cloneJSON(parsed.program.value)
   };
   const changed = {cfg:false, data:false, program:false};
+  if (hadDeprecatedUsdaKey) changed.cfg = true;
   try {
     let current = version;
     while (current<SCHEMA_VERSION){
@@ -2347,7 +2346,7 @@ const ACCESSIBLE_DYNAMIC_NAMES = {
   suSpC:"Carbohydrate percentage", suSpF:"Fat percentage", suSched:"Calorie schedule mode",
   suSched0:"Sunday calorie target", suSched1:"Monday calorie target", suSched2:"Tuesday calorie target",
   suSched3:"Wednesday calorie target", suSched4:"Thursday calorie target", suSched5:"Friday calorie target",
-  suSched6:"Saturday calorie target", suUsda:"USDA API key"
+  suSched6:"Saturday calorie target"
 };
 function associatedLabelText(el){
   if (!el || !el.id) return "";

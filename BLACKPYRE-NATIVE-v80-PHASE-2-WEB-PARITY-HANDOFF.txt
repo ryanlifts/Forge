@@ -1,0 +1,116 @@
+BLACKPYRE NATIVE v80 — PHASE 2 KEYLESS FOOD DATA
+AUTHORITATIVE WEB-PARITY HANDOFF
+
+PURPOSE
+-------
+Phase 2 removes BlackPyre's dependency on a shipped, shared, or user-entered
+USDA API key while preserving practical food logging and all previously
+validated nutrition-safety and workout-card behavior.
+
+AUTHORITATIVE NATIVE BEHAVIOR
+-----------------------------
+1. No shipped or embedded USDA API credential is used.
+
+2. USDA API-key controls, signup instructions, and settings language are
+   removed from the user interface and FAQ.
+
+3. Legacy cfg.usdaKey data is removed during migration and is excluded from
+   normal BlackPyre backups.
+
+4. Existing bundled/local generic food suggestions remain available without
+   an internet connection or user account.
+
+5. Packaged-food and barcode lookup uses the stable Open Food Facts v2 product
+   endpoint.
+
+6. Results obtained from Open Food Facts visibly identify:
+   Source: Open Food Facts
+
+7. Users are reminded to compare database information with the package
+   nutrition label because the physical label is the controlling source for
+   the product in hand.
+
+8. A barcode that is not found opens manual nutrition-label entry after one
+   lookup request.
+
+9. A temporary lookup failure retries once and then opens manual
+   nutrition-label entry rather than trapping the user in an error state.
+
+10. Ordinary rapid repeated Add actions are blocked to prevent accidental
+    double logging.
+
+11. The explicit duplicate control intentionally creates another copy of an
+    existing food entry.
+
+12. Identical items contained in one reviewed AI-food batch are preserved
+    because they may represent intentional separate servings.
+
+PRESERVED CONTRACTS
+-------------------
+Phase 2 must not weaken or replace the completed Phase 1 nutrition-safety
+system, including:
+
+- Ages 13 through 100.
+- Exact 2023 DRI youth energy equations for ages 13 through 17.
+- Transactional validation and visible inline errors.
+- The universal 1,200-calorie minimum.
+- Safe calculator-input persistence.
+- Teen activity-category guidance and complete teen controls.
+
+Phase 2 also preserves the complete profile-aware workout-card system for all
+203 active canonical exercises, including timed holds, steady cardio,
+intervals, carries, conditioning rounds, repetition work, and strength work.
+
+WEB PARITY REQUIREMENTS
+-----------------------
+A future web implementation should reproduce the user-visible and data-safety
+behavior above. It must not copy native packaging details or access the native
+repository as part of web development.
+
+VALIDATION EVIDENCE
+-------------------
+Automated validation:
+
+- Phase 1 nutrition safety: 54 passed
+- Phase 2 keyless food data: 19 passed
+- Unit: 168 passed
+- Integration: 716 passed
+- Card profiles: 56 passed
+- Total: 1,013 passed, 0 failed
+
+Native validation:
+
+- Root, www, and native-public payload parity passed.
+- All 203 canonical exercise-card assignments remained complete.
+- Signed Debug build succeeded.
+- The candidate installed update-in-place on physical iPhone RAW.
+- Existing app data was preserved.
+- The app launched successfully.
+- Physical Phase 2 checks passed.
+- Workout cards remained operational.
+- Protected signing configuration remained unchanged.
+
+PHASE 2 SOURCE SCOPE
+--------------------
+- data-faq.js
+- index.html
+- package.json
+- scripts/01-storage.js
+- scripts/02-food.js
+- scripts/05-ai.js
+- scripts/06-settings.js
+- scripts/07-boot.js
+- sw.js
+- tests/integration.test.js
+- tests/phase2-keyless-food-data.test.js
+- tools/prepare-native.sh
+
+OUTSIDE PHASE 2
+---------------
+This phase does not complete:
+
+- Apple privacy-manifest work.
+- Public privacy-policy or support pages.
+- The live-AI App Store payment/BYOK decision.
+- Remaining dependency-security upgrades.
+- App Store metadata, screenshots, archive, TestFlight, or submission.
