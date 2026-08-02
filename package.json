@@ -9,7 +9,8 @@
   "scripts": {
     "test:nutrition-safety": "node tests/phase1-nutrition-safety.test.js",
     "test:keyless-food-data": "node tests/phase2-keyless-food-data.test.js",
-    "test": "node tests/phase1-nutrition-safety.test.js && node tests/phase2-keyless-food-data.test.js && node tests/unit.test.js && node tests/integration.test.js && node tests/card-profiles.test.js"
+    "test:label-scanner": "node tests/phase2-label-scanner.test.js",
+    "test": "node tests/phase1-nutrition-safety.test.js && node tests/phase2-keyless-food-data.test.js && node tests/phase2-label-scanner.test.js && node tests/unit.test.js && node tests/integration.test.js && node tests/card-profiles.test.js"
   },
   "repository": {
     "type": "git",

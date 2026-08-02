@@ -9660,11 +9660,35 @@ document.getElementById("cancelEditWorkBtn").addEventListener("click", ()=>{
 let mfEditKey = null;
 function mfResetForm(){
   mfEditKey = null;
-  ["mfName","mfServG","mfCal","mfPro","mfCarb","mfFat","mfBarcode"].forEach(id=>document.getElementById(id).value="");
-  document.getElementById("mfFormLabel").textContent = "Create a food";
-  document.getElementById("mfSaveBtn").textContent = "Save food";
-  document.getElementById("mfCancelBtn").classList.add("hidden");
+
+  [
+    "mfName",
+    "mfServingLabel",
+    "mfServG",
+    "mfCal",
+    "mfPro",
+    "mfCarb",
+    "mfFat",
+    "mfBarcode"
+  ].forEach(id=>{
+    document.getElementById(id).value="";
+  });
+
+  document.getElementById("mfServingUnit").value =
+    "g";
+
+  document.getElementById("mfFormLabel").textContent =
+    "Create a food";
+
+  document.getElementById("mfSaveBtn").textContent =
+    "Save food";
+
+  document
+    .getElementById("mfCancelBtn")
+    .classList
+    .add("hidden");
 }
+
 function openMyFoods(){
   renderMyFoods(); renderMFMeals();
   lockScroll();
@@ -9679,26 +9703,114 @@ document.getElementById("myFoodsOpenBtn").addEventListener("click", openMyFoods)
 document.getElementById("myFoodsCloseBtn").addEventListener("click", ()=>{ mfResetForm(); closeMyFoods(); });
 document.getElementById("mfCancelBtn").addEventListener("click", mfResetForm);
 document.getElementById("mfSaveBtn").addEventListener("click", ()=>{
-  const name = document.getElementById("mfName").value.trim();
-  const servG = Number(document.getElementById("mfServG").value);
-  const cal = Number(document.getElementById("mfCal").value);
-  if(!name || !servG || !cal){ flashSave("Need name, serving size, calories", true); return; }
-  const pro = Number(document.getElementById("mfPro").value||0);
-  const carb = Number(document.getElementById("mfCarb").value||0);
-  const fat = Number(document.getElementById("mfFat").value||0);
-  const food = { name:name, brand:"My foods",
-    cal100: cal/servG*100, pro100: pro/servG*100, carb100: carb/servG*100, fat100: fat/servG*100,
-    servingG: servG, servingLabel: servG+"g" };
-  const bc = document.getElementById("mfBarcode").value.replace(/\D/g,"");
-  const key = bc || mfEditKey || ("cf_"+Date.now());
-  const wasEdit = mfEditKey!=null;
-  if (mfEditKey && key!==mfEditKey) delete data.myFoods[mfEditKey];
-  data.myFoods[key] = food;
+  const result =
+    buildServingFood({
+      name:
+        document
+          .getElementById("mfName")
+          .value,
+      brand:"My foods",
+      servingLabel:
+        document
+          .getElementById("mfServingLabel")
+          .value,
+      servingAmount:
+        document
+          .getElementById("mfServG")
+          .value,
+      servingUnit:
+        document
+          .getElementById("mfServingUnit")
+          .value,
+      calories:
+        document
+          .getElementById("mfCal")
+          .value,
+      protein:
+        document
+          .getElementById("mfPro")
+          .value,
+      carbs:
+        document
+          .getElementById("mfCarb")
+          .value,
+      fat:
+        document
+          .getElementById("mfFat")
+          .value,
+      sourceLabel:"My Foods"
+    });
+
+  if (!result.ok){
+    const fieldMap = {
+      name:"mfName",
+      calories:"mfCal",
+      servingAmount:"mfServG",
+      macros:"mfPro"
+    };
+
+    const id =
+      fieldMap[result.field];
+
+    flashSave(
+      result.message,
+      true
+    );
+
+    if (id){
+      document
+        .getElementById(id)
+        .focus();
+    }
+
+    return;
+  }
+
+  const food =
+    result.food;
+
+  const barcode =
+    document
+      .getElementById("mfBarcode")
+      .value
+      .replace(/\D/g,"");
+
+  if (barcode){
+    food.barcode=barcode;
+  }
+
+  const key =
+    barcode
+    || mfEditKey
+    || (
+      "cf_"
+      +Date.now()
+    );
+
+  const wasEdit =
+    mfEditKey!=null;
+
+  if (
+    mfEditKey
+    && key!==mfEditKey
+  ){
+    delete data.myFoods[mfEditKey];
+  }
+
+  data.myFoods[key]=food;
   save();
-  ackBtn("mfSaveBtn", wasEdit ? "✓ Updated" : "✓ Saved");
+
+  ackBtn(
+    "mfSaveBtn",
+    wasEdit
+      ? "✓ Updated"
+      : "✓ Saved"
+  );
+
   mfResetForm();
   renderMyFoods();
 });
+
 function renderMyFoods(){
   const el = document.getElementById("mfList");
   const keys = Object.keys(data.myFoods||{});
@@ -9726,12 +9838,47 @@ function renderMyFoods(){
     eBtn.addEventListener("click", ()=>{
       mfEditKey = key;
       document.getElementById("mfName").value = f.name;
-      document.getElementById("mfServG").value = g;
-      document.getElementById("mfCal").value = Math.round((f.cal100||0)*g/100);
-      document.getElementById("mfPro").value = Math.round((f.pro100||0)*g/100*10)/10;
-      document.getElementById("mfCarb").value = Math.round((f.carb100||0)*g/100*10)/10;
-      document.getElementById("mfFat").value = Math.round((f.fat100||0)*g/100*10)/10;
-      document.getElementById("mfBarcode").value = /^\d{6,}$/.test(key) ? key : "";
+
+      const servingValues =
+        servingValuesFromFood(f);
+
+      const storedUnit =
+        normalizedServingUnit(
+          String(f.servingUnit||"g")
+        );
+
+      document.getElementById("mfServingLabel").value =
+        f.servingLabel || "";
+
+      document.getElementById("mfServingUnit").value =
+        storedUnit;
+
+      document.getElementById("mfServG").value =
+        storedUnit==="serving"
+          ? ""
+          : (
+              Number(f.servingAmount)>0
+                ? f.servingAmount
+                : (f.servingG||100)
+            );
+
+      document.getElementById("mfCal").value =
+        Math.round(servingValues.cal*10)/10;
+
+      document.getElementById("mfPro").value =
+        Math.round(servingValues.pro*10)/10;
+
+      document.getElementById("mfCarb").value =
+        Math.round(servingValues.carb*10)/10;
+
+      document.getElementById("mfFat").value =
+        Math.round(servingValues.fat*10)/10;
+
+      document.getElementById("mfBarcode").value =
+        /^\d{6,}$/.test(key)
+          ? key
+          : "";
+
       document.getElementById("mfFormLabel").textContent = "Edit food";
       document.getElementById("mfSaveBtn").textContent = "Update food";
       document.getElementById("mfCancelBtn").classList.remove("hidden");

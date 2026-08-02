@@ -195,7 +195,7 @@ check("normal backups exclude a legacy USDA credential",
 check("FAQ accurately explains keyless sources and label verification",
   migrated.window.eval(`FAQ.some(x=>x.q==="Do I need a USDA key for food search?"&&/does not ship a USDA API key/.test(x.a)&&/Open Food Facts/.test(x.a))`) &&
   migrated.window.eval(`FAQ.some(x=>x.q==="How accurate are suggested-food calories and macros?"&&/nutrition label is the best source/.test(x.a))`));
-check("service worker cache is bumped for Phase 2",/blackpyre-v81/.test(fs.readFileSync(path.join(root,"sw.js"),"utf8")));
+check("service worker cache is bumped for Phase 2",/blackpyre-v89/.test(fs.readFileSync(path.join(root,"sw.js"),"utf8")));
 
 summary("PHASE 2 KEYLESS FOOD DATA");
 })().catch(error=>{

@@ -27,7 +27,7 @@
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>BlackPyre uses the camera to scan food barcodes.</string>
+	<string>BlackPyre uses the camera to scan food barcodes and nutrition labels.</string>
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
