@@ -186,54 +186,95 @@ function lastSessionFor(dayId){
 }
 
 // ================== ADAPTIVE TDEE ==================
+function nutritionDateMs(ds){
+  const match=String(ds).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(!match) return null;
+  const parsed=Date.UTC(Number(match[1]),Number(match[2])-1,Number(match[3]));
+  const check=new Date(parsed);
+  return check.getUTCFullYear()===Number(match[1])&&check.getUTCMonth()===Number(match[2])-1&&check.getUTCDate()===Number(match[3]) ? parsed : null;
+}
+function computeLogTDEEEstimate(){
+  const today=todayStr(), todayMs=nutritionDateMs(today);
+  const cutoffDate=new Date(todayMs-(NUTRITION_SAFETY.estimateWindowDays-1)*86400000);
+  const cutoff=cutoffDate.toISOString().slice(0,10);
+  const wts=(data.weights||[]).filter(w=>{
+    const pounds=Number(w.lbs), when=nutritionDateMs(w.date);
+    return when!==null && w.date>=cutoff && w.date<=today && pounds>=NUTRITION_SAFETY.minWeightLb && pounds<=NUTRITION_SAFETY.maxWeightLb;
+  }).sort((a,b)=>a.date.localeCompare(b.date));
+  if(wts.length<NUTRITION_SAFETY.estimateMinWeights) return {ok:false,code:"weights",reason:"At least four valid weigh-ins are needed."};
+  const firstMs=nutritionDateMs(wts[0].date), lastMs=nutritionDateMs(wts[wts.length-1].date);
+  const spanDays=Math.round((lastMs-firstMs)/86400000);
+  if(spanDays<NUTRITION_SAFETY.estimateMinSpanDays) return {ok:false,code:"span",reason:"Weigh-ins must span at least 14 days."};
+  const requiredDays=Math.max(NUTRITION_SAFETY.estimateMinLoggedDays,Math.ceil(spanDays*NUTRITION_SAFETY.estimateCoverage));
+  const calDays=Object.keys(data.food||{}).filter(ds=>ds>=wts[0].date&&ds<=wts[wts.length-1].date&&ds<today)
+    .map(ds=>({date:ds,cal:Number(daySums(ds).cal)})).filter(day=>Number.isFinite(day.cal)&&day.cal>NUTRITION_SAFETY.estimateLoggedDayFloor);
+  if(calDays.length<requiredDays) return {ok:false,code:"food-coverage",reason:"More complete food logs are needed across the weigh-in period."};
+  const avgCal=calDays.reduce((sum,day)=>sum+day.cal,0)/calDays.length;
+  const pts=wts.map(w=>({x:(nutritionDateMs(w.date)-firstMs)/86400000,y:Number(w.lbs)}));
+  const n=pts.length;
+  const sx=pts.reduce((sum,p)=>sum+p.x,0), sy=pts.reduce((sum,p)=>sum+p.y,0);
+  const sxx=pts.reduce((sum,p)=>sum+p.x*p.x,0), sxy=pts.reduce((sum,p)=>sum+p.x*p.y,0);
+  const denom=n*sxx-sx*sx;
+  if(!Number.isFinite(denom)||denom===0) return {ok:false,code:"trend",reason:"The weight trend could not be calculated from these dates."};
+  const slope=(n*sxy-sx*sy)/denom;
+  const weeklyChange=slope*7;
+  if(!Number.isFinite(weeklyChange)||Math.abs(weeklyChange)>NUTRITION_SAFETY.estimateMaxWeeklyChange){
+    return {ok:false,code:"trend-range",reason:"The recent weight trend is outside the supported range for a reliable estimate."};
+  }
+  const tdee=avgCal-slope*3500;
+  const estimateCheck=validateDailyCalories(tdee,"Estimated TDEE");
+  if(!Number.isFinite(tdee)||!estimateCheck.ok) return {ok:false,code:"estimate-range",reason:"The log-derived estimate is outside BlackPyre’s supported range."};
+  const adjustment=recognizedNutritionGoalAdjustment(cfg);
+  const proposal=Math.round(tdee+adjustment);
+  const proposalCheck=validateDailyCalories(proposal,"Suggested daily target");
+  return {
+    ok:true,tdee:Math.round(tdee),avgCal:Math.round(avgCal),weeklyChange:Math.round(weeklyChange*10)/10,
+    days:calDays.length,spanDays:spanDays,requiredDays:requiredDays,goalAdjustment:adjustment,
+    proposal:proposal,proposalSafe:proposalCheck.ok,proposalMessage:proposalCheck.ok?"":proposalCheck.message
+  };
+}
 function computeTDEE(){
-  const today = new Date();
-  const cutoff = new Date(today.getTime() - 28*86400000);
-  const cutStr = cutoff.getFullYear()+"-"+String(cutoff.getMonth()+1).padStart(2,"0")+"-"+String(cutoff.getDate()).padStart(2,"0");
-  const wts = data.weights.filter(w=>w.date>=cutStr).sort((a,b)=>a.date.localeCompare(b.date));
-  if (wts.length<4) return null;
-  const spanDays = (new Date(wts[wts.length-1].date) - new Date(wts[0].date))/86400000;
-  if (spanDays<10) return null;
-  const tStr = todayStr();
-  const calDays = Object.keys(data.food).filter(d=>d>=wts[0].date && d<=wts[wts.length-1].date && d<tStr)
-    .map(d=>daySums(d).cal).filter(c=>c>800);
-  if (calDays.length<7) return null;
-  const avgCal = calDays.reduce((s,c)=>s+c,0)/calDays.length;
-  // least-squares slope of weight in lb/day
-  const t0 = new Date(wts[0].date).getTime();
-  const pts = wts.map(w=>({x:(new Date(w.date).getTime()-t0)/86400000, y:w.lbs}));
-  const n = pts.length;
-  const sx = pts.reduce((s,p)=>s+p.x,0), sy = pts.reduce((s,p)=>s+p.y,0);
-  const sxx = pts.reduce((s,p)=>s+p.x*p.x,0), sxy = pts.reduce((s,p)=>s+p.x*p.y,0);
-  const denom = n*sxx - sx*sx;
-  if (!denom) return null;
-  const slope = (n*sxy - sx*sy)/denom; // lb per day
-  const tdee = avgCal - slope*3500;
-  return { tdee:Math.round(tdee), avgCal:Math.round(avgCal), weeklyChange:Math.round(slope*7*10)/10, days:calDays.length };
+  const estimate=computeLogTDEEEstimate();
+  return estimate.ok ? estimate : null;
 }
 let lastTDEE = null;
 function renderTDEE(){
   const card = document.getElementById("tdeeCard");
-  lastTDEE = computeTDEE();
+  const result=computeLogTDEEEstimate();
+  lastTDEE=result.ok?result:null;
   if(!lastTDEE){ card.classList.add("hidden"); return; }
   card.classList.remove("hidden");
   document.getElementById("tdeeText").innerHTML =
-    'Measured TDEE: <b class="ember-text">'+lastTDEE.tdee+' kcal/day</b><br>'
+    'Estimated TDEE from your logs: <b class="ember-text">'+lastTDEE.tdee+' kcal/day</b><br>'
     +'Based on '+lastTDEE.days+' logged days, avg '+lastTDEE.avgCal+' kcal, trending '
     +(lastTDEE.weeklyChange<=0? lastTDEE.weeklyChange : "+"+lastTDEE.weeklyChange)+' lb/week';
+  const button=document.getElementById("tdeeApplyBtn");
+  button.textContent="Review suggested target";
+  button.disabled=!lastTDEE.proposalSafe;
+  button.setAttribute("aria-disabled",String(!lastTDEE.proposalSafe));
+  const explanation=document.getElementById("tdeeExplanation");
+  explanation.textContent=lastTDEE.proposalSafe
+    ? "Suggested target: "+lastTDEE.proposal+" kcal/day. Review it in Settings before anything is saved."
+    : "No target can be suggested: "+lastTDEE.proposalMessage;
+  explanation.style.color=lastTDEE.proposalSafe?"":"var(--warn)";
 }
 document.getElementById("tdeeApplyBtn").addEventListener("click", ()=>{
-  if(!lastTDEE) return;
-  const currentDeficit = cfg.calTarget - lastTDEE.tdee; // negative = deficit intent preserved? use target rate instead:
-  // preserve the user's current intended rate: assume they want the same deficit they originally set vs formula; simplest robust move: keep a 500 deficit if losing, else maintain
-  const losing = cfg.goalWt < cfg.startWt;
-  const target = lastTDEE.tdee + (losing ? -500 : 0);
-  cfg.calTarget = target;
-  const sortedW = data.weights.slice().sort((a,b)=>a.date.localeCompare(b.date));
-  cfg.lastTargetWt = sortedW.length ? sortedW[sortedW.length-1].lbs : cfg.lastTargetWt || cfg.startWt;
-  delete cfg.adjustPromptedAt;
-  saveCfg(); renderAll(); flashSave("Targets recalibrated ✓");
-  ackBtn("tdeeApplyBtn", "✓ Recalibrated");
+  if(!lastTDEE||!lastTDEE.proposalSafe) return;
+  const oldCal=Number(cfg.calTarget), scale=oldCal>0?lastTDEE.proposal/oldCal:null;
+  activateView("settings",null,false);
+  document.getElementById("settingsGoalsDetails").open=true;
+  document.getElementById("sCalTarget").value=lastTDEE.proposal;
+  if(scale&&Number.isFinite(scale)){
+    [["sProTarget",cfg.proTarget],["sCarb",cfg.carbGoal],["sFat",cfg.fatGoal]].forEach(pair=>{
+      if(Number(pair[1])>0) document.getElementById(pair[0]).value=Math.max(1,Math.round(Number(pair[1])*scale));
+    });
+  }
+  const note=document.getElementById("targetReviewNote");
+  note.textContent="Suggested from your recent logs. Review the calorie and macro targets, then choose Save settings. Nothing has been saved yet.";
+  note.classList.remove("hidden");
+  const target=document.getElementById("sCalTarget");
+  if(target.scrollIntoView) target.scrollIntoView({behavior:"smooth",block:"center"});
+  if(target.focus) target.focus({preventScroll:true});
 });
 
 // ================== STREAK ==================
@@ -635,4 +676,3 @@ document.getElementById("shareBtn").addEventListener("click", async ()=>{
   } catch(e){ /* user cancelled or unsupported */ }
   download(fname, json); // fallback
 });
-

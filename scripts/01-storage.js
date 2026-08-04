@@ -42,6 +42,221 @@ function isPlainObject(v){
 }
 function cloneJSON(v){ return JSON.parse(JSON.stringify(v)); }
 
+// ================== nutrition safety contract ==================
+// One shared source of truth for every calculator, saved target, schedule, and
+// log-derived suggestion. Existing saved values are preserved during migration;
+// these limits apply when BlackPyre calculates, proposes, or saves new values.
+const NUTRITION_SAFETY = Object.freeze({
+  minDailyCalories:1200,
+  maxDailyCalories:10000,
+  minAge:13,
+  maxAge:100,
+  minHeightInches:48,
+  maxHeightInches:96,
+  minWeightLb:50,
+  maxWeightLb:700,
+  activityMultipliers:Object.freeze([1.2,1.375,1.55,1.725,1.9]),
+  goalAdjustments:Object.freeze([-1000,-500,-250,0,250]),
+  estimateWindowDays:28,
+  estimateMinWeights:4,
+  estimateMinSpanDays:14,
+  estimateLoggedDayFloor:800,
+  estimateCoverage:0.70,
+  estimateMinLoggedDays:10,
+  estimateMaxWeeklyChange:3
+});
+const CALORIE_SCHEDULE_MODES = Object.freeze(["same","frisat","satsun","frisatsun","custom"]);
+const CALORIE_DAY_NAMES = Object.freeze(["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"]);
+const NUTRITION_ACTIVITY_OPTIONS = Object.freeze([
+  Object.freeze({value:1.2,adultLabel:"Sedentary (desk job, little exercise)",teenLabel:"Inactive (mostly seated; minimal daily movement)",youthKey:"inactive",youthCategory:"Inactive"}),
+  Object.freeze({value:1.375,adultLabel:"Light (1–3 workouts/week)",teenLabel:"Low active (some daily walking and activity)",youthKey:"lowActive",youthCategory:"Low active"}),
+  Object.freeze({value:1.55,adultLabel:"Moderate (3–5 workouts/week)",teenLabel:"Low active + exercise (daily movement and 3–5 workouts/week)",youthKey:"lowActive",youthCategory:"Low active"}),
+  Object.freeze({value:1.725,adultLabel:"Very active (6–7 workouts/week or physical job)",teenLabel:"Active (high daily movement and frequent exercise)",youthKey:"active",youthCategory:"Active"}),
+  Object.freeze({value:1.9,adultLabel:"Athlete (2-a-days or heavy labor + training)",teenLabel:"Very active (vigorous daily work or hard training)",youthKey:"veryActive",youthCategory:"Very active"})
+]);
+const NUTRITION_MACRO_FIELDS = Object.freeze(["proTarget","carbGoal","fatGoal"]);
+const NUTRITION_SCHEDULE_FIELDS = Object.freeze([0,1,2,3,4,5,6].map(i=>"calSchedDays."+i));
+
+function finiteNutritionNumber(value){
+  if (value==="" || value===null || value===undefined) return null;
+  const n=Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+function nutritionActivityOption(value){
+  const n=finiteNutritionNumber(value);
+  return NUTRITION_ACTIVITY_OPTIONS.find(option=>option.value===n)||null;
+}
+function validateDailyCalories(value,label,field){
+  const name=label||"Daily calorie target";
+  const n=finiteNutritionNumber(value);
+  const fields=field?[field]:[];
+  if (n===null) return {ok:false,message:name+" must be a number between 1,200 and 10,000 kcal.",fields:fields};
+  if (n<NUTRITION_SAFETY.minDailyCalories){
+    return {ok:false,message:name+" must be at least 1,200 kcal. BlackPyre does not save or suggest targets below this safety floor.",fields:fields};
+  }
+  if (n>NUTRITION_SAFETY.maxDailyCalories){
+    return {ok:false,message:name+" must be no more than 10,000 kcal.",fields:fields};
+  }
+  return {ok:true,value:n};
+}
+function validateSupportedWeight(value,label,allowEmpty,field){
+  const n=finiteNutritionNumber(value);
+  const fields=field?[field]:[];
+  if (n===null || n===0){
+    return allowEmpty ? {ok:true,value:0,present:false} : {ok:false,message:"Enter "+String(label||"weight").toLowerCase()+" between 50 and 700 lb.",fields:fields};
+  }
+  if (n<NUTRITION_SAFETY.minWeightLb || n>NUTRITION_SAFETY.maxWeightLb){
+    return {ok:false,message:(label||"Weight")+" must be between 50 and 700 lb.",fields:fields};
+  }
+  return {ok:true,value:n,present:true};
+}
+function validatePositiveMacro(value,label,field){
+  const n=finiteNutritionNumber(value);
+  if (n===null || n<=0) return {ok:false,message:(label||"Macro target")+" must be greater than zero.",fields:field?[field]:[]};
+  return {ok:true,value:n};
+}
+function caloriePresetDaysFor(base,mode){
+  const b=Number(base);
+  if (!Number.isFinite(b)) return null;
+  if (mode==="frisat") return [b-100,b-100,b-100,b-100,b-100,b+250,b+250];
+  if (mode==="satsun") return [b+250,b-100,b-100,b-100,b-100,b-100,b+250];
+  if (mode==="frisatsun") return [b+200,b-150,b-150,b-150,b-150,b+200,b+200];
+  return null;
+}
+function validateCalorieSchedule(baseValue,modeValue,customDays){
+  const base=validateDailyCalories(baseValue,"Daily calorie target","calTarget");
+  if (!base.ok) return base;
+  const mode=String(modeValue||"same");
+  if (!CALORIE_SCHEDULE_MODES.includes(mode)) return {ok:false,message:"Choose a supported calorie schedule.",fields:["calSchedMode"]};
+  let days;
+  if (mode==="same") days=[0,1,2,3,4,5,6].map(()=>base.value);
+  else if (mode==="custom"){
+    if (!Array.isArray(customDays) || customDays.length!==7){
+      return {ok:false,message:"A custom calorie schedule must contain exactly seven daily targets.",fields:NUTRITION_SCHEDULE_FIELDS.slice()};
+    }
+    days=customDays.map(Number);
+  } else {
+    days=caloriePresetDaysFor(base.value,mode);
+  }
+  for (let i=0;i<days.length;i++){
+    const day=validateDailyCalories(days[i],CALORIE_DAY_NAMES[i]+" calorie target");
+    if (!day.ok){
+      if (mode!=="custom"){
+        const below=Number(days[i])<NUTRITION_SAFETY.minDailyCalories;
+        const boundary=below ? "below BlackPyre’s 1,200 kcal safety floor" : "above BlackPyre’s 10,000 kcal supported maximum";
+        const correction=below ? "raise" : "lower";
+        return {ok:false,message:"This preset would create a day "+boundary+". Choose Same target every day or "+correction+" the base target.",fields:["calTarget","calSchedMode"]};
+      }
+      return Object.assign({},day,{fields:["calSchedDays."+i],scheduleDayIndex:i});
+    }
+    days[i]=day.value;
+  }
+  const total=days.reduce((sum,value)=>sum+value,0);
+  const budget=base.value*7;
+  if (mode==="custom" && total>budget){
+    return {ok:false,message:"Over weekly budget by "+(total-budget)+" calories. Lower one or more days or change the base target.",fields:NUTRITION_SCHEDULE_FIELDS.slice(),overBudget:true};
+  }
+  return {ok:true,base:base.value,mode:mode,days:days,total:total,budget:budget};
+}
+function validateNutritionSettingsDraft(draft){
+  const source=draft||{};
+  const start=validateSupportedWeight(source.startWt,"Start weight",true,"startWt");
+  if (!start.ok) return start;
+  const goal=validateSupportedWeight(source.goalWt,"Goal weight",true,"goalWt");
+  if (!goal.ok) return goal;
+  const calories=validateDailyCalories(source.calTarget,"Daily calorie target","calTarget");
+  if (!calories.ok) return calories;
+  const protein=validatePositiveMacro(source.proTarget,"Protein target","proTarget");
+  const carbs=validatePositiveMacro(source.carbGoal,"Carbohydrate target","carbGoal");
+  const fat=validatePositiveMacro(source.fatGoal,"Fat target","fatGoal");
+  const invalidMacro=[protein,carbs,fat].find(result=>!result.ok);
+  if (invalidMacro) return Object.assign({},invalidMacro,{fields:NUTRITION_MACRO_FIELDS.slice()});
+  const schedule=validateCalorieSchedule(calories.value,source.calSchedMode,source.calSchedDays);
+  if (!schedule.ok) return schedule;
+  return {ok:true,value:{
+    startWt:start.value,goalWt:goal.value,calTarget:calories.value,
+    proTarget:protein.value,carbGoal:carbs.value,fatGoal:fat.value,
+    calSchedMode:schedule.mode,calSchedDays:schedule.mode==="custom"?schedule.days.slice():null
+  },schedule:schedule};
+}
+function validateNutritionCalculatorInput(input){
+  const x=input||{};
+  if (x.sex!=="m" && x.sex!=="f") return {ok:false,message:"Choose a supported sex value for the calorie estimate.",fields:["sex"]};
+  const age=finiteNutritionNumber(x.age);
+  if (age!==null && age<NUTRITION_SAFETY.minAge) return {ok:false,message:"The calculator supports ages 13–100. It is not designed for children under 13.",fields:["age"]};
+  if (!Number.isInteger(age) || age>NUTRITION_SAFETY.maxAge) return {ok:false,message:"Age must be a whole number from 13 to 100.",fields:["age"]};
+  const feet=finiteNutritionNumber(x.ft);
+  const inches=finiteNutritionNumber(x.inches===undefined?0:x.inches);
+  if (!Number.isInteger(feet) || !Number.isInteger(inches) || inches<0 || inches>11){
+    return {ok:false,message:"Enter height using whole feet and 0–11 inches.",fields:["ft","inches"]};
+  }
+  const totalInches=feet*12+inches;
+  if (totalInches<NUTRITION_SAFETY.minHeightInches || totalInches>NUTRITION_SAFETY.maxHeightInches){
+    return {ok:false,message:"Height must be between 48 and 96 total inches.",fields:["ft","inches"]};
+  }
+  const weight=validateSupportedWeight(x.lb,"Weight",false,"lb");
+  if (!weight.ok) return weight;
+  const activity=finiteNutritionNumber(x.activity);
+  if (!nutritionActivityOption(activity)){
+    return {ok:false,message:"Choose a supported activity level.",fields:["activity"]};
+  }
+  const goalAdjustment=finiteNutritionNumber(x.goalAdj);
+  if (!NUTRITION_SAFETY.goalAdjustments.includes(goalAdjustment)){
+    return {ok:false,message:"Choose a supported weight-goal rate.",fields:["goalAdj"]};
+  }
+  return {ok:true,value:{sex:x.sex,age:age,ft:feet,inches:inches,totalInches:totalInches,lb:weight.value,activity:activity,goalAdj:goalAdjustment}};
+}
+function youthEnergyMaintenance(x,kg,cm){
+  const option=nutritionActivityOption(x.activity);
+  const equations={
+    m:{
+      inactive:()=>-447.51+3.68*x.age+13.01*cm+13.15*kg,
+      lowActive:()=>19.12+3.68*x.age+8.62*cm+20.28*kg,
+      active:()=>-388.19+3.68*x.age+12.66*cm+20.46*kg,
+      veryActive:()=>-671.75+3.68*x.age+15.38*cm+23.25*kg
+    },
+    f:{
+      inactive:()=>55.59-22.25*x.age+8.43*cm+17.07*kg,
+      lowActive:()=>-297.54-22.25*x.age+12.77*cm+14.73*kg,
+      active:()=>-189.55-22.25*x.age+11.74*cm+18.34*kg,
+      veryActive:()=>-709.59-22.25*x.age+18.22*cm+14.25*kg
+    }
+  };
+  const growth=x.age===13?(x.sex==="m"?25:30):20;
+  return {maintenance:Math.round(equations[x.sex][option.youthKey]()+growth),activityCategory:option.youthCategory,activityKey:option.youthKey,growth:growth};
+}
+function calculateNutritionTargets(input){
+  const checked=validateNutritionCalculatorInput(input);
+  if (!checked.ok) return checked;
+  const x=checked.value;
+  const kg=x.lb*0.4536;
+  const cm=x.totalInches*2.54;
+  const isYouth=x.age<18;
+  const youth=isYouth?youthEnergyMaintenance(x,kg,cm):null;
+  const bmr=isYouth?null:10*kg+6.25*cm-5*x.age+(x.sex==="m"?5:-161);
+  const tdee=isYouth?youth.maintenance:bmr*x.activity;
+  const maintenance=Math.round(tdee);
+  const calories=Math.round(maintenance+x.goalAdj);
+  if (calories<NUTRITION_SAFETY.minDailyCalories){
+    const ending=isYouth
+      ? "Choose a slower goal and review it with a parent or guardian and pediatrician or registered dietitian."
+      : "Choose a slower goal or talk with a qualified clinician.";
+    return {ok:false,code:"calorie-floor",estimatedCalories:calories,message:"That goal estimates "+calories+" kcal/day, below BlackPyre’s 1,200 kcal safety floor. "+ending,fields:["goalAdj"]};
+  }
+  if (calories>NUTRITION_SAFETY.maxDailyCalories){
+    return {ok:false,code:"calorie-maximum",estimatedCalories:calories,message:"That goal estimates "+calories+" kcal/day, above BlackPyre’s 10,000 kcal supported maximum. Choose a different goal or check the inputs.",fields:["goalAdj"]};
+  }
+  const protein=isYouth?Math.round(calories*0.20/4):Math.round(x.lb*0.9);
+  const fat=Math.round(calories*0.25/9);
+  const carbs=isYouth?Math.round(calories*0.55/4):Math.max(0,Math.round((calories-protein*4-fat*9)/4));
+  return {ok:true,inputs:x,value:{bmr:isYouth?null:Math.round(bmr),tdee:maintenance,cal:calories,pro:protein,fat:fat,carb:carbs,goalAdj:x.goalAdj,isYouth:isYouth,activityCategory:isYouth?youth.activityCategory:null,activityKey:isYouth?youth.activityKey:null}};
+}
+function recognizedNutritionGoalAdjustment(settings){
+  const saved=settings && settings.calcInputs ? finiteNutritionNumber(settings.calcInputs.goal) : null;
+  if (NUTRITION_SAFETY.goalAdjustments.includes(saved)) return saved;
+  return settings && Number(settings.goalWt)>0 && Number(settings.startWt)>0 && Number(settings.goalWt)<Number(settings.startWt) ? -500 : 0;
+}
+
 // ================== exercise model contract ==================
 const EXERCISE_SHAPES = ["lift","reps","timeDist","carry","rounds","text"];
 const EXERCISE_TAGS = ["strength","push","pull","squat","hinge","lunge","core","carry","conditioning","cardio","mobility","power","olympic","strongman","bodyweight","machine","isolation","upper","lower","full-body","recovery","sport","rehab"];
@@ -1222,11 +1437,7 @@ if (protectedMode){
 // exact calorie target for a given date (schedule-aware); presets always rebalance to the same weekly total
 // days are Sun..Sat (JS getDay order)
 function presetDays(mode){
-  const b = cfg.calTarget;
-  if (mode==="frisat")    return [b-100, b-100, b-100, b-100, b-100, b+250, b+250]; // 5×(−100) = 2×(+250)
-  if (mode==="satsun")    return [b+250, b-100, b-100, b-100, b-100, b-100, b+250];
-  if (mode==="frisatsun") return [b+200, b-150, b-150, b-150, b-150, b+200, b+200]; // 4×(−150) = 3×(+200)
-  return null;
+  return caloriePresetDaysFor(cfg.calTarget,mode);
 }
 function schedDays(){
   const m = cfg.calSchedMode || "same";

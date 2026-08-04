@@ -2011,7 +2011,7 @@ check("v62 a catalog suggestion opens its exact listed serving for review", dC62
 check("v62 review shows the USDA per-100g values and correctly scaled serving", /USDA reference · SR28/.test(dC62.getElementById("selName").textContent) && /165 kcal/.test(dC62.getElementById("selPer100").textContent) && dC62.getElementById("calcCal").textContent==="186" && dC62.getElementById("calcPro").textContent==="35");
 check("v62 reviewing a broad-catalog suggestion never auto-logs it", C62.window.eval(`(data.food[todayStr()]||[]).length`)===beforeReview62);
 check("v62 FAQ explains USDA sourcing, exact servings, and real-world variation", C62.window.eval(`FAQ.some(x=>x.q==="How accurate are suggested-food calories and macros?"&&/per 100 grams/.test(x.a)&&/exact gram weight/.test(x.a)&&/NDB number/.test(x.a)&&/brand/.test(x.a)) && FAQ.some(x=>x.q==="How do food suggestions work?"&&/120 common foods/.test(x.a)&&/familiar foods receive a bonus but are not required/.test(x.a)&&/does not call USDA or an AI/.test(x.a))`));
-check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v78-native-parity-7"'); })());
+check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v79"'); })());
 check("v62 keeps primary schemaVersion 3", C62.window.eval("SCHEMA_VERSION")===3);
 
 // ================= ChatGPT handoff paste flow =================
@@ -2343,12 +2343,41 @@ check("v56 FAQ documents offline fast-fail and handoff availability", P.window.e
 check("FAQ uses current program identity and Manage labels", P.window.eval(`FAQ.some(x=>x.q==="How do programs work?"&&x.a.includes("Current program")&&x.a.includes("Manage")&&x.a.includes("Save file")&&x.a.includes("Share"))`));
 check("FAQ no longer sends users to the retired Program tools label", P.window.eval(`!FAQ.some(x=>x.a&&x.a.includes("Program tools"))`));
 check("FAQ privacy and storage copy distinguish local data, network requests, and approximate usage", P.window.eval(`FAQ.some(x=>x.q==="Where is my data stored? Is it private?"&&/on this device/.test(x.a)&&/Local food suggestions/.test(x.a)&&/Online food searches/.test(x.a)&&/Optional AI features/.test(x.a)) && FAQ.some(x=>x.q==="How much storage is BlackPyre using?"&&/Settings → Data &amp; recovery/.test(x.a)&&/approximate browser-storage/.test(x.a)&&/Back up before clearing/.test(x.a))`));
+check("Phase 1 FAQ explains the complete teen calculator contract and disclaimer", P.window.eval(`FAQ.some(x=>x.q==="How do I set my calorie and macro targets?"&&/13–100/.test(x.a)&&/complete access/.test(x.a)&&/1,200/.test(x.a)&&/custom week/.test(x.a)) && FAQ.some(x=>x.q==="Can teenagers use the calorie and macro calculator?"&&/13–17/.test(x.a)&&/20% protein/.test(x.a)&&/whole day—not workouts alone/.test(x.a)&&/Moderate/.test(x.a)&&/No goal, macro, Apply, or schedule control is locked/.test(x.a)) && FAQ.some(x=>x.q==="What's a macro split and which should I pick?"&&/For adults/.test(x.a)&&/For ages 13–17/.test(x.a)&&/starting estimates/.test(x.a)) && FAQ.some(x=>x.q==="Disclaimer & terms of use"&&/parent or guardian/.test(x.a)&&/children under 13/.test(x.a)&&/pregnant or breastfeeding/.test(x.a)&&x.a.includes("does <b>not</b> establish"))`));
+check("Phase 1 youth calculator reproduces the accepted reference vector", P.window.eval(`(()=>{const x=calculateNutritionTargets({sex:"m",age:17,ft:5,inches:8,lb:150,activity:1.55,goalAdj:-500});return x.ok&&x.value.activityCategory==="Low active"&&x.value.tdee===2970&&x.value.cal===2470&&x.value.pro===124&&x.value.carb===340&&x.value.fat===69;})()`));
+
+const dP=P.window.document;
+const setP=(id,value)=>{ const el=dP.getElementById(id); el.value=String(value); el.dispatchEvent(new P.window.Event(el.tagName==="SELECT"?"change":"input",{bubbles:true})); };
+setP("cAge",17); setP("cFt",5); setP("cIn",8); setP("cWt",150); setP("cAct",1.55); setP("cGoal",-500);
+check("Phase 1 Settings switches to conservative teen activity labels and all-day guidance", /Low active \+ exercise/.test(dP.getElementById("cAct").options[2].textContent) && /whole day/.test(dP.getElementById("cActivityNote").textContent));
+dP.getElementById("calcMacrosBtn").dispatchEvent(new P.window.Event("click",{bubbles:true}));
+check("Phase 1 valid teen calculation displays category and Recommended 20/55/25 macros", /Youth activity category: Low active/.test(dP.getElementById("calcOutText").textContent) && /20% protein · 55% carbs · 25% fat/.test(dP.getElementById("splitGrams").textContent));
+setP("cAge",42); setP("cFt",5); setP("cIn",11); setP("cWt",190); setP("cAct",1.55); setP("cGoal",-500);
+dP.getElementById("calcMacrosBtn").dispatchEvent(new P.window.Event("click",{bubbles:true}));
+const CalculatorWeightCfg=JSON.parse(P.window.localStorage.getItem("forge:cfg"));
+const CalculatorWeightReboot=boot(CalculatorWeightCfg,Object.assign({},EMPTY_DATA,{weights:[{date:dstr(0),lbs:225}]}));
+check("Phase 1 full reboot restores validated 190-lb calculator weight instead of 225-lb starting/latest weight", CalculatorWeightReboot.window.document.getElementById("cWt").value==="190" && CalculatorWeightReboot.window.eval(`cfg.calcInputs.lb===190`));
+
+const LegacyCalculatorWeight=boot(Object.assign({},EXISTING_CFG,{calcInputs:{sex:"m",age:42,ft:5,inches:11,act:1.55,goal:-500}}),Object.assign({},EMPTY_DATA,{weights:[{date:dstr(0),lbs:225}]}));
+check("Phase 1 legacy calculator inputs without valid weight retain latest-weigh-in fallback", LegacyCalculatorWeight.window.document.getElementById("cWt").value==="225");
+
+const SetupYouth=boot(null,null);
+const dSetupYouth=SetupYouth.window.document;
+const clickSetupYouth=id=>dSetupYouth.getElementById(id).dispatchEvent(new SetupYouth.window.Event("click",{bubbles:true}));
+clickSetupYouth("disclaimerAgreeBtn");
+dSetupYouth.getElementById("suWt").value="190"; dSetupYouth.getElementById("suGoalWt").value="175"; clickSetupYouth("setupNext");
+const setSetupYouth=(id,value)=>{ const el=dSetupYouth.getElementById(id); el.value=String(value); el.dispatchEvent(new SetupYouth.window.Event(el.tagName==="SELECT"?"change":"input",{bubbles:true})); };
+setSetupYouth("suAge",17); setSetupYouth("suSex","m"); setSetupYouth("suFt",5); setSetupYouth("suIn",8); setSetupYouth("suAct",1.55); setSetupYouth("suGoal",-500);
+check("Phase 1 first-run setup uses teen activity descriptions without hiding controls", /Low active \+ exercise/.test(dSetupYouth.getElementById("suAct").options[2].textContent) && /whole day/.test(dSetupYouth.getElementById("suActivityNote").textContent) && !!dSetupYouth.getElementById("suGoal"));
+clickSetupYouth("setupNext");
+check("Phase 1 first-run calculation persists starting weight as calculator weight", SetupYouth.window.eval(`cfg.calcInputs.lb===190&&setupChoice.calc.activityCategory==="Low active"`));
+
 check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.some(f=>/chicken breast/i.test(f.n))`));
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
-check("SW cache key matches the BlackPyre v78 release",
-  /const CACHE = "blackpyre-v78-native-parity-7";/.test(sw));
-check("v78 service-worker cache is refreshed", sw.includes('const CACHE = "blackpyre-v78-native-parity-7"'));
+check("SW cache key matches the BlackPyre web v79 release",
+  /const CACHE = "blackpyre-v79";/.test(sw));
+check("Phase 1 service-worker cache is refreshed", sw.includes('const CACHE = "blackpyre-v79"') && !sw.includes('blackpyre-phase1-nutrition-safety-1'));
 
 await wait(0);
 releaseTestWindows([
@@ -2359,7 +2388,7 @@ releaseTestWindows([
   T51,T51b,T51c,T54,T64,T64Expired,T64PausedReload,
   T65BackgroundExpired,T65VisibleExpired,TimerPausedParity76,
   TimerRunningParity76,UsualAllMeals,UsualControls,UsualIdentity,
-  UsualPartial,V59
+  UsualPartial,V59,P,CalculatorWeightReboot,LegacyCalculatorWeight,SetupYouth
 ]);
 
 const rawIndex = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
@@ -7711,11 +7740,11 @@ check(
 );
 
 check(
-  "v78 service worker precaches both profile files with the v78 key",
+  "Phase 1 service worker keeps both profile files in the refreshed cache",
   V78ServiceWorker.includes('"./data-exercise-card-profiles.js"')
   && V78ServiceWorker.includes('"./scripts/03-card-profiles.js"')
   && V78ServiceWorker.includes(
-    'const CACHE = "blackpyre-v78-native-parity-7"'
+    'const CACHE = "blackpyre-v79"'
   )
 );
 

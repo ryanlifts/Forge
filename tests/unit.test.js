@@ -20,7 +20,16 @@ r = E(`calcMacros("f", 30, 5, 4, 140, 1.2, 0)`);
 // kg=63.504, cm=162.56 -> BMR = 635.04+1016 -150 -161 = 1340.04 -> 1340
 check("Mifflin BMR female known-value", r.bmr===1340);
 r = E(`calcMacros("m", 25, 6, 0, 90, 1.2, -1000)`);
-check("extreme deficit: carbs floored at 0, not negative", r.carb>=0);
+check("unsafe calculator result below the 1,200 kcal floor is rejected", r===null);
+
+// ---------- 2023 youth energy equations, ages 13–17 ----------
+r = E(`calcMacros("m", 17, 5, 8, 150, 1.55, -500)`);
+check("teen Moderate maps to the Low active youth category", r.isYouth && r.activityCategory==="Low active");
+check("youth reference maintenance EER = 2,970", r.tdee===2970);
+check("youth reference target = 2,470", r.cal===2470);
+check("youth Recommended protein = 20% / 4", r.pro===124);
+check("youth Recommended carbohydrates = 55% / 4", r.carb===340);
+check("youth Recommended fat = 25% / 9", r.fat===69);
 
 // ---------- Epley e1RM (parseBestSet) ----------
 r = E(`parseBestSet([{w:275,r:5}])`);

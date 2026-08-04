@@ -902,24 +902,41 @@ function renderUsual(){
 }
 
 // ================== CALORIE SCHEDULE UI ==================
-function schedBudget(){ return cfg.calTarget*7; }
-function schedReadInputs(){ return [0,1,2,3,4,5,6].map(i=>Number(document.getElementById("sSched"+i).value)||0); }
-function schedTargetsOk(){ return Number.isFinite(cfg.calTarget) && cfg.calTarget>0; }
+function schedBaseTarget(){
+  const input=document.getElementById("sCalTarget");
+  return finiteNutritionNumber(input ? input.value : cfg.calTarget);
+}
+function schedBudget(){
+  const base=schedBaseTarget();
+  return base===null ? 0 : base*7;
+}
+function schedReadInputs(){ return [0,1,2,3,4,5,6].map(i=>Number(document.getElementById("sSched"+i).value)); }
+function schedTargetsOk(){ return validateDailyCalories(schedBaseTarget()).ok; }
+function schedPresetDays(mode){ return caloriePresetDaysFor(schedBaseTarget(),mode); }
 function schedNote(){
   const mode = document.getElementById("sCalSched").value;
   const note = document.getElementById("schedTotalNote");
+  const base = schedBaseTarget();
+  const baseCheck=validateDailyCalories(base,"Daily calorie target","calTarget");
+  if(!baseCheck.ok){ note.style.color="var(--warn)"; note.textContent=baseCheck.message; return; }
   const budget = schedBudget();
-  if (mode==="same"){ note.style.color=""; note.textContent = "Weekly budget: "+budget+" kcal ("+cfg.calTarget+" every day)."; return; }
+  if (mode==="same"){ note.style.color=""; note.textContent = "Weekly budget: "+budget+" kcal ("+base+" every day)."; return; }
   if (mode!=="custom"){
-    const d = presetDays(mode);
+    const d = schedPresetDays(mode);
+    const checked=validateCalorieSchedule(base,mode,null);
     const hi = Math.max.apply(null,d), lo = Math.min.apply(null,d);
-    note.style.color="";
-    note.textContent = "Higher days "+hi+" kcal · lower days "+lo+" kcal · weekly total unchanged at "+budget+" kcal.";
+    note.style.color=checked.ok?"":"var(--warn)";
+    note.textContent = checked.ok ? "Higher days "+hi+" kcal · lower days "+lo+" kcal · weekly total unchanged at "+budget+" kcal." : checked.message;
     return;
   }
-  const total = schedReadInputs().reduce((a,x)=>a+x,0);
+  const days=schedReadInputs();
+  const total = days.reduce((a,x)=>a+(Number.isFinite(x)?x:0),0);
   const diff = budget - total;
-  if (diff > 0){
+  const checked=validateCalorieSchedule(base,"custom",days);
+  if(!checked.ok){
+    note.style.color="var(--warn)";
+    note.textContent=checked.message;
+  } else if (diff > 0){
     note.style.color="";
     note.textContent = "Weekly budget "+budget+" · scheduled "+total+" · remaining "+diff+" kcal (≈"+Math.round(diff/7)+"/day if spread across the week).";
   } else if (diff < 0){
@@ -930,20 +947,29 @@ function schedNote(){
     note.textContent = "Weekly budget "+budget+" · scheduled "+total+" · balanced ✓";
   }
 }
+function refreshSchedDraft(){
+  const ok=schedTargetsOk();
+  const select=document.getElementById("sCalSched");
+  select.disabled=!ok;
+  document.getElementById("schedDisabledNote").classList.toggle("hidden",ok);
+  document.getElementById("schedCustom").classList.toggle("hidden",!ok||select.value!=="custom");
+  if(ok) schedNote();
+  else {
+    const note=document.getElementById("schedTotalNote");
+    note.style.color="var(--warn)";
+    note.textContent=validateDailyCalories(schedBaseTarget(),"Daily calorie target","calTarget").message;
+  }
+}
 function renderSched(){
-  const ok = schedTargetsOk();
-  document.getElementById("sCalSched").disabled = !ok;
-  document.getElementById("schedDisabledNote").classList.toggle("hidden", ok);
-  if (!ok){ document.getElementById("schedCustom").classList.add("hidden"); document.getElementById("schedTotalNote").textContent=""; return; }
   const mode = cfg.calSchedMode || "same";
   document.getElementById("sCalSched").value = mode;
-  document.getElementById("schedCustom").classList.toggle("hidden", mode!=="custom");
   if (mode==="custom"){
     const days = (Array.isArray(cfg.calSchedDays) && cfg.calSchedDays.length===7) ? cfg.calSchedDays : [0,1,2,3,4,5,6].map(()=>cfg.calTarget);
     [0,1,2,3,4,5,6].forEach(i=>{ document.getElementById("sSched"+i).value = days[i]; });
   }
-  schedNote();
+  refreshSchedDraft();
 }
+document.getElementById("sCalTarget").addEventListener("input",refreshSchedDraft);
 document.getElementById("sCalSched").addEventListener("change", ()=>{
   const mode = document.getElementById("sCalSched").value;
   document.getElementById("schedCustom").classList.toggle("hidden", mode!=="custom");
@@ -959,8 +985,9 @@ document.getElementById("sCalSched").addEventListener("change", ()=>{
   document.getElementById("sSched"+i).addEventListener("input", schedNote);
 });
 document.getElementById("schedAutoBtn").addEventListener("click", ()=>{
-  // user-triggered: spread the gap evenly so the week lands exactly on budget
+  // Balance against the calorie target currently displayed in Settings.
   const days = schedReadInputs();
+  if(days.some(value=>!Number.isFinite(value))) { schedNote(); return; }
   const diff = schedBudget() - days.reduce((a,x)=>a+x,0);
   const per = Math.floor(diff/7);
   const balanced = days.map(d=>d+per);
@@ -1319,13 +1346,22 @@ function addCoachBubble(role, text, payloads){
     const proT = typeof t.proTarget==="number" ? t.proTarget : (typeof t.proLo==="number" && typeof t.proHi==="number" ? Math.round((t.proLo+t.proHi)/2) : null);
     b.textContent = "Apply targets: " + (calT||"?") + " kcal";
     b.addEventListener("click", ()=>{
-      if (calT!=null){ cfg.calTarget = calT; }
-      if (proT!=null) cfg.proTarget = proT;
-      ["carbGoal","fatGoal"].forEach(k=>{ if (typeof t[k]==="number") cfg[k] = t[k]; });
+      const draft={
+        startWt:cfg.startWt,goalWt:cfg.goalWt,
+        calTarget:calT!=null?calT:cfg.calTarget,proTarget:proT!=null?proT:cfg.proTarget,
+        carbGoal:typeof t.carbGoal==="number"?t.carbGoal:cfg.carbGoal,
+        fatGoal:typeof t.fatGoal==="number"?t.fatGoal:cfg.fatGoal,
+        calSchedMode:cfg.calSchedMode||"same",calSchedDays:cfg.calSchedDays
+      };
+      const checked=validateNutritionSettingsDraft(draft);
+      if(!checked.ok){ flashSave(checked.message,true); return; }
+      const previous=cloneJSON(cfg);
+      cfg=Object.assign({},cfg,checked.value);
       const sortedW = data.weights.slice().sort((a,b2)=>a.date.localeCompare(b2.date));
       cfg.lastTargetWt = sortedW.length ? sortedW[sortedW.length-1].lbs : cfg.lastTargetWt;
       delete cfg.adjustPromptedAt;
-      saveCfg(); renderAll();
+      if(!saveCfg()){ cfg=previous; return; }
+      renderAll();
       b.textContent = "✓ Applied — bars updated";
       b.disabled = true;
       flashSave("Targets applied ✓");
@@ -1970,7 +2006,7 @@ function aiReport(){
   L.push("## Goal & weight");
   L.push("- Start: "+cfg.startWt+" lb · Current: "+cur+" lb · Goal: "+cfg.goalWt+" lb");
   L.push(rate!=null ? "- Trend (last 28 days): "+(rate>0?"+":"")+rate+" lb/week" : "- Trend: not enough weigh-ins yet ("+sorted.length+" recorded)");
-  if (tdee && tdee.tdee) L.push("- Measured TDEE from my actual logs: ~"+tdee.tdee+" kcal/day");
+  if (tdee && tdee.tdee) L.push("- Estimated TDEE from my food and weight logs: ~"+tdee.tdee+" kcal/day (a trend estimate, not a measurement or prescription)");
   L.push("");
   L.push("## Nutrition (last 14 days)");
   L.push("- Daily targets (exact): "+cfg.calTarget+" kcal"+(cfg.calSchedMode!=="same"?" (scheduled by day; weekly total "+weeklyCalTotal()+")":"")+" · protein "+cfg.proTarget+"g · carbs "+cfg.carbGoal+"g · fat "+cfg.fatGoal+"g");
@@ -2201,4 +2237,3 @@ function renderMeasure(){
     });
   }));
 }
-

@@ -854,13 +854,14 @@
     </div>
     <button class="btn" id="finishDayBtn" style="margin-bottom:12px;">Finish today's log</button>
     <details class="disclosure" id="homeProgressDetails">
-      <summary><div><div class="disclosure-title">Progress details</div><div class="disclosure-sub">Measured metabolism and last training session</div></div></summary>
+      <summary><div><div class="disclosure-title">Progress details</div><div class="disclosure-sub">Estimated metabolism and last training session</div></div></summary>
       <div class="disclosure-body">
         <div class="card hidden" id="tdeeCard">
-          <div class="label">Your measured metabolism</div>
+          <div class="label">Estimated metabolism from your logs</div>
           <div id="tdeeText" style="font-size:13px; line-height:1.8;"></div>
-          <button class="btn ghost small mt10" id="tdeeApplyBtn">Recalibrate my targets</button>
-          <div class="note">Computed from YOUR logged food vs YOUR actual weight change — more accurate than any formula. Updates as you log.</div>
+          <div class="note" id="tdeeExplanation" aria-live="polite"></div>
+          <button class="btn ghost small mt10" id="tdeeApplyBtn">Review suggested target</button>
+          <div class="note">This is a trend estimate from recent food and weight logs, not a measurement, medical assessment, or prescription. It updates as you log.</div>
         </div>
         <div class="card">
           <div class="label">Last session</div>
@@ -1417,12 +1418,12 @@
       <div class="label" style="margin-bottom:12px;">Calorie & macro calculator</div>
       <div class="row" style="margin-bottom:12px;">
         <div><div class="label">Sex</div><select id="cSex" aria-label="Sex used for calorie calculation"><option value="m">Male</option><option value="f">Female</option></select></div>
-        <div><div class="label">Age</div><input type="number" id="cAge" aria-label="Age in years" inputmode="numeric" placeholder="years"></div>
+        <div><div class="label">Age</div><input type="number" id="cAge" aria-label="Age in years" inputmode="numeric" min="13" max="100" step="1" placeholder="years"></div>
       </div>
       <div class="row" style="margin-bottom:12px;">
-        <div><div class="label">Height (ft)</div><input type="number" id="cFt" aria-label="Height feet" inputmode="numeric" placeholder="ft"></div>
-        <div><div class="label">Height (in)</div><input type="number" id="cIn" aria-label="Height inches" inputmode="numeric" placeholder="in"></div>
-        <div><div class="label">Weight (lb)</div><input type="number" id="cWt" aria-label="Body weight in pounds for calorie calculation" inputmode="decimal" placeholder="lb"></div>
+        <div><div class="label">Height (ft)</div><input type="number" id="cFt" aria-label="Height feet" inputmode="numeric" min="4" max="8" step="1" placeholder="ft"></div>
+        <div><div class="label">Height (in)</div><input type="number" id="cIn" aria-label="Height inches" inputmode="numeric" min="0" max="11" step="1" placeholder="in"></div>
+        <div><div class="label">Weight (lb)</div><input type="number" id="cWt" aria-label="Body weight in pounds for calorie calculation" inputmode="decimal" min="50" max="700" step="any" placeholder="lb"></div>
       </div>
       <div class="label">Activity level</div>
       <select id="cAct" aria-label="Activity level" style="margin-bottom:12px;">
@@ -1432,6 +1433,7 @@
         <option value="1.725">Very active (6–7 workouts/week or physical job)</option>
         <option value="1.9">Athlete (2-a-days or heavy labor + training)</option>
       </select>
+      <div class="note hidden" id="cActivityNote" style="margin-top:-6px; margin-bottom:12px;"></div>
       <div class="label">Goal</div>
       <select id="cGoal" aria-label="Weight goal rate" style="margin-bottom:14px;">
         <option value="-1000">Lose 2 lb/week (aggressive)</option>
@@ -1441,8 +1443,10 @@
         <option value="250">Gain 0.5 lb/week (lean bulk)</option>
       </select>
       <button class="btn ghost" id="calcMacrosBtn">Calculate</button>
-      <div id="calcOut" class="hidden" style="margin-top:14px;">
+      <div class="note hidden" id="calcError" role="alert" aria-live="assertive" style="color:var(--warn);"></div>
+      <div id="calcOut" class="hidden" role="status" aria-live="polite" style="margin-top:14px;">
         <div style="font-size:14px; line-height:1.8;" id="calcOutText"></div>
+        <div class="note hidden" id="calcAggressiveNote" style="color:var(--warn);">A 2 lb/week goal is aggressive and may not be appropriate for you. Consider a slower goal or talk with a qualified clinician.</div>
         <div class="label" style="margin-top:14px;">Macro split (P / C / F)</div>
         <div id="splitChips" style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;"></div>
         <div class="row hidden" id="splitCustomRow" style="margin-bottom:10px;">
@@ -1455,25 +1459,27 @@
         <button class="btn mt10" id="applyMacrosBtn">Use these as my targets</button>
       </div>
       <div class="note">
-        Uses the Mifflin-St Jeor equation (the standard clinical model for calorie needs), protein at ~0.9 g per lb of bodyweight, fat at ~25% of calories, carbs from the remainder.
+        Supports ages 13–100. Adults use the Mifflin-St Jeor equation with Recommended protein at ~0.9 g per lb, fat at ~25% of calories, and carbs from the remainder. Ages 13–17 use youth energy equations and a 20% protein / 55% carbohydrate / 25% fat Recommended starting split, with every goal, macro, Apply, and schedule control available.
+        Under 13 and pregnancy or breastfeeding are outside this calculator’s designed scope. Results are estimates, not medical advice or a prescription. Teens should review weight-change plans with a parent or guardian and pediatrician or registered dietitian. BlackPyre will not save or suggest a target below 1,200 kcal/day; that floor does not mean 1,200 kcal is appropriate for you.
         For the research behind macro splits, see the <a href="https://jissn.biomedcentral.com/articles/10.1186/s12970-018-0242-y" target="_blank" rel="noopener" style="color:var(--ember);">International Society of Sports Nutrition's evidence review</a> (open access, peer-reviewed).
       </div>
     </div>
     <div class="card">
       <div class="label" style="margin-bottom:12px;">Bodyweight goal</div>
       <div class="row" style="margin-bottom:12px;">
-        <div><div class="label">Start weight (lb)</div><input type="number" id="sStartWt" aria-label="Starting body weight in pounds" inputmode="decimal" step="any"></div>
-        <div><div class="label">Goal weight (lb)</div><input type="number" id="sGoalWt" aria-label="Goal body weight in pounds" inputmode="decimal" step="any"></div>
+        <div><div class="label">Start weight (lb)</div><input type="number" id="sStartWt" aria-label="Starting body weight in pounds" inputmode="decimal" min="50" max="700" step="any"></div>
+        <div><div class="label">Goal weight (lb)</div><input type="number" id="sGoalWt" aria-label="Goal body weight in pounds" inputmode="decimal" min="50" max="700" step="any"></div>
       </div>
       <div class="label" style="margin-bottom:12px; margin-top:6px;">Daily nutrition targets</div>
       <div class="row" style="margin-bottom:12px;">
-        <div><div class="label">Calorie target (kcal)</div><input type="number" id="sCalTarget" aria-label="Daily calorie target" inputmode="numeric"></div>
-        <div><div class="label">Protein goal (g)</div><input type="number" id="sProTarget" aria-label="Daily protein target in grams" inputmode="numeric"></div>
+        <div><div class="label">Calorie target (kcal)</div><input type="number" id="sCalTarget" aria-label="Daily calorie target" inputmode="numeric" min="1200" max="10000"></div>
+        <div><div class="label">Protein goal (g)</div><input type="number" id="sProTarget" aria-label="Daily protein target in grams" inputmode="numeric" min="1"></div>
       </div>
       <div class="row" style="margin-bottom:14px;">
-        <div><div class="label">Carbs goal g</div><input type="number" id="sCarb" aria-label="Daily carbohydrate target in grams" inputmode="numeric"></div>
-        <div><div class="label">Fat goal g</div><input type="number" id="sFat" aria-label="Daily fat target in grams" inputmode="numeric"></div>
+        <div><div class="label">Carbs goal g</div><input type="number" id="sCarb" aria-label="Daily carbohydrate target in grams" inputmode="numeric" min="1"></div>
+        <div><div class="label">Fat goal g</div><input type="number" id="sFat" aria-label="Daily fat target in grams" inputmode="numeric" min="1"></div>
       </div>
+      <div class="note hidden" id="targetReviewNote" role="status" aria-live="polite" style="margin-bottom:12px;"></div>
       <div class="label" style="margin-bottom:6px;">Calorie schedule</div>
       <select id="sCalSched" aria-label="Calorie schedule mode" style="margin-bottom:10px;">
         <option value="same">Same target every day</option>
@@ -1485,22 +1491,23 @@
       <div class="note hidden" id="schedDisabledNote" style="margin-bottom:10px;">Set your calorie target first — the schedule is built from it.</div>
       <div id="schedCustom" class="hidden" style="margin-bottom:10px;">
         <div class="row" style="margin-bottom:8px;">
-          <div><div class="label">Sun</div><input type="number" id="sSched0" aria-label="Sunday calorie target" inputmode="numeric"></div>
-          <div><div class="label">Mon</div><input type="number" id="sSched1" aria-label="Monday calorie target" inputmode="numeric"></div>
-          <div><div class="label">Tue</div><input type="number" id="sSched2" aria-label="Tuesday calorie target" inputmode="numeric"></div>
-          <div><div class="label">Wed</div><input type="number" id="sSched3" aria-label="Wednesday calorie target" inputmode="numeric"></div>
+          <div><div class="label">Sun</div><input type="number" id="sSched0" aria-label="Sunday calorie target" inputmode="numeric" min="1200" max="10000"></div>
+          <div><div class="label">Mon</div><input type="number" id="sSched1" aria-label="Monday calorie target" inputmode="numeric" min="1200" max="10000"></div>
+          <div><div class="label">Tue</div><input type="number" id="sSched2" aria-label="Tuesday calorie target" inputmode="numeric" min="1200" max="10000"></div>
+          <div><div class="label">Wed</div><input type="number" id="sSched3" aria-label="Wednesday calorie target" inputmode="numeric" min="1200" max="10000"></div>
         </div>
         <div class="row">
-          <div><div class="label">Thu</div><input type="number" id="sSched4" aria-label="Thursday calorie target" inputmode="numeric"></div>
-          <div><div class="label">Fri</div><input type="number" id="sSched5" aria-label="Friday calorie target" inputmode="numeric"></div>
-          <div><div class="label">Sat</div><input type="number" id="sSched6" aria-label="Saturday calorie target" inputmode="numeric"></div>
+          <div><div class="label">Thu</div><input type="number" id="sSched4" aria-label="Thursday calorie target" inputmode="numeric" min="1200" max="10000"></div>
+          <div><div class="label">Fri</div><input type="number" id="sSched5" aria-label="Friday calorie target" inputmode="numeric" min="1200" max="10000"></div>
+          <div><div class="label">Sat</div><input type="number" id="sSched6" aria-label="Saturday calorie target" inputmode="numeric" min="1200" max="10000"></div>
           <div></div>
         </div>
         <button class="btn ghost small mt10" id="schedAutoBtn" style="width:100%;">Auto-balance to weekly budget</button>
       </div>
       <div class="note" id="schedTotalNote" style="margin-bottom:12px;"></div>
       <button class="btn" id="saveSettingsBtn">Save settings</button>
-      <div class="note">Targets are exact, but color warnings allow a small practical buffer. Scheduling redistributes the same weekly calories across days — it never adds calories unless you edit the daily numbers yourself in custom mode.</div>
+      <div class="note hidden" id="settingsSaveError" role="alert" aria-live="assertive" style="color:var(--warn);"></div>
+      <div class="note">Targets are exact, but color warnings allow a small practical buffer. Every saved day must be 1,200–10,000 kcal. A custom week may be under its weekly budget but never above it.</div>
       <div style="height:14px;"></div>
       <button class="btn ghost small" id="measureToggleBtn">Enable body measurements</button>
       <div class="note">Adds an optional waist/chest/arm tracker to the Weight tab. Toggle off any time — your entries stay saved.</div>
@@ -1679,8 +1686,9 @@
     <div class="card" style="font-size:13px; line-height:1.8;">
       <b>Health & Liability Disclaimer</b><br><br>
       BlackPyre is an informational logging tool, <b>not medical advice</b> and not a substitute for guidance from a physician, registered dietitian, or qualified trainer.<br><br>
-      • <b>Consult a professional first.</b> Talk to your doctor before beginning any diet, weight-change, or exercise program — especially if you have any medical condition, injury, are pregnant, or are under 18.<br><br>
-      • <b>Estimates are estimates.</b> Calorie and macro targets use published scientific formulas (Mifflin-St Jeor; Epley for estimated 1RM). Individual needs vary — no calculation replaces professional assessment.<br><br>
+      • <b>Calculator scope.</b> Ages 13–17 have complete access to BlackPyre’s calorie and macro calculator using youth equations, without locked goals, macros, Apply, or schedule controls. Teens should review weight-change plans with a parent or guardian and pediatrician or registered dietitian. The calculator is not designed for children under 13 or anyone who is pregnant or breastfeeding. Adults should talk to a qualified clinician before beginning any diet, weight-change, or exercise program, especially with a medical condition or injury.<br><br>
+      • <b>Estimates are estimates.</b> Calorie and macro results use published formulas and logged trends. They are not measurements, medical advice, or prescriptions, and no calculation replaces professional assessment.<br><br>
+      • <b>Nutrition safety floor.</b> BlackPyre will not save or suggest a target below 1,200 kcal/day. This technical floor does not mean 1,200 kcal—or any result shown—is medically appropriate for you.<br><br>
       • <b>Programs are general templates,</b> not personalized prescriptions. Exercise carries inherent risk of injury. Use appropriate form and loads, and stop immediately if you feel pain, dizziness, or shortness of breath.<br><br>
       • <b>You are responsible for your choices.</b> By using BlackPyre you agree that you use it at your own risk, and that the app's creators and contributors are <b>not liable</b> for any injury, health outcome, or loss arising from its use. The app is provided "as is," without warranties of any kind.<br><br>
       • <b>Nutrition data</b> comes from public databases and user entries and may contain errors — verify labels for allergies or medical diets.
