@@ -1545,58 +1545,208 @@ function scrollAiFoodIntoView(el, block){
   });
 }
 function showFoodConfirm(foods){
-  const el = document.getElementById("aiFoodConfirm");
-  el.classList.remove("hidden");
-  el.innerHTML = "";
-  if (!foods.length){
-    el.innerHTML = '<div class="note">The AI could not identify any food there. Try describing it, or use manual entry.</div>';
+  const container=document.getElementById("aiFoodConfirm");
+  container.classList.remove("hidden");
+  container.innerHTML="";
+
+  if(!foods.length){
+    container.innerHTML=
+      '<div class="note">The AI could not identify any food there. Try describing it, or use manual entry.</div>';
     return;
   }
-  const items = foods.slice();
-  const list = document.createElement("div");
-  const add = document.createElement("button");
-  add.className = "btn ghost small mt10 ai-confirm-log";
-  add.style.width = "100%";
+
+  const items=foods.slice().map(food=>({
+    name:String(food.name==null?"":food.name),
+    cal:food.cal,
+    pro:food.pro,
+    carb:food.carb,
+    fat:food.fat
+  }));
+
+  const list=document.createElement("div");
+  const error=document.createElement("div");
+  const add=document.createElement("button");
+
+  error.className="err hidden ai-food-review-error";
+  error.setAttribute("role","alert");
+  error.setAttribute("aria-live","assertive");
+
+  add.className="btn ghost small mt10 ai-confirm-log";
+  add.style.width="100%";
+
+  function clearError(){
+    error.textContent="";
+    error.classList.add("hidden");
+  }
+
+  function makeField(label,key,item,index){
+    const wrapper=document.createElement("div");
+    const heading=document.createElement("div");
+    const input=document.createElement("input");
+
+    wrapper.style.flex="1";
+    heading.className="label";
+    heading.textContent=label;
+
+    input.className="ai-food-"+key;
+    input.setAttribute(
+      "aria-label",
+      "AI reviewed "+label.toLowerCase()+
+      " for item "+(index+1)
+    );
+
+    if(key==="name"){
+      input.type="text";
+    } else {
+      input.type="number";
+      input.step="any";
+      input.inputMode="decimal";
+    }
+
+    input.value=item[key];
+
+    input.addEventListener("input",()=>{
+      item[key]=input.value;
+      input.removeAttribute("aria-invalid");
+      clearError();
+    });
+
+    wrapper.appendChild(heading);
+    wrapper.appendChild(input);
+
+    return wrapper;
+  }
+
   function redraw(){
-    list.innerHTML = "";
-    items.forEach((f,i)=>{
-      const row = document.createElement("div");
-      row.className = "list-item";
-      row.innerHTML = '<div style="flex:1; min-width:0;"><div style="font-weight:500;">'+esc(f.name)+'</div>'
-        +'<div style="color:var(--dim); font-size:11px;">'+Math.round(f.cal)+' kcal · '+Math.round(f.pro)+'P / '+Math.round(f.carb)+'C / '+Math.round(f.fat)+'F (estimate)</div></div>';
-      const x = document.createElement("button");
-      x.className = "del"; x.textContent = "✕"; x.setAttribute("aria-label","Remove");
-      x.addEventListener("click", ()=>{ items.splice(i,1); redraw(); });
-      row.appendChild(x);
+    list.innerHTML="";
+    clearError();
+
+    items.forEach((item,index)=>{
+      const row=document.createElement("div");
+      row.className="list-item ai-food-review-item";
+      row.style.display="block";
+
+      row.appendChild(
+        makeField("Food name","name",item,index)
+      );
+
+      const first=document.createElement("div");
+      first.className="row";
+      first.style.marginTop="10px";
+      first.appendChild(
+        makeField("Calories","cal",item,index)
+      );
+      first.appendChild(
+        makeField("Protein g","pro",item,index)
+      );
+      row.appendChild(first);
+
+      const second=document.createElement("div");
+      second.className="row";
+      second.style.marginTop="10px";
+      second.appendChild(
+        makeField("Carbs g","carb",item,index)
+      );
+      second.appendChild(
+        makeField("Fat g","fat",item,index)
+      );
+      row.appendChild(second);
+
+      const remove=document.createElement("button");
+      remove.className="del";
+      remove.textContent="✕";
+      remove.setAttribute("aria-label","Remove");
+      remove.style.marginTop="10px";
+
+      remove.addEventListener("click",()=>{
+        items.splice(index,1);
+        redraw();
+      });
+
+      row.appendChild(remove);
       list.appendChild(row);
     });
-    add.textContent = "✓ Log " + items.length + " item" + (items.length===1?"":"s") + " to " + currentMeal;
-    add.disabled = items.length===0;
+
+    add.textContent=
+      "Add to log — "+
+      items.length+
+      " item"+
+      (items.length===1?"":"s");
+
+    add.disabled=items.length===0;
   }
-  redraw();
-  el.appendChild(list);
-  const totals = document.createElement("div");
-  totals.className = "note";
-  totals.textContent = "Estimates — edit anything after logging with ✎.";
-  el.appendChild(totals);
-  add.addEventListener("click", ()=>{
-    const loggedCount = items.length;
-    items.forEach(f=>addEntry(Object.assign({}, f)));
-    el.classList.add("hidden");
-    if (isHandoff()){
+
+  add.addEventListener("click",()=>{
+    clearError();
+
+    const reviewed=[];
+
+    for(let index=0;index<items.length;index++){
+      const checked=validateFoodNutritionDraft(items[index]);
+
+      if(!checked.ok){
+        error.textContent=
+          "Item "+(index+1)+": "+checked.message;
+        error.classList.remove("hidden");
+
+        const target=list.children[index].querySelector(
+          ".ai-food-"+checked.field
+        );
+
+        if(target){
+          target.setAttribute("aria-invalid","true");
+          target.focus();
+        }
+
+        return;
+      }
+
+      reviewed.push(Object.assign({},checked.value,{
+        source:"AI-reviewed estimate"
+      }));
+    }
+
+    reviewed.forEach(food=>{
+      addEntry(Object.assign({},food));
+    });
+
+    const loggedCount=reviewed.length;
+    container.classList.add("hidden");
+
+    if(isHandoff()){
       hfCloseParseBox();
-      aiFoodStatus("Logged "+loggedCount+" ✓ — ready for another.");
-      scrollAiFoodIntoView(document.getElementById("aiFoodCard"), "start");
+      aiFoodStatus(
+        "Logged "+loggedCount+" ✓ — ready for another."
+      );
+      scrollAiFoodIntoView(
+        document.getElementById("aiFoodCard"),
+        "start"
+      );
     } else {
       aiFoodStatus(null);
     }
+
     flashSave("Logged "+loggedCount+" ✓");
   });
-  el.appendChild(add);
-  // Keep the first reviewed item comfortably inside the viewport instead of
-  // pinning the confirmation container against the top edge on mobile.
-  scrollAiFoodIntoView(list.firstElementChild || el, "center");
+
+  redraw();
+  container.appendChild(list);
+
+  const note=document.createElement("div");
+  note.className="note";
+  note.textContent=
+    "Review and edit every estimate. Nothing is logged until Add to log.";
+
+  container.appendChild(note);
+  container.appendChild(error);
+  container.appendChild(add);
+
+  scrollAiFoodIntoView(
+    list.firstElementChild||container,
+    "center"
+  );
 }
+
 document.getElementById("aiFoodGoBtn").addEventListener("click", async ()=>{
   const q = document.getElementById("aiFoodText").value.trim();
   if (!q) return;

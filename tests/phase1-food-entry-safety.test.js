@@ -1,4 +1,4 @@
-// BlackPyre Phase 1 manual food-entry safety tests.
+// BlackPyre Phase 1 complete food-entry safety tests.
 const {
   boot,
   check,
@@ -28,8 +28,12 @@ const W=dom.window;
 const D=W.document;
 const E=code=>W.eval(code);
 
-const click=id=>{
-  D.getElementById(id).dispatchEvent(
+const click=target=>{
+  const element=typeof target==="string"
+    ? D.getElementById(target)
+    : target;
+
+  element.dispatchEvent(
     new W.Event("click",{bubbles:true})
   );
 };
@@ -169,8 +173,191 @@ check(
   E(`data.food[todayStr()].length`)===firstLength+1
 );
 
+
+const beforeExternal=E(`data.food[todayStr()].length`);
+
+E(`selectFood({
+  name:"Database product",
+  brand:"Open Food Facts",
+  cal100:200,
+  pro100:4,
+  carb100:30,
+  fat100:8,
+  servingG:50,
+  servingLabel:"1 package (50 g)"
+})`);
+
 check(
-  "manual validation preserves unrelated permanent data",
+  "external database food opens editable review without logging",
+  E(`data.food[todayStr()].length`)===beforeExternal
+  && D.getElementById("selEditName").value==="Database product"
+  && D.getElementById("selEditCal100").value==="200"
+  && !D.getElementById("calcCard").classList.contains("hidden")
+);
+
+setv("selEditName","Corrected database product");
+setv("selEditCal100",240);
+setv("selEditPro100",-1);
+click("addSelBtn");
+
+check(
+  "invalid external review remains editable and does not log",
+  E(`data.food[todayStr()].length`)===beforeExternal
+  && !D.getElementById("calcCard").classList.contains("hidden")
+  && !D.getElementById("selReviewError").classList.contains("hidden")
+  && D.activeElement===D.getElementById("selEditPro100")
+);
+
+setv("selEditPro100",6);
+setv("selEditCarb100",32);
+setv("selEditFat100",9);
+click("addSelBtn");
+
+check(
+  "corrected external nutrition is preserved in the logged entry",
+  E(`data.food[todayStr()].length`)===beforeExternal+1
+  && /Corrected database product/.test(
+    E(`data.food[todayStr()].at(-1).name`)
+  )
+  && E(`data.food[todayStr()].at(-1).cal`)===120
+  && E(`data.food[todayStr()].at(-1).sourceFood.cal100`)===240
+);
+
+const beforeBarcodeFoods=E(`JSON.stringify(data.myFoods)`);
+const beforeBarcodeLog=E(`data.food[todayStr()].length`);
+
+E(`openCustomForm("012345678905")`);
+setv("cfName","Barcode correction");
+setv("cfBarcode","012345678905");
+setv("cfServG",50);
+setv("cfCal",200);
+setv("cfPro",5);
+setv("cfCarb",30);
+D.getElementById("cfFat").value="";
+click("cfSaveBtn");
+
+check(
+  "invalid barcode correction does not partially save",
+  E(`JSON.stringify(data.myFoods)`)===beforeBarcodeFoods
+  && E(`data.food[todayStr()].length`)===beforeBarcodeLog
+  && !D.getElementById("customCard").classList.contains("hidden")
+);
+
+setv("cfFat",10);
+click("cfSaveBtn");
+
+check(
+  "valid barcode correction saves safely and opens review without logging",
+  !!E(`data.myFoods["012345678905"]`)
+  && E(`data.myFoods["012345678905"].cal100`)===400
+  && E(`data.food[todayStr()].length`)===beforeBarcodeLog
+  && D.getElementById("selEditName").value==="Barcode correction"
+);
+
+const beforeMyFoodsCount=E(`Object.keys(data.myFoods).length`);
+
+setv("mfName","Reusable food");
+setv("mfServG",100);
+setv("mfCal",300);
+setv("mfPro",10);
+setv("mfCarb",40);
+D.getElementById("mfFat").value="";
+click("mfSaveBtn");
+
+check(
+  "invalid My Foods nutrition does not partially save",
+  E(`Object.keys(data.myFoods).length`)===beforeMyFoodsCount
+  && D.activeElement===D.getElementById("mfFat")
+);
+
+setv("mfFat",8);
+click("mfSaveBtn");
+
+check(
+  "valid My Foods nutrition saves through strict validation",
+  E(`Object.keys(data.myFoods).length`)===beforeMyFoodsCount+1
+  && E(`Object.values(data.myFoods).some(
+    food=>food.name==="Reusable food"
+      && food.cal100===300
+      && food.fat100===8
+  )`)
+);
+
+const beforeAI=E(`data.food[todayStr()].length`);
+
+E(`showFoodConfirm([{
+  name:"AI meal",
+  cal:500,
+  pro:25,
+  carb:50,
+  fat:20
+}])`);
+
+check(
+  "AI estimate is editable and remains unlogged during review",
+  E(`data.food[todayStr()].length`)===beforeAI
+  && !!D.querySelector("#aiFoodConfirm .list-item")
+  && !!D.querySelector(".ai-food-name")
+  && /^Add to log/.test(
+    D.querySelector(".ai-confirm-log").textContent
+  )
+);
+
+E(`showFoodConfirm([
+  {name:"Valid AI item",cal:200,pro:10,carb:20,fat:5},
+  {name:"Invalid AI item",cal:300,pro:-1,carb:30,fat:10}
+])`);
+
+click(D.querySelector(".ai-confirm-log"));
+
+check(
+  "invalid AI batch blocks every item without partial logging",
+  E(`data.food[todayStr()].length`)===beforeAI
+  && !D.querySelector(".ai-food-review-error").classList.contains("hidden")
+  && D.activeElement===D.querySelectorAll(".ai-food-pro")[1]
+);
+
+E(`showFoodConfirm([{
+  name:"AI meal",
+  cal:500,
+  pro:25,
+  carb:50,
+  fat:20
+}])`);
+
+const aiName=D.querySelector(".ai-food-name");
+const aiCal=D.querySelector(".ai-food-cal");
+const aiPro=D.querySelector(".ai-food-pro");
+const aiCarb=D.querySelector(".ai-food-carb");
+const aiFat=D.querySelector(".ai-food-fat");
+
+[
+  [aiName,"Edited AI meal"],
+  [aiCal,"450"],
+  [aiPro,"30"],
+  [aiCarb,"40"],
+  [aiFat,"18"]
+].forEach(([element,value])=>{
+  element.value=value;
+  element.dispatchEvent(
+    new W.Event("input",{bubbles:true})
+  );
+});
+
+click(D.querySelector(".ai-confirm-log"));
+
+check(
+  "edited AI values log only after Add to log",
+  E(`data.food[todayStr()].length`)===beforeAI+1
+  && E(`data.food[todayStr()].at(-1).name`)==="Edited AI meal"
+  && E(`data.food[todayStr()].at(-1).cal`)===450
+  && E(`data.food[todayStr()].at(-1).pro`)===30
+  && E(`data.food[todayStr()].at(-1).source`)===
+    "AI-reviewed estimate"
+);
+
+check(
+  "food-entry validation preserves unrelated permanent data",
   E(`data.workouts.length`)===1
   && E(`data.weights.length`)===1
   && E(`data.savedMeals.length`)===1

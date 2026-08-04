@@ -5739,26 +5739,98 @@ document.getElementById("myFoodsOpenBtn").addEventListener("click", openMyFoods)
 document.getElementById("myFoodsCloseBtn").addEventListener("click", ()=>{ mfResetForm(); closeMyFoods(); });
 document.getElementById("mfCancelBtn").addEventListener("click", mfResetForm);
 document.getElementById("mfSaveBtn").addEventListener("click", ()=>{
-  const name = document.getElementById("mfName").value.trim();
-  const servG = Number(document.getElementById("mfServG").value);
-  const cal = Number(document.getElementById("mfCal").value);
-  if(!name || !servG || !cal){ flashSave("Need name, serving size, calories", true); return; }
-  const pro = Number(document.getElementById("mfPro").value||0);
-  const carb = Number(document.getElementById("mfCarb").value||0);
-  const fat = Number(document.getElementById("mfFat").value||0);
-  const food = { name:name, brand:"My foods",
-    cal100: cal/servG*100, pro100: pro/servG*100, carb100: carb/servG*100, fat100: fat/servG*100,
-    servingG: servG, servingLabel: servG+"g" };
-  const bc = document.getElementById("mfBarcode").value.replace(/\D/g,"");
-  const key = bc || mfEditKey || ("cf_"+Date.now());
-  const wasEdit = mfEditKey!=null;
-  if (mfEditKey && key!==mfEditKey) delete data.myFoods[mfEditKey];
-  data.myFoods[key] = food;
-  save();
-  ackBtn("mfSaveBtn", wasEdit ? "✓ Updated" : "✓ Saved");
+  const name=document.getElementById("mfName").value.trim();
+  const servingG=Number(
+    document.getElementById("mfServG").value
+  );
+
+  const checked=validateFoodNutritionDraft({
+    name:name,
+    cal:document.getElementById("mfCal").value,
+    pro:document.getElementById("mfPro").value,
+    carb:document.getElementById("mfCarb").value,
+    fat:document.getElementById("mfFat").value
+  });
+
+  if(!Number.isFinite(servingG) || servingG<=0){
+    flashSave("Serving size must be greater than zero.",true);
+    document.getElementById("mfServG").focus();
+    return;
+  }
+
+  if(!checked.ok){
+    const ids={
+      name:"mfName",
+      cal:"mfCal",
+      pro:"mfPro",
+      carb:"mfCarb",
+      fat:"mfFat"
+    };
+
+    flashSave(checked.message,true);
+
+    const target=document.getElementById(ids[checked.field]);
+
+    if(target) target.focus();
+    return;
+  }
+
+  const value=checked.value;
+  const food={
+    name:value.name,
+    brand:"My foods",
+    cal100:value.cal/servingG*100,
+    pro100:value.pro/servingG*100,
+    carb100:value.carb/servingG*100,
+    fat100:value.fat/servingG*100,
+    servingG:servingG,
+    servingLabel:servingG+"g"
+  };
+
+  const normalized=validateFoodNutritionDraft({
+    name:food.name,
+    cal:food.cal100,
+    pro:food.pro100,
+    carb:food.carb100,
+    fat:food.fat100
+  });
+
+  if(!normalized.ok){
+    flashSave(
+      "That serving size produces unsupported nutrition values.",
+      true
+    );
+    return;
+  }
+
+  const barcode=document
+    .getElementById("mfBarcode")
+    .value
+    .replace(/\D/g,"");
+
+  const key=barcode||mfEditKey||("cf_"+Date.now());
+  const wasEdit=mfEditKey!=null;
+
+  if(mfEditKey && key!==mfEditKey){
+    delete data.myFoods[mfEditKey];
+  }
+
+  data.myFoods[key]=food;
+
+  if(!save()){
+    flashSave("The food could not be saved.",true);
+    return;
+  }
+
+  ackBtn(
+    "mfSaveBtn",
+    wasEdit ? "✓ Updated" : "✓ Saved"
+  );
+
   mfResetForm();
   renderMyFoods();
 });
+
 function renderMyFoods(){
   const el = document.getElementById("mfList");
   const keys = Object.keys(data.myFoods||{});

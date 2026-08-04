@@ -600,44 +600,112 @@ function openCustomForm(code, prefill, reviewWarning){
 }
 
 document.getElementById("cfSaveBtn").addEventListener("click", ()=>{
-  const name = document.getElementById("cfName").value.trim();
-  const brand = document.getElementById("cfBrand").value.trim();
-  const barcode = document.getElementById("cfBarcode").value.trim().replace(/\D/g,"");
-  const servingLabel = document.getElementById("cfServingLabel").value.trim();
-  const servG = Number(document.getElementById("cfServG").value);
-  const cal = Number(document.getElementById("cfCal").value);
+  const name=document.getElementById("cfName").value.trim();
+  const brand=document.getElementById("cfBrand").value.trim();
+  const barcode=document
+    .getElementById("cfBarcode")
+    .value
+    .trim()
+    .replace(/\D/g,"");
+  const servingLabel=document
+    .getElementById("cfServingLabel")
+    .value
+    .trim();
+  const servingG=Number(
+    document.getElementById("cfServG").value
+  );
 
-  if(!name || !barcode || !servG || !cal){
-    flashSave("Need name, barcode, serving size, calories", true);
+  const checked=validateFoodNutritionDraft({
+    name:name,
+    cal:document.getElementById("cfCal").value,
+    pro:document.getElementById("cfPro").value,
+    carb:document.getElementById("cfCarb").value,
+    fat:document.getElementById("cfFat").value
+  });
+
+  if(!barcode){
+    flashSave("Enter the barcode before saving this correction.",true);
+    document.getElementById("cfBarcode").focus();
     return;
   }
 
-  const pro = Number(document.getElementById("cfPro").value||0);
-  const carb = Number(document.getElementById("cfCarb").value||0);
-  const fat = Number(document.getElementById("cfFat").value||0);
+  if(!Number.isFinite(servingG) || servingG<=0){
+    flashSave("Serving size must be greater than zero.",true);
+    document.getElementById("cfServG").focus();
+    return;
+  }
 
-  const food = {
-    name:name,
-    brand:brand || "My foods",
-    cal100:cal/servG*100,
-    pro100:pro/servG*100,
-    carb100:carb/servG*100,
-    fat100:fat/servG*100,
-    servingG:servG,
-    servingLabel:servingLabel || servG+"g",
+  if(!checked.ok){
+    const ids={
+      name:"cfName",
+      cal:"cfCal",
+      pro:"cfPro",
+      carb:"cfCarb",
+      fat:"cfFat"
+    };
+
+    flashSave(checked.message,true);
+
+    const target=document.getElementById(ids[checked.field]);
+
+    if(target) target.focus();
+    return;
+  }
+
+  const value=checked.value;
+  const food={
+    name:value.name,
+    brand:brand||"My foods",
+    cal100:value.cal/servingG*100,
+    pro100:value.pro/servingG*100,
+    carb100:value.carb/servingG*100,
+    fat100:value.fat/servingG*100,
+    servingG:servingG,
+    servingLabel:servingLabel||servingG+"g"
   };
 
-  if(!data.myFoods) data.myFoods = {};
-  data.myFoods[barcode] = food;
-  save();
+  const normalized=validateFoodNutritionDraft({
+    name:food.name,
+    cal:food.cal100,
+    pro:food.pro100,
+    carb:food.carb100,
+    fat:food.fat100
+  });
 
-  ["cfName","cfBrand","cfBarcode","cfServingLabel","cfServG","cfCal","cfPro","cfCarb","cfFat"].forEach(id=>{
+  if(!normalized.ok){
+    flashSave(
+      "That serving size produces unsupported nutrition values.",
+      true
+    );
+    return;
+  }
+
+  if(!data.myFoods) data.myFoods={};
+  data.myFoods[barcode]=food;
+
+  if(!save()){
+    flashSave("The correction could not be saved.",true);
+    return;
+  }
+
+  [
+    "cfName",
+    "cfBrand",
+    "cfBarcode",
+    "cfServingLabel",
+    "cfServG",
+    "cfCal",
+    "cfPro",
+    "cfCarb",
+    "cfFat"
+  ].forEach(id=>{
     document.getElementById(id).value="";
   });
 
-  document.getElementById("customNote").textContent = CUSTOM_FOOD_NOTE;
+  document.getElementById("customNote").textContent=
+    CUSTOM_FOOD_NOTE;
   document.getElementById("customCard").classList.add("hidden");
-  pendingBarcode = null;
+  pendingBarcode=null;
   selectFood(food);
   flashSave("Saved to your foods ✓");
 });
@@ -673,6 +741,93 @@ const qtyAmountEl = document.getElementById("qtyAmount");
 const qtySliderEl = document.getElementById("qtySlider");
 const qtyUnitEl = document.getElementById("qtyUnit");
 
+const SELECTED_REVIEW_IDS=Object.freeze({
+  name:"selEditName",
+  cal:"selEditCal100",
+  pro:"selEditPro100",
+  carb:"selEditCarb100",
+  fat:"selEditFat100"
+});
+
+function clearSelectedReviewError(){
+  const error=document.getElementById("selReviewError");
+  error.textContent="";
+  error.classList.add("hidden");
+
+  Object.values(SELECTED_REVIEW_IDS).forEach(id=>{
+    document.getElementById(id).removeAttribute("aria-invalid");
+  });
+}
+
+function selectedReviewRaw(){
+  return {
+    name:document.getElementById(SELECTED_REVIEW_IDS.name).value,
+    cal:document.getElementById(SELECTED_REVIEW_IDS.cal).value,
+    pro:document.getElementById(SELECTED_REVIEW_IDS.pro).value,
+    carb:document.getElementById(SELECTED_REVIEW_IDS.carb).value,
+    fat:document.getElementById(SELECTED_REVIEW_IDS.fat).value
+  };
+}
+
+function reviewedSelectedFood(showError){
+  if(!selected) return null;
+
+  const checked=validateFoodNutritionDraft(
+    selectedReviewRaw()
+  );
+
+  if(!checked.ok){
+    if(showError){
+      clearSelectedReviewError();
+
+      const error=document.getElementById("selReviewError");
+      error.textContent=checked.message;
+      error.classList.remove("hidden");
+
+      const input=document.getElementById(
+        SELECTED_REVIEW_IDS[checked.field]
+      );
+
+      if(input){
+        input.setAttribute("aria-invalid","true");
+        input.focus();
+      }
+    }
+
+    return null;
+  }
+
+  return Object.assign({},selected,{
+    name:checked.value.name,
+    cal100:checked.value.cal,
+    pro100:checked.value.pro,
+    carb100:checked.value.carb,
+    fat100:checked.value.fat
+  });
+}
+
+function populateSelectedReview(food){
+  document.getElementById(SELECTED_REVIEW_IDS.name).value=
+    food.name||"";
+  document.getElementById(SELECTED_REVIEW_IDS.cal).value=
+    Number.isFinite(Number(food.cal100)) ? food.cal100 : "";
+  document.getElementById(SELECTED_REVIEW_IDS.pro).value=
+    Number.isFinite(Number(food.pro100)) ? food.pro100 : "";
+  document.getElementById(SELECTED_REVIEW_IDS.carb).value=
+    Number.isFinite(Number(food.carb100)) ? food.carb100 : "";
+  document.getElementById(SELECTED_REVIEW_IDS.fat).value=
+    Number.isFinite(Number(food.fat100)) ? food.fat100 : "";
+
+  clearSelectedReviewError();
+}
+
+Object.values(SELECTED_REVIEW_IDS).forEach(id=>{
+  document.getElementById(id).addEventListener("input",()=>{
+    clearSelectedReviewError();
+    updateCalc();
+  });
+});
+
 function sliderConfigFor(unit){
   if (unit==="g") return {max:500, step:5};
   if (unit==="oz") return {max:16, step:0.25};
@@ -693,16 +848,55 @@ function revealFoodSliderEditor(){
   setTimeout(reveal, 0);
 }
 function selectFood(h){
-  selected = h;
-  document.getElementById("selName").textContent = h.name + (h.brand && h.brand!=="Generic" && !String(h.brand).startsWith("Built-in") ? " — "+h.brand : "");
-  document.getElementById("selPer100").textContent =
-    "per 100g: "+Math.round(h.cal100)+" kcal · "+r1(h.pro100)+"g P · "+r1(h.carb100)+"g C · "+r1(h.fat100)+"g F";
-  qtyUnitEl.innerHTML = "";
-  const opts = [["g","grams"],["oz","ounces"],["lb","pounds"],["ml","ml"],["floz","fl oz"]];
-  if (h.servingG) opts.unshift(["serving", "serving ("+(h.servingLabel||h.servingG+"g")+")"]);
-  opts.forEach(pair=>{ const o=document.createElement("option"); o.value=pair[0]; o.textContent=pair[1]; qtyUnitEl.appendChild(o); });
-  qtyAmountEl.value = h.servingG ? 1 : 100;
+  selected=Object.assign({},h);
+  populateSelectedReview(selected);
+
+  document.getElementById("selName").textContent=
+    selected.name+
+    (
+      selected.brand &&
+      selected.brand!=="Generic" &&
+      !String(selected.brand).startsWith("Built-in")
+        ? " — "+selected.brand
+        : ""
+    );
+
+  document.getElementById("selPer100").textContent=
+    "per 100g: "+
+    Math.round(selected.cal100)+" kcal · "+
+    r1(selected.pro100)+"g P · "+
+    r1(selected.carb100)+"g C · "+
+    r1(selected.fat100)+"g F";
+
+  qtyUnitEl.innerHTML="";
+
+  const options=[
+    ["g","grams"],
+    ["oz","ounces"],
+    ["lb","pounds"],
+    ["ml","ml"],
+    ["floz","fl oz"]
+  ];
+
+  if(selected.servingG){
+    options.unshift([
+      "serving",
+      "serving ("+
+        (selected.servingLabel||selected.servingG+"g")+
+        ")"
+    ]);
+  }
+
+  options.forEach(pair=>{
+    const option=document.createElement("option");
+    option.value=pair[0];
+    option.textContent=pair[1];
+    qtyUnitEl.appendChild(option);
+  });
+
+  qtyAmountEl.value=selected.servingG ? 1 : 100;
   syncSliderToUnit();
+
   document.getElementById("calcCard").classList.remove("hidden");
   updateCalc();
   revealFoodSliderEditor();
@@ -723,15 +917,39 @@ qtyAmountEl.addEventListener("input", ()=>{ qtySliderEl.value = Math.min(Number(
 qtySliderEl.addEventListener("input", ()=>{ qtyAmountEl.value = qtySliderEl.value; updateCalc(); });
 
 function currentGrams(){
-  return toGrams(parseFloat(qtyAmountEl.value)||0, qtyUnitEl.value, selected ? selected.servingG : null);
+  return toGrams(
+    parseFloat(qtyAmountEl.value)||0,
+    qtyUnitEl.value,
+    selected ? selected.servingG : null
+  );
 }
+
 function updateCalc(){
   if(!selected) return;
-  const g = currentGrams();
-  document.getElementById("calcCal").textContent = Math.round(scaleMacro(selected.cal100,g));
-  document.getElementById("calcPro").textContent = Math.round(scaleMacro(selected.pro100,g));
-  document.getElementById("calcCarb").textContent = Math.round(scaleMacro(selected.carb100,g));
-  document.getElementById("calcFat").textContent = Math.round(scaleMacro(selected.fat100,g));
+
+  const values=selectedReviewRaw();
+  const grams=currentGrams();
+
+  function scaled(raw,isCalories){
+    if(raw==="" || raw===null || raw===undefined) return "—";
+
+    const number=Number(raw);
+
+    if(!Number.isFinite(number)) return "—";
+    if(isCalories ? number<=0 : number<0) return "—";
+    if(!Number.isFinite(grams) || grams<=0) return "—";
+
+    return Math.round(scaleMacro(number,grams));
+  }
+
+  document.getElementById("calcCal").textContent=
+    scaled(values.cal,true);
+  document.getElementById("calcPro").textContent=
+    scaled(values.pro,false);
+  document.getElementById("calcCarb").textContent=
+    scaled(values.carb,false);
+  document.getElementById("calcFat").textContent=
+    scaled(values.fat,false);
 }
 
 function normalizedFoodIdentityPart(value){
@@ -760,30 +978,48 @@ function compactSourceFood(food){
   if (food.suggestionUsdaDescription) out.suggestionUsdaDescription = String(food.suggestionUsdaDescription);
   return out;
 }
-function sliderEntryFromSelection(){
-  if (!selected) return null;
-  const g = currentGrams();
-  const amount = Number(qtyAmountEl.value);
-  const unit = qtyUnitEl.value;
-  if (!Number.isFinite(amount) || amount<=0 || !Number.isFinite(g) || g<=0) return null;
-  const amountLabel = String(qtyAmountEl.value);
-  const label = unit==="serving"
-    ? amountLabel+" serving"+(amount===1?"":"s")+" · "+selected.name
-    : amountLabel+unit+" "+selected.name;
-  const sourceFood = compactSourceFood(selected);
+function sliderEntryFromSelection(food){
+  const reviewed=food||selected;
+  if(!reviewed) return null;
+
+  const grams=currentGrams();
+  const amount=Number(qtyAmountEl.value);
+  const unit=qtyUnitEl.value;
+
+  if(
+    !Number.isFinite(amount) ||
+    amount<=0 ||
+    !Number.isFinite(grams) ||
+    grams<=0
+  ){
+    return null;
+  }
+
+  const amountLabel=String(qtyAmountEl.value);
+  const label=unit==="serving"
+    ? amountLabel+
+      " serving"+
+      (amount===1?"":"s")+
+      " · "+
+      reviewed.name
+    : amountLabel+unit+" "+reviewed.name;
+
+  const sourceFood=compactSourceFood(reviewed);
+
   return {
     name:label,
-    cal:Math.round(scaleMacro(selected.cal100,g)),
-    pro:Math.round(scaleMacro(selected.pro100,g)),
-    carb:Math.round(scaleMacro(selected.carb100,g)),
-    fat:Math.round(scaleMacro(selected.fat100,g)),
+    cal:Math.round(scaleMacro(reviewed.cal100,grams)),
+    pro:Math.round(scaleMacro(reviewed.pro100,grams)),
+    carb:Math.round(scaleMacro(reviewed.carb100,grams)),
+    fat:Math.round(scaleMacro(reviewed.fat100,grams)),
     amount:amount,
     unit:unit,
-    grams:g,
-    foodKey:sourceFoodKey(selected),
+    grams:grams,
+    foodKey:sourceFoodKey(reviewed),
     sourceFood:sourceFood
   };
 }
+
 function updateRecentPortion(item, amount, unit){
   if (!item) return;
   const list = data.recents||[];
@@ -796,27 +1032,62 @@ function updateRecentPortion(item, amount, unit){
 
 document.getElementById("addSelBtn").addEventListener("click", ()=>{
   if(!selected) return;
-  const entry = sliderEntryFromSelection();
-  if (!entry){ flashSave("Enter an amount greater than 0", true); return; }
-  const amt = qtyAmountEl.value, unit = qtyUnitEl.value;
-  if (editFoodIdx!=null && editFoodMode==="slider" && (data.food[foodDateEl.value]||[])[editFoodIdx]){
-    entry.meal = data.food[foodDateEl.value][editFoodIdx].meal || currentMeal;
-    data.food[foodDateEl.value][editFoodIdx] = entry;
-    updateRecentPortion(selected,amt,unit);
-    save(); renderFood(); renderDash();
-    ackBtn("addSelBtn", "✓ Updated");
+
+  const reviewed=reviewedSelectedFood(true);
+  if(!reviewed) return;
+
+  const entry=sliderEntryFromSelection(reviewed);
+
+  if(!entry){
+    flashSave("Enter an amount greater than 0",true);
+    return;
+  }
+
+  const amount=qtyAmountEl.value;
+  const unit=qtyUnitEl.value;
+
+  if(
+    editFoodIdx!=null &&
+    editFoodMode==="slider" &&
+    (data.food[foodDateEl.value]||[])[editFoodIdx]
+  ){
+    entry.meal=
+      data.food[foodDateEl.value][editFoodIdx].meal||
+      currentMeal;
+
+    data.food[foodDateEl.value][editFoodIdx]=entry;
+    updateRecentPortion(reviewed,amount,unit);
+
+    if(!save()){
+      flashSave("The edited entry could not be saved.",true);
+      return;
+    }
+
+    renderFood();
+    renderDash();
+    ackBtn("addSelBtn","✓ Updated");
     cancelEditFood();
   } else {
     addEntry(entry);
-    pushRecent(Object.assign({}, selected, {lastAmt:amt, lastUnit:unit}));
+    pushRecent(Object.assign({},reviewed,{
+      lastAmt:amount,
+      lastUnit:unit
+    }));
   }
+
   document.getElementById("calcCard").classList.add("hidden");
   document.getElementById("resultsCard").classList.add("hidden");
-  document.getElementById("foodQuery").value = "";
-  document.getElementById("barcodeInput").value = "";
-  selected = null;
-  // v51: return to the search box ready for the next entry (meal selection is preserved)
-  try { document.getElementById("foodQuery").scrollIntoView({behavior:"smooth", block:"center"}); } catch(e){}
+  document.getElementById("foodQuery").value="";
+  document.getElementById("barcodeInput").value="";
+  selected=null;
+  clearSelectedReviewError();
+
+  try {
+    document.getElementById("foodQuery").scrollIntoView({
+      behavior:"smooth",
+      block:"center"
+    });
+  } catch(e){}
 });
 
 // --- recents ---

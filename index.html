@@ -1101,6 +1101,34 @@
       <div class="label">Selected</div>
       <div id="selName" style="font-size:14px; font-weight:600; margin-bottom:2px;"></div>
       <div id="selPer100" class="note" style="margin-top:0; margin-bottom:8px;"></div>
+
+      <div class="label" style="margin-top:12px;">Review nutrition before logging</div>
+      <input id="selEditName" aria-label="Reviewed food name" placeholder="Food name" style="margin-bottom:10px;">
+
+      <div class="row" style="margin-bottom:10px;">
+        <div>
+          <div class="label">Calories / 100 g</div>
+          <input type="number" step="any" id="selEditCal100" aria-label="Reviewed calories per 100 grams" inputmode="decimal">
+        </div>
+        <div>
+          <div class="label">Protein / 100 g</div>
+          <input type="number" step="any" id="selEditPro100" aria-label="Reviewed protein per 100 grams" inputmode="decimal">
+        </div>
+      </div>
+
+      <div class="row" style="margin-bottom:10px;">
+        <div>
+          <div class="label">Carbs / 100 g</div>
+          <input type="number" step="any" id="selEditCarb100" aria-label="Reviewed carbohydrates per 100 grams" inputmode="decimal">
+        </div>
+        <div>
+          <div class="label">Fat / 100 g</div>
+          <input type="number" step="any" id="selEditFat100" aria-label="Reviewed fat per 100 grams" inputmode="decimal">
+        </div>
+      </div>
+
+      <div class="err hidden" id="selReviewError" role="alert" aria-live="assertive"></div>
+
       <div class="row" style="align-items:flex-end;">
         <div style="flex:1;"><div class="label">Amount</div><input type="number" id="qtyAmount" aria-label="Food amount" value="100" inputmode="decimal" step="any"></div>
         <div style="flex:1;"><div class="label">Unit</div><select id="qtyUnit" aria-label="Food amount unit"></select></div>
