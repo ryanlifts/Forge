@@ -107,10 +107,6 @@ function captureSetupStep(){
     const sel=document.getElementById("suSched"); if(sel) setupChoice.schedMode=sel.value;
     if(setupChoice.schedMode==="custom") setupChoice.schedDays=[0,1,2,3,4,5,6].map(i=>Number(document.getElementById("suSched"+i).value)||0);
   }
-  if (setupStep===6){
-    const usda=document.getElementById("suUsda");
-    if(usda){ cfg.usdaKey=usda.value.trim(); saveCfg(); }
-  }
 }
 function validateSetupStep(){
   captureSetupStep();
@@ -286,9 +282,7 @@ function renderSetupStep(){
     const td=document.getElementById("suTrain"); opts.forEach(o=>{const b=document.createElement("button");b.className="su-opt"+(setupChoice.trainAction===o[0]?" sel":"");b.innerHTML='<b>'+o[1]+'</b><div class="su-sub">'+o[2]+'</div>';b.addEventListener("click",()=>{setupChoice.trainAction=o[0];renderSetupStep();});td.appendChild(b);});
   }
   if(setupStep===6){
-    body.innerHTML='<div class="card"><div class="label">Step 7 · Food database</div><div class="note" style="margin:8px 0 12px;">Food search and barcode lookup work out of the box. Optionally add your own free USDA key for guaranteed speed.</div><a href="https://fdc.nal.usda.gov/api-key-signup.html" target="_blank" style="color:var(--ember);font-size:13px;">Get a free USDA key →</a><div class="row mt10" style="align-items:flex-end;"><div style="flex:1;"><div class="label">Paste key (or skip)</div><input id="suUsda" placeholder="Your API key"></div><button class="xbtn" id="suUsdaSave" style="flex:0 0 auto;">Save</button></div></div>';
-    if(cfg.usdaKey) document.getElementById("suUsda").value=cfg.usdaKey;
-    document.getElementById("suUsdaSave").addEventListener("click",()=>{const k=document.getElementById("suUsda").value.trim();if(!k){flashSave("Paste a key first",true);return;}cfg.usdaKey=k;saveCfg();ackBtn("suUsdaSave","✓ Saved");});
+    body.innerHTML='<div class="card"><div class="label">Step 7 · Food database</div><div class="note" style="margin-top:8px;line-height:1.75;">No food-database account or API key is needed. Saved foods, built-in staples, and the 120-food USDA reference catalog work offline. When connected, packaged-food search and barcode lookup use Open Food Facts. Every online result names its source, and any missing product can be entered from its package label and saved on this device.</div></div>';
   }
   if(setupStep===7){
     body.innerHTML='<div class="card"><div class="label">Step 8 · Your data</div><div style="font-size:14px;line-height:1.9;margin-top:8px;">Everything you log stays <b>only on this device</b>. No account, server, or ads.<br><br>Use backup/restore to protect your data or move it to another device.<br><br>Your bodyweight goal, calculator information, macro split, schedule, and tracking choices are now saved in Settings and can be changed anytime.</div></div>';
@@ -684,6 +678,7 @@ function backupSafeCfg(){
   const safe = Object.assign({},cfg);
   delete safe.anthropicKey;
   delete safe.openaiKey;
+  delete safe.usdaKey;
   return safe;
 }
 function normalBackupText(){
@@ -754,7 +749,7 @@ async function doBackup(btnId, shareAfterSave){
       data:JSON.parse(protectedSnapshotStrings.data),
       program:JSON.parse(protectedSnapshotStrings.program)
     } : {cfg:cfg, data:data, program:program};
-    const cfgPartial = Object.assign({}, snap.cfg); delete cfgPartial.anthropicKey; delete cfgPartial.openaiKey;
+    const cfgPartial = Object.assign({}, snap.cfg); delete cfgPartial.anthropicKey; delete cfgPartial.openaiKey; delete cfgPartial.usdaKey;
     const partialName = "blackpyre-PARTIAL-"+todayStr()+".json";
     const partialText = JSON.stringify({cfg:cfgPartial, program:snap.program, data:snap.data}, null, 2);
     let partialFile = null;

@@ -1,35 +1,4 @@
 "use strict";
-// ================== USDA SEARCH ==================
-function mapUSDA(f){
-  // Handles branded (labelNutrients + servingSize) and standard (per-100g foodNutrients)
-  const getNut = (id)=> {
-    const n = (f.foodNutrients||[]).find(x=>x.nutrientId===id || (x.nutrient&&x.nutrient.id===id));
-    return n ? Number(n.value!=null?n.value:(n.amount||0)) : 0;
-  };
-  let cal100 = getNut(1008), pro100 = getNut(1003), carb100 = getNut(1005), fat100 = getNut(1004);
-  if (!cal100 && f.labelNutrients && f.servingSize){
-    const g = Number(f.servingSize); // grams for most branded
-    const l = f.labelNutrients;
-    const per = (v)=> v&&v.value!=null ? Number(v.value)/g*100 : 0;
-    cal100 = per(l.calories); pro100 = per(l.protein); carb100 = per(l.carbohydrates); fat100 = per(l.fat);
-  }
-  if (!cal100) return null;
-  return {
-    name: f.description || f.lowercaseDescription || "Unknown",
-    brand: f.brandName || f.brandOwner || "USDA",
-    cal100:cal100, pro100:pro100, carb100:carb100, fat100:fat100,
-    servingG: f.servingSize && (String(f.servingSizeUnit||"").toLowerCase().indexOf("g")===0 || String(f.servingSizeUnit||"").toLowerCase()==="ml") ? Number(f.servingSize) : null,
-    servingLabel: f.servingSize ? f.servingSize+(f.servingSizeUnit||"g") : null,
-  };
-}
-async function searchUSDA(q){
-  if (isOffline()) return [];
-  if (!effectiveUsdaKey()) return [];
-  const res = await fetchWithTimeout("https://api.nal.usda.gov/fdc/v1/foods/search?api_key="+encodeURIComponent(effectiveUsdaKey())
-    +"&query="+encodeURIComponent(q)+"&pageSize=10&dataType=Branded,Foundation,SR%20Legacy", 8000);
-  const json = await res.json();
-  return (json.foods||[]).map(mapUSDA).filter(Boolean);
-}
 // ================== V23: WATER / QUOTES / ACCENTS / SWAPS ==================
 // ---------- water tracking (optional) ----------
 function renderWater(){
@@ -1707,7 +1676,10 @@ function showFoodConfirm(foods){
     }
 
     reviewed.forEach(food=>{
-      addEntry(Object.assign({},food));
+      addEntry(
+        Object.assign({},food),
+        {allowDuplicate:true}
+      );
     });
 
     const loggedCount=reviewed.length;

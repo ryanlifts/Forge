@@ -319,6 +319,8 @@ function mapOFFProduct(p){
     cal100:cal100, pro100:pro100, carb100:carb100, fat100:fat100,
     servingG:servingOk ? serving : null,
     servingLabel:p.serving_size || p.quantity || null,
+    barcode:p.code ? String(p.code) : null,
+    sourceLabel:"Open Food Facts",
   };
 }
 
@@ -330,10 +332,11 @@ function fetchWithTimeout(url, ms){
   });
 }
 async function searchOFF(q){
-  const fields = "product_name,brands,nutriments,serving_size,serving_quantity,nutrition_data_per";
+  const fields = "code,product_name,brands,nutriments,serving_size,serving_quantity,nutrition_data_per";
   // 1) modern search API
   try {
     const res = await fetchWithTimeout("https://search.openfoodfacts.org/search?q="+encodeURIComponent(q)+"&page_size=15&fields="+fields, 8000);
+    if (!res.ok) throw new Error("Open Food Facts search unavailable");
     const json = await res.json();
     const hits = (json.hits||[]).map(mapOFFProduct).filter(Boolean);
     if (hits.length) return hits;
@@ -341,8 +344,16 @@ async function searchOFF(q){
   // 2) legacy search API
   const res2 = await fetchWithTimeout("https://world.openfoodfacts.org/cgi/search.pl?search_terms="+encodeURIComponent(q)
     +"&search_simple=1&action=process&json=1&page_size=15&sort_by=unique_scans_n&fields="+fields, 10000);
+  if (!res2.ok) throw new Error("Open Food Facts search unavailable");
   const json2 = await res2.json();
   return (json2.products||[]).map(mapOFFProduct).filter(Boolean);
+}
+
+function foodSourceLabel(food){
+  if (!food) return "";
+  if (food.sourceLabel) return String(food.sourceLabel);
+  if (String(food.brand||"").startsWith("Built-in")) return "Built-in";
+  return "";
 }
 
 // --- search ---
@@ -351,49 +362,89 @@ searchBtn.addEventListener("click", runSearch);
 document.getElementById("foodQuery").addEventListener("keydown", e=>{ if(e.key==="Enter") runSearch(); });
 
 async function runSearch(){
-  const q = document.getElementById("foodQuery").value.trim();
-  const errEl = document.getElementById("searchErr");
-  errEl.classList.add("hidden");
-  if(!q) return;
-  searchBtn.disabled = true; searchBtn.textContent = "Searching…";
-  const resultsEl = document.getElementById("results");
-  resultsEl.innerHTML = "";
+  const q=document.getElementById("foodQuery").value.trim();
+  const errEl=document.getElementById("searchErr");
 
-  const tokens = q.toLowerCase().split(/\s+/).filter(t=>t.length>2);
-  const scoreName = (name)=>tokens.reduce((s,t)=>s+(name.toLowerCase().includes(t)?1:0),0);
-  // personal foods first
-  const myHits = Object.keys(data.myFoods||{}).map(code=>data.myFoods[code])
-    .map(f=>({f:f, score:scoreName(f.name)})).filter(x=>x.score>0)
-    .sort((a,b)=>b.score-a.score).slice(0,4).map(x=>x.f);
-  const localHits = LOCAL_DB.map(f=>{
-      return {f:f, score:scoreName(f.n)};
-    })
-    .filter(x=>x.score>0)
+  errEl.classList.add("hidden");
+
+  if(!q)return;
+
+  searchBtn.disabled=true;
+  searchBtn.textContent="Searching…";
+
+  document.getElementById("results").innerHTML="";
+
+  const tokens=q.toLowerCase().split(/\s+/).filter(
+    token=>token.length>2
+  );
+
+  const scoreName=name=>tokens.reduce(
+    (score,token)=>
+      score+(name.toLowerCase().includes(token)?1:0),
+    0
+  );
+
+  const myHits=Object.keys(data.myFoods||{})
+    .map(code=>data.myFoods[code])
+    .map(food=>({
+      food:food,
+      score:scoreName(food.name)
+    }))
+    .filter(item=>item.score>0)
     .sort((a,b)=>b.score-a.score)
     .slice(0,4)
-    .map(x=>({ name:x.f.n, brand:"Built-in · whole food", cal100:x.f.cal, pro100:x.f.pro, carb100:x.f.carb, fat100:x.f.fat, servingG:null, servingLabel:null }));
+    .map(item=>Object.assign({},item.food,{
+      sourceLabel:"My Foods"
+    }));
 
-  if (isOffline()){
-    renderResults([...myHits, ...localHits]);
-    errEl.textContent = "Offline — showing saved and built-in foods; online databases were skipped.";
+  const localHits=LOCAL_DB
+    .map(food=>({
+      food:food,
+      score:scoreName(food.n)
+    }))
+    .filter(item=>item.score>0)
+    .sort((a,b)=>b.score-a.score)
+    .slice(0,4)
+    .map(item=>({
+      name:item.food.n,
+      brand:"Built-in · whole food",
+      cal100:item.food.cal,
+      pro100:item.food.pro,
+      carb100:item.food.carb,
+      fat100:item.food.fat,
+      servingG:null,
+      servingLabel:null,
+      sourceLabel:"Built-in"
+    }));
+
+  if(isOffline()){
+    renderResults([...myHits,...localHits]);
+
+    errEl.textContent=
+      "Offline — showing saved and built-in foods; Open Food Facts was skipped.";
     errEl.classList.remove("hidden");
-    searchBtn.disabled = false; searchBtn.textContent = "Search food database";
+
+    searchBtn.disabled=false;
+    searchBtn.textContent="Search food database";
     return;
   }
 
-  let usdaHits = [], offHits = [];
-  try { usdaHits = await searchUSDA(q); } catch(e){ /* USDA optional */ }
-  try {
-    offHits = await searchOFF(q);
-  } catch(e) {
-    if (localHits.length===0 && myHits.length===0 && usdaHits.length===0){
-      errEl.textContent = "Couldn't reach the food databases — check connection. Built-in foods and manual entry still work.";
-      errEl.classList.remove("hidden");
-    }
+  let offHits=[];
+
+  try{
+    offHits=await searchOFF(q);
+  }catch(error){
+    errEl.textContent=localHits.length||myHits.length
+      ? "Open Food Facts is temporarily unavailable — showing saved and built-in matches. You can also enter label values manually."
+      : "Open Food Facts is temporarily unavailable. Check your connection or enter the package label manually.";
+
+    errEl.classList.remove("hidden");
   }
 
-  renderResults([...myHits, ...localHits, ...usdaHits, ...offHits]);
-  searchBtn.disabled = false; searchBtn.textContent = "Search food database";
+  renderResults([...myHits,...localHits,...offHits]);
+
+  searchBtn.disabled=false;
+  searchBtn.textContent="Search food database";
 }
 
 // --- camera barcode scanning (lazy-loads scanner library on first use) ---
@@ -501,75 +552,115 @@ function offNutritionNeedsManualReview(p){
 }
 
 async function runBarcode(){
-  const code = document.getElementById("barcodeInput").value.trim().replace(/\D/g,"");
-  const errEl = document.getElementById("searchErr");
+  const code=document
+    .getElementById("barcodeInput")
+    .value
+    .trim()
+    .replace(/\D/g,"");
+
+  const errEl=document.getElementById("searchErr");
+
   errEl.classList.add("hidden");
   document.getElementById("customCard").classList.add("hidden");
-  if(!code) return;
-  // personal library first
-  if (data.myFoods && data.myFoods[code]){
-    selectFood(data.myFoods[code]);
+
+  if(!code)return;
+
+  if(data.myFoods&&data.myFoods[code]){
+    selectFood(Object.assign({},data.myFoods[code],{
+      sourceLabel:"My Foods"
+    }));
     return;
   }
-  if (isOffline()){
+
+  if(isOffline()){
     openCustomForm(code);
-    errEl.textContent = "Offline — online barcode lookup was skipped. Add the label details manually, or reconnect and try again.";
+
+    errEl.textContent=
+      "Offline — Open Food Facts was skipped. Add the package-label details manually, or reconnect and try again.";
     errEl.classList.remove("hidden");
     return;
   }
 
-  const btn = document.getElementById("barcodeBtn");
-  btn.disabled = true; btn.textContent = "…";
+  const button=document.getElementById("barcodeBtn");
 
-  try {
-    // Open Food Facts API v2 product schema (includes nutriments used by mapOFFProduct)
-    const fields = "code,product_name,brands,quantity,serving_size,serving_quantity,nutrition_data_per,nutriments";
-    const result = await lookupOFFBarcode(code, fields);
+  button.disabled=true;
+  button.textContent="…";
 
-    if (result.state==="unavailable"){
-      const found = await tryUSDABarcode(code, false);
-      if (!found){
-        errEl.textContent = "Barcode databases could not be reached. Check your connection and tap Look up again.";
-        errEl.classList.remove("hidden");
-      }
-    } else if (result.state==="not-found"){
-      await tryUSDABarcode(code, true);
-    } else {
-      const product = result.product;
+  try{
+    const fields=
+      "code,product_name,brands,quantity,serving_size,"+
+      "serving_quantity,nutrition_data_per,nutriments";
 
-      if (offNutritionNeedsManualReview(product)){
-        const serving = Number(product && product.serving_quantity);
-        openCustomForm(code, {
-          name:String((product && product.product_name) || "").trim(),
-          brand:String((product && product.brands) || "").trim(),
-          barcode:code,
-          servingG:Number.isFinite(serving) && serving>0 && serving<=1000 ? serving : "",
-          servingLabel:String((product && (product.serving_size || product.quantity)) || "").trim()
-        }, true);
-        errEl.textContent = "This product's database nutrition does not make sense. Enter the calories and macros from the package label below. BlackPyre will save your correction for this barcode.";
-        errEl.classList.remove("hidden");
-      } else {
-        const h = mapOFFProduct(product);
-        if (h) selectFood(h);
-        else await tryUSDABarcode(code, true);
-      }
+    const result=await lookupOFFBarcode(code,fields);
+
+    if(result.state==="unavailable"){
+      openCustomForm(code);
+
+      errEl.textContent=
+        "Open Food Facts could not be reached. Enter the package label below, or check your connection and tap Look up again.";
+      errEl.classList.remove("hidden");
+      return;
     }
-  } finally {
-    btn.disabled = false;
-    btn.textContent = "Look up";
-  }
-}
 
-async function tryUSDABarcode(code, openManualOnMiss=true){
-  if (effectiveUsdaKey()){
-    try {
-      const hits = await searchUSDA(code); // USDA matches UPC/GTIN in query
-      if (hits.length){ selectFood(hits[0]); return true; }
-    } catch(e){}
-  }
+    if(result.state==="not-found"){
+      openCustomForm(code);
 
-  if (openManualOnMiss) openCustomForm(code);
-  return false;
+      errEl.textContent=
+        "That barcode was not found in Open Food Facts. Enter the package label below and BlackPyre will remember it on this device.";
+      errEl.classList.remove("hidden");
+      return;
+    }
+
+    const product=result.product;
+
+    if(offNutritionNeedsManualReview(product)){
+      const serving=Number(
+        product&&product.serving_quantity
+      );
+
+      openCustomForm(code,{
+        name:String(
+          (product&&product.product_name)||""
+        ).trim(),
+        brand:String(
+          (product&&product.brands)||""
+        ).trim(),
+        barcode:code,
+        servingG:
+          Number.isFinite(serving)&&
+          serving>0&&
+          serving<=1000
+            ? serving
+            : "",
+        servingLabel:String(
+          (
+            product&&
+            (product.serving_size||product.quantity)
+          )||""
+        ).trim()
+      },true);
+
+      errEl.textContent=
+        "This product's database nutrition does not make sense. Enter the calories and macros from the package label below. BlackPyre will save your correction for this barcode.";
+      errEl.classList.remove("hidden");
+      return;
+    }
+
+    const food=mapOFFProduct(product);
+
+    if(food){
+      selectFood(food);
+    }else{
+      openCustomForm(code);
+
+      errEl.textContent=
+        "This product does not include usable nutrition. Enter the values from the package label below.";
+      errEl.classList.remove("hidden");
+    }
+  }finally{
+    button.disabled=false;
+    button.textContent="Look up";
+  }
 }
 
 // --- personal barcode library ---
@@ -661,7 +752,9 @@ document.getElementById("cfSaveBtn").addEventListener("click", ()=>{
     carb100:value.carb/servingG*100,
     fat100:value.fat/servingG*100,
     servingG:servingG,
-    servingLabel:servingLabel||servingG+"g"
+    servingLabel:servingLabel||servingG+"g",
+    barcode:barcode,
+    sourceLabel:"My Foods"
   };
 
   const normalized=validateFoodNutritionDraft({
@@ -722,8 +815,9 @@ function renderResults(hits){
       div.type = "button";
       div.className = "result";
       div.setAttribute("aria-label", "Select "+h.name+(h.brand ? " by "+h.brand : ""));
+      const source=foodSourceLabel(h);
       div.innerHTML = '<div class="r-name">'+esc(h.name)+'</div>'
-        +'<div class="r-brand">'+esc(h.brand)+'</div>'
+        +'<div class="r-brand">'+esc(h.brand)+(source?' · Source: '+esc(source):'')+'</div>'
         +'<div class="r-macros">per 100g: '+Math.round(h.cal100)+' kcal · '+r1(h.pro100)+'P / '+r1(h.carb100)+'C / '+r1(h.fat100)+'F'
         +(h.servingLabel?' · serving: '+esc(h.servingLabel):'')+'</div>';
       div.addEventListener("click", ()=>selectFood(h));
@@ -861,12 +955,15 @@ function selectFood(h){
         : ""
     );
 
+  const source=foodSourceLabel(selected);
+
   document.getElementById("selPer100").textContent=
     "per 100g: "+
     Math.round(selected.cal100)+" kcal · "+
     r1(selected.pro100)+"g P · "+
     r1(selected.carb100)+"g C · "+
-    r1(selected.fat100)+"g F";
+    r1(selected.fat100)+"g F"+
+    (source ? " · Source: "+source : "");
 
   qtyUnitEl.innerHTML="";
 
@@ -976,6 +1073,7 @@ function compactSourceFood(food){
   if (food.barcode||food.code) out.barcode = String(food.barcode||food.code);
   if (food.suggestionNdb) out.suggestionNdb = String(food.suggestionNdb);
   if (food.suggestionUsdaDescription) out.suggestionUsdaDescription = String(food.suggestionUsdaDescription);
+  if (food.sourceLabel) out.sourceLabel = String(food.sourceLabel);
   return out;
 }
 function sliderEntryFromSelection(food){
@@ -1316,19 +1414,45 @@ function bumpLog(){
   data.meta.logsSince = (data.meta.logsSince||0)+1;
 }
 let _lastAddSig = "", _lastAddT = 0;
-function addEntry(entry){
-  const d = foodDateEl.value;
-  if(!entry.meal) entry.meal = currentMeal;
-  // v51: repeated taps / delayed responses can fire the same add twice — swallow exact repeats within 900ms
-  const sig = d+"|"+(entry.name||"")+"|"+entry.cal+"|"+entry.meal;
-  const now = Date.now();
-  if (sig===_lastAddSig && (now-_lastAddT)<900){ flashSave("Already added \u2014 not logging it twice", true); return; }
-  _lastAddSig = sig; _lastAddT = now;
-  if(!data.food[d]) data.food[d]=[];
-  data.food[d].push(entry);
+function addEntry(entry,options){
+  const date=foodDateEl.value;
+  const opts=options||{};
+
+  if(!entry.meal)entry.meal=currentMeal;
+
+  const signature=
+    date+"|"+
+    (entry.name||"")+"|"+
+    entry.cal+"|"+
+    entry.meal;
+
+  const now=Date.now();
+
+  if(
+    !opts.allowDuplicate&&
+    signature===_lastAddSig&&
+    (now-_lastAddT)<900
+  ){
+    flashSave("Already added — not logging it twice",true);
+    return false;
+  }
+
+  if(!opts.allowDuplicate){
+    _lastAddSig=signature;
+    _lastAddT=now;
+  }
+
+  if(!data.food[date])data.food[date]=[];
+
+  data.food[date].push(entry);
   bumpLog();
-  save(); renderFood(); renderDash(); renderBackup();
+  save();
+  renderFood();
+  renderDash();
+  renderBackup();
   foodKudos(entry);
+
+  return true;
 }
 function removeEntry(i){
   const d = foodDateEl.value;
@@ -1385,7 +1509,10 @@ function renderFood(){
     el.querySelectorAll(".edt").forEach(b=>b.addEventListener("click",()=>startEditEntry(Number(b.dataset.i))));
     el.querySelectorAll(".dup").forEach(b=>b.addEventListener("click",()=>{
       const f = list[Number(b.dataset.i)];
-      addEntry(Object.assign({}, f)); // keeps original meal
+      addEntry(
+        Object.assign({},f),
+        {allowDuplicate:true}
+      ); // explicit duplicate action keeps the original meal
     }));
   }
   renderRecents();

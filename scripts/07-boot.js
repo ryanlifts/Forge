@@ -56,12 +56,6 @@ function renderDash(){
   }
 }
 
-document.getElementById("saveUsdaBtn").addEventListener("click", ()=>{
-  cfg.usdaKey = document.getElementById("sUsdaKey").value.trim();
-  saveCfg(); flashSave(cfg.usdaKey ? "USDA key saved ✓" : "USDA key cleared");
-  ackBtn("saveUsdaBtn", cfg.usdaKey ? "✓ Key saved" : "✓ Cleared");
-});
-
 function renderNextWorkout(){
   const btn = document.getElementById("nextWorkoutBtn");
   const nd = nextProgramDay();
@@ -74,7 +68,6 @@ function renderAll(){ renderDash(); renderFood(); renderWork(); renderWeight(); 
   const sl = document.getElementById("streakLine");
   if (st>=2){ sl.textContent = ""+st+"-day logging streak — keep the chain alive"; sl.classList.remove("hidden"); }
   else sl.classList.add("hidden");
-  document.getElementById("sUsdaKey").value = cfg.usdaKey||"";
   document.getElementById("waterToggleBtn").textContent = cfg.waterOn ? "Disable water tracking" : "Enable water tracking";
   renderAIGates();
 }

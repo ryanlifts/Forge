@@ -92,10 +92,10 @@ check("backup FAQ explains both actions, actual web storage, and same-device los
 
 B.window.eval(`cfg.anthropicKey="sk-test-A"; cfg.openaiKey="sk-test-O"; cfg.usdaKey="usda-keep"; cfg.aiProvider="anthropic"; saveCfg();
 window.__dl=null; download=(n,c)=>{window.__dl=c;}; doBackup("exportDataBtn",false);`);
-check("normal backup excludes Anthropic and OpenAI keys but retains the USDA key",
+check("normal backup excludes Anthropic, OpenAI, and legacy USDA keys",
   !B.window.eval("window.__dl").includes("sk-test-A")
   && !B.window.eval("window.__dl").includes("sk-test-O")
-  && B.window.eval("window.__dl").includes("usda-keep"));
+  && !B.window.eval("window.__dl").includes("usda-keep"));
 check("downloaded normal backup passes the existing restore-envelope verifier",
   B.window.eval(`prepareRecoveryBackupEnvelope(JSON.parse(window.__dl)).ok`)===true);
 B.window.eval(`
@@ -179,8 +179,8 @@ check("browser download records an attempt without inventing a completed browser
   && BackupReminder.window.eval("data.meta.lastBackupAttemptKind")==="download"
   && !BackupReminder.window.eval("data.meta.lastBackupCompletedAt"));
 
-check("browser backup download keeps USDA, strips private AI keys, and uses honest ready language",
-  browserDownloadBackup.cfg.usdaKey==="keep-usda"
+check("browser backup download strips legacy USDA and private AI keys and uses honest ready language",
+  browserDownloadBackup.cfg.usdaKey===undefined
   && browserDownloadBackup.cfg.anthropicKey===undefined
   && browserDownloadBackup.cfg.openaiKey===undefined
   && BackupReminder.window.eval("window.__backupMessage.message")==="Verified backup download started. Check your browser or device's Downloads location."
@@ -394,9 +394,9 @@ const protectedGoal = PC.window.eval("cfg.goalWt");
 PC.window.eval(`cfg.goalWt=199; saveCfg();`);
 await wait(15);
 check("protected settings mutation is visibly undone", PC.window.eval("cfg.goalWt")===protectedGoal);
-PC.window.document.getElementById("sUsdaKey").value="blocked-key";
-PC.window.document.getElementById("saveUsdaBtn").dispatchEvent(new PC.window.Event("click",{bubbles:true}));
-check("blocked actions cannot show a false saved acknowledgement", !PC.window.document.getElementById("saveUsdaBtn").classList.contains("acked") && /Not saved/.test(PC.window.document.getElementById("saveState").textContent));
+PC.window.document.getElementById("foodSuggestionsAvoid").value="blocked-change";
+PC.window.document.getElementById("saveFoodSuggestionsBtn").dispatchEvent(new PC.window.Event("click",{bubbles:true}));
+check("blocked actions cannot show a false saved acknowledgement", !PC.window.document.getElementById("saveFoodSuggestionsBtn").classList.contains("acked") && /Not saved/.test(PC.window.document.getElementById("saveState").textContent));
 const protectedProgram = PC.window.eval("program.name");
 PC.window.eval(`program={name:"Blocked",days:[{id:"X",title:"X",exercises:[{name:"Squat"}]}]}; saveProgram();`);
 await wait(15);
@@ -779,17 +779,38 @@ check("recovery quarantine preserves active legacy fallback as evidence", legacy
 check("recovery writes forge:data but never alters legacy fallback", LegacyRecover46.window.localStorage.getItem("forge:data")!==null && LegacyRecover46.window.localStorage.getItem("ryan-cut:data")===legacyRaw && !LegacyRecover46.__storageCalls.some(c=>c.key==="ryan-cut:data"));
 
 // ================= barcode chain =================
-function bootOFF(offResponder, usdaResponder, cfgOverrides){
-  return boot(Object.assign({}, EXISTING_CFG, {usdaKey:"k"}, cfgOverrides||{}),
-    Object.assign({}, EMPTY_DATA, {myFoods:{"111":{name:"Saved thing", brand:"Mine", cal100:100, pro100:10, carb100:5, fat100:2}}}),
-    (w)=>{ w.__calls=[]; w.fetch=(url)=>{ w.__calls.push(url);
-      if (url.includes("openfoodfacts")) return offResponder(url);
-      if (url.includes("usda")){
-        if (typeof usdaResponder==="function") return usdaResponder(url);
-        return Promise.resolve({ok:true,status:200,json:()=>Promise.resolve({foods:[{description:"USDA Fallback Bar", brandOwner:"USDA Co", servingSize:50, servingSizeUnit:"g", foodNutrients:[{nutrientId:1008,value:400},{nutrientId:1003,value:30},{nutrientId:1005,value:40},{nutrientId:1004,value:12}]}]})});
+function bootOFF(offResponder,cfgOverrides){
+  return boot(
+    Object.assign({},EXISTING_CFG,cfgOverrides||{}),
+    Object.assign({},EMPTY_DATA,{
+      myFoods:{
+        "111":{
+          name:"Saved thing",
+          brand:"Mine",
+          cal100:100,
+          pro100:10,
+          carb100:5,
+          fat100:2
+        }
       }
-      return Promise.resolve({ok:false,status:500,json:()=>Promise.resolve({})});
-    };});
+    }),
+    w=>{
+      w.__calls=[];
+      w.fetch=url=>{
+        w.__calls.push(url);
+
+        if(url.includes("openfoodfacts")){
+          return offResponder(url);
+        }
+
+        return Promise.resolve({
+          ok:false,
+          status:500,
+          json:()=>Promise.resolve({})
+        });
+      };
+    }
+  );
 }
 async function scan(C, code){ C.window.document.getElementById("barcodeInput").value=code; await C.window.eval("runBarcode()"); await wait(30); }
 const yoplaitOFF = {
@@ -942,8 +963,9 @@ C = bootOFF(()=>{
   return Promise.resolve({ok:false,status:404,json:()=>Promise.resolve({})});
 });
 await scan(C,"333");
-check("v69 confirmed OFF 404 does not retry and uses USDA", notFoundAttempts===1 &&
-  C.window.document.getElementById("selName").textContent.includes("USDA Fallback Bar"));
+check("v82 confirmed OFF 404 does not retry and opens label entry", notFoundAttempts===1 &&
+  !C.window.document.getElementById("customCard").classList.contains("hidden") &&
+  /not found in Open Food Facts/i.test(C.window.document.getElementById("searchErr").textContent));
 
 let networkAttempts = 0;
 C = bootOFF(()=>{
@@ -951,23 +973,26 @@ C = bootOFF(()=>{
   return Promise.reject(new Error("offline"));
 });
 await scan(C,"666");
-check("v69 OFF network failure retries once before USDA", networkAttempts===2 &&
-  C.window.document.getElementById("selName").textContent.includes("USDA Fallback Bar"));
+check("v82 OFF network failure retries once then opens label entry", networkAttempts===2 &&
+  !C.window.document.getElementById("customCard").classList.contains("hidden") &&
+  /could not be reached/i.test(C.window.document.getElementById("searchErr").textContent));
 
 let unavailableAttempts = 0;
 C = bootOFF(()=>{
   unavailableAttempts++;
   return Promise.reject(new Error("OFF unavailable"));
-}, ()=>Promise.reject(new Error("USDA unavailable")));
+});
 await scan(C,"777");
-check("v69 unavailable databases show retry message instead of false not-found form", unavailableAttempts===2 &&
-  C.window.document.getElementById("customCard").classList.contains("hidden") &&
+check("v82 unavailable Open Food Facts opens manual label entry", unavailableAttempts===2 &&
+  !C.window.document.getElementById("customCard").classList.contains("hidden") &&
   !C.window.document.getElementById("searchErr").classList.contains("hidden") &&
   /could not be reached/i.test(C.window.document.getElementById("searchErr").textContent));
 
 C = bootOFF(()=>Promise.resolve({ok:true,status:200,json:()=>Promise.resolve({status:"success", product:{product_name:"Bad", nutriments:{"energy-kcal_100g":"NaN-city","proteins_100g":-5}}})}));
 await scan(C,"555");
-check("malformed nutrition rejected → USDA", C.window.document.getElementById("selName").textContent.includes("USDA Fallback Bar"));
+check("malformed Open Food Facts nutrition opens manual label entry",
+  !C.window.document.getElementById("customCard").classList.contains("hidden") &&
+  /does not include usable nutrition/i.test(C.window.document.getElementById("searchErr").textContent));
 
 // ================= v49: training-session integrity =================
 const priorWorkout = {date:"2026-07-01",day:"D1",title:"Day 1",sets:{"Bench Press":[{w:100,r:5},{w:100,r:5},{w:100,r:5}]},notes:""};
@@ -2011,7 +2036,7 @@ check("v62 a catalog suggestion opens its exact listed serving for review", dC62
 check("v62 review shows the USDA per-100g values and correctly scaled serving", /USDA reference · SR28/.test(dC62.getElementById("selName").textContent) && /165 kcal/.test(dC62.getElementById("selPer100").textContent) && dC62.getElementById("calcCal").textContent==="186" && dC62.getElementById("calcPro").textContent==="35");
 check("v62 reviewing a broad-catalog suggestion never auto-logs it", C62.window.eval(`(data.food[todayStr()]||[]).length`)===beforeReview62);
 check("v62 FAQ explains USDA sourcing, exact servings, and real-world variation", C62.window.eval(`FAQ.some(x=>x.q==="How accurate are suggested-food calories and macros?"&&/per 100 grams/.test(x.a)&&/exact gram weight/.test(x.a)&&/NDB number/.test(x.a)&&/brand/.test(x.a)) && FAQ.some(x=>x.q==="How do food suggestions work?"&&/120 common foods/.test(x.a)&&/familiar foods receive a bonus but are not required/.test(x.a)&&/does not call USDA or an AI/.test(x.a))`));
-check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v81"'); })());
+check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v82"'); })());
 check("v62 keeps primary schemaVersion 3", C62.window.eval("SCHEMA_VERSION")===3);
 
 // ================= ChatGPT handoff paste flow =================
@@ -2375,9 +2400,9 @@ check("Phase 1 first-run calculation persists starting weight as calculator weig
 check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.some(f=>/chicken breast/i.test(f.n))`));
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
-check("SW cache key matches the BlackPyre web v81 release",
-  /const CACHE = "blackpyre-v81";/.test(sw));
-check("Phase 1 service-worker cache is refreshed", sw.includes('const CACHE = "blackpyre-v81"') && !sw.includes('blackpyre-phase1-nutrition-safety-1'));
+check("SW cache key matches the BlackPyre web v82 release",
+  /const CACHE = "blackpyre-v82";/.test(sw));
+check("Phase 1 service-worker cache is refreshed", sw.includes('const CACHE = "blackpyre-v82"') && !sw.includes('blackpyre-phase1-nutrition-safety-1'));
 
 await wait(0);
 releaseTestWindows([
@@ -2525,7 +2550,7 @@ check("no local script tag uses async, defer, or type=module",
 // below verify different, lasting invariants (order, strict mode, attributes, openers).
 const SLICE_OPENERS = {
   "01-storage.js":"storage keys & defaults", "02-food.js":"bars", "03-train.js":"TRAIN",
-  "04-weight.js":"WEIGHT", "05-ai.js":"USDA SEARCH",
+  "04-weight.js":"WEIGHT", "05-ai.js":"V23",
   "06-settings.js":"FIRST-RUN SETUP WIZARD", "07-boot.js":"DASH" };
 check("every slice opens with strict mode then its expected section marker",
   SLICES.every(f=>{
@@ -2654,10 +2679,10 @@ const dO56=O56.window.document;
 Object.defineProperty(O56.window.navigator,"onLine",{configurable:true,value:false});
 dO56.getElementById("foodQuery").value="chicken";
 await O56.window.eval("runSearch()");
-check("v56 offline food search skips network and shows local results immediately", O56.window.__netCalls.length===0 && dO56.getElementById("results").children.length>0 && /online databases were skipped/.test(dO56.getElementById("searchErr").textContent));
+check("v56 offline food search skips network and shows local results immediately", O56.window.__netCalls.length===0 && dO56.getElementById("results").children.length>0 && /Open Food Facts was skipped/.test(dO56.getElementById("searchErr").textContent));
 dO56.getElementById("barcodeInput").value="999999";
 await O56.window.eval("runBarcode()");
-check("v56 offline barcode lookup skips network and opens manual entry", O56.window.__netCalls.length===0 && !dO56.getElementById("customCard").classList.contains("hidden") && /online barcode lookup was skipped/.test(dO56.getElementById("searchErr").textContent));
+check("v56 offline barcode lookup skips network and opens manual entry", O56.window.__netCalls.length===0 && !dO56.getElementById("customCard").classList.contains("hidden") && /Open Food Facts was skipped/.test(dO56.getElementById("searchErr").textContent));
 dO56.getElementById("scanBtn").dispatchEvent(new O56.window.Event("click",{bubbles:true}));
 await wait(5);
 check("v56 offline scanner fast-fails without loading its external library", O56.window.__netCalls.length===0 && /needs a connection/.test(dO56.getElementById("scanErr").textContent) && ![...dO56.querySelectorAll('script[src]')].some(x=>/html5-qrcode/.test(x.src)));
@@ -2741,12 +2766,18 @@ check("v57 every dynamically rendered onboarding control has an accessible name"
 
 fresh57.window.eval(`setupStep=6; renderSetupStep();`);
 await wait(20);
-dFresh57.getElementById("suUsda").value="  onboarding-usda-test-key  ";
+check("onboarding explains keyless food sources and exposes no credential field",
+  /No food-database account or API key is needed/.test(
+    dFresh57.getElementById("setupBody").textContent
+  ) &&
+  /Open Food Facts/.test(
+    dFresh57.getElementById("setupBody").textContent
+  ) &&
+  dFresh57.getElementById("suUsda")===null);
 dFresh57.getElementById("setupNext").click();
 await wait(20);
-check("onboarding USDA key saves when advancing without the separate Save button",
-  fresh57.window.eval(`setupStep===7 && cfg.usdaKey==="onboarding-usda-test-key"`) &&
-  JSON.parse(fresh57.window.localStorage.getItem("forge:cfg")).usdaKey==="onboarding-usda-test-key");
+check("keyless onboarding advances without saving a USDA credential",
+  fresh57.window.eval(`setupStep===7 && !Object.prototype.hasOwnProperty.call(cfg,"usdaKey")`));
 
 check("v57 errors and save/network messages expose live status semantics", dA57.getElementById("searchErr").getAttribute("role")==="alert" && dA57.getElementById("saveState").getAttribute("role")==="status" && dA57.getElementById("offlineBanner").getAttribute("role")==="status");
 A57.window.eval("renderFAQ()");
@@ -7744,7 +7775,7 @@ check(
   V78ServiceWorker.includes('"./data-exercise-card-profiles.js"')
   && V78ServiceWorker.includes('"./scripts/03-card-profiles.js"')
   && V78ServiceWorker.includes(
-    'const CACHE = "blackpyre-v81"'
+    'const CACHE = "blackpyre-v82"'
   )
 );
 
