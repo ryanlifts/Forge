@@ -873,7 +873,7 @@ let editFoodMode = null;
 function cancelEditFood(){
   editFoodIdx = null;
   editFoodMode = null;
-  document.getElementById("addManualBtn").textContent = "Add entry";
+  document.getElementById("addManualBtn").textContent = "Add to log";
   document.getElementById("cancelEditFoodBtn").classList.add("hidden");
   document.getElementById("addSelBtn").textContent = "Add to log";
   document.getElementById("cancelSelEditBtn").classList.add("hidden");
@@ -980,38 +980,63 @@ document.getElementById("cancelSelEditBtn").addEventListener("click", ()=>{
   selected = null;
 });
 document.getElementById("addManualBtn").addEventListener("click", ()=>{
-  const nameInput = document.getElementById("mName");
-  const calInput = document.getElementById("mCal");
-  const n = nameInput.value.trim();
-  const c = Number(calInput.value);
-  if(!n){
-    flashSave("Enter a food name before adding this entry", true);
-    nameInput.focus();
-    if (nameInput.scrollIntoView) nameInput.scrollIntoView({behavior:"smooth", block:"center"});
-    return;
-  }
-  if(!Number.isFinite(c) || c<=0){
-    flashSave("Enter calories greater than 0 before adding this entry", true);
-    calInput.focus();
-    if (calInput.scrollIntoView) calInput.scrollIntoView({behavior:"smooth", block:"center"});
-    return;
-  }
-  const entry = {
-    name:n, cal:c,
-    pro:Number(document.getElementById("mPro").value||0),
-    carb:Number(document.getElementById("mCarb").value||0),
-    fat:Number(document.getElementById("mFat").value||0),
+  const ids={
+    name:"mName",
+    cal:"mCal",
+    pro:"mPro",
+    carb:"mCarb",
+    fat:"mFat"
   };
-  if (editFoodIdx!=null && editFoodMode==="manual" && (data.food[foodDateEl.value]||[])[editFoodIdx]){
-    entry.meal = data.food[foodDateEl.value][editFoodIdx].meal || currentMeal;
-    data.food[foodDateEl.value][editFoodIdx] = entry;
-    save(); renderFood(); renderDash();
-    ackBtn("addManualBtn", "✓ Updated");
+
+  const checked=validateFoodNutritionDraft({
+    name:document.getElementById(ids.name).value,
+    cal:document.getElementById(ids.cal).value,
+    pro:document.getElementById(ids.pro).value,
+    carb:document.getElementById(ids.carb).value,
+    fat:document.getElementById(ids.fat).value
+  });
+
+  if(!checked.ok){
+    flashSave(checked.message,true);
+
+    const target=document.getElementById(ids[checked.field]);
+
+    if(target){
+      target.focus();
+
+      if(target.scrollIntoView){
+        target.scrollIntoView({
+          behavior:"smooth",
+          block:"center"
+        });
+      }
+    }
+
+    return;
+  }
+
+  const entry=checked.value;
+
+  if(
+    editFoodIdx!=null &&
+    editFoodMode==="manual" &&
+    (data.food[foodDateEl.value]||[])[editFoodIdx]
+  ){
+    entry.meal=
+      data.food[foodDateEl.value][editFoodIdx].meal||
+      currentMeal;
+
+    data.food[foodDateEl.value][editFoodIdx]=entry;
+    save();
+    renderFood();
+    renderDash();
+    ackBtn("addManualBtn","✓ Updated");
     cancelEditFood();
   } else {
     addEntry(entry);
-    ackBtn("addManualBtn", "✓ Added");
+    ackBtn("addManualBtn","✓ Added");
   }
+
   clearManualFoodInputs();
 });
 

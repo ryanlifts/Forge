@@ -82,6 +82,101 @@ function finiteNutritionNumber(value){
   const n=Number(value);
   return Number.isFinite(n) ? n : null;
 }
+
+const FOOD_NUTRITION_SAFETY = Object.freeze({
+  maxCalories:10000,
+  maxMacroGrams:10000
+});
+
+function validateFoodNutritionDraft(draft){
+  const source=draft||{};
+  const name=String(source.name==null?"":source.name).trim();
+
+  if(!name){
+    return {
+      ok:false,
+      message:"Enter a food name before adding this entry",
+      field:"name"
+    };
+  }
+
+  const fields=[
+    {
+      key:"cal",
+      label:"Calories",
+      mustBePositive:true,
+      maximum:FOOD_NUTRITION_SAFETY.maxCalories
+    },
+    {
+      key:"pro",
+      label:"Protein",
+      mustBePositive:false,
+      maximum:FOOD_NUTRITION_SAFETY.maxMacroGrams
+    },
+    {
+      key:"carb",
+      label:"Carbohydrates",
+      mustBePositive:false,
+      maximum:FOOD_NUTRITION_SAFETY.maxMacroGrams
+    },
+    {
+      key:"fat",
+      label:"Fat",
+      mustBePositive:false,
+      maximum:FOOD_NUTRITION_SAFETY.maxMacroGrams
+    }
+  ];
+
+  const value={name:name};
+
+  for(const field of fields){
+    const raw=source[field.key];
+
+    if(raw==="" || raw===null || raw===undefined){
+      return {
+        ok:false,
+        message:field.key==="cal"
+          ? "Enter calories greater than 0 before adding this entry"
+          : field.label+" is required. Enter 0 when the label lists zero.",
+        field:field.key
+      };
+    }
+
+    const number=Number(raw);
+
+    if(!Number.isFinite(number)){
+      return {
+        ok:false,
+        message:field.label+" must be a valid finite number.",
+        field:field.key
+      };
+    }
+
+    if(field.mustBePositive ? number<=0 : number<0){
+      return {
+        ok:false,
+        message:field.key==="cal"
+          ? "Enter calories greater than 0 before adding this entry"
+          : field.label+" cannot be negative.",
+        field:field.key
+      };
+    }
+
+    if(number>field.maximum){
+      return {
+        ok:false,
+        message:field.label+
+          " is outside BlackPyre’s supported food-entry range.",
+        field:field.key
+      };
+    }
+
+    value[field.key]=number;
+  }
+
+  return {ok:true,value:value};
+}
+
 function nutritionActivityOption(value){
   const n=finiteNutritionNumber(value);
   return NUTRITION_ACTIVITY_OPTIONS.find(option=>option.value===n)||null;
