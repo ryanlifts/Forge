@@ -226,7 +226,7 @@ check(
 const beforeBarcodeFoods=E(`JSON.stringify(data.myFoods)`);
 const beforeBarcodeLog=E(`data.food[todayStr()].length`);
 
-E(`openCustomForm("012345678905")`);
+E(`switchFoodEntryMode("barcode"); openCustomForm("012345678905")`);
 setv("cfName","Barcode correction");
 setv("cfBarcode","012345678905");
 setv("cfServG",50);

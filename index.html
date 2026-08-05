@@ -911,6 +911,9 @@
         <input id="barcodeInput" aria-label="Barcode or UPC number" placeholder="or type UPC" inputmode="numeric" style="flex:1.4;">
         <button class="btn ghost small" id="barcodeBtn" style="flex:0.8;">Look up</button>
       </div>
+      <button class="btn ghost small hidden mt10" id="labelScanBtn" style="width:100%;">Scan nutrition label</button>
+      <input type="file" id="labelScanFile" accept="image/*" aria-label="Take or choose a nutrition-label photo" class="hidden">
+      <div class="note hidden" id="labelScanStatus" role="status" aria-live="polite" style="margin-top:8px;"></div>
       <div class="err hidden" id="searchErr" role="alert" aria-live="assertive"></div>
     </div>
 
@@ -1053,21 +1056,46 @@
         </div>
         <div class="card">
           <div class="label" id="mfFormLabel">Create a food</div>
+
           <input id="mfName" aria-label="Personal food name" placeholder="Food name" style="margin:8px 0 10px;">
+
+          <div class="label">Serving description</div>
+          <input id="mfServingLabel" aria-label="Personal food serving description" placeholder="e.g. 1 slice or 1 bottle (355 mL)" style="margin-bottom:10px;">
+
           <div class="row" style="margin-bottom:10px;">
-            <div><div class="label">Serving size (g)</div><input type="number" id="mfServG" aria-label="Personal food serving size in grams" inputmode="decimal" placeholder="e.g. 170"></div>
-            <div><div class="label">Calories / serving</div><input type="number" id="mfCal" aria-label="Personal food calories per serving" inputmode="numeric" placeholder="kcal"></div>
+            <div>
+              <div class="label">Measured serving (optional)</div>
+              <input type="number" id="mfServG" aria-label="Personal food measured serving amount" inputmode="decimal" placeholder="e.g. 55">
+            </div>
+            <div>
+              <div class="label">Measurement unit</div>
+              <select id="mfServingUnit" aria-label="Personal food serving measurement unit">
+                <option value="g">g</option>
+                <option value="ml">mL</option>
+                <option value="oz">oz</option>
+                <option value="floz">fl oz</option>
+                <option value="serving">Serving only</option>
+              </select>
+            </div>
           </div>
+
           <div class="row" style="margin-bottom:10px;">
+            <div><div class="label">Calories / serving</div><input type="number" id="mfCal" aria-label="Personal food calories per serving" inputmode="numeric" placeholder="kcal"></div>
             <div><div class="label">Protein g</div><input type="number" id="mfPro" aria-label="Personal food protein grams per serving" inputmode="decimal" placeholder="g"></div>
+          </div>
+
+          <div class="row" style="margin-bottom:10px;">
             <div><div class="label">Carbs g</div><input type="number" id="mfCarb" aria-label="Personal food carbohydrate grams per serving" inputmode="decimal" placeholder="g"></div>
             <div><div class="label">Fat g</div><input type="number" id="mfFat" aria-label="Personal food fat grams per serving" inputmode="decimal" placeholder="g"></div>
           </div>
+
           <div class="label">Barcode (optional — lets scanning find it)</div>
           <input id="mfBarcode" aria-label="Optional barcode for personal food" inputmode="numeric" placeholder="UPC number" style="margin-bottom:12px;">
+
           <button class="btn" id="mfSaveBtn">Save food</button>
           <button class="xbtn mt10 hidden" id="mfCancelBtn" style="width:100%;">Cancel edit</button>
         </div>
+
         <div class="card flush">
           <div style="padding:12px 16px; border-bottom:1px solid var(--border);"><span class="label" style="margin:0;">Your foods — tap to log, ✎ to edit</span></div>
           <div id="mfList"><div style="padding:16px; font-size:13px; color:var(--dim);">Nothing saved yet.</div></div>
@@ -1141,20 +1169,60 @@
       <button class="xbtn mt10 hidden" id="cancelSelEditBtn" style="width:100%;">Cancel edit</button>
     </div>
 
-    <div class="card">
-      <div class="label">Or enter manually</div>
-      <input id="mName" aria-label="Manual food name" placeholder="Food name" style="margin-bottom:10px;">
+    <div class="card" id="manualFoodCard">
+      <div class="label">Enter food manually</div>
+      <div class="note" style="margin:0 0 10px;">Enter nutrition for one serving. Then choose how much you ate or drank on the normal amount slider. Nothing is logged from this form.</div>
+
       <div class="row" style="margin-bottom:10px;">
-        <div><div class="label">Calories</div><input type="number" id="mCal" aria-label="Manual food calories" placeholder="kcal" inputmode="numeric"></div>
-        <div><div class="label">Protein g</div><input type="number" id="mPro" aria-label="Manual food protein grams" placeholder="g" inputmode="numeric"></div>
+        <div>
+          <div class="label">Food name</div>
+          <input id="mName" aria-label="Manual food name" placeholder="e.g. Homemade chili">
+        </div>
+        <div>
+          <div class="label">Brand (optional)</div>
+          <input id="mBrand" aria-label="Manual food brand" placeholder="e.g. Homemade">
+        </div>
       </div>
+
+      <div class="label">Serving description</div>
+      <input id="mServingLabel" aria-label="Manual food serving description" placeholder="e.g. 1 bowl, 1 slice, or 1 bottle (355 mL)" style="margin-bottom:10px;">
+
+      <div class="row" style="margin-bottom:10px;">
+        <div>
+          <div class="label">Measured serving (optional)</div>
+          <input type="number" id="mServingAmount" aria-label="Manual food measured serving amount" placeholder="e.g. 55" inputmode="decimal">
+        </div>
+        <div>
+          <div class="label">Measurement unit</div>
+          <select id="mServingUnit" aria-label="Manual food serving measurement unit">
+            <option value="serving">Serving only</option>
+            <option value="g">g</option>
+            <option value="ml">mL</option>
+            <option value="oz">oz</option>
+            <option value="floz">fl oz</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row" style="margin-bottom:10px;">
+        <div><div class="label">Calories / serving</div><input type="number" id="mCal" aria-label="Manual food calories per serving" placeholder="kcal" inputmode="numeric"></div>
+        <div><div class="label">Protein g / serving</div><input type="number" id="mPro" aria-label="Manual food protein grams per serving" placeholder="g" inputmode="decimal"></div>
+      </div>
+
       <div class="row">
-        <div><div class="label">Carbs g</div><input type="number" id="mCarb" aria-label="Manual food carbohydrate grams" placeholder="g" inputmode="numeric"></div>
-        <div><div class="label">Fat g</div><input type="number" id="mFat" aria-label="Manual food fat grams" placeholder="g" inputmode="numeric"></div>
+        <div><div class="label">Carbs g / serving</div><input type="number" id="mCarb" aria-label="Manual food carbohydrate grams per serving" placeholder="g" inputmode="decimal"></div>
+        <div><div class="label">Fat g / serving</div><input type="number" id="mFat" aria-label="Manual food fat grams per serving" placeholder="g" inputmode="decimal"></div>
       </div>
-      <button class="btn ghost mt14" id="addManualBtn">Add to log</button>
+
+      <button class="btn ghost mt14" id="manualUseBtn">Use once &amp; choose amount</button>
+      <button class="btn mt10" id="manualSaveChooseBtn">Save &amp; choose amount</button>
+
+      <!-- Retained only for editing older direct manual records. -->
+      <button class="btn ghost mt14 hidden" id="addManualBtn">Add to log</button>
       <button class="xbtn mt10 hidden" id="cancelEditFoodBtn" style="width:100%;">Cancel edit</button>
-      <button class="xbtn mt10" id="saveToMyFoodsBtn" style="width:100%;">＋ Save this as a reusable food</button>
+
+      <!-- Retained for compatibility with the older My Foods handoff listener. -->
+      <button class="xbtn mt10 hidden" id="saveToMyFoodsBtn" style="width:100%;">＋ Save this as a reusable food</button>
     </div>
 
     <div class="card">

@@ -8,6 +8,7 @@ cd ..
 node tests/phase1-nutrition-safety.test.js
 node tests/phase1-food-entry-safety.test.js
 node tests/phase2-keyless-food-data.test.js
+node tests/phase2-label-scanner.test.js
 node tests/unit.test.js
 node tests/integration.test.js
 node tests/card-profiles.test.js

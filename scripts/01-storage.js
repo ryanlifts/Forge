@@ -1726,20 +1726,106 @@ const ACCESSIBLE_DYNAMIC_NAMES = {
   suSched3:"Wednesday calorie target", suSched4:"Thursday calorie target", suSched5:"Friday calorie target",
   suSched6:"Saturday calorie target"
 };
-function associatedLabelText(el){
-  if (!el || !el.id) return "";
-  const label = document.querySelector('label[for="'+el.id.replace(/"/g,"\\\"")+'"]');
-  return label ? label.textContent.trim() : "";
+function accessibilityDocumentFor(el){
+  if (
+    el
+    && el.ownerDocument
+  ){
+    return el.ownerDocument;
+  }
+
+  if (
+    typeof document!=="undefined"
+    && document
+  ){
+    return document;
+  }
+
+  return null;
 }
+
+function associatedLabelText(el){
+  if (
+    !el
+    || !el.id
+  ){
+    return "";
+  }
+
+  const doc=
+    accessibilityDocumentFor(el);
+
+  if (
+    !doc
+    || typeof doc.querySelector!=="function"
+  ){
+    return "";
+  }
+
+  const label=
+    doc.querySelector(
+      'label[for="'
+      +el.id.replace(/"/g,"\\\"")
+      +'"]'
+    );
+
+  return label
+    ? label.textContent.trim()
+    : "";
+}
+
 function accessibleNamePresent(el){
   if (!el) return false;
-  if ((el.getAttribute("aria-label")||"").trim()) return true;
-  const by = (el.getAttribute("aria-labelledby")||"").trim();
-  if (by && by.split(/\s+/).some(id=>{ const n=document.getElementById(id); return n && n.textContent.trim(); })) return true;
-  if (associatedLabelText(el)) return true;
-  if (el.tagName==="BUTTON") return !!el.textContent.trim();
+
+  if (
+    (
+      el.getAttribute("aria-label")
+      || ""
+    ).trim()
+  ){
+    return true;
+  }
+
+  const by=
+    (
+      el.getAttribute(
+        "aria-labelledby"
+      )
+      || ""
+    ).trim();
+
+  const doc=
+    accessibilityDocumentFor(el);
+
+  if (
+    by
+    && doc
+    && typeof doc.getElementById
+      ==="function"
+    && by.split(/\s+/).some(id=>{
+      const node=
+        doc.getElementById(id);
+
+      return (
+        node
+        && node.textContent.trim()
+      );
+    })
+  ){
+    return true;
+  }
+
+  if (associatedLabelText(el)){
+    return true;
+  }
+
+  if (el.tagName==="BUTTON"){
+    return !!el.textContent.trim();
+  }
+
   return false;
 }
+
 function humanizeControlId(id){
   return String(id||"")
     .replace(/([a-z0-9])([A-Z])/g,"$1 $2")
