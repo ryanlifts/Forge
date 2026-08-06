@@ -251,7 +251,8 @@
   .srow .slabel { font-size:10px; color:var(--dim); width:34px; }
   .snum { width:64px; text-align:center; padding:10px 4px; font-size:16px; }
   .step { width:44px; height:44px; border-radius:8px; border:1px solid var(--border); background:var(--panel-up);
-    color:var(--text); font-family:inherit; font-size:13px; cursor:pointer; flex-shrink:0; }
+    color:var(--text); font-family:inherit; font-size:13px; cursor:pointer; flex-shrink:0;
+    touch-action:manipulation; -webkit-user-select:none; user-select:none; }
   .step:active { border-color:var(--ember); }
   .sx { color:var(--dim); font-size:13px; }
   .sdone { width:44px; height:44px; border-radius:8px; border:1px solid var(--border); background:transparent;
@@ -1555,9 +1556,7 @@
         <button class="btn mt10" id="applyMacrosBtn">Use these as my targets</button>
       </div>
       <div class="note">
-        Supports ages 13–100. Adults use the Mifflin-St Jeor equation with Recommended protein at ~0.9 g per lb, fat at ~25% of calories, and carbs from the remainder. Ages 13–17 use youth energy equations and a 20% protein / 55% carbohydrate / 25% fat Recommended starting split, with every goal, macro, Apply, and schedule control available.
-        Under 13 and pregnancy or breastfeeding are outside this calculator’s designed scope. Results are estimates, not medical advice or a prescription. Teens should review weight-change plans with a parent or guardian and pediatrician or registered dietitian. BlackPyre will not save or suggest a target below 1,200 kcal/day; that floor does not mean 1,200 kcal is appropriate for you.
-        For the research behind macro splits, see the <a href="https://jissn.biomedcentral.com/articles/10.1186/s12970-018-0242-y" target="_blank" rel="noopener" style="color:var(--ember);">International Society of Sports Nutrition's evidence review</a> (open access, peer-reviewed).
+        Supports ages 13+. Ages 13&ndash;17 use the 2023 Dietary Reference Intake youth equation and a 20% protein / 55% carbohydrate / 25% fat starting split; they retain all goal, macro, apply, and scheduling controls. For teens, activity reflects total daily movement, not workouts alone; Moderate uses the conservative Low active youth category. Adults use the <a href="https://pubmed.ncbi.nlm.nih.gov/2305711/" target="_blank" rel="noopener noreferrer" style="color:var(--ember);">Mifflin-St Jeor equation</a>, protein at ~0.9 g per lb of bodyweight, fat at ~25% of calories, and carbs from the remainder. Not for pregnancy or breastfeeding. BlackPyre will not suggest or save any day below 1,200 kcal. See the <a href="https://www.ncbi.nlm.nih.gov/books/NBK588659/" target="_blank" rel="noopener noreferrer" style="color:var(--ember);">2023 Dietary Reference Intakes</a>, <a href="https://www.healthychildren.org/English/ages-stages/teen/nutrition/Pages/Fads-and-Diets.aspx" target="_blank" rel="noopener noreferrer" style="color:var(--ember);">American Academy of Pediatrics teen guidance</a>, and <a href="https://www.niddk.nih.gov/health-information/diabetes/overview/preventing-type-2-diabetes/game-plan" target="_blank" rel="noopener noreferrer" style="color:var(--ember);">NIDDK calorie guidance</a>. For the research behind macro splits, see the <a href="https://jissn.biomedcentral.com/articles/10.1186/s12970-018-0242-y" target="_blank" rel="noopener noreferrer" style="color:var(--ember);">International Society of Sports Nutrition's evidence review</a> (open access, peer-reviewed).
       </div>
     </div>
     <div class="card">

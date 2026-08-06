@@ -1455,7 +1455,7 @@ const sw = fs.readFileSync(
 check(
   "unified food-slider candidate advances web cache to v83",
   sw.includes(
-    'const CACHE = "blackpyre-v84-paddle-7"'
+    'const CACHE = "blackpyre-v84-paddle-9"'
   )
 );
 

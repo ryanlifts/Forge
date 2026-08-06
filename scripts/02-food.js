@@ -5181,7 +5181,11 @@ function applyNutritionLabelScanResult(
       && Number.isFinite(Number(value))
     ){
       document.getElementById(id).value =
-        String(Number(value));
+        String(
+          Math.round(
+            Number(value)
+          )
+        );
 
       filled.push(id);
     } else {

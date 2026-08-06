@@ -8,6 +8,94 @@ const EXERCISE_SHAPE_LABELS = {
   carry:"Weight + distance", rounds:"Rounds / intervals", text:"Free text"
 };
 
+
+/* BLACKPYRE_TRAINING_WEIGHT_FIRST_TAP_FIX */
+function prepareTrainingWeightInput(
+  input
+){
+  if(
+    !input
+    || typeof input.addEventListener
+      !=="function"
+  ){
+    return input;
+  }
+
+  let selectedForFocus=false;
+  let lastTouchEnd=0;
+
+  function selectCurrentValue(){
+    if(
+      selectedForFocus
+      || !input.value
+    ){
+      return;
+    }
+
+    selectedForFocus=true;
+
+    try{
+      input.select();
+    }catch(_error){}
+  }
+
+  input.style.touchAction=
+    "manipulation";
+
+  input.addEventListener(
+    "focus",
+    ()=>{
+      selectedForFocus=false;
+
+      window.setTimeout(
+        selectCurrentValue,
+        0
+      );
+    }
+  );
+
+  input.addEventListener(
+    "pointerup",
+    ()=>{
+      window.setTimeout(
+        selectCurrentValue,
+        0
+      );
+    }
+  );
+
+  input.addEventListener(
+    "blur",
+    ()=>{
+      selectedForFocus=false;
+    }
+  );
+
+  input.addEventListener(
+    "touchend",
+    event=>{
+      const now=Date.now();
+
+      if(
+        lastTouchEnd
+        && now-lastTouchEnd<350
+        && event
+        && typeof event.preventDefault
+          ==="function"
+      ){
+        event.preventDefault();
+      }
+
+      lastTouchEnd=now;
+    },
+    {
+      passive:false
+    }
+  );
+
+  return input;
+}
+
 function newExerciseNameMap(){
   return Object.create(null);
 }
@@ -4712,10 +4800,11 @@ function appendWorkoutSetRows(div,ex,st){
 
     if (weightPolicy!=="hidden"){
       weightInput=document.createElement("input");
-      weightInput.type="number";
+      weightInput.type="text";
       weightInput.className="snum";
       weightInput.inputMode="decimal";
-      weightInput.min="0";
+      weightInput.autocomplete="off";
+      weightInput.spellcheck=false;
       weightInput.placeholder=
         weightPolicy==="required"
           ? (weightLabel==="Assistance" ? "assist" : "lb")
@@ -4727,6 +4816,11 @@ function appendWorkoutSetRows(div,ex,st){
       weightInput.dataset.exercise=ex.name;
       weightInput.dataset.row=String(ri);
       weightInput.dataset.field="weight";
+
+      prepareTrainingWeightInput(
+        weightInput
+      );
+
       weightInput.setAttribute(
         "aria-label",
         ex.name.replace("[Cardio] ","")+" set "+(ri+1)+" "

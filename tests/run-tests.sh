@@ -12,6 +12,7 @@ node tests/phase2-label-scanner.test.js
 node tests/phase2-web-label-scanner.test.js
 node tests/unit.test.js
 node tests/integration.test.js
+node tests/v84-ui-polish.test.js
 node tests/card-profiles.test.js
 echo ""
 echo "GAUNTLET GREEN — safe to ship."
