@@ -451,64 +451,3236 @@ async function runSearch(){
 // Apple Vision reads the selected image on the device. OCR values only
 // prefill manual entry. Nothing is logged until the user taps Add entry.
 
-let nutritionLabelScannerPlugin = null;
+const NUTRITION_LABEL_PADDLE_ASSETS=
+  Object.freeze({
+    module:
+      "vendor/paddleocr/paddleocr-entry.js",
+
+    ort:
+      "vendor/paddleocr/ort/",
+
+    detection:
+      "vendor/paddleocr/models/"
+      +"PP-OCRv6_tiny_det_onnx_infer.tar",
+
+    recognition:
+      "vendor/paddleocr/models/"
+      +"PP-OCRv6_tiny_rec_onnx_infer.tar"
+  });
+
+let nutritionLabelPaddleModulePromise=null;
+let nutritionLabelPaddleInstancePromise=null;
+let nutritionLabelPaddleInstance=null;
+let nutritionLabelPaddleScanning=false;
+let nutritionLabelPaddleInitializationError=null;
 
 function nutritionLabelScannerCapability(){
-  const capacitor = window.Capacitor;
-  let native = false;
-  let available = false;
-  let plugin = null;
+  const available=!!(
+    document.getElementById(
+      "labelScanFile"
+    )
+    && typeof window.WebAssembly
+      ==="object"
+    && typeof window.File
+      ==="function"
+    && typeof window.Blob
+      ==="function"
+    && typeof window.Promise
+      ==="function"
+    && window.URL
+    && typeof window.URL
+      .createObjectURL
+      ==="function"
+  );
 
-  try {
-    native = !!(
-      capacitor
-      && typeof capacitor.isNativePlatform==="function"
-      && capacitor.isNativePlatform()
+  return {
+    available,
+    mode:
+      available
+        ? "paddle-browser"
+        : "unavailable"
+  };
+}
+
+function nutritionLabelPaddleAssetUrl(
+  path
+){
+  return new URL(
+    path,
+    document.baseURI
+  ).href;
+}
+
+async function nutritionLabelLoadPaddleModule(){
+  if (
+    window.BlackPyrePaddleOCR
+    && window.BlackPyrePaddleOCR.PaddleOCR
+    && typeof window
+      .BlackPyrePaddleOCR
+      .PaddleOCR
+      .create==="function"
+  ){
+    return window.BlackPyrePaddleOCR;
+  }
+
+  if (nutritionLabelPaddleModulePromise){
+    return nutritionLabelPaddleModulePromise;
+  }
+
+  const moduleUrl=
+    nutritionLabelPaddleAssetUrl(
+      NUTRITION_LABEL_PADDLE_ASSETS
+        .module
     );
-  } catch(e){}
 
-  try {
-    available = !!(
-      native
-      && capacitor
-      && typeof capacitor.isPluginAvailable==="function"
-      && capacitor.isPluginAvailable(
-        "NutritionLabelScanner"
-      )
-    );
-  } catch(e){}
-
-  if (available){
-    try {
-      if (
-        capacitor.Plugins
-        && capacitor.Plugins.NutritionLabelScanner
-      ){
-        nutritionLabelScannerPlugin =
-          capacitor.Plugins.NutritionLabelScanner;
-      } else if (
-        !nutritionLabelScannerPlugin
-        && typeof capacitor.registerPlugin==="function"
-      ){
-        nutritionLabelScannerPlugin =
-          capacitor.registerPlugin(
-            "NutritionLabelScanner"
+  nutritionLabelPaddleModulePromise=
+    import(moduleUrl)
+      .then(module=>{
+        const api=
+          window.BlackPyrePaddleOCR
+          || module.BlackPyrePaddleOCR
+          || module.default
+          || (
+            module.PaddleOCR
+              ? {
+                  PaddleOCR:
+                    module.PaddleOCR
+                }
+              : null
           );
-      }
 
-      plugin = nutritionLabelScannerPlugin;
-    } catch(e){}
+        if (
+          !api
+          || !api.PaddleOCR
+          || typeof api.PaddleOCR
+            .create!=="function"
+        ){
+          throw new Error(
+            "The local PaddleOCR module did not initialize."
+          );
+        }
+
+        window.BlackPyrePaddleOCR=api;
+
+        return api;
+      })
+      .catch(error=>{
+        nutritionLabelPaddleModulePromise=
+          null;
+
+        throw error;
+      });
+
+  return nutritionLabelPaddleModulePromise;
+}
+
+function nutritionLabelPaddleWithTimeout(
+  promise,
+  milliseconds,
+  message
+){
+  return new Promise((resolve,reject)=>{
+    let settled=false;
+
+    const timer=
+      window.setTimeout(
+        ()=>{
+          if (settled){
+            return;
+          }
+
+          settled=true;
+          reject(new Error(message));
+        },
+        milliseconds
+      );
+
+    Promise.resolve(promise)
+      .then(
+        value=>{
+          if (settled){
+            return;
+          }
+
+          settled=true;
+          window.clearTimeout(timer);
+          resolve(value);
+        },
+        error=>{
+          if (settled){
+            return;
+          }
+
+          settled=true;
+          window.clearTimeout(timer);
+          reject(error);
+        }
+      );
+  });
+}
+
+async function nutritionLabelGetPaddleOcr(){
+  if (nutritionLabelPaddleInitializationError){
+    throw nutritionLabelPaddleInitializationError;
+  }
+  if (nutritionLabelPaddleInstance){
+    return nutritionLabelPaddleInstance;
+  }
+
+  if (nutritionLabelPaddleInstancePromise){
+    return nutritionLabelPaddleInstancePromise;
+  }
+
+  nutritionLabelStatus(
+    "Loading the local scanner engine…",
+    false
+  );
+
+  nutritionLabelPaddleInstancePromise=
+    nutritionLabelLoadPaddleModule()
+      .then(async api=>{
+        if (!nutritionLabelPaddleScanning){
+          nutritionLabelStatus(
+            "Preparing the scanner for its first use…",
+            false
+          );
+        }
+
+        const instance=
+          await api.PaddleOCR.create({
+            initialize:false,
+            worker:false,
+
+            textDetectionModelName:
+              "PP-OCRv6_tiny_det",
+
+            textDetectionModelAsset:{
+              url:
+                nutritionLabelPaddleAssetUrl(
+                  NUTRITION_LABEL_PADDLE_ASSETS
+                    .detection
+                )
+            },
+
+            textRecognitionModelName:
+              "PP-OCRv6_tiny_rec",
+
+            textRecognitionModelAsset:{
+              url:
+                nutritionLabelPaddleAssetUrl(
+                  NUTRITION_LABEL_PADDLE_ASSETS
+                    .recognition
+                )
+            },
+
+            textDetectionBatchSize:1,
+            textRecognitionBatchSize:8,
+
+            ortOptions:{
+              backend:"wasm",
+
+              wasmPaths:
+                nutritionLabelPaddleAssetUrl(
+                  NUTRITION_LABEL_PADDLE_ASSETS
+                    .ort
+                ),
+
+              numThreads:1,
+              simd:true,
+              proxy:false
+            }
+          });
+
+        nutritionLabelStatus(
+          "Loading the smaller local scanner models…",
+          false
+        );
+
+        await nutritionLabelPaddleWithTimeout(
+          instance.initialize(),
+          60000,
+          "Scanner initialization did not finish within 60 seconds. Close this tab and reopen BlackPyre before trying again."
+        );
+
+        nutritionLabelPaddleInitializationError=
+          null;
+
+        nutritionLabelPaddleInstance=
+          instance;
+
+        if (!nutritionLabelPaddleScanning){
+          nutritionLabelStatus(
+            "Scanner ready.",
+            false
+          );
+        }
+
+        return instance;
+      })
+      .catch(error=>{
+        nutritionLabelPaddleInstancePromise=
+          null;
+
+        nutritionLabelPaddleInitializationError=
+          error;
+
+        throw error;
+      });
+
+  return nutritionLabelPaddleInstancePromise;
+}
+
+function nutritionLabelWarmPaddleOcr(){
+  if (
+    !nutritionLabelScannerCapability()
+      .available
+  ){
+    return;
+  }
+
+  nutritionLabelGetPaddleOcr()
+    .catch(error=>{
+      if (!nutritionLabelPaddleScanning){
+        nutritionLabelStatus(
+          error && error.message
+            ? error.message
+            : "The local scanner could not initialize.",
+          true
+        );
+      }
+    });
+}
+
+function nutritionLabelNormalizeOcrNumber(value){
+  const normalized=
+    String(value||"")
+      .replace(/[Oo]/g,"0")
+      .replace(/[Il|]/g,"1")
+      .replace(",",".")
+      .trim();
+
+  if (
+    !/^\d+(?:\.\d+)?$/.test(normalized)
+  ){
+    return null;
+  }
+
+  const number=Number(normalized);
+
+  return Number.isFinite(number)
+    ? number
+    : null;
+}
+
+function nutritionLabelDirectValue(
+  text,
+  expression,
+  maximum
+){
+  const match=
+    String(text||"").match(expression);
+
+  if (!match){
+    return null;
+  }
+
+  const number=
+    nutritionLabelNormalizeOcrNumber(
+      match[1]
+    );
+
+  if (
+    number===null
+    || number<0
+    || number>maximum
+  ){
+    return null;
+  }
+
+  return number;
+}
+
+function nutritionLabelFuzzyMacroValue(
+  text,
+  matchesLabel,
+  maximum
+){
+  const lines=
+    String(text||"")
+      .split(/\r?\n/);
+
+  for (const line of lines){
+    const letters=
+      String(line)
+        .toLowerCase()
+        .replace(/[^a-z]/g,"");
+
+    if (!matchesLabel(letters)){
+      continue;
+    }
+
+    const match=
+      String(line).match(
+        /([0-9OoIl|]+(?:[.,][0-9OoIl|]+)?)\s*g\b/i
+      );
+
+    if (!match){
+      continue;
+    }
+
+    const number=
+      nutritionLabelNormalizeOcrNumber(
+        match[1]
+      );
+
+    if (
+      number!==null
+      && number>=0
+      && number<=maximum
+    ){
+      return number;
+    }
+  }
+
+  return null;
+}
+
+function nutritionLabelDirectTextValues(text){
+  const directCarbs=
+    nutritionLabelDirectValue(
+      text,
+      /(?:^|\n)\s*(?:total\s+)?(?:carbohydrate|carbohydrates|carbs?)\s*[:\-]?\s*([0-9OoIl|]+(?:[.,][0-9OoIl|]+)?)\s*g\b/im,
+      500
+    );
+
+  const fuzzyCarbs=
+    directCarbs!==null
+      ? directCarbs
+      : nutritionLabelFuzzyMacroValue(
+          text,
+          letters=>
+            letters.includes("carb")
+            || letters.includes("bohyd")
+            || (
+              letters.includes("car")
+              && letters.includes("hyd")
+            ),
+          500
+        );
+
+  return {
+    calories:
+      nutritionLabelDirectValue(
+        text,
+        /(?:^|\n)\s*calories?(?:\s+per\s+serving)?\s*[:\-]?\s*([0-9OoIl|]+(?:[.,][0-9OoIl|]+)?)/im,
+        5000
+      ),
+    protein:
+      nutritionLabelDirectValue(
+        text,
+        /(?:^|\n)\s*protein\s*[:\-]?\s*([0-9OoIl|]+(?:[.,][0-9OoIl|]+)?)\s*g\b/im,
+        500
+      ),
+    carbs:
+      fuzzyCarbs,
+    fat:
+      nutritionLabelDirectValue(
+        text,
+        /(?:^|\n)\s*(?:total\s+)?fat\s*[:\-]?\s*([0-9OoIl|]+(?:[.,][0-9OoIl|]+)?)\s*g\b/im,
+        500
+      )
+  };
+}
+
+function nutritionLabelPaddlePoints(poly){
+  if (!Array.isArray(poly)){
+    return [];
+  }
+
+  if (
+    poly.length
+    && Array.isArray(poly[0])
+  ){
+    return poly
+      .map(point=>({
+        x:Number(point[0]),
+        y:Number(point[1])
+      }))
+      .filter(point=>
+        Number.isFinite(point.x)
+        && Number.isFinite(point.y)
+      );
+  }
+
+  if (
+    poly.length
+    && typeof poly[0]==="object"
+  ){
+    return poly
+      .map(point=>({
+        x:Number(point.x),
+        y:Number(point.y)
+      }))
+      .filter(point=>
+        Number.isFinite(point.x)
+        && Number.isFinite(point.y)
+      );
+  }
+
+  const points=[];
+
+  for (
+    let index=0;
+    index+1<poly.length;
+    index+=2
+  ){
+    const x=Number(poly[index]);
+    const y=Number(poly[index+1]);
+
+    if (
+      Number.isFinite(x)
+      && Number.isFinite(y)
+    ){
+      points.push({
+        x,
+        y
+      });
+    }
+  }
+
+  return points;
+}
+
+function nutritionLabelPaddleLine(
+  item,
+  index
+){
+  const points=
+    nutritionLabelPaddlePoints(
+      item
+      && item.poly
+    );
+
+  const xs=
+    points.map(point=>point.x);
+
+  const ys=
+    points.map(point=>point.y);
+
+  const minimumX=
+    xs.length
+      ? Math.min(...xs)
+      : null;
+
+  const maximumX=
+    xs.length
+      ? Math.max(...xs)
+      : null;
+
+  const minimumY=
+    ys.length
+      ? Math.min(...ys)
+      : null;
+
+  const maximumY=
+    ys.length
+      ? Math.max(...ys)
+      : null;
+
+  const score=
+    Number(
+      item
+      && item.score
+    );
+
+  return {
+    text:
+      String(
+        item
+        && item.text
+        || ""
+      )
+        .replace(/\s+/g," ")
+        .trim(),
+
+    confidence:
+      Number.isFinite(score)
+        ? (
+            score<=1
+              ? score*100
+              : score
+          )
+        : null,
+
+    x:minimumX,
+    y:minimumY,
+
+    width:
+      minimumX!==null
+      && maximumX!==null
+        ? maximumX-minimumX
+        : null,
+
+    height:
+      minimumY!==null
+      && maximumY!==null
+        ? maximumY-minimumY
+        : null,
+
+    pass:"paddle",
+    index
+  };
+}
+
+function nutritionLabelSanitizeCoreValue(
+  field,
+  value
+){
+  if (
+    value===null
+    || value===undefined
+  ){
+    return null;
+  }
+
+  const text=
+    String(value)
+      .replace(/,/g,".")
+      .trim();
+
+  if (!/\d/.test(text)){
+    return null;
+  }
+
+  const match=
+    text.match(
+      /-?\d+(?:\.\d+)?/
+    );
+
+  if (!match){
+    return null;
+  }
+
+  const number=
+    Number(
+      match[0]
+    );
+
+  const maximum=
+    field==="calories"
+      ? 5000
+      : 1000;
+
+  if (
+    !Number.isFinite(number)
+    || number<0
+    || number>maximum
+  ){
+    return null;
+  }
+
+  return number;
+}
+
+function nutritionLabelRecoverCoreValues(
+  rawText
+){
+  const compact=
+    String(
+      rawText
+      || ""
+    )
+      .replace(/[|]/g," ")
+      .replace(/\s+/g," ")
+      .trim();
+
+  const patterns={
+    calories:
+      /\bcalories?\b\D{0,16}(\d{1,4})\b/i,
+
+    protein:
+      /\bprotein\b\D{0,14}(\d+(?:\.\d+)?)\s*g?\b/i,
+
+    carbs:
+      /\b(?:total\s+)?carbohyd(?:rate|rates|rate)?\b\D{0,18}(\d+(?:\.\d+)?)\s*g?\b/i,
+
+    fat:
+      /\btotal\s+fat\b\D{0,14}(\d+(?:\.\d+)?)\s*g?\b/i
+  };
+
+  const recovered={};
+
+  Object.entries(
+    patterns
+  ).forEach(([field,pattern])=>{
+    const match=
+      compact.match(
+        pattern
+      );
+
+    recovered[field]=
+      match
+        ? nutritionLabelSanitizeCoreValue(
+            field,
+            match[1]
+          )
+        : null;
+  });
+
+  return recovered;
+}
+
+function nutritionLabelRecoverServingValues(
+  rawText
+){
+  const flattened=
+    String(
+      rawText
+      || ""
+    )
+      .replace(/[|]/g," ")
+      .replace(/\s+/g," ")
+      .trim();
+
+  const match=
+    flattened.match(
+      /\bserving\s*size\b\s*[:\-]?\s*(.{1,70}?)(?=\b(?:calories?|total\s+fat|sodium|total\s+carbohyd|protein)\b|$)/i
+    );
+
+  if (!match){
+    return {
+      servingLabel:null,
+      servingAmount:null,
+      servingUnit:null
+    };
+  }
+
+  const servingLabel=
+    String(
+      match[1]
+    )
+      .replace(/\s+/g," ")
+      .trim()
+      .replace(/[.,;:]+$/,"");
+
+  if (
+    !servingLabel
+    || servingLabel.length>70
+  ){
+    return {
+      servingLabel:null,
+      servingAmount:null,
+      servingUnit:null
+    };
+  }
+
+  const measured=
+    servingLabel.match(
+      /\(\s*(\d+(?:\.\d+)?)\s*(g|kg|mg|ml|l|oz|fl\s*oz)\s*\)/i
+    )
+    || servingLabel.match(
+      /\b(\d+(?:\.\d+)?)\s*(g|kg|mg|ml|l|oz|fl\s*oz)\b/i
+    );
+
+  let servingAmount=null;
+  let servingUnit=null;
+
+  if (measured){
+    servingAmount=
+      Number(
+        measured[1]
+      );
+
+    servingUnit=
+      String(
+        measured[2]
+      )
+        .toLowerCase()
+        .replace(/\s+/g,"");
+
+    if (servingUnit==="floz"){
+      servingUnit="fl oz";
+    }
+
+    if (
+      !Number.isFinite(
+        servingAmount
+      )
+      || servingAmount<=0
+    ){
+      servingAmount=null;
+      servingUnit=null;
+    }
   }
 
   return {
-    native:native,
-    available:!!(
-      available
-      && plugin
-      && typeof plugin.recognize==="function"
-    ),
-    plugin:plugin
+    servingLabel,
+    servingAmount,
+    servingUnit
   };
+}
+
+function nutritionLabelParsePaddleResult(
+  result
+){
+  const lines=
+    (
+      Array.isArray(
+        result
+        && result.items
+      )
+        ? result.items
+        : []
+    )
+      .map(
+        nutritionLabelPaddleLine
+      )
+      .filter(line=>
+        line.text
+      );
+
+  const parsed=
+    parseNutritionLabelLines(
+      lines
+    );
+
+  const rawText=
+    lines
+      .map(line=>line.text)
+      .join("\n");
+
+  const direct=
+    nutritionLabelDirectTextValues(
+      rawText
+    );
+
+  [
+    "calories",
+    "protein",
+    "carbs",
+    "fat"
+  ].forEach(field=>{
+    if (
+      (
+        parsed[field]===null
+        || parsed[field]===undefined
+      )
+      && direct[field]!==null
+    ){
+      parsed[field]=direct[field];
+    }
+  });
+
+  const recoveredCore=
+    nutritionLabelRecoverCoreValues(
+      rawText
+    );
+
+  [
+    "calories",
+    "protein",
+    "carbs",
+    "fat"
+  ].forEach(field=>{
+    if (
+      parsed[field]===null
+      || parsed[field]===undefined
+      || !/\d/.test(
+        String(
+          parsed[field]
+        )
+      )
+    ){
+      parsed[field]=
+        recoveredCore[field];
+    }
+
+    parsed[field]=
+      nutritionLabelSanitizeCoreValue(
+        field,
+        parsed[field]
+      );
+  });
+
+  const recoveredServing=
+    nutritionLabelRecoverServingValues(
+      rawText
+    );
+
+  if (
+    !parsed.servingLabel
+    && recoveredServing.servingLabel
+  ){
+    parsed.servingLabel=
+      recoveredServing.servingLabel;
+  }
+
+  if (
+    (
+      parsed.servingAmount===null
+      || parsed.servingAmount===undefined
+      || !Number.isFinite(
+        Number(
+          parsed.servingAmount
+        )
+      )
+    )
+    && recoveredServing.servingAmount!==null
+  ){
+    parsed.servingAmount=
+      recoveredServing.servingAmount;
+  }
+
+  if (
+    !parsed.servingUnit
+    && recoveredServing.servingUnit
+  ){
+    parsed.servingUnit=
+      recoveredServing.servingUnit;
+  }
+
+  parsed.nutrientCount=
+    [
+      parsed.calories,
+      parsed.protein,
+      parsed.carbs,
+      parsed.fat
+    ].filter(value=>
+      value!==null
+      && value!==undefined
+      && Number.isFinite(
+        Number(value)
+      )
+    ).length;
+
+  parsed.ocrLines=lines;
+
+  parsed.ocrMetrics=
+    Object.assign(
+      {},
+      result
+      && result.metrics
+        ? result.metrics
+        : {}
+    );
+
+  return parsed;
+}
+
+function nutritionLabelMissingCoreFields(parsed){
+  const fields=[
+    ["calories","calories"],
+    ["protein","protein"],
+    ["carbs","carbohydrates"],
+    ["fat","fat"]
+  ];
+
+  return fields
+    .filter(([field])=>
+      parsed[field]===null
+      || parsed[field]===undefined
+      || !Number.isFinite(
+        Number(parsed[field])
+      )
+    )
+    .map(([,label])=>label);
+}
+
+function nutritionLabelHasAnyRecognizedValue(parsed){
+  return !!(
+    parsed
+    && [
+      parsed.servingLabel,
+      parsed.calories,
+      parsed.protein,
+      parsed.carbs,
+      parsed.fat
+    ].some(value=>
+      value!==null
+      && value!==undefined
+      && value!==""
+      && (
+        typeof value==="string"
+        || Number.isFinite(Number(value))
+      )
+    )
+  );
+}
+
+function nutritionLabelLoadImage(
+  file
+){
+  return new Promise((resolve,reject)=>{
+    const image=
+      new Image();
+
+    const url=
+      URL.createObjectURL(
+        file
+      );
+
+    function release(){
+      try {
+        URL.revokeObjectURL(
+          url
+        );
+      } catch(error){}
+    }
+
+    image.onload=()=>{
+      release();
+      resolve(image);
+    };
+
+    image.onerror=()=>{
+      release();
+
+      reject(
+        new Error(
+          "The selected photo could not be opened."
+        )
+      );
+    };
+
+    image.src=url;
+  });
+}
+
+function nutritionLabelMakeDetectionCanvas(
+  image,
+  maximumDimension
+){
+  const width=
+    image.naturalWidth
+    || image.width;
+
+  const height=
+    image.naturalHeight
+    || image.height;
+
+  const limit=
+    Number.isFinite(
+      Number(maximumDimension)
+    )
+      ? Number(maximumDimension)
+      : 640;
+
+  const scale=
+    Math.min(
+      1,
+      limit
+      /Math.max(
+        width,
+        height
+      )
+    );
+
+  const canvas=
+    document.createElement(
+      "canvas"
+    );
+
+  canvas.width=
+    Math.max(
+      1,
+      Math.round(
+        width*scale
+      )
+    );
+
+  canvas.height=
+    Math.max(
+      1,
+      Math.round(
+        height*scale
+      )
+    );
+
+  const context=
+    canvas.getContext(
+      "2d",
+      {
+        alpha:false,
+        willReadFrequently:true
+      }
+    );
+
+  if (!context){
+    throw new Error(
+      "The photo could not be prepared."
+    );
+  }
+
+  context.fillStyle=
+    "#ffffff";
+
+  context.fillRect(
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+
+  context.drawImage(
+    image,
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+
+  return canvas;
+}
+
+function nutritionLabelIntegralCreate(
+  values,
+  width,
+  height
+){
+  const stride=
+    width+1;
+
+  const integral=
+    new Float64Array(
+      stride
+      *(
+        height+1
+      )
+    );
+
+  for (
+    let y=0;
+    y<height;
+    y++
+  ){
+    let row=0;
+
+    for (
+      let x=0;
+      x<width;
+      x++
+    ){
+      row+=
+        values[
+          y*width+x
+        ];
+
+      integral[
+        (
+          y+1
+        )*stride
+        +x+1
+      ]=
+        integral[
+          y*stride
+          +x+1
+        ]
+        +row;
+    }
+  }
+
+  return {
+    values:integral,
+    stride
+  };
+}
+
+function nutritionLabelIntegralRect(
+  integral,
+  x,
+  y,
+  width,
+  height
+){
+  const values=
+    integral.values;
+
+  const stride=
+    integral.stride;
+
+  const left=
+    Math.max(
+      0,
+      Math.round(
+        x
+      )
+    );
+
+  const top=
+    Math.max(
+      0,
+      Math.round(
+        y
+      )
+    );
+
+  const right=
+    Math.max(
+      left,
+      Math.round(
+        x+width
+      )
+    );
+
+  const bottom=
+    Math.max(
+      top,
+      Math.round(
+        y+height
+      )
+    );
+
+  return (
+    values[
+      bottom*stride
+      +right
+    ]
+    -values[
+      top*stride
+      +right
+    ]
+    -values[
+      bottom*stride
+      +left
+    ]
+    +values[
+      top*stride
+      +left
+    ]
+  );
+}
+
+function nutritionLabelPercentileFromHistogram(
+  histogram,
+  total,
+  fraction
+){
+  const target=
+    total*fraction;
+
+  let running=0;
+
+  for (
+    let value=0;
+    value<histogram.length;
+    value++
+  ){
+    running+=
+      histogram[value];
+
+    if (running>=target){
+      return value;
+    }
+  }
+
+  return 255;
+}
+
+function nutritionLabelBuildPanelFeatures(
+  canvas
+){
+  const context=
+    canvas.getContext(
+      "2d",
+      {
+        alpha:false,
+        willReadFrequently:true
+      }
+    );
+
+  if (!context){
+    return null;
+  }
+
+  const width=
+    canvas.width;
+
+  const height=
+    canvas.height;
+
+  const imageData=
+    context.getImageData(
+      0,
+      0,
+      width,
+      height
+    );
+
+  const pixels=
+    imageData.data;
+
+  const luminance=
+    new Uint8Array(
+      width*height
+    );
+
+  const histogram=
+    new Uint32Array(
+      256
+    );
+
+  for (
+    let index=0;
+    index<luminance.length;
+    index++
+  ){
+    const offset=
+      index*4;
+
+    const value=
+      Math.max(
+        0,
+        Math.min(
+          255,
+          Math.round(
+            pixels[offset]*0.2126
+            +pixels[offset+1]*0.7152
+            +pixels[offset+2]*0.0722
+          )
+        )
+      );
+
+    luminance[index]=
+      value;
+
+    histogram[value]++;
+  }
+
+  const low=
+    nutritionLabelPercentileFromHistogram(
+      histogram,
+      luminance.length,
+      0.08
+    );
+
+  const high=
+    nutritionLabelPercentileFromHistogram(
+      histogram,
+      luminance.length,
+      0.92
+    );
+
+  const darkThreshold=
+    Math.max(
+      45,
+      Math.min(
+        175,
+        low
+        +(
+          high-low
+        )*0.44
+      )
+    );
+
+  const gradientThreshold=
+    Math.max(
+      18,
+      Math.min(
+        42,
+        (
+          high-low
+        )*0.15
+      )
+    );
+
+  const dark=
+    new Uint8Array(
+      width*height
+    );
+
+  const horizontal=
+    new Uint8Array(
+      width*height
+    );
+
+  const edge=
+    new Uint8Array(
+      width*height
+    );
+
+  const light=
+    new Float64Array(
+      width*height
+    );
+
+  const lightSquared=
+    new Float64Array(
+      width*height
+    );
+
+  for (
+    let y=0;
+    y<height;
+    y++
+  ){
+    for (
+      let x=0;
+      x<width;
+      x++
+    ){
+      const index=
+        y*width+x;
+
+      const value=
+        luminance[index];
+
+      const left=
+        x>0
+          ? luminance[index-1]
+          : value;
+
+      const above=
+        y>0
+          ? luminance[
+              index-width
+            ]
+          : value;
+
+      const aboveTwo=
+        y>1
+          ? luminance[
+              index-width*2
+            ]
+          : above;
+
+      dark[index]=
+        value<=darkThreshold
+          ? 1
+          : 0;
+
+      horizontal[index]=
+        Math.abs(
+          value-aboveTwo
+        )>=gradientThreshold
+          ? 1
+          : 0;
+
+      edge[index]=
+        (
+          Math.abs(
+            value-left
+          )
+          +Math.abs(
+            value-above
+          )
+        )>=gradientThreshold*1.5
+          ? 1
+          : 0;
+
+      light[index]=
+        value;
+
+      lightSquared[index]=
+        value*value;
+    }
+  }
+
+  return {
+    width,
+    height,
+
+    dark:
+      nutritionLabelIntegralCreate(
+        dark,
+        width,
+        height
+      ),
+
+    horizontal:
+      nutritionLabelIntegralCreate(
+        horizontal,
+        width,
+        height
+      ),
+
+    edge:
+      nutritionLabelIntegralCreate(
+        edge,
+        width,
+        height
+      ),
+
+    light:
+      nutritionLabelIntegralCreate(
+        light,
+        width,
+        height
+      ),
+
+    lightSquared:
+      nutritionLabelIntegralCreate(
+        lightSquared,
+        width,
+        height
+      )
+  };
+}
+
+function nutritionLabelCandidateScore(
+  features,
+  x,
+  y,
+  width,
+  height
+){
+  const area=
+    width*height;
+
+  if (area<=0){
+    return -Infinity;
+  }
+
+  const darkDensity=
+    nutritionLabelIntegralRect(
+      features.dark,
+      x,
+      y,
+      width,
+      height
+    )
+    /area;
+
+  const horizontalDensity=
+    nutritionLabelIntegralRect(
+      features.horizontal,
+      x,
+      y,
+      width,
+      height
+    )
+    /area;
+
+  const edgeDensity=
+    nutritionLabelIntegralRect(
+      features.edge,
+      x,
+      y,
+      width,
+      height
+    )
+    /area;
+
+  const lightSum=
+    nutritionLabelIntegralRect(
+      features.light,
+      x,
+      y,
+      width,
+      height
+    );
+
+  const lightSquaredSum=
+    nutritionLabelIntegralRect(
+      features.lightSquared,
+      x,
+      y,
+      width,
+      height
+    );
+
+  const mean=
+    lightSum/area;
+
+  const variance=
+    Math.max(
+      0,
+      lightSquaredSum/area
+      -mean*mean
+    );
+
+  const contrastScore=
+    Math.min(
+      1,
+      Math.sqrt(
+        variance
+      )/70
+    );
+
+  const darkScore=
+    Math.max(
+      0,
+      1-Math.abs(
+        darkDensity-0.19
+      )/0.19
+    );
+
+  const horizontalScore=
+    Math.min(
+      1,
+      horizontalDensity/0.17
+    );
+
+  const edgeScore=
+    Math.min(
+      1,
+      edgeDensity/0.24
+    );
+
+  const centerX=
+    x+width/2;
+
+  const centerY=
+    y+height/2;
+
+  const distance=
+    Math.hypot(
+      (
+        centerX-features.width/2
+      )/features.width,
+
+      (
+        centerY-features.height/2
+      )/features.height
+    );
+
+  const centerScore=
+    Math.max(
+      0,
+      1-distance/0.72
+    );
+
+  const sizeRatio=
+    area
+    /(
+      features.width
+      *features.height
+    );
+
+  const sizeScore=
+    Math.min(
+      1,
+      sizeRatio/0.34
+    );
+
+  return (
+    horizontalScore*3.4
+    +edgeScore*1.7
+    +darkScore*1.3
+    +contrastScore*1.2
+    +sizeScore*0.8
+    +centerScore*0.4
+  );
+}
+
+function nutritionLabelFindPanelBounds(
+  features
+){
+  if (!features){
+    return null;
+  }
+
+  const widthFractions=[
+    0.42,
+    0.52,
+    0.62,
+    0.72,
+    0.82,
+    0.92
+  ];
+
+  const aspects=[
+    1.05,
+    1.3,
+    1.6,
+    2,
+    2.5,
+    3.1,
+    3.8,
+    4.6
+  ];
+
+  let best=null;
+
+  for (
+    const widthFraction
+    of widthFractions
+  ){
+    const candidateWidth=
+      Math.round(
+        features.width
+        *widthFraction
+      );
+
+    for (
+      const aspect
+      of aspects
+    ){
+      const candidateHeight=
+        Math.round(
+          candidateWidth
+          /aspect
+        );
+
+      if (
+        candidateHeight
+        <features.height*0.11
+        || candidateHeight
+          >features.height*0.76
+      ){
+        continue;
+      }
+
+      const stepX=
+        Math.max(
+          8,
+          Math.round(
+            candidateWidth*0.07
+          )
+        );
+
+      const stepY=
+        Math.max(
+          8,
+          Math.round(
+            candidateHeight*0.08
+          )
+        );
+
+      for (
+        let y=0;
+        y+candidateHeight
+          <=features.height;
+        y+=stepY
+      ){
+        for (
+          let x=0;
+          x+candidateWidth
+            <=features.width;
+          x+=stepX
+        ){
+          const score=
+            nutritionLabelCandidateScore(
+              features,
+              x,
+              y,
+              candidateWidth,
+              candidateHeight
+            );
+
+          if (
+            !best
+            || score>best.score
+          ){
+            best={
+              x,
+              y,
+              width:
+                candidateWidth,
+
+              height:
+                candidateHeight,
+
+              score
+            };
+          }
+        }
+      }
+    }
+  }
+
+  if (
+    !best
+    || best.score<3.15
+  ){
+    return null;
+  }
+
+  return {
+    x:
+      best.x
+      /features.width,
+
+    y:
+      best.y
+      /features.height,
+
+    width:
+      best.width
+      /features.width,
+
+    height:
+      best.height
+      /features.height,
+
+    score:
+      best.score
+  };
+}
+
+function nutritionLabelExpandPanelBounds(
+  panel
+){
+  if (!panel){
+    return null;
+  }
+
+  const marginX=
+    Math.max(
+      0.02,
+      Math.min(
+        0.07,
+        panel.width*0.075
+      )
+    );
+
+  const marginY=
+    Math.max(
+      0.02,
+      Math.min(
+        0.08,
+        panel.height*0.12
+      )
+    );
+
+  const left=
+    Math.max(
+      0,
+      panel.x-marginX
+    );
+
+  const top=
+    Math.max(
+      0,
+      panel.y-marginY
+    );
+
+  const right=
+    Math.min(
+      1,
+      panel.x
+      +panel.width
+      +marginX
+    );
+
+  const bottom=
+    Math.min(
+      1,
+      panel.y
+      +panel.height
+      +marginY
+    );
+
+  return {
+    x:left,
+    y:top,
+    width:
+      right-left,
+
+    height:
+      bottom-top,
+
+    score:
+      panel.score
+  };
+}
+
+function nutritionLabelAnglePreview(
+  image,
+  panel,
+  angle
+){
+  const imageWidth=
+    image.naturalWidth
+    || image.width;
+
+  const imageHeight=
+    image.naturalHeight
+    || image.height;
+
+  const sourceX=
+    panel.x*imageWidth;
+
+  const sourceY=
+    panel.y*imageHeight;
+
+  const sourceWidth=
+    panel.width*imageWidth;
+
+  const sourceHeight=
+    panel.height*imageHeight;
+
+  const previewWidth=
+    360;
+
+  const previewHeight=
+    Math.max(
+      80,
+      Math.round(
+        previewWidth
+        *sourceHeight
+        /Math.max(
+          1,
+          sourceWidth
+        )
+      )
+    );
+
+  const canvas=
+    document.createElement(
+      "canvas"
+    );
+
+  canvas.width=
+    previewWidth;
+
+  canvas.height=
+    previewHeight;
+
+  const context=
+    canvas.getContext(
+      "2d",
+      {
+        alpha:false,
+        willReadFrequently:true
+      }
+    );
+
+  if (!context){
+    return null;
+  }
+
+  context.fillStyle=
+    "#ffffff";
+
+  context.fillRect(
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+
+  context.save();
+
+  context.translate(
+    canvas.width/2,
+    canvas.height/2
+  );
+
+  context.rotate(
+    angle*Math.PI/180
+  );
+
+  context.drawImage(
+    image,
+    sourceX,
+    sourceY,
+    sourceWidth,
+    sourceHeight,
+    -canvas.width/2,
+    -canvas.height/2,
+    canvas.width,
+    canvas.height
+  );
+
+  context.restore();
+
+  return canvas;
+}
+
+function nutritionLabelAngleScore(
+  canvas
+){
+  if (!canvas){
+    return -Infinity;
+  }
+
+  const context=
+    canvas.getContext(
+      "2d",
+      {
+        alpha:false,
+        willReadFrequently:true
+      }
+    );
+
+  if (!context){
+    return -Infinity;
+  }
+
+  const imageData=
+    context.getImageData(
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+
+  const pixels=
+    imageData.data;
+
+  const rows=
+    new Float64Array(
+      canvas.height
+    );
+
+  for (
+    let y=0;
+    y<canvas.height;
+    y++
+  ){
+    let rowValue=0;
+
+    for (
+      let x=0;
+      x<canvas.width;
+      x+=2
+    ){
+      const offset=
+        (
+          y*canvas.width+x
+        )*4;
+
+      const luminance=
+        pixels[offset]*0.2126
+        +pixels[offset+1]*0.7152
+        +pixels[offset+2]*0.0722;
+
+      if (luminance<150){
+        rowValue++;
+      }
+    }
+
+    rows[y]=rowValue;
+  }
+
+  const mean=
+    rows.reduce(
+      (
+        total,
+        value
+      )=>total+value,
+      0
+    )
+    /Math.max(
+      1,
+      rows.length
+    );
+
+  let variance=0;
+  let strongest=0;
+
+  rows.forEach(value=>{
+    const difference=
+      value-mean;
+
+    variance+=
+      difference*difference;
+
+    strongest=
+      Math.max(
+        strongest,
+        value
+      );
+  });
+
+  return (
+    variance
+    /Math.max(
+      1,
+      rows.length
+    )
+    +strongest*2
+  );
+}
+
+function nutritionLabelEstimatePanelRotation(
+  image,
+  panel
+){
+  if (!panel){
+    return 0;
+  }
+
+  const angles=[
+    -8,
+    -6,
+    -4,
+    -2,
+    0,
+    2,
+    4,
+    6,
+    8
+  ];
+
+  let bestAngle=0;
+  let bestScore=-Infinity;
+
+  angles.forEach(angle=>{
+    const preview=
+      nutritionLabelAnglePreview(
+        image,
+        panel,
+        angle
+      );
+
+    const score=
+      nutritionLabelAngleScore(
+        preview
+      );
+
+    if (preview){
+      preview.width=1;
+      preview.height=1;
+    }
+
+    if (score>bestScore){
+      bestScore=score;
+      bestAngle=angle;
+    }
+  });
+
+  return bestAngle;
+}
+
+function nutritionLabelEnhancePreparedCanvas(
+  canvas
+){
+  const context=
+    canvas.getContext(
+      "2d",
+      {
+        alpha:false,
+        willReadFrequently:true
+      }
+    );
+
+  if (!context){
+    return;
+  }
+
+  const imageData=
+    context.getImageData(
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+
+  const pixels=
+    imageData.data;
+
+  const histogram=
+    new Uint32Array(
+      256
+    );
+
+  let samples=0;
+
+  for (
+    let offset=0;
+    offset<pixels.length;
+    offset+=64
+  ){
+    const luminance=
+      Math.max(
+        0,
+        Math.min(
+          255,
+          Math.round(
+            pixels[offset]*0.2126
+            +pixels[offset+1]*0.7152
+            +pixels[offset+2]*0.0722
+          )
+        )
+      );
+
+    histogram[luminance]++;
+    samples++;
+  }
+
+  if (!samples){
+    return;
+  }
+
+  const low=
+    nutritionLabelPercentileFromHistogram(
+      histogram,
+      samples,
+      0.035
+    );
+
+  const high=
+    nutritionLabelPercentileFromHistogram(
+      histogram,
+      samples,
+      0.97
+    );
+
+  const range=
+    high-low;
+
+  if (range<45){
+    return;
+  }
+
+  const strength=
+    0.38;
+
+  for (
+    let offset=0;
+    offset<pixels.length;
+    offset+=4
+  ){
+    for (
+      let channel=0;
+      channel<3;
+      channel++
+    ){
+      const original=
+        pixels[offset+channel];
+
+      const stretched=
+        Math.max(
+          0,
+          Math.min(
+            255,
+            (
+              original-low
+            )*255/range
+          )
+        );
+
+      pixels[offset+channel]=
+        Math.round(
+          original
+          *(
+            1-strength
+          )
+          +stretched
+          *strength
+        );
+    }
+  }
+
+  context.putImageData(
+    imageData,
+    0,
+    0
+  );
+}
+
+function nutritionLabelRenderPreparedPanel(
+  image,
+  detectedPanel,
+  maximumDimension
+){
+  const imageWidth=
+    image.naturalWidth
+    || image.width;
+
+  const imageHeight=
+    image.naturalHeight
+    || image.height;
+
+  const expanded=
+    nutritionLabelExpandPanelBounds(
+      detectedPanel
+    );
+
+  const panel=
+    expanded
+    || {
+      x:0,
+      y:0,
+      width:1,
+      height:1,
+      score:0
+    };
+
+  const rotation=
+    expanded
+      ? nutritionLabelEstimatePanelRotation(
+          image,
+          expanded
+        )
+      : 0;
+
+  const sourceX=
+    panel.x*imageWidth;
+
+  const sourceY=
+    panel.y*imageHeight;
+
+  const sourceWidth=
+    panel.width*imageWidth;
+
+  const sourceHeight=
+    panel.height*imageHeight;
+
+  const limit=
+    Number.isFinite(
+      Number(maximumDimension)
+    )
+      ? Number(maximumDimension)
+      : 1280;
+
+  const initialScale=
+    Math.min(
+      expanded
+        ? 2.5
+        : 1,
+
+      limit
+      /Math.max(
+        sourceWidth,
+        sourceHeight
+      )
+    );
+
+  let drawWidth=
+    Math.max(
+      1,
+      sourceWidth*initialScale
+    );
+
+  let drawHeight=
+    Math.max(
+      1,
+      sourceHeight*initialScale
+    );
+
+  const radians=
+    rotation*Math.PI/180;
+
+  const cosine=
+    Math.abs(
+      Math.cos(
+        radians
+      )
+    );
+
+  const sine=
+    Math.abs(
+      Math.sin(
+        radians
+      )
+    );
+
+  const boundingWidth=
+    drawWidth*cosine
+    +drawHeight*sine;
+
+  const boundingHeight=
+    drawWidth*sine
+    +drawHeight*cosine;
+
+  const finalScale=
+    Math.min(
+      1,
+      limit
+      /Math.max(
+        boundingWidth,
+        boundingHeight
+      )
+    );
+
+  drawWidth*=finalScale;
+  drawHeight*=finalScale;
+
+  const canvas=
+    document.createElement(
+      "canvas"
+    );
+
+  canvas.width=
+    Math.max(
+      1,
+      Math.round(
+        drawWidth*cosine
+        +drawHeight*sine
+      )
+    );
+
+  canvas.height=
+    Math.max(
+      1,
+      Math.round(
+        drawWidth*sine
+        +drawHeight*cosine
+      )
+    );
+
+  const context=
+    canvas.getContext(
+      "2d",
+      {
+        alpha:false,
+        willReadFrequently:true
+      }
+    );
+
+  if (!context){
+    throw new Error(
+      "The photo could not be prepared."
+    );
+  }
+
+  context.imageSmoothingEnabled=
+    true;
+
+  context.imageSmoothingQuality=
+    "high";
+
+  context.fillStyle=
+    "#ffffff";
+
+  context.fillRect(
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+
+  context.save();
+
+  context.translate(
+    canvas.width/2,
+    canvas.height/2
+  );
+
+  context.rotate(
+    radians
+  );
+
+  context.drawImage(
+    image,
+    sourceX,
+    sourceY,
+    sourceWidth,
+    sourceHeight,
+    -drawWidth/2,
+    -drawHeight/2,
+    drawWidth,
+    drawHeight
+  );
+
+  context.restore();
+
+  nutritionLabelEnhancePreparedCanvas(
+    canvas
+  );
+
+  canvas.dataset
+    .blackpyrePrepared=
+    "true";
+
+  canvas.dataset
+    .blackpyreAutoCropped=
+    expanded
+      ? "true"
+      : "false";
+
+  canvas.dataset
+    .blackpyrePanelScore=
+    expanded
+      ? String(
+          expanded.score
+        )
+      : "0";
+
+  canvas.dataset
+    .blackpyreRotation=
+    String(
+      rotation
+    );
+
+  return canvas;
+}
+
+async function nutritionLabelPrepareCanvas(
+  file,
+  maximumDimension
+){
+  const started=
+    performance.now();
+
+  nutritionLabelStatus(
+    "Finding and preparing the Nutrition Facts panel…",
+    false
+  );
+
+  const image=
+    await nutritionLabelLoadImage(
+      file
+    );
+
+  const detectionCanvas=
+    nutritionLabelMakeDetectionCanvas(
+      image,
+      640
+    );
+
+  let panel=null;
+
+  try {
+    const features=
+      nutritionLabelBuildPanelFeatures(
+        detectionCanvas
+      );
+
+    panel=
+      nutritionLabelFindPanelBounds(
+        features
+      );
+  } catch(error){
+    panel=null;
+  } finally {
+    detectionCanvas.width=1;
+    detectionCanvas.height=1;
+  }
+
+  const prepared=
+    nutritionLabelRenderPreparedPanel(
+      image,
+      panel,
+      maximumDimension
+    );
+
+  prepared.dataset
+    .blackpyrePreprocessMs=
+    String(
+      performance.now()
+      -started
+    );
+
+  return prepared;
+}
+
+async function recognizeNutritionLabelFile(
+  file
+){
+  const started=
+    performance.now();
+
+  nutritionLabelStatus(
+    "Preparing the nutrition label…",
+    false
+  );
+
+  const [
+    ocr,
+    canvas
+  ]=
+    await Promise.all([
+      nutritionLabelGetPaddleOcr(),
+
+      nutritionLabelPrepareCanvas(
+        file,
+        1280
+      )
+    ]);
+
+  try {
+    nutritionLabelStatus(
+      "Reading the nutrition label…",
+      false
+    );
+
+    const results=
+      await ocr.predict(
+        canvas,
+        {
+          textDetLimitSideLen:1280,
+          textDetLimitType:"max",
+          textDetMaxSideLimit:1280,
+          textDetThresh:0.25,
+          textDetBoxThresh:0.45,
+          textDetUnclipRatio:1.6,
+          textRecScoreThresh:0.2
+        }
+      );
+
+    const result=
+      Array.isArray(results)
+        ? results[0]
+        : null;
+
+    const parsed=
+      nutritionLabelParsePaddleResult(
+        result
+        || {}
+      );
+
+    parsed.ocrMetrics
+      .blackPyreTotalMs=
+      performance.now()
+      -started;
+
+    parsed.ocrMetrics
+      .blackPyrePreprocessMs=
+      Number(
+        canvas.dataset
+          .blackpyrePreprocessMs
+      )
+      || 0;
+
+    parsed.ocrMetrics
+      .blackPyreAutoCropped=
+      canvas.dataset
+        .blackpyreAutoCropped
+        ==="true";
+
+    parsed.ocrMetrics
+      .blackPyreRotation=
+      Number(
+        canvas.dataset
+          .blackpyreRotation
+      )
+      || 0;
+
+    return parsed;
+  } finally {
+    canvas.width=1;
+    canvas.height=1;
+  }
+}
+
+window.recognizeNutritionLabelFile=
+  recognizeNutritionLabelFile;
+
+
+function nutritionLabelOcrComparableWord(
+  value
+){
+  let text=
+    String(value||"")
+      .toLowerCase();
+
+  if (
+    typeof text.normalize
+    ==="function"
+  ){
+    text=
+      text.normalize("NFKD");
+  }
+
+  return text.replace(
+    /[^a-z]/g,
+    ""
+  );
+}
+
+function nutritionLabelOcrEditDistance(
+  left,
+  right
+){
+  const a=
+    nutritionLabelOcrComparableWord(
+      left
+    );
+
+  const b=
+    nutritionLabelOcrComparableWord(
+      right
+    );
+
+  if (!a){
+    return b.length;
+  }
+
+  if (!b){
+    return a.length;
+  }
+
+  const previous=
+    new Array(b.length+1);
+
+  const current=
+    new Array(b.length+1);
+
+  for (
+    let column=0;
+    column<=b.length;
+    column+=1
+  ){
+    previous[column]=column;
+  }
+
+  for (
+    let row=1;
+    row<=a.length;
+    row+=1
+  ){
+    current[0]=row;
+
+    for (
+      let column=1;
+      column<=b.length;
+      column+=1
+    ){
+      const substitutionCost=
+        a[row-1]===b[column-1]
+          ? 0
+          : 1;
+
+      current[column]=
+        Math.min(
+          current[column-1]+1,
+          previous[column]+1,
+          previous[column-1]
+            +substitutionCost
+        );
+    }
+
+    for (
+      let column=0;
+      column<=b.length;
+      column+=1
+    ){
+      previous[column]=
+        current[column];
+    }
+  }
+
+  return previous[b.length];
+}
+
+function nutritionLabelOcrCoordinate(
+  line,
+  property
+){
+  const value=
+    Number(
+      line
+      && line[property]
+    );
+
+  return Number.isFinite(value)
+    ? value
+    : null;
+}
+
+function nutritionLabelRecoverProteinFromOcr(
+  parsed,
+  lines
+){
+  const rawCurrentValue=
+    parsed
+    && parsed.protein;
+
+  const hasCurrentValue=
+    rawCurrentValue!==null
+    && rawCurrentValue!==undefined
+    && String(rawCurrentValue).trim()!=="";
+
+  const currentValue=
+    Number(rawCurrentValue);
+
+  if (
+    hasCurrentValue
+    && Number.isFinite(currentValue)
+    && currentValue>=0
+  ){
+    return false;
+  }
+
+  let bestCandidate=null;
+
+  lines.forEach((line,index)=>{
+    const text=
+      String(
+        line
+        && line.text
+        || ""
+      ).trim();
+
+    if (!text){
+      return;
+    }
+
+    const firstWord=
+      text.split(/\s+/)[0];
+
+    const comparable=
+      nutritionLabelOcrComparableWord(
+        firstWord
+      );
+
+    if (
+      comparable.length<6
+      || comparable.length>9
+    ){
+      return;
+    }
+
+    const distance=
+      nutritionLabelOcrEditDistance(
+        comparable,
+        "protein"
+      );
+
+    if (distance>2){
+      return;
+    }
+
+    const valueMatch=
+      text.match(
+        /(-?\d+(?:[.,]\d+)?)\s*(?:g|gram|grams)\b/i
+      );
+
+    if (!valueMatch){
+      return;
+    }
+
+    const value=
+      Number(
+        valueMatch[1]
+          .replace(",",".")
+      );
+
+    if (
+      !Number.isFinite(value)
+      || value<0
+      || value>1000
+    ){
+      return;
+    }
+
+    const confidence=
+      Number(
+        line
+        && line.confidence
+      );
+
+    const candidate={
+      distance,
+      value,
+      index,
+      text,
+      confidence:
+        Number.isFinite(confidence)
+          ? confidence
+          : 0
+    };
+
+    if (
+      !bestCandidate
+      || candidate.distance
+        <bestCandidate.distance
+      || (
+        candidate.distance
+          ===bestCandidate.distance
+        && candidate.confidence
+          >bestCandidate.confidence
+      )
+    ){
+      bestCandidate=candidate;
+    }
+  });
+
+  if (!bestCandidate){
+    return false;
+  }
+
+  parsed.protein=
+    bestCandidate.value;
+
+  parsed.ocrRecoveries=
+    Object.assign(
+      {},
+      parsed.ocrRecoveries||{},
+      {
+        protein:{
+          source:
+            bestCandidate.text,
+
+          value:
+            bestCandidate.value,
+
+          editDistance:
+            bestCandidate.distance
+        }
+      }
+    );
+
+  return true;
+}
+
+function nutritionLabelServingAnchorMatch(
+  text
+){
+  const words=
+    String(text||"")
+      .trim()
+      .split(/\s+/)
+      .map(
+        nutritionLabelOcrComparableWord
+      )
+      .filter(Boolean);
+
+  if (words.length<2){
+    return false;
+  }
+
+  return (
+    nutritionLabelOcrEditDistance(
+      words[0],
+      "serving"
+    )<=2
+    && nutritionLabelOcrEditDistance(
+      words[1],
+      "size"
+    )<=1
+  );
+}
+
+function nutritionLabelServingCandidate(
+  text
+){
+  const normalized=
+    String(text||"")
+      .trim()
+      .replace(/\s+/g," ");
+
+  const match=
+    normalized.match(
+      /^(\d+\s+\d+\/\d+|\d+\/\d+|\d+(?:[.,]\d+)?)\s*([A-Za-z][A-Za-z .'-]{0,40}?)\s*\(\s*(\d+(?:[.,]\d+)?)\s*(g|gram|grams|ml|oz)\s*\)\s*$/i
+    );
+
+  if (!match){
+    return null;
+  }
+
+  const amount=
+    match[1]
+      .replace(",",".")
+      .trim();
+
+  const description=
+    match[2]
+      .trim()
+      .replace(/\s+/g," ");
+
+  const metricAmount=
+    Number(
+      match[3]
+        .replace(",",".")
+    );
+
+  let metricUnit=
+    match[4]
+      .toLowerCase();
+
+  if (
+    metricUnit==="gram"
+    || metricUnit==="grams"
+  ){
+    metricUnit="g";
+  }
+
+  if (
+    !description
+    || !Number.isFinite(metricAmount)
+    || metricAmount<=0
+  ){
+    return null;
+  }
+
+  return {
+    label:
+      amount
+      +" "
+      +description
+      +" ("
+      +metricAmount
+      +" "
+      +metricUnit
+      +")",
+
+    amount:
+      metricAmount,
+
+    unit:
+      metricUnit
+  };
+}
+
+function nutritionLabelRecoverServingLabelFromOcr(
+  parsed,
+  lines
+){
+  let anchor=null;
+
+  for (
+    let index=0;
+    index<lines.length;
+    index+=1
+  ){
+    const line=lines[index];
+
+    if (
+      nutritionLabelServingAnchorMatch(
+        line
+        && line.text
+      )
+    ){
+      anchor={
+        index,
+        line
+      };
+
+      break;
+    }
+  }
+
+  if (!anchor){
+    return false;
+  }
+
+  const anchorX=
+    nutritionLabelOcrCoordinate(
+      anchor.line,
+      "x"
+    );
+
+  const anchorY=
+    nutritionLabelOcrCoordinate(
+      anchor.line,
+      "y"
+    );
+
+  const anchorWidth=
+    nutritionLabelOcrCoordinate(
+      anchor.line,
+      "width"
+    );
+
+  const anchorHeight=
+    nutritionLabelOcrCoordinate(
+      anchor.line,
+      "height"
+    );
+
+  let bestCandidate=null;
+
+  for (
+    let index=anchor.index+1;
+    index<lines.length;
+    index+=1
+  ){
+    const line=lines[index];
+
+    const parsedCandidate=
+      nutritionLabelServingCandidate(
+        line
+        && line.text
+      );
+
+    if (!parsedCandidate){
+      continue;
+    }
+
+    const candidateX=
+      nutritionLabelOcrCoordinate(
+        line,
+        "x"
+      );
+
+    const candidateY=
+      nutritionLabelOcrCoordinate(
+        line,
+        "y"
+      );
+
+    let verticalDistance=
+      index-anchor.index;
+
+    let horizontalDistance=0;
+
+    if (
+      anchorY!==null
+      && candidateY!==null
+    ){
+      verticalDistance=
+        candidateY-anchorY;
+
+      const allowedVerticalDistance=
+        Math.max(
+          160,
+          (
+            anchorHeight===null
+              ? 0
+              : anchorHeight*2.5
+          )
+        );
+
+      if (
+        verticalDistance< -8
+        || verticalDistance
+          >allowedVerticalDistance
+      ){
+        continue;
+      }
+    } else if (
+      index>anchor.index+2
+    ){
+      continue;
+    }
+
+    if (
+      anchorX!==null
+      && candidateX!==null
+    ){
+      horizontalDistance=
+        Math.abs(
+          candidateX-anchorX
+        );
+
+      const allowedHorizontalDistance=
+        Math.max(
+          260,
+          (
+            anchorWidth===null
+              ? 0
+              : anchorWidth*1.5
+          )
+        );
+
+      if (
+        horizontalDistance
+        >allowedHorizontalDistance
+      ){
+        continue;
+      }
+    }
+
+    const candidate={
+      line,
+      parsedCandidate,
+      verticalDistance:
+        Math.max(
+          0,
+          verticalDistance
+        ),
+      horizontalDistance
+    };
+
+    if (
+      !bestCandidate
+      || candidate.verticalDistance
+        <bestCandidate.verticalDistance
+      || (
+        candidate.verticalDistance
+          ===bestCandidate.verticalDistance
+        && candidate.horizontalDistance
+          <bestCandidate.horizontalDistance
+      )
+    ){
+      bestCandidate=candidate;
+    }
+  }
+
+  if (!bestCandidate){
+    return false;
+  }
+
+  const currentLabel=
+    String(
+      parsed
+      && parsed.servingLabel
+      || ""
+    ).trim();
+
+  const contaminated=
+    /(?:total\s+(?:carbohydrate|carbs?|fat|sugars?)|trans\s+fat|protein|calories|sodium|cholesterol|dietary\s+fiber)/i
+      .test(currentLabel);
+
+  const cleanerCandidate=
+    (
+      !currentLabel
+      || contaminated
+      || currentLabel.length
+        >bestCandidate
+          .parsedCandidate
+          .label
+          .length+8
+    );
+
+  if (!cleanerCandidate){
+    return false;
+  }
+
+  parsed.servingLabel=
+    bestCandidate
+      .parsedCandidate
+      .label;
+
+  const existingAmount=
+    Number(
+      parsed.servingAmount
+    );
+
+  if (
+    !Number.isFinite(existingAmount)
+    || existingAmount<=0
+  ){
+    parsed.servingAmount=
+      bestCandidate
+        .parsedCandidate
+        .amount;
+  }
+
+  if (!parsed.servingUnit){
+    parsed.servingUnit=
+      bestCandidate
+        .parsedCandidate
+        .unit;
+  }
+
+  parsed.ocrRecoveries=
+    Object.assign(
+      {},
+      parsed.ocrRecoveries||{},
+      {
+        servingLabel:{
+          source:
+            String(
+              bestCandidate.line.text
+              || ""
+            ),
+
+          value:
+            bestCandidate
+              .parsedCandidate
+              .label
+        }
+      }
+    );
+
+  return true;
+}
+
+function nutritionLabelRepairParsedOcrValues(
+  parsed
+){
+  if (
+    !parsed
+    || typeof parsed!=="object"
+  ){
+    return parsed;
+  }
+
+  const lines=
+    Array.isArray(parsed.ocrLines)
+      ? parsed.ocrLines
+      : [];
+
+  if (!lines.length){
+    return parsed;
+  }
+
+  nutritionLabelRecoverProteinFromOcr(
+    parsed,
+    lines
+  );
+
+  nutritionLabelRecoverServingLabelFromOcr(
+    parsed,
+    lines
+  );
+
+  return parsed;
 }
 
 function nutritionLabelStatus(message, isError){
@@ -560,6 +3732,14 @@ function nutritionLabelEntries(rawLines){
         if (!cleaned) return null;
 
         const numberOrNull = value=>{
+          if (
+            value===null
+            || value===undefined
+            || value===""
+          ){
+            return null;
+          }
+
           const number = Number(value);
 
           return Number.isFinite(number)
@@ -2190,13 +5370,20 @@ function nutritionLabelImageBase64(
   });
 }
 
+let nutritionLabelPaddleVisibilityObserver=
+  null;
+
 function renderNutritionLabelScannerAvailability(){
-  const button =
-    document.getElementById("labelScanBtn");
+  const button=
+    document.getElementById(
+      "labelScanBtn"
+    );
 
-  if (!button) return false;
+  if (!button){
+    return false;
+  }
 
-  const capability =
+  const capability=
     nutritionLabelScannerCapability();
 
   button.classList.toggle(
@@ -2204,99 +5391,220 @@ function renderNutritionLabelScannerAvailability(){
     !capability.available
   );
 
+  if (
+    capability.available
+    && typeof window
+      .IntersectionObserver
+      ==="function"
+    && !nutritionLabelPaddleVisibilityObserver
+  ){
+    nutritionLabelPaddleVisibilityObserver=
+      new window.IntersectionObserver(
+        entries=>{
+          if (
+            entries.some(
+              entry=>
+                entry.isIntersecting
+            )
+          ){
+            nutritionLabelWarmPaddleOcr();
+
+            nutritionLabelPaddleVisibilityObserver
+              .disconnect();
+
+            nutritionLabelPaddleVisibilityObserver=
+              null;
+          }
+        },
+        {
+          rootMargin:"200px"
+        }
+      );
+
+    nutritionLabelPaddleVisibilityObserver
+      .observe(button);
+  }
+
   return capability.available;
 }
 
 document
-  .getElementById("labelScanBtn")
-  .addEventListener("click",()=>{
-    const capability =
-      nutritionLabelScannerCapability();
-
-    if (!capability.available){
-      nutritionLabelStatus(
-        "Nutrition-label scanning is available "
-        +"in the native iPhone app.",
-        true
-      );
-      return;
+  .getElementById(
+    "labelScanBtn"
+  )
+  .addEventListener(
+    "pointerdown",
+    nutritionLabelWarmPaddleOcr,
+    {
+      passive:true
     }
-
-    nutritionLabelStatus(
-      "Take or choose a clear, straight-on photo "
-      +"of the complete Nutrition Facts panel.",
-      false
-    );
-
-    document
-      .getElementById("labelScanFile")
-      .click();
-  });
+  );
 
 document
-  .getElementById("labelScanFile")
+  .getElementById(
+    "labelScanBtn"
+  )
   .addEventListener(
-    "change",
-    async event=>{
-      const input = event.currentTarget;
-      const file =
-        input.files
-        && input.files[0];
+    "click",
+    ()=>{
+      beginNutritionLabelScan();
 
-      if (!file) return;
+      const capability=
+        nutritionLabelScannerCapability();
 
-      const button =
-        document.getElementById("labelScanBtn");
+      if (!capability.available){
+        nutritionLabelStatus(
+          "Nutrition-label scanning is not supported "
+          +"in this browser. Enter the package values manually.",
+          true
+        );
 
-      button.disabled = true;
-      button.textContent = "Reading label…";
+        return;
+      }
+
+      nutritionLabelWarmPaddleOcr();
 
       nutritionLabelStatus(
-        "Reading the Nutrition Facts panel on this device…",
+        "Take or choose a clear, straight-on photo "
+        +"framed tightly around the Nutrition Facts panel.",
         false
       );
 
+      document
+        .getElementById(
+          "labelScanFile"
+        )
+        .click();
+    }
+  );
+
+document
+  .getElementById(
+    "labelScanFile"
+  )
+  .addEventListener(
+    "change",
+    async event=>{
+      const input=
+        event.currentTarget;
+
+      const file=
+        input.files
+        && input.files[0];
+
+      if (!file){
+        return;
+      }
+
+      if (
+        file.type
+        && !/^image\//i.test(
+          file.type
+        )
+      ){
+        nutritionLabelStatus(
+          "Choose a photo of the Nutrition Facts panel.",
+          true
+        );
+
+        input.value="";
+        return;
+      }
+
+      if (
+        Number(file.size)
+        >25*1024*1024
+      ){
+        nutritionLabelStatus(
+          "That photo is too large. "
+          +"Choose an image under 25 MB.",
+          true
+        );
+
+        input.value="";
+        return;
+      }
+
+      const button=
+        document.getElementById(
+          "labelScanBtn"
+        );
+
+      nutritionLabelPaddleScanning=
+        true;
+
+      button.disabled=true;
+      button.textContent=
+        "Reading label…";
+
       try {
-        const capability =
-          nutritionLabelScannerCapability();
-
-        if (!capability.available){
-          throw new Error(
-            "The native label scanner is unavailable."
-          );
-        }
-
-        const base64 =
-          await nutritionLabelImageBase64(
-            file,
-            2200
+        const parsed=
+          await recognizeNutritionLabelFile(
+            file
           );
 
-        const response =
-          await capability.plugin.recognize({
-            base64:base64
-          });
+        nutritionLabelRepairParsedOcrValues(parsed);
 
-        const parsed =
-          parseNutritionLabelLines(
-            response
-            && response.lines
+        applyNutritionLabelScanResult(
+          parsed
+        );
+
+
+        const missing=
+          nutritionLabelMissingCoreFields(
+            parsed
           );
 
-        if (
-          parsed.calories===null
-          || parsed.nutrientCount<3
-        ){
+        const anyRecognized=
+          nutritionLabelHasAnyRecognizedValue(
+            parsed
+          );
+
+        const totalMs=
+          Number(
+            parsed
+            && parsed.ocrMetrics
+            && parsed.ocrMetrics
+              .blackPyreTotalMs
+          );
+
+        const timing=
+          Number.isFinite(totalMs)
+            ? (
+                " in "
+                +Math.max(
+                  0.1,
+                  totalMs/1000
+                ).toFixed(1)
+                +" seconds"
+              )
+            : "";
+
+        if (!anyRecognized){
           nutritionLabelStatus(
-            "BlackPyre could not confidently read enough "
-            +"of that label. Retake it straight-on in brighter "
-            +"light and include the complete Nutrition Facts panel.",
-            true
+            "Scan finished"
+            +timing
+            +", but no nutrition values were read clearly. "
+            +"The fields remain open for manual entry.",
+            false
           );
-          return;
+        } else if (missing.length){
+          nutritionLabelStatus(
+            "Scan finished"
+            +timing
+            +". Review the values and enter the missing "
+            +missing.join(", ")
+            +".",
+            false
+          );
+        } else {
+          nutritionLabelStatus(
+            "Scan finished"
+            +timing
+            +". Review every value against the package.",
+            false
+          );
         }
-
-        applyNutritionLabelScanResult(parsed);
       } catch(error){
         nutritionLabelStatus(
           (
@@ -2305,17 +5613,57 @@ document
               ? error.message
               : "The nutrition label could not be read."
           )
-          +" Try another photo or enter the values manually.",
+          +" Retake the photo or enter the package values manually.",
           true
         );
       } finally {
-        input.value = "";
-        button.disabled = false;
-        button.textContent =
+        nutritionLabelPaddleScanning=
+          false;
+
+        input.value="";
+        button.disabled=false;
+        button.textContent=
           "Scan nutrition label";
       }
     }
   );
+
+window.addEventListener(
+  "pagehide",
+  ()=>{
+    if (
+      nutritionLabelPaddleVisibilityObserver
+    ){
+      nutritionLabelPaddleVisibilityObserver
+        .disconnect();
+
+      nutritionLabelPaddleVisibilityObserver=
+        null;
+    }
+
+    const instance=
+      nutritionLabelPaddleInstance;
+
+    nutritionLabelPaddleInstance=
+      null;
+
+    nutritionLabelPaddleInstancePromise=
+      null;
+
+    if (
+      instance
+      && typeof instance.dispose
+        ==="function"
+    ){
+      try {
+        instance.dispose();
+      } catch(error){}
+    }
+  },
+  {
+    once:true
+  }
+);
 
 renderNutritionLabelScannerAvailability();
 

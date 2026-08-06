@@ -2,8 +2,8 @@
 // NOTE: sw.js deliberately does NOT appear in SHELL. The browser fetches the service
 // worker itself through its own update mechanism (byte-compare on navigation); precaching
 // it would freeze updates and break the cache-bump release ritual. Do not "fix" this.
-const CACHE = "blackpyre-v83";
-// BlackPyre web v82: complete Phase 2 keyless food data.
+const CACHE = "blackpyre-v84-paddle-7";
+// BlackPyre web v84: local PaddleOCR nutrition-label scanning.
 const SHELL = [
   "./",
   "./index.html",

@@ -523,48 +523,48 @@ check(
   )===true
 );
 
+const UnsupportedBrowser = boot(
+  EXISTING_CFG,
+  EMPTY_DATA,
+  window=>{
+    Object.defineProperty(
+      window,
+      "WebAssembly",
+      {
+        configurable:true,
+        writable:true,
+        value:undefined
+      }
+    );
+  }
+);
+
 check(
-  "scanner stays hidden without native plugin",
-  App.window.document
+  "scanner stays hidden when browser OCR is unavailable",
+  UnsupportedBrowser.window.eval(
+    "nutritionLabelScannerCapability().available"
+  )===false
+  && UnsupportedBrowser.window.document
     .getElementById("labelScanBtn")
     .classList
     .contains("hidden")
 );
 
-const Native = boot(
+const BrowserSupported = boot(
   EXISTING_CFG,
   EMPTY_DATA,
   window=>{
-    const plugin = {
-      async recognize(){
-        return {
-          lines:labelLines.map(text=>({
-            text:text,
-            confidence:0.99
-          }))
-        };
-      }
-    };
-
-    window.Capacitor = {
-      Plugins:{},
-      isNativePlatform:()=>true,
-      isPluginAvailable:name=>
-        name==="NutritionLabelScanner",
-      registerPlugin:name=>
-        name==="NutritionLabelScanner"
-          ? plugin
-          : null
-    };
+    window.Worker=function(){};
+    window.WebAssembly={};
   }
 );
 
 check(
-  "native plugin reveals scanner button",
-  Native.window.eval(
+  "browser OCR capability reveals scanner button",
+  BrowserSupported.window.eval(
     "nutritionLabelScannerCapability().available"
   )===true
-  && !Native.window.document
+  && !BrowserSupported.window.document
     .getElementById("labelScanBtn")
     .classList
     .contains("hidden")
@@ -1320,6 +1320,102 @@ check(
   )==="12 fl oz"
 );
 
+const BrowserNullGeometry = boot(
+  EXISTING_CFG,
+  EMPTY_DATA
+);
+
+const browserNullGeometryParsed =
+  BrowserNullGeometry.window.eval(
+    "parseNutritionLabelLines("
+    +JSON.stringify([
+      {
+        text:"Nutrition Facts",
+        confidence:96,
+        x:null,
+        y:null,
+        width:null,
+        height:null,
+        pass:"browser"
+      },
+      {
+        text:"8 servings per container",
+        confidence:96,
+        x:null,
+        y:null,
+        width:null,
+        height:null,
+        pass:"browser"
+      },
+      {
+        text:"Serving size 2/3 cup (55g)",
+        confidence:96,
+        x:null,
+        y:null,
+        width:null,
+        height:null,
+        pass:"browser"
+      },
+      {
+        text:"Amount per serving",
+        confidence:96,
+        x:null,
+        y:null,
+        width:null,
+        height:null,
+        pass:"browser"
+      },
+      {
+        text:"Calories 230",
+        confidence:96,
+        x:null,
+        y:null,
+        width:null,
+        height:null,
+        pass:"browser"
+      },
+      {
+        text:"Total Fat 8g 10%",
+        confidence:96,
+        x:null,
+        y:null,
+        width:null,
+        height:null,
+        pass:"browser"
+      },
+      {
+        text:"Total Carbohydrate 37g 13%",
+        confidence:96,
+        x:null,
+        y:null,
+        width:null,
+        height:null,
+        pass:"browser"
+      },
+      {
+        text:"Protein 3g",
+        confidence:96,
+        x:null,
+        y:null,
+        width:null,
+        height:null,
+        pass:"browser"
+      }
+    ])
+    +")"
+  );
+
+check(
+  "browser OCR null geometry preserves explicit calories and macros",
+  browserNullGeometryParsed.servingLabel
+    ==="2/3 cup (55g)"
+  && browserNullGeometryParsed.calories===230
+  && browserNullGeometryParsed.protein===3
+  && browserNullGeometryParsed.carbs===37
+  && browserNullGeometryParsed.fat===8
+  && browserNullGeometryParsed.nutrientCount===4
+);
+
 const root = path.join(
   __dirname,
   ".."
@@ -1359,7 +1455,7 @@ const sw = fs.readFileSync(
 check(
   "unified food-slider candidate advances web cache to v83",
   sw.includes(
-    'const CACHE = "blackpyre-v83"'
+    'const CACHE = "blackpyre-v84-paddle-7"'
   )
 );
 

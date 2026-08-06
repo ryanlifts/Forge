@@ -1,0 +1,33 @@
+BlackPyre browser nutrition-label OCR
+=====================================
+
+PaddleOCR.js: 0.4.2
+ONNX Runtime Web: 1.27.0 wasm-only export
+Detection model: PP-OCRv6_tiny_det
+Recognition model: PP-OCRv6_tiny_rec
+Inference: inside the browser
+Photo upload: none
+Runtime CDN dependency: none
+Per-scan charge: none
+
+Local runtime files:
+LICENSE.txt
+assets/ort.wasm.min-BPiswx8K.js
+licenses/OpenCV-JS.txt
+licenses/js-yaml.txt
+models/PP-OCRv6_tiny_det_onnx_infer.tar
+models/PP-OCRv6_tiny_rec_onnx_infer.tar
+ort/ort-wasm-simd-threaded.mjs
+ort/ort-wasm-simd-threaded.wasm
+paddleocr-entry.js
+
+SHA-256:
+3840c5c0c61c294264d2dd77b8777be6ddd90121ef4e0e64abcd22edea581d6e  LICENSE.txt
+79599fce65f3a42a4cd783ba6a9b9b7a7dfa440880fe5a5b351e6d66f5407361  assets/ort.wasm.min-BPiswx8K.js
+c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4  licenses/OpenCV-JS.txt
+a07bc24468b9654ce76a547d47a2db282d07733b715db4c73a98bd63961f9550  licenses/js-yaml.txt
+ff6ab415b0a6e0c488550f2fb5d5046f1719848df220b2dc21b56402a65bc05d  models/PP-OCRv6_tiny_det_onnx_infer.tar
+1e13b22717b1edd89d4cde4fda272b6c17d5b505c97c2baea99da1a3a2d54b29  models/PP-OCRv6_tiny_rec_onnx_infer.tar
+0a1e718d99c41b22c21f2520ff4f9e883a6b5533856e398d21816ee8eb8185d3  ort/ort-wasm-simd-threaded.mjs
+d1ab1b94b16a65b29d710d0b587b29e7bed336827577623913479b8afe8113e6  ort/ort-wasm-simd-threaded.wasm
+046f4442feb667d6425b88583a922c09026b234c5d2acbcd435372e2bd819ea3  paddleocr-entry.js
