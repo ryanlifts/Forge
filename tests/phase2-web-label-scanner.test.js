@@ -1123,7 +1123,7 @@ const sw=
 
 check(
   "service worker uses Paddle cache and removes Tesseract",
-  /blackpyre-v84-paddle-9/.test(
+  /blackpyre-v84-paddle-10/.test(
     sw
   )
   && !/vendor\/tesseract/.test(

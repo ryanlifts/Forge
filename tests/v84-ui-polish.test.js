@@ -132,6 +132,141 @@ check(
   scannerReviewPassed
 );
 
+/* Test whole-number display while retaining exact selected-food values. */
+
+const selectedHelperStart=
+  food.indexOf(
+    "function selectedReviewWholeNumber("
+  );
+
+const selectedHelperEnd=
+  food.indexOf(
+    "function clearSelectedReviewError(",
+    selectedHelperStart
+  );
+
+let selectedDisplayPassed=false;
+let selectedPrecisionPassed=false;
+let selectedManualEditPassed=false;
+
+if(
+  selectedHelperStart!==-1
+  && selectedHelperEnd>selectedHelperStart
+){
+  const selectedElements={};
+
+  function selectedElement(id){
+    if(!selectedElements[id]){
+      selectedElements[id]={
+        value:"",
+        dataset:{}
+      };
+    }
+
+    return selectedElements[id];
+  }
+
+  const selectedContext={
+    document:{
+      getElementById:selectedElement
+    }
+  };
+
+  vm.createContext(
+    selectedContext
+  );
+
+  vm.runInContext(
+    food.slice(
+      selectedHelperStart,
+      selectedHelperEnd
+    ),
+    selectedContext
+  );
+
+  const setNutrition=
+    selectedContext
+      .selectedReviewSetNutritionInput;
+
+  const effectiveValue=
+    selectedContext
+      .selectedReviewInputValue;
+
+  const fixtures=[
+    [
+      "cal",
+      142.857142857143,
+      "143"
+    ],
+    [
+      "pro",
+      4.28571428571429,
+      "4"
+    ],
+    [
+      "carb",
+      27.1428571428571,
+      "27"
+    ],
+    [
+      "fat",
+      1.42857142857143,
+      "1"
+    ]
+  ];
+
+  selectedDisplayPassed=
+    fixtures.every(
+      fixture=>{
+        setNutrition(
+          fixture[0],
+          fixture[1]
+        );
+
+        return selectedElement(
+          fixture[0]
+        ).value===fixture[2];
+      }
+    );
+
+  selectedPrecisionPassed=
+    fixtures.every(
+      fixture=>
+        Number(
+          effectiveValue(
+            fixture[0]
+          )
+        )===fixture[1]
+    );
+
+  const edited=
+    selectedElement("cal");
+
+  delete edited.dataset.reviewExact;
+  edited.value="150";
+
+  selectedManualEditPassed=
+    effectiveValue("cal")==="150";
+}
+
+check(
+  "selected food review displays the Fudge Bar nutrition as whole numbers",
+  selectedDisplayPassed
+);
+
+check(
+  "untouched selected-food fields retain exact values for scaling and logging",
+  selectedPrecisionPassed
+);
+
+check(
+  "manual selected-food edits replace the retained source value",
+  selectedManualEditPassed
+  && food.includes(
+    "delete input.dataset.reviewExact;"
+  )
+);
+
 /* Test the actual training helper. */
 
 const helperStart=

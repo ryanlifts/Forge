@@ -6081,6 +6081,60 @@ const SELECTED_REVIEW_IDS=Object.freeze({
   fat:"selEditFat100"
 });
 
+
+function selectedReviewWholeNumber(
+  value
+){
+  if(
+    value===null
+    || value===undefined
+    || String(value).trim()===""
+  ){
+    return "";
+  }
+
+  const number=Number(value);
+
+  return Number.isFinite(number)
+    ? String(Math.round(number))
+    : "";
+}
+
+function selectedReviewSetNutritionInput(
+  id,
+  value
+){
+  const input=
+    document.getElementById(id);
+
+  const display=
+    selectedReviewWholeNumber(value);
+
+  input.value=display;
+
+  if(display===""){
+    delete input.dataset.reviewExact;
+    return;
+  }
+
+  input.dataset.reviewExact=
+    String(Number(value));
+}
+
+function selectedReviewInputValue(
+  id
+){
+  const input=
+    document.getElementById(id);
+
+  return Object.prototype.hasOwnProperty.call(
+    input.dataset,
+    "reviewExact"
+  )
+    ? input.dataset.reviewExact
+    : input.value;
+}
+
 function clearSelectedReviewError(){
   const error=document.getElementById("selReviewError");
   error.textContent="";
@@ -6094,10 +6148,22 @@ function clearSelectedReviewError(){
 function selectedReviewRaw(){
   return {
     name:document.getElementById(SELECTED_REVIEW_IDS.name).value,
-    cal:document.getElementById(SELECTED_REVIEW_IDS.cal).value,
-    pro:document.getElementById(SELECTED_REVIEW_IDS.pro).value,
-    carb:document.getElementById(SELECTED_REVIEW_IDS.carb).value,
-    fat:document.getElementById(SELECTED_REVIEW_IDS.fat).value
+
+    cal:selectedReviewInputValue(
+      SELECTED_REVIEW_IDS.cal
+    ),
+
+    pro:selectedReviewInputValue(
+      SELECTED_REVIEW_IDS.pro
+    ),
+
+    carb:selectedReviewInputValue(
+      SELECTED_REVIEW_IDS.carb
+    ),
+
+    fat:selectedReviewInputValue(
+      SELECTED_REVIEW_IDS.fat
+    )
   };
 }
 
@@ -6198,20 +6264,35 @@ function reviewedSelectedFood(showError){
 function populateSelectedReview(food){
   document.getElementById(SELECTED_REVIEW_IDS.name).value=
     food.name||"";
-  document.getElementById(SELECTED_REVIEW_IDS.cal).value=
-    Number.isFinite(Number(food.cal100)) ? food.cal100 : "";
-  document.getElementById(SELECTED_REVIEW_IDS.pro).value=
-    Number.isFinite(Number(food.pro100)) ? food.pro100 : "";
-  document.getElementById(SELECTED_REVIEW_IDS.carb).value=
-    Number.isFinite(Number(food.carb100)) ? food.carb100 : "";
-  document.getElementById(SELECTED_REVIEW_IDS.fat).value=
-    Number.isFinite(Number(food.fat100)) ? food.fat100 : "";
+  selectedReviewSetNutritionInput(
+    SELECTED_REVIEW_IDS.cal,
+    food.cal100
+  );
+
+  selectedReviewSetNutritionInput(
+    SELECTED_REVIEW_IDS.pro,
+    food.pro100
+  );
+
+  selectedReviewSetNutritionInput(
+    SELECTED_REVIEW_IDS.carb,
+    food.carb100
+  );
+
+  selectedReviewSetNutritionInput(
+    SELECTED_REVIEW_IDS.fat,
+    food.fat100
+  );
 
   clearSelectedReviewError();
 }
 
 Object.values(SELECTED_REVIEW_IDS).forEach(id=>{
-  document.getElementById(id).addEventListener("input",()=>{
+  const input=
+    document.getElementById(id);
+
+  input.addEventListener("input",()=>{
+    delete input.dataset.reviewExact;
     clearSelectedReviewError();
     updateCalc();
   });
