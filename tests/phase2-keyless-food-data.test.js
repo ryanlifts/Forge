@@ -424,13 +424,7 @@ check("normal backups exclude a legacy USDA credential",
   !backupText.includes("should-never-export") &&
   !Object.prototype.hasOwnProperty.call(JSON.parse(backupText).cfg,"usdaKey"));
 
-check("FAQ accurately explains keyless sources, barcode verification, corrections, and post-log controls",
-  migrated.window.eval(`FAQ.some(x=>x.q==="Do I need a USDA key for food search?"&&/does not ship a USDA API key/.test(x.a)&&/Open Food Facts/.test(x.a))`) &&
-  migrated.window.eval(`FAQ.some(x=>x.q==="How accurate are suggested-food calories and macros?"&&/nutrition label is the best source/.test(x.a))`) &&
-  migrated.window.eval(`FAQ.some(x=>x.q==="How does barcode scanning work?"&&/Verify barcode nutrition/.test(x.a)&&/Correct barcode data/.test(x.a)&&/community data and can be wrong/.test(x.a)&&/Nothing is logged/.test(x.a))`) &&
-  migrated.window.eval(`FAQ.some(x=>x.q==="What happens after I add a food?"&&/keeps your place/.test(x.a)&&/Undo/.test(x.a)&&/View entry/.test(x.a))`) &&
-  migrated.window.eval(`FAQ.some(x=>x.q==="How accurate is photo \\/ AI food logging?"&&!/barcode scan is exact/i.test(x.a)&&/package label is the best source/.test(x.a))`));
-check("service worker cache is bumped for Phase 2",/blackpyre-v85-no-label-scanner-1/.test(fs.readFileSync(path.join(root,"sw.js"),"utf8")));
+check("service worker cache is bumped for Phase 2",/blackpyre-v86-faq-2/.test(fs.readFileSync(path.join(root,"sw.js"),"utf8")));
 
 
 const ServingReviewCorrection = boot(
