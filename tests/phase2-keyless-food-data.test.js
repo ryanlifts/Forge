@@ -106,6 +106,225 @@ check("temporary barcode failure retries once then opens manual entry",
   !failedBarcode.dom.window.document.getElementById("customCard").classList.contains("hidden") &&
   /could not be reached/.test(failedBarcode.dom.window.document.getElementById("searchErr").textContent));
 
+const readyBarcodeCorrectionProductV90 = {
+  code:"0847644005066",
+  product_name:"CLEAN",
+  brands:"READY",
+  serving_size:"1 bar (52 g)",
+  serving_quantity:52,
+  nutrition_data_per:"100g",
+  nutriments:{
+    "energy-kcal_100g":200,
+    "energy-kcal_serving":104,
+    "proteins_100g":15,
+    "proteins_serving":7.8,
+    "carbohydrates_100g":23,
+    "carbohydrates_serving":11.96,
+    "fat_100g":7,
+    "fat_serving":3.64,
+    proteins:15,
+    carbohydrates:23,
+    fat:7
+  }
+};
+
+const readyBarcodeCorrectionV90 =
+  barcodeBoot(
+    ()=>Promise.resolve({
+      ok:true,
+      status:200,
+      json:()=>Promise.resolve({
+        status:1,
+        product:
+          readyBarcodeCorrectionProductV90
+      })
+    })
+  );
+
+await lookup(
+  readyBarcodeCorrectionV90,
+  "0847644005066"
+);
+
+const readyCorrectionDocumentV90 =
+  readyBarcodeCorrectionV90
+    .dom
+    .window
+    .document;
+
+check(
+  "leading-zero EAN barcode uses canonical UPC identity",
+  readyBarcodeCorrectionV90.calls.length===1
+  && /\/847644005066\.json/.test(
+    readyBarcodeCorrectionV90.calls[0]
+  )
+  && readyBarcodeCorrectionV90
+    .dom
+    .window
+    .eval(
+      `normalizeBarcodeIdentity(
+        selected
+        && selected.barcode
+      )`
+    )==="847644005066"
+);
+
+const readyCorrectionPanelV90 =
+  readyCorrectionDocumentV90
+    .getElementById(
+      "barcodeCorrectionReview"
+    );
+
+const readyCorrectionButtonV90 =
+  readyCorrectionDocumentV90
+    .getElementById(
+      "barcodeCorrectionBtn"
+    );
+
+check(
+  "Open Food Facts result exposes package correction review",
+  !!readyCorrectionPanelV90
+  && !readyCorrectionPanelV90
+    .classList
+    .contains("hidden")
+  && !!readyCorrectionButtonV90
+  && readyCorrectionButtonV90
+    .textContent==="Correct barcode data"
+);
+
+check(
+  "barcode verification is prominent and directly above nutrition",
+  !!readyCorrectionDocumentV90
+    .getElementById(
+      "barcodeCorrectionTitle"
+    )
+  && readyCorrectionDocumentV90
+    .getElementById(
+      "barcodeCorrectionTitle"
+    )
+    .textContent
+    .includes("Verify barcode nutrition")
+  && readyCorrectionPanelV90
+    .style
+    .border
+    .includes("var(--amber)")
+  && readyCorrectionPanelV90
+    .nextSibling===
+      readyCorrectionDocumentV90
+        .getElementById("calcLine")
+);
+
+readyCorrectionButtonV90.click();
+
+check(
+  "correction form prefills current barcode serving values",
+  readyCorrectionDocumentV90
+    .getElementById("cfBarcode")
+    .value==="847644005066"
+  && readyCorrectionDocumentV90
+    .getElementById("cfServG")
+    .value==="52"
+  && readyCorrectionDocumentV90
+    .getElementById("cfServingLabel")
+    .value==="1 bar (52 g)"
+  && readyCorrectionDocumentV90
+    .getElementById("cfCal")
+    .value==="104"
+  && readyCorrectionDocumentV90
+    .getElementById("cfPro")
+    .value==="7.8"
+  && readyCorrectionDocumentV90
+    .getElementById("cfCarb")
+    .value==="12"
+  && readyCorrectionDocumentV90
+    .getElementById("cfFat")
+    .value==="3.6"
+);
+
+readyCorrectionDocumentV90
+  .getElementById("cfCal")
+  .value="200";
+
+readyCorrectionDocumentV90
+  .getElementById("cfPro")
+  .value="15";
+
+readyCorrectionDocumentV90
+  .getElementById("cfCarb")
+  .value="23";
+
+readyCorrectionDocumentV90
+  .getElementById("cfFat")
+  .value="7";
+
+readyCorrectionDocumentV90
+  .getElementById("cfSaveBtn")
+  .click();
+
+check(
+  "package correction saves under canonical barcode",
+  readyBarcodeCorrectionV90
+    .dom
+    .window
+    .eval(
+      `(()=>{
+        const saved =
+          data.myFoods["847644005066"];
+
+        if (!saved){
+          return false;
+        }
+
+        const serving =
+          servingValuesFromFood(saved);
+
+        return saved.servingG===52
+          && saved.servingLabel==="1 bar (52 g)"
+          && Math.abs(serving.cal-200)<0.01
+          && Math.abs(serving.pro-15)<0.01
+          && Math.abs(serving.carb-23)<0.01
+          && Math.abs(serving.fat-7)<0.01;
+      })()`
+    )===true
+);
+
+readyBarcodeCorrectionV90.calls.length=0;
+
+await lookup(
+  readyBarcodeCorrectionV90,
+  "0847644005066"
+);
+
+check(
+  "later UPC or EAN scan uses saved correction without network",
+  readyBarcodeCorrectionV90.calls.length===0
+  && readyBarcodeCorrectionV90
+    .dom
+    .window
+    .eval(
+      `(()=>{
+        const serving =
+          servingValuesFromFood(selected);
+
+        return normalizeBarcodeIdentity(
+          selected
+          && selected.barcode
+        )==="847644005066"
+          && Math.abs(serving.cal-200)<0.01
+          && Math.abs(serving.pro-15)<0.01
+          && Math.abs(serving.carb-23)<0.01
+          && Math.abs(serving.fat-7)<0.01;
+      })()`
+    )===true
+);
+
+check(
+  "saved barcode correction no longer shows verification warning",
+  readyCorrectionPanelV90
+    .classList
+    .contains("hidden")
+);
+
 const rapidAddGuard = boot(EXISTING_CFG,EMPTY_DATA);
 rapidAddGuard.window.eval(`
   data.food[todayStr()]=[];
@@ -195,7 +414,7 @@ check("normal backups exclude a legacy USDA credential",
 check("FAQ accurately explains keyless sources and label verification",
   migrated.window.eval(`FAQ.some(x=>x.q==="Do I need a USDA key for food search?"&&/does not ship a USDA API key/.test(x.a)&&/Open Food Facts/.test(x.a))`) &&
   migrated.window.eval(`FAQ.some(x=>x.q==="How accurate are suggested-food calories and macros?"&&/nutrition label is the best source/.test(x.a))`));
-check("service worker cache is bumped for Phase 2",/blackpyre-v89/.test(fs.readFileSync(path.join(root,"sw.js"),"utf8")));
+check("service worker cache is bumped for Phase 2",/blackpyre-v90-2/.test(fs.readFileSync(path.join(root,"sw.js"),"utf8")));
 
 summary("PHASE 2 KEYLESS FOOD DATA");
 })().catch(error=>{

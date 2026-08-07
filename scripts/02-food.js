@@ -319,7 +319,10 @@ function mapOFFProduct(p){
     cal100:cal100, pro100:pro100, carb100:carb100, fat100:fat100,
     servingG:servingOk ? serving : null,
     servingLabel:p.serving_size || p.quantity || null,
-    barcode:p.code ? String(p.code) : null,
+    barcode:
+      p.code
+        ? normalizeBarcodeIdentity(p.code)
+        : null,
     sourceLabel:"Open Food Facts",
   };
 }
@@ -2385,7 +2388,14 @@ function offNutritionNeedsManualReview(p){
 }
 
 async function runBarcode(){
-  const code = document.getElementById("barcodeInput").value.trim().replace(/\D/g,"");
+  const rawCode =
+    document
+      .getElementById("barcodeInput")
+      .value
+      .trim();
+
+  const code =
+    normalizeBarcodeIdentity(rawCode);
   const errEl = document.getElementById("searchErr");
   errEl.classList.add("hidden");
   document.getElementById("customCard").classList.add("hidden");
@@ -2690,6 +2700,303 @@ function foodSelectionSummary(food){
   );
 }
 
+function normalizeBarcodeIdentity(value){
+  const digits =
+    String(value||"")
+      .replace(/\D/g,"");
+
+  if (
+    digits.length===13
+    && digits.startsWith("0")
+  ){
+    return digits.slice(1);
+  }
+
+  return digits;
+}
+
+function setBarcodeCorrectionField(id,value){
+  const field =
+    document.getElementById(id);
+
+  if (!field){
+    return;
+  }
+
+  if (
+    value===null
+    || value===undefined
+    || value===""
+  ){
+    field.value="";
+    return;
+  }
+
+  const number =
+    Number(value);
+
+  field.value =
+    Number.isFinite(number)
+      ? String(number)
+      : String(value);
+}
+
+function openBarcodeCorrection(food){
+  if (!food){
+    return;
+  }
+
+  const barcode =
+    normalizeBarcodeIdentity(
+      food.barcode
+      || food.lookupBarcode
+      || food.code
+    );
+
+  if (!barcode){
+    return;
+  }
+
+  openCustomForm(barcode);
+
+  const servingG =
+    Number(food.servingG);
+
+  const servingValues =
+    servingValuesFromFood(food);
+
+  setBarcodeCorrectionField(
+    "cfName",
+    food.productName
+      || food.name
+      || ""
+  );
+
+  setBarcodeCorrectionField(
+    "cfBrand",
+    food.brandName
+      || food.brand
+      || ""
+  );
+
+  setBarcodeCorrectionField(
+    "cfBarcode",
+    barcode
+  );
+
+  setBarcodeCorrectionField(
+    "cfServG",
+    Number.isFinite(servingG)
+    && servingG>0
+      ? servingG
+      : ""
+  );
+
+  setBarcodeCorrectionField(
+    "cfServingLabel",
+    food.servingLabel
+      || ""
+  );
+
+  setBarcodeCorrectionField(
+    "cfCal",
+    Math.round(
+      Number(servingValues.cal)||0
+    )
+  );
+
+  setBarcodeCorrectionField(
+    "cfPro",
+    r1(servingValues.pro)
+  );
+
+  setBarcodeCorrectionField(
+    "cfCarb",
+    r1(servingValues.carb)
+  );
+
+  setBarcodeCorrectionField(
+    "cfFat",
+    r1(servingValues.fat)
+  );
+
+  const card =
+    document.getElementById("customCard");
+
+  if (
+    card
+    && typeof card.scrollIntoView==="function"
+  ){
+    card.scrollIntoView({
+      block:"start"
+    });
+  }
+}
+
+function syncBarcodeCorrectionReview(food){
+  const calculator =
+    document.getElementById("calcCard");
+
+  if (!calculator){
+    return;
+  }
+
+  let panel =
+    document.getElementById(
+      "barcodeCorrectionReview"
+    );
+
+  if (!panel){
+    panel =
+      document.createElement("div");
+
+    panel.id =
+      "barcodeCorrectionReview";
+
+    panel.setAttribute(
+      "role",
+      "note"
+    );
+
+    panel.setAttribute(
+      "aria-labelledby",
+      "barcodeCorrectionTitle"
+    );
+
+    panel.setAttribute(
+      "aria-describedby",
+      "barcodeCorrectionMessage"
+    );
+
+    panel.style.cssText =
+      "margin:12px 0 10px;"
+      +"padding:12px;"
+      +"border:2px solid var(--amber);"
+      +"border-radius:12px;"
+      +"background:rgba(232,176,75,.14);";
+
+    const title =
+      document.createElement("div");
+
+    title.id =
+      "barcodeCorrectionTitle";
+
+    title.textContent =
+      "⚠ Verify barcode nutrition";
+
+    title.style.cssText =
+      "font-size:15px;"
+      +"font-weight:700;"
+      +"line-height:1.3;"
+      +"margin-bottom:6px;";
+
+    const message =
+      document.createElement("div");
+
+    message.id =
+      "barcodeCorrectionMessage";
+
+    message.textContent =
+      "This result came from Open Food Facts. Compare the serving and nutrition below with the package before logging.";
+
+    message.style.cssText =
+      "font-size:13px;"
+      +"line-height:1.5;"
+      +"color:var(--text);";
+
+    const button =
+      document.createElement("button");
+
+    button.id =
+      "barcodeCorrectionBtn";
+
+    button.type =
+      "button";
+
+    button.textContent =
+      "Correct barcode data";
+
+    button.setAttribute(
+      "aria-describedby",
+      "barcodeCorrectionMessage"
+    );
+
+    const existingButton =
+      document.getElementById("cfSaveBtn");
+
+    if (
+      existingButton
+      && existingButton.className
+    ){
+      button.className =
+        existingButton.className;
+    }
+
+    button.style.width =
+      "100%";
+
+    button.style.marginTop =
+      "10px";
+
+    panel.appendChild(title);
+    panel.appendChild(message);
+    panel.appendChild(button);
+
+    const nutritionLine =
+      document.getElementById(
+        "calcLine"
+      );
+
+    if (
+      nutritionLine
+      && nutritionLine.parentNode===calculator
+    ){
+      calculator.insertBefore(
+        panel,
+        nutritionLine
+      );
+    } else {
+      calculator.appendChild(panel);
+    }
+  }
+
+  const barcode =
+    normalizeBarcodeIdentity(
+      food
+      && (
+        food.barcode
+        || food.lookupBarcode
+        || food.code
+      )
+    );
+
+  const eligible =
+    !!(
+      food
+      && food.sourceLabel==="Open Food Facts"
+      && barcode
+    );
+
+  panel.classList.toggle(
+    "hidden",
+    !eligible
+  );
+
+  const button =
+    document.getElementById(
+      "barcodeCorrectionBtn"
+    );
+
+  if (!button){
+    return;
+  }
+
+  button.onclick =
+    eligible
+      ? ()=>openBarcodeCorrection(food)
+      : null;
+}
+
 function selectFood(h){
   selected = h;
 
@@ -2740,6 +3047,9 @@ function selectFood(h){
 
   updateCalc();
   revealFoodSliderEditor();
+
+
+  syncBarcodeCorrectionReview(h);
 }
 
 function syncSliderToUnit(){
@@ -2879,29 +3189,431 @@ function updateRecentPortion(item, amount, unit){
   data.recents = list.slice(0,20);
 }
 
+let foodAddConfirmationRef=null;
+
+function ensureFoodAddConfirmation(){
+  let panel =
+    document.getElementById(
+      "foodAddConfirmationPanel"
+    );
+
+  if (panel){
+    return panel;
+  }
+
+  panel =
+    document.createElement("div");
+
+  panel.id =
+    "foodAddConfirmationPanel";
+
+  panel.className =
+    "hidden";
+
+  panel.setAttribute(
+    "role",
+    "status"
+  );
+
+  panel.setAttribute(
+    "aria-live",
+    "polite"
+  );
+
+  panel.style.cssText =
+    "margin:0 0 12px;"
+    +"padding:12px;"
+    +"border:1px solid var(--ok);"
+    +"border-radius:12px;"
+    +"background:var(--panel);";
+
+  const message =
+    document.createElement("div");
+
+  message.id =
+    "foodAddConfirmationMessage";
+
+  message.style.cssText =
+    "font-size:14px;"
+    +"font-weight:600;"
+    +"margin-bottom:9px;";
+
+  const actions =
+    document.createElement("div");
+
+  actions.style.cssText =
+    "display:flex;"
+    +"gap:8px;";
+
+  const undo =
+    document.createElement("button");
+
+  undo.id =
+    "foodAddUndoBtn";
+
+  undo.type =
+    "button";
+
+  undo.className =
+    "btn ghost small";
+
+  undo.textContent =
+    "Undo";
+
+  undo.style.flex =
+    "1";
+
+  const view =
+    document.createElement("button");
+
+  view.id =
+    "foodAddViewBtn";
+
+  view.type =
+    "button";
+
+  view.className =
+    "btn ghost small";
+
+  view.textContent =
+    "View entry";
+
+  view.style.flex =
+    "1";
+
+  actions.appendChild(undo);
+  actions.appendChild(view);
+
+  panel.appendChild(message);
+  panel.appendChild(actions);
+
+  const calculator =
+    document.getElementById("calcCard");
+
+  if (
+    calculator
+    && calculator.parentNode
+  ){
+    calculator.parentNode.insertBefore(
+      panel,
+      calculator.nextSibling
+    );
+  }
+
+  return panel;
+}
+
+function hideFoodAddedConfirmation(){
+  foodAddConfirmationRef=null;
+
+  const panel =
+    document.getElementById(
+      "foodAddConfirmationPanel"
+    );
+
+  if (panel){
+    panel.classList.add("hidden");
+  }
+
+  const undo =
+    document.getElementById(
+      "foodAddUndoBtn"
+    );
+
+  const view =
+    document.getElementById(
+      "foodAddViewBtn"
+    );
+
+  if (undo){
+    undo.onclick=null;
+  }
+
+  if (view){
+    view.onclick=null;
+  }
+}
+
+function showFoodAddedConfirmation(
+  dateStr,
+  entry
+){
+  const panel =
+    ensureFoodAddConfirmation();
+
+  if (!panel){
+    return;
+  }
+
+  const ref = {
+    date:dateStr,
+    entry:entry
+  };
+
+  foodAddConfirmationRef=ref;
+
+  const message =
+    document.getElementById(
+      "foodAddConfirmationMessage"
+    );
+
+  if (message){
+    message.textContent =
+      dateStr===todayStr()
+        ? "✓ Added to today’s log"
+        : "✓ Added to "+fmtDate(dateStr);
+  }
+
+  const undo =
+    document.getElementById(
+      "foodAddUndoBtn"
+    );
+
+  const view =
+    document.getElementById(
+      "foodAddViewBtn"
+    );
+
+  if (undo){
+    undo.onclick=()=>{
+      if (
+        !foodAddConfirmationRef
+        || foodAddConfirmationRef!==ref
+      ){
+        return;
+      }
+
+      const list =
+        data.food[dateStr] || [];
+
+      const index =
+        list.indexOf(entry);
+
+      if (index<0){
+        hideFoodAddedConfirmation();
+        return;
+      }
+
+      const removed =
+        list.splice(index,1)[0];
+
+      if (save()===false){
+        list.splice(
+          Math.min(index,list.length),
+          0,
+          removed
+        );
+
+        if (
+          foodDateEl.value===dateStr
+        ){
+          renderFood();
+        }
+
+        renderDash();
+
+        flashSave(
+          "Could not undo that food entry",
+          true
+        );
+
+        return;
+      }
+
+      if (
+        foodDateEl.value===dateStr
+      ){
+        renderFood();
+      }
+
+      renderDash();
+      renderBackup();
+
+      hideFoodAddedConfirmation();
+
+      flashSave(
+        "Food entry removed"
+      );
+    };
+  }
+
+  if (view){
+    view.onclick=()=>{
+      const list =
+        data.food[dateStr] || [];
+
+      const index =
+        list.indexOf(entry);
+
+      if (index<0){
+        hideFoodAddedConfirmation();
+        return;
+      }
+
+      if (
+        foodDateEl.value!==dateStr
+      ){
+        foodDateEl.value=dateStr;
+        renderFood();
+      }
+
+      const editButton =
+        document.querySelector(
+          '#foodList .edt[data-i="'
+          +index
+          +'"]'
+        );
+
+      const row =
+        editButton
+        && editButton.closest
+          ? editButton.closest(
+              ".list-item"
+            )
+          : null;
+
+      if (
+        row
+        && row.scrollIntoView
+      ){
+        row.scrollIntoView({
+          behavior:"smooth",
+          block:"center"
+        });
+      }
+    };
+  }
+
+  panel.classList.remove("hidden");
+}
+
 document.getElementById("addSelBtn").addEventListener("click", ()=>{
   if(!selected) return;
-  const entry = sliderEntryFromSelection();
-  if (!entry){ flashSave("Enter an amount greater than 0", true); return; }
-  const amt = qtyAmountEl.value, unit = qtyUnitEl.value;
-  if (editFoodIdx!=null && editFoodMode==="slider" && (data.food[foodDateEl.value]||[])[editFoodIdx]){
-    entry.meal = data.food[foodDateEl.value][editFoodIdx].meal || currentMeal;
-    data.food[foodDateEl.value][editFoodIdx] = entry;
-    updateRecentPortion(selected,amt,unit);
-    save(); renderFood(); renderDash();
-    ackBtn("addSelBtn", "✓ Updated");
+
+  const entry =
+    sliderEntryFromSelection();
+
+  if (!entry){
+    flashSave(
+      "Enter an amount greater than 0",
+      true
+    );
+    return;
+  }
+
+  const amt =
+    qtyAmountEl.value;
+
+  const unit =
+    qtyUnitEl.value;
+
+  const logDate =
+    foodDateEl.value;
+
+  const addButton =
+    document.getElementById(
+      "addSelBtn"
+    );
+
+  // On iOS the tapped button retains focus. Hiding its parent while it is
+  // still focused can cause WKWebView to reposition the page. Release that
+  // focus before resetting the completed entry.
+  if (
+    document.activeElement===addButton
+    && addButton
+    && typeof addButton.blur==="function"
+  ){
+    try {
+      addButton.blur();
+    } catch(e){}
+  }
+
+  let added=false;
+
+  if (
+    editFoodIdx!=null
+    && editFoodMode==="slider"
+    && (
+      data.food[foodDateEl.value]
+      || []
+    )[editFoodIdx]
+  ){
+    entry.meal =
+      data.food[
+        foodDateEl.value
+      ][editFoodIdx].meal
+      || currentMeal;
+
+    data.food[
+      foodDateEl.value
+    ][editFoodIdx] =
+      entry;
+
+    updateRecentPortion(
+      selected,
+      amt,
+      unit
+    );
+
+    save();
+    renderFood();
+    renderDash();
+
+    ackBtn(
+      "addSelBtn",
+      "✓ Updated"
+    );
+
+    hideFoodAddedConfirmation();
     cancelEditFood();
   } else {
-    addEntry(entry);
-    pushRecent(Object.assign({}, selected, {lastAmt:amt, lastUnit:unit}));
+    added =
+      addEntry(entry)!==false;
+
+    if (added){
+      pushRecent(
+        Object.assign(
+          {},
+          selected,
+          {
+            lastAmt:amt,
+            lastUnit:unit
+          }
+        )
+      );
+    }
   }
-  document.getElementById("calcCard").classList.add("hidden");
-  document.getElementById("resultsCard").classList.add("hidden");
-  document.getElementById("foodQuery").value = "";
-  document.getElementById("barcodeInput").value = "";
-  selected = null;
-  // v51: return to the search box ready for the next entry (meal selection is preserved)
-  try { document.getElementById("foodQuery").scrollIntoView({behavior:"smooth", block:"center"}); } catch(e){}
+
+  document
+    .getElementById("calcCard")
+    .classList
+    .add("hidden");
+
+  document
+    .getElementById("resultsCard")
+    .classList
+    .add("hidden");
+
+  document
+    .getElementById("foodQuery")
+    .value="";
+
+  document
+    .getElementById("barcodeInput")
+    .value="";
+
+  selected=null;
+
+  if (added){
+    showFoodAddedConfirmation(
+      logDate,
+      entry
+    );
+  }
+
+  // Deliberately do not scroll or focus another field here.
+  // The user stays where they were and chooses whether to continue
+  // entering food or explicitly View entry.
 });
 
 // --- recents ---

@@ -212,6 +212,21 @@ check(
   E("JSON.stringify(data.food)")===beforeScanFood
 );
 
+App.window.eval(`
+  window.__postAddScrolls=0;
+  window.__postAddTarget=null;
+
+  HTMLElement.prototype.scrollIntoView=function(opts){
+    window.__postAddScrolls++;
+
+    window.__postAddTarget={
+      id:this.id || "",
+      className:this.className || "",
+      block:opts && opts.block
+    };
+  };
+`);
+
 click(
   App.window,
   "addSelBtn"
@@ -224,6 +239,59 @@ check(
   && E("Object.values(data.food).flat()[0].pro")===1.5
   && E("Object.values(data.food).flat()[0].carb")===18.5
   && E("Object.values(data.food).flat()[0].fat")===4
+);
+
+check(
+  "Add to log preserves the user's position and shows inline confirmation",
+  E("window.__postAddScrolls")===0
+  && !d
+    .getElementById(
+      "foodAddConfirmationPanel"
+    )
+    .classList
+    .contains("hidden")
+  && /Added to today/.test(
+    d
+      .getElementById(
+        "foodAddConfirmationMessage"
+      )
+      .textContent
+  )
+);
+
+click(
+  App.window,
+  "foodAddViewBtn"
+);
+
+check(
+  "View entry scrolls only after the user asks",
+  E("window.__postAddScrolls")===1
+  && /list-item/.test(
+    E(
+      "window.__postAddTarget"
+      +" && window.__postAddTarget.className"
+    )
+  )
+);
+
+click(
+  App.window,
+  "foodAddUndoBtn"
+);
+
+check(
+  "inline Undo removes the exact food entry",
+  E(
+    "Object.values(data.food)"
+    +".flat().length"
+  )===0
+  && d
+    .getElementById(
+      "foodAddConfirmationPanel"
+    )
+    .classList
+    .contains("hidden")
 );
 
 const ManualServing = boot(
@@ -1378,7 +1446,7 @@ const sw = fs.readFileSync(
 check(
   "unified food-slider candidate advances cache to v89",
   sw.includes(
-    'const CACHE = "blackpyre-v89"'
+    'const CACHE = "blackpyre-v90-2"'
   )
 );
 

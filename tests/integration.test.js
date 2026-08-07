@@ -887,13 +887,20 @@ check("v51 undo: tapping Undo restores the entry and releases its reserved space
   F51.window.eval(`data.food[todayStr()].length===3 && data.food[todayStr()][0].name==="Chicken"`)
   && dF51.getElementById("undoToast").classList.contains("hidden")
   && !dF51.body.classList.contains("undo-toast-visible"));
-// search results into view + post-log return
-F51.window.HTMLElement.prototype.scrollIntoView = function(opts){ F51.window.__f51 = {id:this.id, block:opts&&opts.block}; };
+// search results still reveal normally, but logging itself preserves position.
+F51.window.HTMLElement.prototype.scrollIntoView = function(opts){ F51.window.__f51 = {id:this.id, className:this.className, block:opts&&opts.block}; };
 F51.window.eval(`renderResults([{name:"Test Food", brand:"B", cal100:100, pro100:10, carb100:5, fat100:2}]);`);
 check("v51 search results scroll into view beside the field", F51.window.eval("window.__f51 && window.__f51.id")==="resultsCard");
 dF51.querySelector("#results .result").dispatchEvent(new F51.window.Event("click",{bubbles:true}));
+await wait(10);
+F51.window.eval(`window.__f51=null;`);
 dF51.getElementById("addSelBtn").dispatchEvent(new F51.window.Event("click",{bubbles:true}));
-check("v51 logging from search returns to the search box for the next entry", F51.window.eval("window.__f51 && window.__f51.id")==="foodQuery" && F51.window.eval("data.food[todayStr()].length")===4);
+check("v90 logging from search preserves position and offers explicit follow-up actions",
+  F51.window.eval("window.__f51")===null
+  && F51.window.eval("data.food[todayStr()].length")===4
+  && !dF51.getElementById("foodAddConfirmationPanel").classList.contains("hidden")
+  && dF51.getElementById("foodAddUndoBtn").textContent==="Undo"
+  && dF51.getElementById("foodAddViewBtn").textContent==="View entry");
 check("v51 handoff behavior untouched by food changes", !!dF51.getElementById("hfPasteBtn"));
 
 
@@ -1692,8 +1699,8 @@ check("native backup FAQ names both actions, the exact Files location, and local
 check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.some(f=>/chicken breast/i.test(f.n))`));
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
-check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+"/.test(sw));
-check("v89 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v89"'));
+check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+(?:-\d+)?"/.test(sw));
+check("v90 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v90-2"'));
 
 const nativePrep76 = fs.readFileSync(
   path.join(__dirname,"..","tools","prepare-native.sh"),
