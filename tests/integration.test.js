@@ -1527,13 +1527,38 @@ F51.window.eval(`removeEntry(0)`);
 check("v51 undo: deletion removes the entry and offers Undo", F51.window.eval("data.food[todayStr()].length")===2 && !dF51.getElementById("undoToast").classList.contains("hidden") && /Deleted "Chicken"/.test(dF51.getElementById("undoMsg").textContent));
 dF51.getElementById("undoBtn").dispatchEvent(new F51.window.Event("click",{bubbles:true}));
 check("v51 undo: tapping Undo restores the entry at its original position", F51.window.eval(`data.food[todayStr()].length===3 && data.food[todayStr()][0].name==="Chicken"`) && dF51.getElementById("undoToast").classList.contains("hidden"));
-// search results into view + post-log return
-F51.window.HTMLElement.prototype.scrollIntoView = function(opts){ F51.window.__f51 = {id:this.id, block:opts&&opts.block}; };
+// search results still reveal normally; successful logging preserves position.
+F51.window.HTMLElement.prototype.scrollIntoView = function(opts){ F51.window.__f51 = {id:this.id, className:this.className, block:opts&&opts.block}; };
 F51.window.eval(`renderResults([{name:"Test Food", brand:"B", cal100:100, pro100:10, carb100:5, fat100:2}]);`);
 check("v51 search results scroll into view beside the field", F51.window.eval("window.__f51 && window.__f51.id")==="resultsCard");
 dF51.querySelector("#results .result").dispatchEvent(new F51.window.Event("click",{bubbles:true}));
+await wait(10);
+F51.window.eval(`window.__f51=null;`);
 dF51.getElementById("addSelBtn").dispatchEvent(new F51.window.Event("click",{bubbles:true}));
-check("v51 logging from search returns to the search box for the next entry", F51.window.eval("window.__f51 && window.__f51.id")==="foodQuery" && F51.window.eval("data.food[todayStr()].length")===4);
+
+check("v84 successful food logging preserves position and offers explicit follow-up actions",
+  F51.window.eval("window.__f51")===null
+  && F51.window.eval("data.food[todayStr()].length")===4
+  && !dF51.getElementById("foodAddConfirmationPanel").classList.contains("hidden")
+  && /Added to today/.test(dF51.getElementById("foodAddConfirmationMessage").textContent)
+  && dF51.getElementById("foodAddUndoBtn").textContent==="Undo"
+  && dF51.getElementById("foodAddViewBtn").textContent==="View entry");
+
+dF51.getElementById("foodAddViewBtn").dispatchEvent(
+  new F51.window.Event("click",{bubbles:true})
+);
+
+check("v84 View entry is the explicit action that moves to the newly logged row",
+  F51.window.eval("window.__f51 && /list-item/.test(window.__f51.className||'')"));
+
+dF51.getElementById("foodAddUndoBtn").dispatchEvent(
+  new F51.window.Event("click",{bubbles:true})
+);
+
+check("v84 inline Undo removes that exact newly added food",
+  F51.window.eval("data.food[todayStr()].length")===3
+  && dF51.getElementById("foodAddConfirmationPanel").classList.contains("hidden"));
+
 check("v51 handoff behavior untouched by food changes", !!dF51.getElementById("hfPasteBtn"));
 
 // ================= editable slider portions + stable usual-meal identity =================
@@ -2036,7 +2061,7 @@ check("v62 a catalog suggestion opens its exact listed serving for review", dC62
 check("v62 review shows the USDA per-100g values and correctly scaled serving", /USDA reference · SR28/.test(dC62.getElementById("selName").textContent) && /165 kcal/.test(dC62.getElementById("selPer100").textContent) && dC62.getElementById("calcCal").textContent==="186" && dC62.getElementById("calcPro").textContent==="35");
 check("v62 reviewing a broad-catalog suggestion never auto-logs it", C62.window.eval(`(data.food[todayStr()]||[]).length`)===beforeReview62);
 check("v62 FAQ explains USDA sourcing, exact servings, and real-world variation", C62.window.eval(`FAQ.some(x=>x.q==="How accurate are suggested-food calories and macros?"&&/per 100 grams/.test(x.a)&&/exact gram weight/.test(x.a)&&/NDB number/.test(x.a)&&/brand/.test(x.a)) && FAQ.some(x=>x.q==="How do food suggestions work?"&&/120 common foods/.test(x.a)&&/familiar foods receive a bonus but are not required/.test(x.a)&&/does not call USDA or an AI/.test(x.a))`));
-check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v84-paddle-10"'); })());
+check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v85-no-label-scanner-1"'); })());
 check("v62 keeps primary schemaVersion 3", C62.window.eval("SCHEMA_VERSION")===3);
 
 // ================= ChatGPT handoff paste flow =================
@@ -2401,8 +2426,8 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache key matches the BlackPyre web v82 release",
-  /const CACHE = "blackpyre-v84-paddle-10";/.test(sw));
-check("Phase 1 service-worker cache is refreshed", sw.includes('const CACHE = "blackpyre-v84-paddle-10"') && !sw.includes('blackpyre-phase1-nutrition-safety-1'));
+  /const CACHE = "blackpyre-v85-no-label-scanner-1";/.test(sw));
+check("Phase 1 service-worker cache is refreshed", sw.includes('const CACHE = "blackpyre-v85-no-label-scanner-1"') && !sw.includes('blackpyre-phase1-nutrition-safety-1'));
 
 await wait(0);
 releaseTestWindows([
@@ -7775,7 +7800,7 @@ check(
   V78ServiceWorker.includes('"./data-exercise-card-profiles.js"')
   && V78ServiceWorker.includes('"./scripts/03-card-profiles.js"')
   && V78ServiceWorker.includes(
-    'const CACHE = "blackpyre-v84-paddle-10"'
+    'const CACHE = "blackpyre-v85-no-label-scanner-1"'
   )
 );
 
