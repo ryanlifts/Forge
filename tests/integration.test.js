@@ -1260,7 +1260,6 @@ const H60Api = boot(Object.assign({},V3_CFG,{aiProvider:"anthropic",anthropicKey
 check("v60 a configured live API key keeps the live food flow", H60Api.window.document.getElementById("aiHandoffControls").classList.contains("hidden") && !H60Api.window.document.getElementById("aiFoodGoBtn").classList.contains("hidden"));
 const H60Off = boot(Object.assign({},V3_CFG,{aiProvider:"handoff",foodHandoffOn:false}),EMPTY_DATA);
 check("v60 disabling food handoff also hides it in handoff provider mode", H60Off.window.document.getElementById("aiFoodCard").classList.contains("hidden"));
-check("v60 FAQ explains the default-on toggle", H60.window.eval(`FAQ.some(x=>x.q==="What is ChatGPT handoff mode?"&&/on by default/i.test(x.a)&&/Settings/.test(x.a))`));
 check("v60 keeps current primary schemaVersion 3", H60.window.eval("SCHEMA_VERSION")===3);
 
 // ================= v61: local food suggestions =================
@@ -1306,7 +1305,6 @@ const S61Familiar=boot(Object.assign({},V3_CFG,{foodSuggestionsOn:true}),familia
 S61Familiar.window.eval(`currentMeal="lunch"; foodSuggestionPage=0; renderMealSeg(); renderFood();`);
 check("v61 familiar meal history is represented in suggestions", /Ryan's lunch yogurt/.test(S61Familiar.window.document.getElementById("foodSuggestionsList").textContent) && /Familiar lunch choice/.test(S61Familiar.window.document.getElementById("foodSuggestionsList").textContent));
 check("v61 suggestion buttons remain keyboard-accessible native controls", [...S61Familiar.window.document.querySelectorAll("#foodSuggestionsList button")].every(b=>b.tagName==="BUTTON" && /Review suggestion:/.test(b.getAttribute("aria-label")||"")));
-check("v61 FAQ fully explains local suggestions, review-before-log, visibility limits, and allergy limits", S61.window.eval(`FAQ.some(x=>x.q==="How do food suggestions work?"&&/one food at a time/.test(x.a)&&/works offline/.test(x.a)&&/does not call USDA or an AI/.test(x.a)&&/nothing logs until/.test(x.a)&&/allergy/i.test(x.a)) && FAQ.some(x=>x.q==="Why aren't food suggestions showing?"&&/today's date/.test(x.a)&&/calorie and macro targets/.test(x.a)&&/individual foods/.test(x.a))`));
 check("v61 keeps current primary schemaVersion 3", S61.window.eval("SCHEMA_VERSION")===3);
 
 
@@ -1336,7 +1334,6 @@ C62.window.eval(`reviewFoodSuggestion(foodSuggestionCandidates().find(c=>c.food.
 check("v62 a catalog suggestion opens its exact listed serving for review", dC62.getElementById("qtyUnit").value==="serving" && Number(dC62.getElementById("qtyAmount").value)===1 && /4 oz cooked \(113g\)/.test(dC62.getElementById("qtyUnit").selectedOptions[0].textContent));
 check("v62 review shows the USDA per-100g values and correctly scaled serving", /USDA reference · SR28/.test(dC62.getElementById("selName").textContent) && /165 kcal/.test(dC62.getElementById("selPer100").textContent) && dC62.getElementById("calcCal").textContent==="186" && dC62.getElementById("calcPro").textContent==="35");
 check("v62 reviewing a broad-catalog suggestion never auto-logs it", C62.window.eval(`(data.food[todayStr()]||[]).length`)===beforeReview62);
-check("v62 FAQ explains USDA sourcing, exact servings, and real-world variation", C62.window.eval(`FAQ.some(x=>x.q==="How accurate are suggested-food calories and macros?"&&/per 100 grams/.test(x.a)&&/exact gram weight/.test(x.a)&&/NDB number/.test(x.a)&&/brand/.test(x.a)) && FAQ.some(x=>x.q==="How do food suggestions work?"&&/120 common foods/.test(x.a)&&/familiar foods receive a bonus but are not required/.test(x.a)&&/does not call USDA or an AI/.test(x.a))`));
 check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"'); })());
 check("v62 keeps current primary schemaVersion 3", C62.window.eval("SCHEMA_VERSION")===3);
 
@@ -1677,30 +1674,11 @@ const P = boot(EXISTING_CFG, EMPTY_DATA);
 check("QUOTES loads from data-quotes.js", P.window.eval("Array.isArray(QUOTES) && QUOTES.length > 100"));
 check("LOCAL_DB loads from data-foods.js", P.window.eval("Array.isArray(LOCAL_DB) && LOCAL_DB.length > 100"));
 check("ALT_MAP loads from data-foods.js", P.window.eval("typeof ALT_MAP==='object' && Object.keys(ALT_MAP).length > 10"));
-check("FAQ loads from data-faq.js", P.window.eval("Array.isArray(FAQ) && FAQ.length > 10"));
-check("FAQ documents complete teen calculator access and youth guidance", P.window.eval(`FAQ.some(x=>x.q==="Can teenagers use the calorie and macro calculator?"&&x.a.includes("complete calculator")&&x.a.includes("20% protein / 55% carbohydrate / 25% fat")&&x.a.includes("without locking the controls"))`));
-check("FAQ explains exercise-level Save/Completed/Edit flow", P.window.eval(`FAQ.some(x=>x.q&&/Unsaved, Completed/.test(x.q)&&/Save Exercise/.test(x.a)&&/Log session/.test(x.a))`));
-check("FAQ no longer instructs per-set checkmarks", P.window.eval(`!FAQ.some(x=>x.a&&(x.a.includes("tap <b>✓</b>")||x.a.includes("Checking ✓")))`));
-check("FAQ documents optional automatic progression and assisted direction", P.window.eval(`FAQ.some(x=>x.q==="How does automatic progression work?"&&x.a.includes("Settings → Training")&&x.a.includes("5 lb less assistance")&&x.a.includes("New users start with it off")&&x.a.includes("Existing users retain")&&x.a.includes("carries the last logged weights forward unchanged"))`));
-check("FAQ documents upright horizontal-or-vertical barcode scanning", P.window.eval(`FAQ.some(x=>x.q==="How does barcode scanning work?"&&x.a.includes("keep the phone upright")&&x.a.includes("horizontal or vertical")&&x.a.includes("native detector"))`));
-check("FAQ documents food deletion Undo", P.window.eval(`FAQ.some(x=>x.a&&x.a.includes("six-second <b>Undo</b>"))`));
-check("FAQ documents protected mode and recovery", P.window.eval(`FAQ.some(x=>x.q==="What are Protected mode and recovery?"&&/last-known-good snapshot/.test(x.a)&&/do not uninstall/.test(x.a))`));
-check("FAQ documents the update toast", P.window.eval(`FAQ.some(x=>x.q&&/updates work/.test(x.q)&&/Use it now/.test(x.a)&&/Later/.test(x.a))`));
-check("FAQ states the rest timer is manual and Save Exercise never starts it", P.window.eval(`FAQ.some(x=>x.q==="What's plate math and the rest timer?"&&/never starts automatically/.test(x.a)&&/Saving an exercise does not start/.test(x.a)&&x.a.includes("Pause/Resume"))`));
-check("v56 FAQ explains durable workout drafts and Resume/Discard", P.window.eval(`FAQ.some(x=>x.q==="How do I log a workout?"&&/workout draft/.test(x.a)&&x.a.includes("Resume")&&x.a.includes("Discard"))`));
-check("v56 FAQ documents shared Undo across routine deletions", P.window.eval(`FAQ.some(x=>x.q==="I logged something wrong — can I fix it?"&&/weigh-ins/.test(x.a)&&/measurements/.test(x.a)&&/personal foods/.test(x.a))`));
-check("v56 FAQ documents confirmed program replacement", P.window.eval(`FAQ.some(x=>x.q==="How do programs work?"&&/current and incoming names/.test(x.a)&&/workout history stays intact/.test(x.a))`));
-check("v56 FAQ documents offline fast-fail and handoff availability", P.window.eval(`FAQ.some(x=>x.q==="What works when BlackPyre says Offline?"&&/immediately shows local matches/.test(x.a)&&/ChatGPT handoff/.test(x.a))`));
-
-check("FAQ uses current program identity and Manage labels", P.window.eval(`FAQ.some(x=>x.q==="How do programs work?"&&x.a.includes("Current program")&&x.a.includes("Manage")&&x.a.includes("Save file")&&x.a.includes("Share"))`));
-check("FAQ no longer sends users to the retired Program tools label", P.window.eval(`!FAQ.some(x=>x.a&&x.a.includes("Program tools"))`));
-check("FAQ privacy and storage copy distinguish local data, network requests, and approximate usage", P.window.eval(`FAQ.some(x=>x.q==="Where is my data stored? Is it private?"&&/on this device/.test(x.a)&&/Local food suggestions/.test(x.a)&&/Online food searches/.test(x.a)&&/Optional AI features/.test(x.a)) && FAQ.some(x=>x.q==="How much storage is BlackPyre using?"&&/Settings → Data &amp; recovery/.test(x.a)&&/approximate browser-storage/.test(x.a)&&/Back up before clearing/.test(x.a))`));
-check("native backup FAQ names both actions, the exact Files location, and local deletion risk", P.window.eval(`FAQ.some(x=>x.q==="Where are my backups saved?"&&/BACK UP ON THIS DEVICE/.test(x.a)&&/Files → On My iPhone → BlackPyre/.test(x.a)&&/SHARE OR SAVE ELSEWHERE/.test(x.a)&&/deleted/.test(x.a)&&/another copy/.test(x.a))`));
 check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.some(f=>/chicken breast/i.test(f.n))`));
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+(?:-\d+)?"/.test(sw));
-check("v90 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v90-2"'));
+check("v90 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v90-4"'));
 
 const nativePrep76 = fs.readFileSync(
   path.join(__dirname,"..","tools","prepare-native.sh"),
@@ -1945,10 +1923,6 @@ check(
   && /\.rest-dock-caret \{[^}]*min-width:24px[^}]*min-height:24px[^}]*font-size:20px[^}]*font-weight:700/.test(rawIndex)
 );
 
-check("v55 FAQ documents consolidated timer, collapsed sections, and offline behavior",
-  T55.window.eval(`FAQ.some(x=>x.q==="What's plate math and the rest timer?"&&/floating timer/.test(x.a)&&/tap the displayed duration/.test(x.a)) && FAQ.some(x=>x.q==="Why are parts of Home and Settings collapsed?") && FAQ.some(x=>x.q==="What works when BlackPyre says Offline?")`));
-
-
 // ================= v56: persistent drafts, action safety, offline fast-fail =================
 const D56 = boot(V3_CFG, V2_DATA, null, TEST_PROGRAM);
 const dD56 = D56.window.document;
@@ -2128,9 +2102,6 @@ check("v81 keyless food onboarding advances without saving a credential",
 
 check("v57 errors and save/network messages expose live status semantics", dA57.getElementById("searchErr").getAttribute("role")==="alert" && dA57.getElementById("saveState").getAttribute("role")==="status" && dA57.getElementById("offlineBanner").getAttribute("role")==="status");
 A57.window.eval("renderFAQ()");
-check("v57 FAQ documents keyboard and screen-reader support", /keyboard or screen reader/i.test(dA57.getElementById("faqBody").textContent));
-
-
 // ================= v63: missing-primary protection and rolling recovery =================
 const V63_POPULATED_DATA = Object.assign({}, V2_DATA, {
   food:{"2026-07-20":[{name:"Chicken",cal:165,pro:31,carb:0,fat:3.6,meal:"dinner"}]},
@@ -2194,9 +2165,6 @@ check("v63 normal-mode snapshot restore quarantines exact prior primary data", J
 const diagnostic63=ManualRestore63.window.eval(`makeStorageDiagnosticEnvelope()`);
 check("v64 diagnostic export preserves primary, recovery, install, and temporary timer fields", diagnostic63.ok && ["forge:cfg","forge:data","forge:program","forge:lkg","forge:lkg:previous","forge:lkg:older","forge:quarantine","forge:install","forge:rest-timer"].every(k=>Object.prototype.hasOwnProperty.call(diagnostic63.envelope.strings,k)));
 check("v63 Data & recovery exposes manual snapshot restore and diagnostic export", !!ManualRestore63.window.document.getElementById("restoreSnapshotBtn") && !!ManualRestore63.window.document.getElementById("exportDiagnosticBtn"));
-check("v63 FAQ explains missing-key protection and rolling snapshots", ManualRestore63.window.eval(`FAQ.some(x=>x.q==="What happens if saved data unexpectedly disappears?"&&/saving is paused/i.test(x.a)&&/rolling/i.test(x.a))`));
-
-
 // ================= Native vault Stage 1: verified iOS Library backup =================
 function nativeVaultApiPresent(dom){
   try { return dom.window.eval(`typeof getNativeVaultStatus==="function" && typeof waitForNativeVaultIdle==="function"`); }
@@ -8519,95 +8487,6 @@ check(
          .getElementById("loadPlanHelpCard")
          .textContent
      )
-);
-
-check(
-  "v77 FAQ explains all three ways to create a training program",
-  Guidance77.window.eval(`
-    FAQ.some(
-      item=>
-        item.q==="How do I make a training program?"
-        && /build it in BlackPyre/i.test(item.a)
-        && /BlackPyre Coach/.test(item.a)
-        && /ChatGPT or another AI/.test(item.a)
-    )
-  `)
-);
-
-check(
-  "v77 FAQ gives the native load navigation, review, confirmation, and cancel behavior",
-  Guidance77.window.eval(`
-    FAQ.some(
-      item=>
-        item.q==="How do I load a program?"
-        && /Train/.test(item.a)
-        && /Manage/.test(item.a)
-        && /Load program/.test(item.a)
-        && /Review/.test(item.a)
-        && /Confirm/.test(item.a)
-        && /Canceling the review saves nothing/.test(item.a)
-    )
-  `)
-);
-
-check(
-  "v77 FAQ defines a BlackPyre training plan file without claiming any JSON works",
-  Guidance77.window.eval(`
-    FAQ.some(
-      item=>
-        item.q==="What is a BlackPyre training plan file?"
-        && /\\.json file exported from BlackPyre/.test(item.a)
-        && /random \\.json file may not work/i.test(item.a)
-        && /renaming another file does not make it/i.test(item.a)
-        && /Do not edit BlackPyre backup files/.test(item.a)
-    )
-    && !FAQ.some(
-      item=>
-        item.a
-        && /any JSON file/i.test(item.a)
-    )
-  `)
-);
-
-check(
-  "v77 FAQ explains exercise recording decisions and all unknown-exercise choices",
-  Guidance77.window.eval(`
-    FAQ.some(
-      item=>
-        item.q==="What happens when I load a file?"
-        && /how each exercise should be recorded/.test(item.a)
-        && /match it to an exercise already in BlackPyre/.test(item.a)
-        && /create a custom exercise/.test(item.a)
-        && /remove it from the program/.test(item.a)
-        && /Nothing is saved until you confirm/.test(item.a)
-        && /Canceling saves nothing/.test(item.a)
-    )
-  `)
-);
-
-check(
-  "v77 FAQ states that loading a program preserves completed workout history",
-  Guidance77.window.eval(`
-    FAQ.some(
-      item=>
-        item.q==="Will loading a program erase my workout history?"
-        && /No\\./.test(item.a.replace(/<[^>]+>/g,""))
-        && /does not erase completed workout history/.test(item.a)
-    )
-  `)
-);
-
-check(
-  "v77 FAQ explains Save file and Share program exchange",
-  Guidance77.window.eval(`
-    FAQ.some(
-      item=>
-        item.q==="How do I share a program?"
-        && /Save file/.test(item.a)
-        && /Share/.test(item.a)
-        && /review and load/.test(item.a)
-    )
-  `)
 );
 
 const ReadyMessage77 = boot(

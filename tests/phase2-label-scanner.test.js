@@ -1430,12 +1430,43 @@ const faq = fs.readFileSync(
   "utf8"
 );
 
+// BLACKPYRE CURRENT FAQ CONTRACT
+
 check(
-  "FAQ explains manual and scanned slider behavior",
-  /same editable form used for manual foods/.test(faq)
-  && /without using either scanner/.test(faq)
-  && /Foods without a known gram or liquid measurement/.test(faq)
-  && /Nothing is logged/.test(faq)
+  "current consolidated native FAQ is valid",
+  (faq.match(/\{q:"/g) || []).length === 26
+
+  && /How do I set my calorie and macro targets\?/.test(faq)
+  && /Can teenagers use the calorie and macro calculator\?/.test(faq)
+
+  && /How do I scan food\?/.test(faq)
+  && /Scan barcode/.test(faq)
+  && /Scan nutrition label/.test(faq)
+  && /Correct barcode data/.test(faq)
+  && /Nothing is logged until you review it/.test(faq)
+
+  && /How do I change, undo, or view a food entry\?/.test(faq)
+  && /slider or amount field/.test(faq)
+  && /Undo/.test(faq)
+  && /View entry/.test(faq)
+
+  && /How do I log a workout\?/.test(faq)
+  && /Save Exercise/.test(faq)
+  && /Log session/.test(faq)
+
+  && /How do I create or load a training program\?/.test(faq)
+  && /What happens when I load a training program\?/.test(faq)
+  && /not replaced until you confirm/.test(faq)
+  && /completed workout history is kept/.test(faq)
+
+  && /Where is my data stored\? Is it private\?/.test(faq)
+  && /How do I back up or move BlackPyre to another device\?/.test(faq)
+  && /Protected mode/.test(faq)
+  && /What works without an internet connection\?/.test(faq)
+
+  && /Disclaimer & terms of use/.test(faq)
+
+  && !/(Open Food Facts|USDA|Apple|iPhone|iPad|Android|Safari|Chrome|Google|ChatGPT|OpenAI|Claude|Anthropic|Starry|Chipotle)/i.test(faq)
 );
 
 const sw = fs.readFileSync(
@@ -1446,7 +1477,7 @@ const sw = fs.readFileSync(
 check(
   "unified food-slider candidate advances cache to v89",
   sw.includes(
-    'const CACHE = "blackpyre-v90-2"'
+    'const CACHE = "blackpyre-v90-4"'
   )
 );
 
