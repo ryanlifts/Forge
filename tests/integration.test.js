@@ -2036,7 +2036,7 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+(?:-\d+)?"/.test(sw));
-check("native service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v94"'));
+check("native service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v95"'));
 
 const nativePrep76 = fs.readFileSync(
   path.join(__dirname,"..","tools","prepare-native.sh"),
@@ -3674,24 +3674,35 @@ const reminderNow = Date.parse("2026-07-25T12:00:00.000Z");
 const reminderLogic = boot(V3_CFG, Object.assign({},EMPTY_DATA,{meta:{lastBackup:"2026-07-25",logsSince:0}}));
 const reminderCases = reminderLogic.window.eval(`(()=>{
   const now=${reminderNow};
+  const firstLog8=new Date(now-8*BACKUP_DAY_MS).toISOString();
   return {
     noShareHistory:offsiteShareReminderDue({},now),
     localOnly:offsiteShareReminderDue({lastBackup:"2026-07-25",logsSince:0},now),
+    firstLog6:offsiteShareReminderDue({firstMeaningfulLogAt:new Date(now-6*BACKUP_DAY_MS).toISOString()},now),
+    firstLog7:offsiteShareReminderDue({firstMeaningfulLogAt:new Date(now-7*BACKUP_DAY_MS).toISOString()},now),
     completed13:offsiteShareReminderDue({lastShareCompletedAt:new Date(now-13*BACKUP_DAY_MS).toISOString()},now),
     completed14:offsiteShareReminderDue({lastShareCompletedAt:new Date(now-14*BACKUP_DAY_MS).toISOString()},now),
-    attempt6:offsiteShareReminderDue({lastShareAttemptAt:new Date(now-6*BACKUP_DAY_MS).toISOString()},now),
-    attempt7:offsiteShareReminderDue({lastShareAttemptAt:new Date(now-7*BACKUP_DAY_MS).toISOString()},now),
+    attempt6:offsiteShareReminderDue({firstMeaningfulLogAt:firstLog8,lastShareAttemptAt:new Date(now-6*BACKUP_DAY_MS).toISOString()},now),
+    attempt7:offsiteShareReminderDue({firstMeaningfulLogAt:firstLog8,lastShareAttemptAt:new Date(now-7*BACKUP_DAY_MS).toISOString()},now),
     snoozed:offsiteShareReminderDue({offsiteReminderSnoozedUntil:new Date(now+BACKUP_DAY_MS).toISOString()},now)
   };
 })()`);
-check("backup-share reminder is immediately due without share history and otherwise uses elapsed share activity",
-  reminderCases.noShareHistory===true
-  && reminderCases.localOnly===true
+check("backup reminder waits for seven days after the first meaningful log and then uses elapsed share activity",
+  reminderCases.noShareHistory===false
+  && reminderCases.localOnly===false
+  && reminderCases.firstLog6===false
+  && reminderCases.firstLog7===true
   && reminderCases.completed13===false
   && reminderCases.completed14===true
   && reminderCases.attempt6===false
   && reminderCases.attempt7===true
   && reminderCases.snoozed===false);
+check("native onboarding completion does not immediately show the backup reminder",
+  reminderLogic.window.document.getElementById("backupCard").classList.contains("hidden"));
+reminderLogic.window.eval(`
+  data.meta.firstMeaningfulLogAt=new Date(${reminderNow}-8*BACKUP_DAY_MS).toISOString();
+  renderBackup();
+`);
 const platformNeutralBackupGuidance = reminderLogic.window.eval(`([
   document.getElementById("backupMetaLine").textContent,
   document.getElementById("backupText").textContent
@@ -3718,10 +3729,10 @@ const approvedBackupReminderCopy = reminderLogic.window.eval(`({
   primary:document.getElementById("backupNowBtn").textContent,
   secondary:document.getElementById("backupSnoozeBtn").textContent
 })`);
-check("backup reminder uses approved red card copy and controls",
+check("backup reminder uses the gold card treatment and approved controls",
   approvedBackupReminderCopy.title==="BACK UP YOUR DATA"
-  && /color\s*:\s*var\(--warn\)/.test(approvedBackupReminderCopy.titleStyle)
-  && /border-color\s*:\s*var\(--warn\)/.test(approvedBackupReminderCopy.cardStyle)
+  && /color\s*:\s*var\(--ember\)/.test(approvedBackupReminderCopy.titleStyle)
+  && /border-color\s*:\s*var\(--ember\)/.test(approvedBackupReminderCopy.cardStyle)
   && approvedBackupReminderCopy.text==="Create a backup so your BlackPyre data can be recovered if your device is lost, replaced, or damaged."
   && approvedBackupReminderCopy.primary==="Backup"
   && approvedBackupReminderCopy.secondary==="Remind me later");
@@ -3731,7 +3742,7 @@ const NativeBackupShares = [];
 let resolveNativeBackupShare = null;
 const NativeBackup = boot(
   V3_CFG,
-  Object.assign({},EMPTY_DATA,{meta:{lastBackup:null,logsSince:7}}),
+  Object.assign({},EMPTY_DATA,{meta:{lastBackup:null,logsSince:7,firstMeaningfulLogAt:new Date(reminderNow-8*86400000).toISOString()}}),
   w=>{
     w.Capacitor = {
       getPlatform:()=>"ios",
@@ -3868,6 +3879,8 @@ ReminderSnooze.window.document.getElementById("backupSnoozeBtn")
   .dispatchEvent(new ReminderSnooze.window.Event("click",{bubbles:true}));
 check("remind-me-later persists a seven-day snooze and hides the reminder",
   ReminderSnooze.window.document.getElementById("backupCard").classList.contains("hidden")
+  && !ReminderSnooze.window.document.getElementById("backupStatusToast").classList.contains("hidden")
+  && ReminderSnooze.window.document.getElementById("backupStatusToast").textContent==="Backup reminder postponed for 7 days."
   && ReminderSnooze.window.eval(`
     typeof data.meta.offsiteReminderSnoozedUntil==="string"
     && Date.parse(data.meta.offsiteReminderSnoozedUntil)>Date.now()+6*BACKUP_DAY_MS

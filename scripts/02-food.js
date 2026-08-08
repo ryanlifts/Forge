@@ -2629,6 +2629,7 @@ document
 
 function bumpLog(){
   if(!data.meta) data.meta = {lastBackup:null, logsSince:0};
+  if(!data.meta.firstMeaningfulLogAt) data.meta.firstMeaningfulLogAt = new Date().toISOString();
   data.meta.logsSince = (data.meta.logsSince||0)+1;
 }
 let _lastAddSig = "", _lastAddT = 0;

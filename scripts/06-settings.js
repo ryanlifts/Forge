@@ -768,7 +768,17 @@ SETTINGS_VALIDATION_FIELDS.forEach(id=>{
 const OFFSITE_SHARE_REMINDER_DAYS = 14;
 const OFFSITE_SHARE_ATTEMPT_GRACE_DAYS = 7;
 const OFFSITE_SHARE_SNOOZE_DAYS = 7;
+const FIRST_LOG_BACKUP_REMINDER_DAYS = 7;
 const BACKUP_DAY_MS = 86400000;
+let backupStatusTimer = null;
+function showBackupStatus(message){
+  const toast = document.getElementById("backupStatusToast");
+  if (!toast) return;
+  toast.textContent = message;
+  toast.classList.remove("hidden");
+  clearTimeout(backupStatusTimer);
+  backupStatusTimer = setTimeout(()=>toast.classList.add("hidden"),4000);
+}
 function backupTimestampMs(value){
   if (typeof value!=="string" || !value.trim()) return null;
   const ms = Date.parse(value);
@@ -789,6 +799,10 @@ function offsiteShareReminderDue(meta,nowMs){
   if (completedAt!==null && now-completedAt<OFFSITE_SHARE_REMINDER_DAYS*BACKUP_DAY_MS) return false;
   const attemptedAt = backupTimestampMs(m.lastShareAttemptAt);
   if (attemptedAt!==null && now-attemptedAt<OFFSITE_SHARE_ATTEMPT_GRACE_DAYS*BACKUP_DAY_MS) return false;
+  if (completedAt===null){
+    const firstLogAt = backupTimestampMs(m.firstMeaningfulLogAt);
+    if (firstLogAt===null || now-firstLogAt<FIRST_LOG_BACKUP_REMINDER_DAYS*BACKUP_DAY_MS) return false;
+  }
   return true;
 }
 function nativeJsonExportCapability(){
@@ -887,7 +901,7 @@ function snoozeOffsiteBackupReminder(days,nowMs){
   data.meta.offsiteReminderSnoozedUntil = new Date(now+count*BACKUP_DAY_MS).toISOString();
   if (!save()) return false;
   renderBackup();
-  flashSave("Backup-share reminder snoozed for "+count+" days");
+  showBackupStatus("Backup reminder postponed for "+count+" days.");
   return true;
 }
 function doBackup(btnId,shareAfterSave){
