@@ -15,6 +15,7 @@ function hash(value){ return crypto.createHash("sha256").update(value).digest("h
 const root=path.join(__dirname,"..");
 const index=fs.readFileSync(path.join(root,"index.html"),"utf8");
 const bootSource=fs.readFileSync(path.join(root,"scripts/07-boot.js"),"utf8");
+const settingsSource=fs.readFileSync(path.join(root,"scripts/06-settings.js"),"utf8");
 
 check("standard motto replaces the former header and setup motto",
   (index.match(/Burn away the old\. Forge what comes next\./g)||[]).length>=2
@@ -50,6 +51,31 @@ check("the Why BlackPyre header carries Bella's unchanged long-press interaction
 
 check("opening presentation remains visible for exactly four seconds",
   /const BRAND_LAUNCH_MS = 4000;/.test(fs.readFileSync(path.join(root,"scripts/06-settings.js"),"utf8")));
+
+check("onboarding guidance is concise, age-inclusive, and medically responsible",
+  /Supports ages 13 and up\./.test(settingsSource)
+  && !/Supports ages 13–100\./.test(settingsSource)
+  && /not medical advice; consult a physician or registered dietitian/.test(settingsSource)
+  && /Step 7 · Food logging/.test(settingsSource)
+  && !/Step 7 · Food database/.test(settingsSource));
+
+check("training onboarding clearly explains the post-setup file picker",
+  /Files picker opens as soon as onboarding finishes/.test(settingsSource)
+  && /Files opens when onboarding finishes/.test(settingsSource));
+
+check("food shortcuts and Help & FAQ use the accent outline",
+  /id="recentsOpenBtn"/.test(index)
+  && /id="myFoodsOpenBtn"/.test(index)
+  && /id="faqOpenBtn"/.test(index)
+  && (index.match(/btn ghost small accent-outline/g)||[]).length>=3
+  && /\.btn\.ghost\.accent-outline \{ border-color:var\(--ember\); \}/.test(index));
+
+check("handoff wording is provider-neutral outside provider-specific API settings",
+  /Paste AI reply &amp; review/.test(index)
+  && /AI food handoff/.test(index)
+  && /AI handoff — no key, copy &amp; paste/.test(index)
+  && !/ChatGPT food handoff|ChatGPT handoff — no key|Paste ChatGPT/.test(index)
+  && !/No account or API key is needed/.test(index));
 
 const bellaCss=(index.match(/#bellaEgg\{.*?\.bar \.fill\.over \{ background:var\(--warn\); \}/s)||[])[0]||"";
 const bellaTitle=(index.match(/<h1 id="bpTitle".*?<\/h1>/s)||[])[0]||"";

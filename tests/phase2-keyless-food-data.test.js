@@ -20,8 +20,8 @@ const migrated = boot(Object.assign({},EXISTING_CFG,{usdaKey:"legacy-device-secr
 check("legacy saved USDA credentials are scrubbed during healthy boot",
   migrated.window.eval(`!Object.prototype.hasOwnProperty.call(cfg,"usdaKey")`) &&
   !Object.prototype.hasOwnProperty.call(JSON.parse(migrated.window.localStorage.getItem("forge:cfg")),"usdaKey"));
-check("settings explain the keyless source and manual fallback",
-  /No account or API key is needed/.test(migrated.window.document.getElementById("settingsServicesDetails").textContent) &&
+check("settings explain the food source and manual fallback without obsolete setup language",
+  !/No account or API key is needed/.test(migrated.window.document.getElementById("settingsServicesDetails").textContent) &&
   /Open Food Facts/.test(migrated.window.document.getElementById("settingsServicesDetails").textContent) &&
   /manual entry/.test(migrated.window.document.getElementById("settingsServicesDetails").textContent));
 
@@ -551,7 +551,7 @@ check("normal backups exclude a legacy USDA credential",
   !backupText.includes("should-never-export") &&
   !Object.prototype.hasOwnProperty.call(JSON.parse(backupText).cfg,"usdaKey"));
 
-check("service worker cache is bumped for the brand-onboarding release",/blackpyre-v92-brand-onboarding-3/.test(fs.readFileSync(path.join(root,"sw.js"),"utf8")));
+check("service worker cache is bumped for the brand-onboarding release",/blackpyre-v92-brand-onboarding-4/.test(fs.readFileSync(path.join(root,"sw.js"),"utf8")));
 
 
 const ServingReviewCorrection = boot(
