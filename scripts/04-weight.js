@@ -1,12 +1,28 @@
 "use strict";
 // ================== WEIGHT ==================
+function currentTimeValue(){
+  const now=new Date();
+  return String(now.getHours()).padStart(2,"0")+":"+String(now.getMinutes()).padStart(2,"0");
+}
+function validWeighInTime(value){ return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(value||"")); }
+function formatWeighInTime(value){
+  if(!validWeighInTime(value)) return "";
+  const parts=String(value).split(":");
+  return new Date(2000,0,1,Number(parts[0]),Number(parts[1])).toLocaleTimeString([], {hour:"numeric",minute:"2-digit"});
+}
+function weighInDateTimeLabel(entry){
+  const time=formatWeighInTime(entry&&entry.time);
+  return fmtDate(entry.date)+(time?" · "+time:"");
+}
 document.getElementById("wtDate").value = todayStr();
+document.getElementById("wtTime").value = currentTimeValue();
 document.getElementById("addWtBtn").addEventListener("click", ()=>{
   const v = Number(document.getElementById("wtVal").value);
   const dt = document.getElementById("wtDate").value;
-  if(!v || v<50 || v>700) return;
+  const tm = document.getElementById("wtTime").value;
+  if(!v || v<50 || v>700 || !validWeighInTime(tm)) return;
   data.weights = data.weights.filter(w=>w.date!==dt);
-  data.weights.push({date:dt, lbs:v});
+  data.weights.push({date:dt, time:tm, lbs:v});
   bumpLog();
   document.getElementById("wtVal").value="";
   if (data.weights.length===1){
@@ -59,7 +75,7 @@ function renderWeight(){
   if(sorted.length===0){ card.classList.add("hidden"); return; }
   card.classList.remove("hidden");
   document.getElementById("wtList").innerHTML=sorted.slice().reverse().map(wp=>
-    '<div class="list-item"><span style="flex:1; color:var(--dim);">'+fmtDate(wp.date)+'</span>'
+    '<div class="list-item"><span style="flex:1; color:var(--dim);">'+weighInDateTimeLabel(wp)+'</span>'
     +'<span style="flex:1; text-align:right; font-weight:600;">'+wp.lbs+' lb</span>'
     +'<button class="del delWt" data-d="'+wp.date+'" aria-label="Delete">✕</button></div>'
   ).join("");
@@ -70,7 +86,7 @@ function renderWeight(){
     data.weights.splice(i,1);
     if (!save()){ data.weights.splice(i,0,removed); renderWeight(); renderDash(); return; }
     renderWeight(); renderDash(); renderProjection(); renderWeek();
-    offerUndo("Deleted weigh-in from "+fmtDate(removed.date), ()=>{
+    offerUndo("Deleted weigh-in from "+weighInDateTimeLabel(removed), ()=>{
       data.weights.splice(Math.min(i,data.weights.length),0,removed);
       save(); renderWeight(); renderDash(); renderProjection(); renderWeek();
       flashSave("Weigh-in restored ✓");
