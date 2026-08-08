@@ -411,1025 +411,9 @@ async function runSearch(){
 }
 
 
-// ================== PHASE 2.1: NUTRITION-LABEL SCANNER ==================
-// Apple Vision reads the selected image on the device. OCR values only
-// prefill manual entry. Nothing is logged until the user taps Add entry.
-
-let nutritionLabelScannerPlugin = null;
-
-function nutritionLabelScannerCapability(){
-  const capacitor = window.Capacitor;
-  let native = false;
-  let available = false;
-  let plugin = null;
-
-  try {
-    native = !!(
-      capacitor
-      && typeof capacitor.isNativePlatform==="function"
-      && capacitor.isNativePlatform()
-    );
-  } catch(e){}
-
-  try {
-    available = !!(
-      native
-      && capacitor
-      && typeof capacitor.isPluginAvailable==="function"
-      && capacitor.isPluginAvailable(
-        "NutritionLabelScanner"
-      )
-    );
-  } catch(e){}
-
-  if (available){
-    try {
-      if (
-        capacitor.Plugins
-        && capacitor.Plugins.NutritionLabelScanner
-      ){
-        nutritionLabelScannerPlugin =
-          capacitor.Plugins.NutritionLabelScanner;
-      } else if (
-        !nutritionLabelScannerPlugin
-        && typeof capacitor.registerPlugin==="function"
-      ){
-        nutritionLabelScannerPlugin =
-          capacitor.registerPlugin(
-            "NutritionLabelScanner"
-          );
-      }
-
-      plugin = nutritionLabelScannerPlugin;
-    } catch(e){}
-  }
-
-  return {
-    native:native,
-    available:!!(
-      available
-      && plugin
-      && typeof plugin.recognize==="function"
-    ),
-    plugin:plugin
-  };
-}
-
-function nutritionLabelStatus(message, isError){
-  const el =
-    document.getElementById("labelScanStatus");
-
-  if (!el) return;
-
-  if (!message){
-    el.textContent = "";
-    el.classList.add("hidden");
-    return;
-  }
-
-  el.textContent = message;
-  el.style.color = isError
-    ? "var(--warn)"
-    : "var(--dim)";
-  el.classList.remove("hidden");
-}
+// ================== FOOD ENTRY MODE ISOLATION ==================
 
 let activeFoodEntryMode = "idle";
-
-function nutritionLabelEntries(rawLines){
-  const source =
-    Array.isArray(rawLines)
-      ? rawLines
-      : [];
-
-  const entries =
-    source
-      .map((item,index)=>{
-        const text =
-          typeof item==="string"
-            ? item
-            : (
-                item
-                && typeof item.text==="string"
-                  ? item.text
-                  : ""
-              );
-
-        const cleaned =
-          String(text)
-            .replace(/\u00a0/g," ")
-            .replace(/[ \t]+/g," ")
-            .trim();
-
-        if (!cleaned) return null;
-
-        const numberOrNull = value=>{
-          const number = Number(value);
-
-          return Number.isFinite(number)
-            ? number
-            : null;
-        };
-
-        return {
-          text:cleaned,
-          confidence:
-            numberOrNull(item && item.confidence),
-          x:numberOrNull(item && item.x),
-          y:numberOrNull(item && item.y),
-          width:numberOrNull(item && item.width),
-          height:numberOrNull(item && item.height),
-          pass:
-            String(
-              item
-              && item.pass
-              || ""
-            ),
-          index:index
-        };
-      })
-      .filter(Boolean);
-
-  const deduped = [];
-
-  entries.forEach(entry=>{
-    const normalized =
-      entry.text
-        .toLowerCase()
-        .replace(/[^a-z0-9.%]+/g,"");
-
-    const duplicate =
-      deduped.find(existing=>{
-        const existingNormalized =
-          existing.text
-            .toLowerCase()
-            .replace(/[^a-z0-9.%]+/g,"");
-
-        if (
-          normalized!==existingNormalized
-        ){
-          return false;
-        }
-
-        if (
-          entry.x===null
-          || entry.y===null
-          || existing.x===null
-          || existing.y===null
-        ){
-          return true;
-        }
-
-        return (
-          Math.abs(entry.x-existing.x)<0.035
-          && Math.abs(entry.y-existing.y)<0.035
-        );
-      });
-
-    if (!duplicate){
-      deduped.push(entry);
-      return;
-    }
-
-    if (
-      Number(entry.confidence||0)
-      > Number(duplicate.confidence||0)
-    ){
-      Object.assign(
-        duplicate,
-        entry
-      );
-    }
-  });
-
-  deduped.sort((left,right)=>{
-    if (
-      left.y!==null
-      && right.y!==null
-    ){
-      const vertical =
-        right.y-left.y;
-
-      if (Math.abs(vertical)>0.02){
-        return vertical;
-      }
-
-      return (
-        Number(left.x||0)
-        -Number(right.x||0)
-      );
-    }
-
-    return left.index-right.index;
-  });
-
-  return deduped;
-}
-
-function nutritionLabelLines(rawLines){
-  return nutritionLabelEntries(rawLines)
-    .map(entry=>entry.text);
-}
-
-function nutritionLabelNumericFragment(
-  value
-){
-  const text =
-    String(value||"").trim();
-
-  return /^[0-9OoIl|]+$/.test(text)
-    ? text
-    : null;
-}
-
-function nutritionLabelGeometryValue(
-  rawLines,
-  matcher,
-  requireGrams,
-  maximum,
-  rejectLine
-){
-  const entries =
-    nutritionLabelEntries(rawLines);
-
-  const candidates =
-    entries.slice();
-
-  for (
-    let firstIndex=0;
-    firstIndex<entries.length;
-    firstIndex++
-  ){
-    for (
-      let secondIndex=firstIndex+1;
-      secondIndex<entries.length;
-      secondIndex++
-    ){
-      const first =
-        entries[firstIndex];
-
-      const second =
-        entries[secondIndex];
-
-      const firstText =
-        nutritionLabelNumericFragment(
-          first.text
-        );
-
-      const secondText =
-        nutritionLabelNumericFragment(
-          second.text
-        );
-
-      if (
-        !firstText
-        || !secondText
-        || first.x===null
-        || first.y===null
-        || second.x===null
-        || second.y===null
-      ){
-        continue;
-      }
-
-      const left =
-        first.x<=second.x
-          ? first
-          : second;
-
-      const right =
-        left===first
-          ? second
-          : first;
-
-      const leftText =
-        left===first
-          ? firstText
-          : secondText;
-
-      const rightText =
-        right===second
-          ? secondText
-          : firstText;
-
-      const leftCenterY =
-        left.y
-        +Number(left.height||0)/2;
-
-      const rightCenterY =
-        right.y
-        +Number(right.height||0)/2;
-
-      const vertical =
-        Math.abs(
-          leftCenterY-rightCenterY
-        );
-
-      const gap =
-        right.x
-        -(
-          left.x
-          +Number(left.width||0)
-        );
-
-      if (
-        vertical
-          >Math.max(
-            0.025,
-            Math.max(
-              Number(left.height||0),
-              Number(right.height||0)
-            )*0.7
-          )
-        || gap < -0.004
-        || gap
-          >Math.max(
-            0.04,
-            Math.min(
-              Number(left.width||0.02),
-              Number(right.width||0.02)
-            )*1.6
-          )
-      ){
-        continue;
-      }
-
-      candidates.push({
-        text:leftText+rightText,
-        confidence:Math.min(
-          Number(left.confidence||0),
-          Number(right.confidence||0)
-        ),
-        x:left.x,
-        y:Math.min(left.y,right.y),
-        width:
-          right.x
-          +Number(right.width||0)
-          -left.x,
-        height:Math.max(
-          Number(left.height||0),
-          Number(right.height||0)
-        ),
-        pass:"joined",
-        index:Math.min(
-          Number(left.index||0),
-          Number(right.index||0)
-        )
-      });
-    }
-  }
-
-  const labelMatcher =
-    new RegExp(
-      matcher.source,
-      matcher.flags.replace(/g/g,"")
-    );
-
-  const rejectionMatcher =
-    rejectLine
-      ? new RegExp(
-          rejectLine.source,
-          rejectLine.flags.replace(/g/g,"")
-        )
-      : null;
-
-  const labels =
-    entries.filter(entry=>
-      labelMatcher.test(entry.text)
-      && !(
-        rejectionMatcher
-        && rejectionMatcher.test(entry.text)
-      )
-    );
-
-  let best = null;
-
-  labels.forEach(label=>{
-    candidates.forEach(candidate=>{
-      if (candidate===label) return;
-
-      if (
-        NUTRITION_LABEL_OTHER_FIELD
-          .test(candidate.text)
-      ){
-        return;
-      }
-
-      const number =
-        nutritionLabelNumber(
-          candidate.text,
-          requireGrams
-        );
-
-      if (
-        number===null
-        || number<0
-        || number>maximum
-      ){
-        return;
-      }
-
-      if (
-        label.x===null
-        || label.y===null
-        || candidate.x===null
-        || candidate.y===null
-      ){
-        return;
-      }
-
-      const labelCenterY =
-        label.y
-        +Number(label.height||0)/2;
-
-      const candidateCenterY =
-        candidate.y
-        +Number(candidate.height||0)/2;
-
-      const vertical =
-        Math.abs(
-          candidateCenterY-labelCenterY
-        );
-
-      const horizontal =
-        Math.abs(
-          candidate.x-label.x
-        );
-
-      let score =
-        -Infinity;
-
-      if (
-        vertical<=0.075
-        && candidate.x>=label.x-0.025
-      ){
-        score =
-          200
-          -vertical*900
-          -horizontal*90;
-      }
-
-      if (
-        label.y>candidate.y
-        && label.y-candidate.y<=0.18
-        && horizontal<=0.32
-      ){
-        score = Math.max(
-          score,
-          120
-          -(label.y-candidate.y)*350
-          -horizontal*70
-        );
-      }
-
-      const digits =
-        String(candidate.text)
-          .replace(/[^0-9OoIl|]/g,"")
-          .length;
-
-      score += digits*10;
-
-      if (candidate.pass==="joined"){
-        score += 14;
-      }
-
-      if (
-        String(candidate.pass||"")
-          .startsWith("calorie-")
-      ){
-        score += 30;
-      }
-
-      if (
-        !best
-        || score>best.score
-      ){
-        best = {
-          number:number,
-          score:score
-        };
-      }
-    });
-  });
-
-  return (
-    best
-    && Number.isFinite(best.score)
-      ? best.number
-      : null
-  );
-}
-
-function nutritionLabelServingFromGeometry(
-  rawLines
-){
-  const entries =
-    nutritionLabelEntries(rawLines);
-
-  const labels =
-    entries.filter(entry=>
-      /\bserving\s+size\b/i.test(
-        entry.text
-      )
-    );
-
-  let best = null;
-
-  labels.forEach(label=>{
-    entries.forEach(candidate=>{
-      if (candidate===label){
-        return;
-      }
-
-      const normalized =
-        nutritionLabelNormalizeServingDescription(
-          candidate.text
-        );
-
-      if (!normalized){
-        return;
-      }
-
-      if (
-        label.x===null
-        || label.y===null
-        || candidate.x===null
-        || candidate.y===null
-      ){
-        return;
-      }
-
-      const labelCenterY =
-        label.y
-        +Number(label.height||0)/2;
-
-      const candidateCenterY =
-        candidate.y
-        +Number(candidate.height||0)/2;
-
-      const vertical =
-        Math.abs(
-          candidateCenterY-labelCenterY
-        );
-
-      const horizontalGap =
-        candidate.x
-        -(
-          label.x
-          +Number(label.width||0)
-        );
-
-      const belowDistance =
-        label.y-candidate.y;
-
-      let score =
-        -Infinity;
-
-      if (
-        vertical<=0.075
-        && horizontalGap>=-0.04
-        && horizontalGap<=0.45
-      ){
-        score =
-          240
-          -vertical*1000
-          -Math.abs(horizontalGap)*90;
-      }
-
-      if (
-        belowDistance>=-0.03
-        && belowDistance<=0.20
-        && Math.abs(candidate.x-label.x)<=0.35
-      ){
-        score = Math.max(
-          score,
-          175
-          -Math.abs(belowDistance)*500
-          -Math.abs(candidate.x-label.x)*80
-        );
-      }
-
-      if (
-        !Number.isFinite(score)
-      ){
-        return;
-      }
-
-      if (
-        /\b(?:bottle|can|package|packet|pouch|container|carton|box|bag|bar|piece|slice|cup|tbsp|tsp|scoop|serving)\b/i
-          .test(normalized)
-      ){
-        score += 20;
-      }
-
-      score +=
-        Number(candidate.confidence||0)*10;
-
-      if (
-        !best
-        || score>best.score
-      ){
-        best = {
-          value:normalized,
-          score:score
-        };
-      }
-    });
-  });
-
-  return best
-    ? best.value
-    : "";
-}
-
-
-function nutritionLabelNumber(
-  line,
-  requireGrams
-){
-  const source =
-    String(line||"")
-      .replace(/\u00a0/g," ")
-      .trim();
-
-  function normalizedValue(token){
-    const normalized =
-      String(token||"")
-        .replace(/[Oo]/g,"0")
-        .replace(/[Il|]/g,"1")
-        .replace(",",".")
-        .trim();
-
-    if (
-      !/^\d+(?:\.\d+)?$/.test(
-        normalized
-      )
-    ){
-      return null;
-    }
-
-    const value =
-      Number(normalized);
-
-    return Number.isFinite(value)
-      ? value
-      : null;
-  }
-
-  if (requireGrams){
-    const match =
-      source.match(
-        /(?:^|[^A-Za-z0-9])([0-9OoIl|]+(?:[.,][0-9OoIl|]+)?)\s*(?:g|grams?)\b/i
-      );
-
-    return match
-      ? normalizedValue(match[1])
-      : null;
-  }
-
-  const expression =
-    /(?:^|[^A-Za-z0-9])([0-9OoIl|]+(?:[.,][0-9OoIl|]+)?)(?=$|[^A-Za-z])/gi;
-
-  let match;
-
-  while (
-    (match=expression.exec(source))
-  ){
-    const value =
-      normalizedValue(match[1]);
-
-    if (value!==null){
-      return value;
-    }
-
-    if (match[0].length===0){
-      expression.lastIndex++;
-    }
-  }
-
-  return null;
-}
-
-const NUTRITION_LABEL_OTHER_FIELD =
-  /\b(?:serving|calories?|total|saturated|trans|fat|cholesterol|sodium|carbohydrate|carbs?|fiber|sugars?|protein|vitamin|calcium|iron|potassium|daily\s+value)\b/i;
-
-function nutritionLabelValueNear(
-  lines,
-  matcher,
-  requireGrams,
-  maximum,
-  rejectLine
-){
-  for (
-    let index=0;
-    index<lines.length;
-    index++
-  ){
-    const line = lines[index];
-
-    if (
-      rejectLine
-      && rejectLine.test(line)
-    ){
-      continue;
-    }
-
-    const match = line.match(matcher);
-
-    if (!match) continue;
-
-    const tail = line.slice(
-      Number(match.index||0)
-      + match[0].length
-    );
-
-    let number = nutritionLabelNumber(
-      tail,
-      requireGrams
-    );
-
-    if (
-      number===null
-      && index+1<lines.length
-    ){
-      const next = lines[index+1];
-
-      if (
-        !NUTRITION_LABEL_OTHER_FIELD.test(next)
-      ){
-        number = nutritionLabelNumber(
-          next,
-          requireGrams
-        );
-      }
-    }
-
-    if (
-      number!==null
-      && number>=0
-      && number<=maximum
-    ){
-      return number;
-    }
-  }
-
-  return null;
-}
-
-function nutritionLabelNormalizeServingDescription(
-  value
-){
-  let text =
-    String(value||"")
-      .replace(/[\u200B-\u200D\uFEFF]/g,"")
-      .replace(/\u00a0/g," ")
-      .replace(/[‐-‒–—]/g,"-")
-      .replace(/\s+/g," ")
-      .trim();
-
-  if (!text || text.length>90){
-    return "";
-  }
-
-  text =
-    text
-      .replace(
-        /^\s*(?:serving\s+size|serving)\s*[:\-]?\s*/i,
-        ""
-      )
-      .trim();
-
-  if (!text){
-    return "";
-  }
-
-  if (
-    /\b(?:calories?|total\s+fat|saturated|trans\s+fat|cholesterol|sodium|carbohydrate|dietary\s+fiber|sugars?|protein|vitamin|calcium|iron|potassium|daily\s+value)\b/i
-      .test(text)
-  ){
-    return "";
-  }
-
-  text =
-    text.replace(
-      /^(about\s+)?([Il|Oo0-9]+)(?=\s|$)/,
-      function(
-        match,
-        about,
-        quantity
-      ){
-        const normalized =
-          quantity
-            .replace(/[Il|]/g,"1")
-            .replace(/[Oo]/g,"0");
-
-        return (
-          about||""
-        )+normalized;
-      }
-    );
-
-  text =
-    text
-      .replace(/\bfl\.?\s*oz\.?/ig,"fl oz")
-      .replace(/\bmilliliters?\b/ig,"mL")
-      .replace(/\bml\b/ig,"mL")
-      .replace(/\bgrams?\b/ig,"g")
-      .replace(/\bounces?\b/ig,"oz")
-      .replace(/\btablespoons?\b/ig,"tbsp")
-      .replace(/\bteaspoons?\b/ig,"tsp")
-      .replace(/\.\s*\)/g,")")
-      .replace(/[.,;:]+\s*$/,"")
-      .replace(/\s+/g," ")
-      .trim();
-
-  const quantity =
-    String.raw`(?:about\s+)?(?:\d+(?:\.\d+)?|\d+\s*\/\s*\d+|[¼½¾⅓⅔⅛⅜⅝⅞])`;
-
-  const countUnit =
-    String.raw`(?:servings?|bottles?|cans?|packages?|packets?|pouches?|containers?|cartons?|boxes?|bags?|bars?|pieces?|slices?|cookies?|crackers?|pretzels?|cups?|tbsp|tsp|scoops?|capsules?|tablets?|sticks?)`;
-
-  const measuredUnit =
-    String.raw`(?:g|kg|mg|oz|lb|mL|l|fl\s+oz)`;
-
-  const measuredAmount =
-    quantity
-    +String.raw`\s*`
-    +measuredUnit;
-
-  const countPattern =
-    new RegExp(
-      "^"
-      +quantity
-      +"\\s+"
-      +countUnit
-      +"(?:\\s*\\("
-      +measuredAmount
-      +"\\))?"
-      +"$",
-      "i"
-    );
-
-  const measuredPattern =
-    new RegExp(
-      "^"
-      +measuredAmount
-      +"(?:\\s*\\("
-      +measuredAmount
-      +"\\))?"
-      +"$",
-      "i"
-    );
-
-  if (
-    !countPattern.test(text)
-    && !measuredPattern.test(text)
-  ){
-    return "";
-  }
-
-  return text;
-}
-
-function nutritionLabelServingDescription(
-  lines
-){
-  const values =
-    Array.isArray(lines)
-      ? lines.map(line=>
-          String(line||"")
-            .replace(/\s+/g," ")
-            .trim()
-        )
-      : [];
-
-  for (
-    let index=0;
-    index<values.length;
-    index++
-  ){
-    const line =
-      values[index];
-
-    if (
-      !/\bserving\s+size\b/i.test(line)
-    ){
-      continue;
-    }
-
-    const inline =
-      nutritionLabelNormalizeServingDescription(
-        line.replace(
-          /^.*?\bserving\s+size\b\s*[:\-]?\s*/i,
-          ""
-        )
-      );
-
-    if (inline){
-      return inline;
-    }
-
-    for (
-      let offset=1;
-      offset<=4;
-      offset++
-    ){
-      const candidate =
-        values[index+offset];
-
-      if (!candidate){
-        continue;
-      }
-
-      if (
-        /\b(?:calories?|amount\s+per|daily\s+value|total\s+fat|sodium|carbohydrate|protein)\b/i
-          .test(candidate)
-      ){
-        break;
-      }
-
-      const normalized =
-        nutritionLabelNormalizeServingDescription(
-          candidate
-        );
-
-      if (normalized){
-        return normalized;
-      }
-    }
-  }
-
-  return "";
-}
-
-function nutritionLabelServingMeasure(servingLabel){
-  const text = String(servingLabel||"")
-    .replace(/\u00a0/g," ")
-    .trim();
-
-  const matches = [];
-
-  function collect(regex, unit, priority){
-    for (const match of text.matchAll(regex)){
-      const amount = Number(
-        String(match[1]).replace(",",".")
-      );
-
-      if (
-        Number.isFinite(amount)
-        && amount>0
-        && amount<=5000
-      ){
-        matches.push({
-          amount:amount,
-          unit:unit,
-          priority:priority,
-          index:Number(match.index||0)
-        });
-      }
-    }
-  }
-
-  // Prefer metric values where labels show both customary and metric units.
-  collect(
-    /(\d+(?:[.,]\d+)?)\s*(?:mL|millilit(?:er|re)s?)\b/gi,
-    "ml",
-    1
-  );
-
-  collect(
-    /(\d+(?:[.,]\d+)?)\s*(?:g|grams?)\b/gi,
-    "g",
-    1
-  );
-
-  collect(
-    /(\d+(?:[.,]\d+)?)\s*(?:fl\.?\s*oz|fluid\s+ounces?)\b/gi,
-    "floz",
-    2
-  );
-
-  collect(
-    /(\d+(?:[.,]\d+)?)\s*(?:oz|ounces?)\b/gi,
-    "oz",
-    2
-  );
-
-  matches.sort((a,b)=>
-    a.priority-b.priority
-    || a.index-b.index
-  );
-
-  return matches.length
-    ? {
-        amount:matches[0].amount,
-        unit:matches[0].unit
-      }
-    : {
-        amount:null,
-        unit:"serving"
-      };
-}
 
 function normalizedServingUnit(value){
   return ["serving","g","ml","oz","floz"].includes(value)
@@ -1759,530 +743,6 @@ function foodListMacroText(food){
   );
 }
 
-function parseNutritionLabelLines(rawLines){
-  const lines =
-    nutritionLabelLines(rawLines);
-
-  const lineCalories =
-    nutritionLabelValueNear(
-      lines,
-      /\bcalories?\b/i,
-      false,
-      5000,
-      /\bcalories?\s+from\s+fat\b/i
-    );
-
-  const geometryCalories =
-    nutritionLabelGeometryValue(
-      rawLines,
-      /\bcalories?\b/i,
-      false,
-      5000,
-      /\bcalories?\s+from\s+fat\b/i
-    );
-
-  const calories =
-    geometryCalories!==null
-      ? geometryCalories
-      : lineCalories;
-
-  let fat =
-    nutritionLabelValueNear(
-      lines,
-      /\btotal\s+fat\b/i,
-      true,
-      500
-    );
-
-  if (fat===null){
-    fat =
-      nutritionLabelValueNear(
-        lines,
-        /^\s*fat\b/i,
-        true,
-        500
-      );
-  }
-
-  if (fat===null){
-    fat =
-      nutritionLabelGeometryValue(
-        rawLines,
-        /\btotal\s+fat\b/i,
-        true,
-        500
-      );
-  }
-
-  let carbs =
-    nutritionLabelValueNear(
-      lines,
-      /\b(?:total\s+carbohydrate|total\s+carbs?|carbohydrate)\b/i,
-      true,
-      500
-    );
-
-  if (carbs===null){
-    carbs =
-      nutritionLabelGeometryValue(
-        rawLines,
-        /\b(?:total\s+carbohydrate|total\s+carbs?|carbohydrate)\b/i,
-        true,
-        500
-      );
-  }
-
-  let protein =
-    nutritionLabelValueNear(
-      lines,
-      /\bprotein\b/i,
-      true,
-      500
-    );
-
-  if (protein===null){
-    protein =
-      nutritionLabelGeometryValue(
-        rawLines,
-        /\bprotein\b/i,
-        true,
-        500
-      );
-  }
-
-  let servingLabel =
-    nutritionLabelServingDescription(
-      lines
-    );
-
-  if (!servingLabel){
-    servingLabel =
-      nutritionLabelServingFromGeometry(
-        rawLines
-      );
-  }
-
-  const values = [
-    calories,
-    protein,
-    carbs,
-    fat
-  ];
-
-  return {
-    lines:lines,
-    servingLabel:servingLabel,
-    calories:calories,
-    protein:protein,
-    carbs:carbs,
-    fat:fat,
-    nutrientCount:
-      values.filter(
-        value=>value!==null
-      ).length
-  };
-}
-
-function applyNutritionLabelScanResult(
-  result,
-  options
-){
-  const parsed = result || {};
-  const opts = options || {};
-
-  const controlledIds = [
-    "mServingLabel",
-    "mServingAmount",
-    "mCal",
-    "mPro",
-    "mCarb",
-    "mFat"
-  ];
-
-  const hasExisting =
-    controlledIds.some(id=>
-      document
-        .getElementById(id)
-        .value
-        .trim()!==""
-    );
-
-  if (
-    hasExisting
-    && opts.confirmOverwrite!==false
-  ){
-    let approved = false;
-
-    try {
-      approved = window.confirm(
-        "Replace the current manual serving and nutrition values "
-        +"with the scanned label values?"
-      );
-    } catch(e){}
-
-    if (!approved){
-      nutritionLabelStatus(
-        "Scan canceled — your current manual values were kept.",
-        false
-      );
-      return false;
-    }
-  }
-
-  const measure =
-    nutritionLabelServingMeasure(
-      parsed.servingLabel
-    );
-
-  document.getElementById("mBrand").value="";
-  document.getElementById("mServingLabel").value =
-    parsed.servingLabel || "";
-
-  document.getElementById("mServingAmount").value =
-    measure.amount!==null
-      ? String(measure.amount)
-      : "";
-
-  document.getElementById("mServingUnit").value =
-    measure.unit;
-
-  const fields = {
-    mCal:parsed.calories,
-    mPro:parsed.protein,
-    mCarb:parsed.carbs,
-    mFat:parsed.fat
-  };
-
-  const filled = [];
-  const missing = [];
-
-  Object.keys(fields).forEach(id=>{
-    const value = fields[id];
-
-    if (
-      value!==null
-      && value!==undefined
-      && Number.isFinite(Number(value))
-    ){
-      document.getElementById(id).value =
-        String(Number(value));
-
-      filled.push(id);
-    } else {
-      document.getElementById(id).value="";
-      missing.push(id);
-    }
-  });
-
-  manualEntrySource = "label";
-
-  document
-    .getElementById("addManualBtn")
-    .classList
-    .add("hidden");
-
-  document
-    .getElementById("manualUseBtn")
-    .classList
-    .remove("hidden");
-
-  document
-    .getElementById("manualSaveChooseBtn")
-    .classList
-    .remove("hidden");
-
-  document
-    .getElementById("cancelEditFoodBtn")
-    .classList
-    .add("hidden");
-
-  let message =
-    parsed.servingLabel
-      ? "Scanned serving: "+parsed.servingLabel+". "
-      : "Nutrition label scanned. ";
-
-  if (
-    measure.amount!==null
-    && measure.unit!=="serving"
-  ){
-    message +=
-      "Measured serving found: "
-      +measure.amount+" "
-      +servingUnitText(measure.unit)
-      +". ";
-  } else {
-    message +=
-      "No measured gram or liquid amount was found, "
-      +"so the slider will use servings unless you enter one. ";
-  }
-
-  if (missing.length){
-    message +=
-      "Some nutrition values could not be read; "
-      +"enter or correct them manually. ";
-  }
-
-  message +=
-    "Enter the food name, compare every value with the package, "
-    +"then choose Use once or Save. Nothing has been logged.";
-
-  nutritionLabelStatus(
-    message,
-    false
-  );
-
-  const card =
-    document.getElementById("manualFoodCard");
-
-  if (
-    card
-    && typeof card.scrollIntoView==="function"
-  ){
-    try {
-      card.scrollIntoView({
-        behavior:"smooth",
-        block:"center"
-      });
-    } catch(e){}
-  }
-
-  return true;
-}
-
-function nutritionLabelImageBase64(
-  file,
-  maxDimension
-){
-  return new Promise((resolve,reject)=>{
-    if (!file){
-      reject(
-        new Error("No image was selected.")
-      );
-      return;
-    }
-
-    const image = new Image();
-    const url = URL.createObjectURL(file);
-
-    image.onload = ()=>{
-      try {
-        const longest =
-          Math.max(
-            image.width,
-            image.height
-          );
-
-        const scale = longest>0
-          ? Math.min(
-              1,
-              Number(maxDimension||2200)/longest
-            )
-          : 1;
-
-        const canvas =
-          document.createElement("canvas");
-
-        canvas.width = Math.max(
-          1,
-          Math.round(image.width*scale)
-        );
-
-        canvas.height = Math.max(
-          1,
-          Math.round(image.height*scale)
-        );
-
-        const context =
-          canvas.getContext("2d");
-
-        if (!context){
-          throw new Error(
-            "Image preparation is unavailable."
-          );
-        }
-
-        context.drawImage(
-          image,
-          0,
-          0,
-          canvas.width,
-          canvas.height
-        );
-
-        const dataUrl =
-          canvas.toDataURL(
-            "image/jpeg",
-            0.92
-          );
-
-        URL.revokeObjectURL(url);
-
-        const comma =
-          dataUrl.indexOf(",");
-
-        if (comma<0){
-          throw new Error(
-            "The selected image could not be prepared."
-          );
-        }
-
-        resolve(
-          dataUrl.slice(comma+1)
-        );
-      } catch(error){
-        try {
-          URL.revokeObjectURL(url);
-        } catch(ignore){}
-
-        reject(error);
-      }
-    };
-
-    image.onerror = ()=>{
-      try {
-        URL.revokeObjectURL(url);
-      } catch(ignore){}
-
-      reject(
-        new Error(
-          "The selected image could not be opened."
-        )
-      );
-    };
-
-    image.src = url;
-  });
-}
-
-function renderNutritionLabelScannerAvailability(){
-  const button =
-    document.getElementById("labelScanBtn");
-
-  if (!button) return false;
-
-  const capability =
-    nutritionLabelScannerCapability();
-
-  button.classList.toggle(
-    "hidden",
-    !capability.available
-  );
-
-  return capability.available;
-}
-
-document
-  .getElementById("labelScanBtn")
-  .addEventListener("click",()=>{
-    const capability =
-      nutritionLabelScannerCapability();
-
-    if (!capability.available){
-      nutritionLabelStatus(
-        "Nutrition-label scanning is available "
-        +"in the native iPhone app.",
-        true
-      );
-      return;
-    }
-
-    nutritionLabelStatus(
-      "Take or choose a clear, straight-on photo "
-      +"of the complete Nutrition Facts panel.",
-      false
-    );
-
-    document
-      .getElementById("labelScanFile")
-      .click();
-  });
-
-document
-  .getElementById("labelScanFile")
-  .addEventListener(
-    "change",
-    async event=>{
-      const input = event.currentTarget;
-      const file =
-        input.files
-        && input.files[0];
-
-      if (!file) return;
-
-      const button =
-        document.getElementById("labelScanBtn");
-
-      button.disabled = true;
-      button.textContent = "Reading label…";
-
-      nutritionLabelStatus(
-        "Reading the Nutrition Facts panel on this device…",
-        false
-      );
-
-      try {
-        const capability =
-          nutritionLabelScannerCapability();
-
-        if (!capability.available){
-          throw new Error(
-            "The native label scanner is unavailable."
-          );
-        }
-
-        const base64 =
-          await nutritionLabelImageBase64(
-            file,
-            2200
-          );
-
-        const response =
-          await capability.plugin.recognize({
-            base64:base64
-          });
-
-        const parsed =
-          parseNutritionLabelLines(
-            response
-            && response.lines
-          );
-
-        if (
-          parsed.calories===null
-          || parsed.nutrientCount<3
-        ){
-          nutritionLabelStatus(
-            "BlackPyre could not confidently read enough "
-            +"of that label. Retake it straight-on in brighter "
-            +"light and include the complete Nutrition Facts panel.",
-            true
-          );
-          return;
-        }
-
-        applyNutritionLabelScanResult(parsed);
-      } catch(error){
-        nutritionLabelStatus(
-          (
-            error
-            && error.message
-              ? error.message
-              : "The nutrition label could not be read."
-          )
-          +" Try another photo or enter the values manually.",
-          true
-        );
-      } finally {
-        input.value = "";
-        button.disabled = false;
-        button.textContent =
-          "Scan nutrition label";
-      }
-    }
-  );
-
-renderNutritionLabelScannerAvailability();
-
 // --- camera barcode scanning (lazy-loads scanner library on first use) ---
 // A square scan box keeps both horizontal and 90-degree barcodes inside the decoded crop.
 function barcodeScanBox(viewfinderWidth, viewfinderHeight){
@@ -2464,7 +924,7 @@ let pendingBarcode = null;
 
 function openCustomForm(code, prefill, reviewWarning){
   if (
-    ["search","label","manual","cleared"]
+    ["search","manual","cleared"]
       .includes(activeFoodEntryMode)
   ){
     return;
@@ -2539,7 +999,7 @@ document.getElementById("cfSaveBtn").addEventListener("click", ()=>{
 
 function renderResults(hits){
   if (
-    ["barcode","label","manual","cleared"]
+    ["barcode","manual","cleared"]
       .includes(activeFoodEntryMode)
   ){
     return;
@@ -2904,6 +1364,23 @@ function syncBarcodeCorrectionReview(food){
       +"line-height:1.5;"
       +"color:var(--text);";
 
+    const confirmButton =
+      document.createElement("button");
+
+    confirmButton.id =
+      "barcodeConfirmBtn";
+
+    confirmButton.type =
+      "button";
+
+    confirmButton.textContent =
+      "✓ Looks correct";
+
+    confirmButton.setAttribute(
+      "aria-describedby",
+      "barcodeCorrectionMessage"
+    );
+
     const button =
       document.createElement("button");
 
@@ -2928,18 +1405,28 @@ function syncBarcodeCorrectionReview(food){
       existingButton
       && existingButton.className
     ){
+      confirmButton.className =
+        existingButton.className;
+
       button.className =
         existingButton.className;
     }
+
+    confirmButton.style.width =
+      "100%";
+
+    confirmButton.style.marginTop =
+      "10px";
 
     button.style.width =
       "100%";
 
     button.style.marginTop =
-      "10px";
+      "8px";
 
     panel.appendChild(title);
     panel.appendChild(message);
+    panel.appendChild(confirmButton);
     panel.appendChild(button);
 
     const nutritionLine =
@@ -2982,19 +1469,114 @@ function syncBarcodeCorrectionReview(food){
     !eligible
   );
 
+  const confirmButton =
+    document.getElementById(
+      "barcodeConfirmBtn"
+    );
+
   const button =
     document.getElementById(
       "barcodeCorrectionBtn"
     );
 
-  if (!button){
+  if (
+    !confirmButton
+    || !button
+  ){
     return;
   }
+
+  confirmButton.onclick =
+    eligible
+      ? ()=>confirmBarcodeFood(food)
+      : null;
 
   button.onclick =
     eligible
       ? ()=>openBarcodeCorrection(food)
       : null;
+}
+
+function rememberConfirmedBarcodeFood(food){
+  if (
+    !food
+    || food.sourceLabel!=="Open Food Facts"
+  ){
+    return false;
+  }
+
+  const barcode =
+    normalizeBarcodeIdentity(
+      food.barcode
+      || food.lookupBarcode
+      || food.code
+    );
+
+  if (!barcode){
+    return false;
+  }
+
+  if (
+    !data.myFoods
+    || typeof data.myFoods!=="object"
+  ){
+    data.myFoods={};
+  }
+
+  const hadPrevious =
+    Object.prototype.hasOwnProperty.call(
+      data.myFoods,
+      barcode
+    );
+
+  const previous =
+    data.myFoods[barcode];
+
+  const saved =
+    Object.assign(
+      {},
+      food,
+      {
+        barcode:barcode,
+        sourceLabel:"My Foods"
+      }
+    );
+
+  data.myFoods[barcode]=saved;
+
+  if (save()===false){
+    if (hadPrevious){
+      data.myFoods[barcode]=previous;
+    } else {
+      delete data.myFoods[barcode];
+    }
+
+    return false;
+  }
+
+  return saved;
+}
+
+function confirmBarcodeFood(food){
+  const saved =
+    rememberConfirmedBarcodeFood(food);
+
+  if (!saved){
+    flashSave(
+      "Could not save this barcode",
+      true
+    );
+    return;
+  }
+
+  selected =
+    Object.assign({},saved);
+
+  selectFood(selected);
+
+  flashSave(
+    "Barcode saved to My Foods ✓"
+  );
 }
 
 function selectFood(h){
@@ -3757,8 +2339,6 @@ function sliderEditDetails(entry){
   }
   return legacySliderEditSource(entry);
 }
-let manualEntrySource = "manual";
-
 function clearManualFoodInputs(){
   [
     "mName",
@@ -3776,7 +2356,6 @@ function clearManualFoodInputs(){
   document.getElementById("mServingUnit").value =
     "serving";
 
-  manualEntrySource = "manual";
 }
 function startEditEntry(i){
   const f = (data.food[foodDateEl.value]||[])[i];
@@ -3925,10 +2504,7 @@ function manualServingFoodFromInputs(){
         document
           .getElementById("mFat")
           .value,
-      sourceLabel:
-        manualEntrySource==="label"
-          ? "Scanned label"
-          : "Manual"
+      sourceLabel:"Manual"
     });
 
   if (!result.ok){
@@ -4324,47 +2900,12 @@ function clearBarcodeState(
   }
 }
 
-function clearNutritionLabelState(
-  preserveMode
-){
-  const file =
-    document.getElementById("labelScanFile");
-
-  if (file){
-    file.value="";
-  }
-
-  nutritionLabelStatus("",false);
-
-  if (
-    typeof manualEntrySource!=="undefined"
-    && manualEntrySource==="label"
-  ){
-    clearManualFoodInputs();
-  }
-
-  if (
-    selected
-    && selected.sourceLabel==="Scanned label"
-  ){
-    resetFoodSelectionState();
-  }
-
-  if (!preserveMode){
-    activeFoodEntryMode="cleared";
-  }
-}
-
 function clearManualFoodEntryState(
   preserveMode
 ){
   clearManualFoodInputs();
   cancelEditFood();
   resetFoodSelectionState();
-
-  clearFoodElementText(
-    "labelScanStatus"
-  );
 
   if (!preserveMode){
     activeFoodEntryMode="cleared";
@@ -4376,7 +2917,6 @@ function clearAllFoodEntryState(){
 
   clearFoodSearchState(true);
   clearBarcodeState(true);
-  clearNutritionLabelState(true);
   clearManualFoodEntryState(true);
 
   clearFoodElementText("searchErr");
@@ -4476,28 +3016,6 @@ function installFoodEntryClearControls(){
     }
   }
 
-  const scanStatus =
-    document.getElementById(
-      "labelScanStatus"
-    );
-
-  if (scanStatus){
-    const button =
-      createFoodClearButton(
-        "labelScanClearBtn",
-        "Clear label scan",
-        ()=>clearNutritionLabelState(false)
-      );
-
-    button.style.width="100%";
-    button.style.marginTop="8px";
-
-    insertAfterElement(
-      scanStatus,
-      button
-    );
-  }
-
   const manualCard =
     document.getElementById(
       "manualFoodCard"
@@ -4541,13 +3059,7 @@ function installFoodEntryClearControls(){
 }
 
 function switchFoodEntryMode(mode){
-  if (
-    activeFoodEntryMode===mode
-    || (
-      activeFoodEntryMode==="label"
-      && mode==="manual"
-    )
-  ){
+  if (activeFoodEntryMode===mode){
     return;
   }
 
@@ -4555,34 +3067,16 @@ function switchFoodEntryMode(mode){
 
   if (mode==="search"){
     clearBarcodeState(true);
-    clearNutritionLabelState(true);
     clearManualFoodEntryState(true);
   } else if (mode==="barcode"){
     clearFoodSearchState(true);
-    clearNutritionLabelState(true);
-    clearManualFoodEntryState(true);
-  } else if (mode==="label"){
-    clearFoodSearchState(true);
-    clearBarcodeState(true);
     clearManualFoodEntryState(true);
   } else if (mode==="manual"){
     clearFoodSearchState(true);
     clearBarcodeState(true);
-    clearNutritionLabelState(true);
   }
 
   activeFoodEntryMode=mode;
-}
-
-function beginNutritionLabelScan(){
-  activeFoodEntryMode="label";
-
-  clearFoodSearchState(true);
-  clearBarcodeState(true);
-  clearManualFoodEntryState(true);
-  clearNutritionLabelState(true);
-
-  activeFoodEntryMode="label";
 }
 
 function installFoodEntryModeIsolation(){
@@ -4627,19 +3121,6 @@ function installFoodEntryModeIsolation(){
       ()=>{
         switchFoodEntryMode("barcode");
       },
-      true
-    );
-  }
-
-  const scanButton =
-    document.getElementById(
-      "labelScanBtn"
-    );
-
-  if (scanButton){
-    scanButton.addEventListener(
-      "click",
-      beginNutritionLabelScan,
       true
     );
   }

@@ -678,6 +678,168 @@ await scan(C,"7500462317515");
 check("v70 future scans use the saved barcode correction with zero network calls",
   C.window.eval("window.__calls.length")===0 &&
   dMango70.getElementById("selName").textContent.includes("Frozen Mango"));
+
+const AddOnlyBarcode90 = bootOFF(
+  ()=>Promise.resolve({
+    ok:true,
+    status:200,
+    json:()=>Promise.resolve({
+      status:1,
+      product:yoplaitOFF
+    })
+  })
+);
+
+const dAddOnlyBarcode90 =
+  AddOnlyBarcode90.window.document;
+
+await scan(
+  AddOnlyBarcode90,
+  "070470343488"
+);
+
+check(
+  "v90 online barcode review shows explicit correct and incorrect choices",
+  !!dAddOnlyBarcode90
+    .getElementById("barcodeConfirmBtn")
+  && /Looks correct/.test(
+       dAddOnlyBarcode90
+         .getElementById(
+           "barcodeConfirmBtn"
+         )
+         .textContent
+     )
+  && !!dAddOnlyBarcode90
+    .getElementById(
+      "barcodeCorrectionBtn"
+    )
+  && /Correct barcode data/.test(
+       dAddOnlyBarcode90
+         .getElementById(
+           "barcodeCorrectionBtn"
+         )
+         .textContent
+     )
+  && !!dAddOnlyBarcode90
+    .getElementById("addSelBtn")
+);
+
+dAddOnlyBarcode90
+  .getElementById("addSelBtn")
+  .dispatchEvent(
+    new AddOnlyBarcode90.window.Event(
+      "click",
+      {bubbles:true}
+    )
+  );
+
+check(
+  "v90 Add to log does not silently confirm an online barcode",
+  AddOnlyBarcode90.window.eval(
+    'data.myFoods["070470343488"]===undefined'
+  )
+);
+
+const ConfirmedBarcode90 = bootOFF(
+  ()=>Promise.resolve({
+    ok:true,
+    status:200,
+    json:()=>Promise.resolve({
+      status:1,
+      product:yoplaitOFF
+    })
+  })
+);
+
+const dConfirmedBarcode90 =
+  ConfirmedBarcode90.window.document;
+
+await scan(
+  ConfirmedBarcode90,
+  "070470343488"
+);
+
+dConfirmedBarcode90
+  .getElementById("barcodeConfirmBtn")
+  .dispatchEvent(
+    new ConfirmedBarcode90.window.Event(
+      "click",
+      {bubbles:true}
+    )
+  );
+
+check(
+  "v90 Looks correct saves reviewed barcode to My Foods",
+  ConfirmedBarcode90.window.eval(`
+    (()=>{
+      const barcode =
+        "070470343488";
+
+      const saved =
+        data.myFoods[barcode];
+
+      const stored =
+        JSON.parse(
+          localStorage.getItem(
+            "forge:data"
+          )
+        );
+
+      return (
+        !!saved
+        && saved.barcode===barcode
+        && saved.sourceLabel==="My Foods"
+        && !!stored.myFoods[barcode]
+        && stored.myFoods[barcode]
+             .sourceLabel==="My Foods"
+        && selected
+        && selected.sourceLabel==="My Foods"
+      );
+    })()
+  `)
+);
+
+check(
+  "v90 Looks correct hides the online verification warning",
+  dConfirmedBarcode90
+    .getElementById(
+      "barcodeCorrectionReview"
+    )
+    .classList
+    .contains("hidden")
+);
+
+ConfirmedBarcode90.window.eval(
+  "window.__calls.length=0"
+);
+
+dConfirmedBarcode90
+  .getElementById("barcodeInput")
+  .value =
+    "070470343488";
+
+await ConfirmedBarcode90.window.eval(
+  "runBarcode()"
+);
+
+await wait(30);
+
+check(
+  "v90 confirmed barcode rescans from My Foods with zero network calls",
+  ConfirmedBarcode90.window.eval(
+    "window.__calls.length"
+  )===0
+  && ConfirmedBarcode90.window.eval(
+       "selected.sourceLabel"
+     )==="My Foods"
+  && dConfirmedBarcode90
+       .getElementById(
+         "barcodeCorrectionReview"
+       )
+       .classList
+       .contains("hidden")
+);
+
 C = bootOFF(()=>Promise.resolve({ok:true,status:200,json:()=>Promise.resolve({})}));
 await scan(C,"111");
 check("saved barcode short-circuits (zero network)", C.window.eval("window.__calls.length")===0);
@@ -744,10 +906,79 @@ const chip49 = dT49.querySelector("#exerciseInputs .unsavedChip");
 check("editing a value marks the exercise Unsaved", T49.window.eval(`sessionState["Bench Press"].status`)==="unsaved" && !!chip49 && chip49.style.display!=="none" && /unsaved/i.test(chip49.textContent));
 clickT49(dT49.querySelector("#exerciseInputs .saveExBtn"));
 check("Save Exercise validates and saves only the entered set", T49.window.eval(`sessionState["Bench Press"].status==="saved" && sessionState["Bench Press"].saved.length===1 && sessionState["Bench Press"].saved[0].w===105`));
-check("saved exercise shows Completed with an Edit option", /Completed/.test(dT49.querySelector("#exerciseInputs .savedChip").textContent) && [...dT49.querySelectorAll("#exerciseInputs .xbtn")].some(b=>b.textContent==="Edit"));
+check(
+  "saved partial exercise still shows Completed with an Edit option",
+  /Completed/.test(
+    dT49.querySelector("#exerciseInputs .savedChip").textContent
+  )
+  && [...dT49.querySelectorAll("#exerciseInputs .xbtn")]
+       .some(button=>button.textContent==="Edit")
+);
+
 clickT49("logWorkoutBtn");
-check("logging saves only the genuinely saved set", T49.window.eval(`data.workouts.length===2 && data.workouts[1].sets["Bench Press"].length===1 && data.workouts[1].sets["Bench Press"][0].w===105`));
-check("partial saved history cannot trigger false progression next time", T49.window.eval(`sessionState["Bench Press"].auto===false && sessionState["Bench Press"].rows.length===1 && sessionState["Bench Press"].rows[0].w===105`));
+
+check(
+  "partially saved programmed exercise cannot silently drop the remaining sets",
+  T49.window.eval("data.workouts.length")===1
+  && /Resolve the remaining planned sets.*Bench Press/.test(
+       dT49.getElementById("workoutErr").textContent
+     )
+);
+
+const edit49=
+  [...dT49.querySelectorAll("#exerciseInputs .xbtn")]
+    .find(button=>button.textContent==="Edit");
+
+clickT49(edit49);
+
+clickT49(
+  dT49.querySelector(
+    '[data-exercise="Bench Press"][data-set-action="skip-remaining"]'
+  )
+);
+
+clickT49(
+  dT49.querySelector("#exerciseInputs .saveExBtn")
+);
+
+check(
+  "remaining programmed sets can be explicitly skipped before logging",
+  T49.window.eval(`
+    sessionState["Bench Press"].status==="saved"
+    && sessionState["Bench Press"].saved.length===3
+    && sessionState["Bench Press"].saved[0].w===105
+    && sessionState["Bench Press"].saved[0].r===5
+    && sessionState["Bench Press"].saved[1].status==="skipped"
+    && sessionState["Bench Press"].saved[2].status==="skipped"
+  `)
+);
+
+clickT49("logWorkoutBtn");
+
+check(
+  "resolved workout logs completed and skipped programmed sets",
+  T49.window.eval(`
+    data.workouts.length===2
+    && data.workouts[1].sets["Bench Press"].length===3
+    && data.workouts[1].sets["Bench Press"][0].w===105
+    && data.workouts[1].sets["Bench Press"][1].status==="skipped"
+    && data.workouts[1].sets["Bench Press"][2].status==="skipped"
+  `)
+);
+
+check(
+  "incomplete prescription cannot trigger progression and outcomes do not carry forward",
+  T49.window.eval(`
+    sessionState["Bench Press"].auto===false
+    && sessionState["Bench Press"].rows.length===3
+    && sessionState["Bench Press"].rows[0].w===105
+    && sessionState["Bench Press"].rows.every(
+         row=>
+           row.prescribed===true
+           && !row.status
+       )
+  `)
+);
 
 const T49Invalid = boot(V3_CFG, EMPTY_DATA, null, TEST_PROGRAM);
 const dT49Invalid = T49Invalid.window.document;
@@ -832,9 +1063,54 @@ T51.window.confirm = (m)=>{ confirm51Msgs.push(m); return false; }; // Review ex
 clickT51("logWorkoutBtn");
 check("v51 warning: even one unsaved exercise triggers the warning, by name", confirm51Msgs.length===1 && /Bench Press/.test(confirm51Msgs[0]) && /Save valid exercises & log session/.test(confirm51Msgs[0]) && /Review exercises/.test(confirm51Msgs[0]));
 check("v51 review path: choosing Review logs nothing and explains next steps", T51.window.eval("data.workouts.length")===0 && /Review the unsaved exercise/.test(dT51.getElementById("workoutErr").textContent));
-T51.window.confirm = (m)=>{ confirm51Msgs.push(m); return true; }; // Save valid & log
+T51.window.confirm = (m)=>{
+  confirm51Msgs.push(m);
+  return true;
+};
+
 clickT51("logWorkoutBtn");
-check("v51 save-and-log path: valid unsaved work is saved then logged, never silently dropped", T51.window.eval(`data.workouts.length===1 && data.workouts[0].sets["Bench Press"].length===1 && data.workouts[0].sets["Bench Press"][0].w===135`));
+
+check(
+  "v51 save-and-log path saves valid work but blocks unresolved programmed sets",
+  T51.window.eval(`
+    data.workouts.length===0
+    && sessionState["Bench Press"].status==="saved"
+    && sessionState["Bench Press"].saved.length===1
+    && sessionState["Bench Press"].saved[0].w===135
+  `)
+  && /Resolve the remaining planned sets.*Bench Press/.test(
+       dT51.getElementById("workoutErr").textContent
+     )
+);
+
+const resolveEdit51=
+  [...dT51.querySelectorAll("#exerciseInputs .xbtn")]
+    .find(button=>button.textContent==="Edit");
+
+clickT51(resolveEdit51);
+
+clickT51(
+  dT51.querySelector(
+    '[data-exercise="Bench Press"][data-set-action="skip-remaining"]'
+  )
+);
+
+clickT51(
+  dT51.querySelector("#exerciseInputs .saveExBtn")
+);
+
+clickT51("logWorkoutBtn");
+
+check(
+  "v51 resolved programmed outcomes log without dropping work",
+  T51.window.eval(`
+    data.workouts.length===1
+    && data.workouts[0].sets["Bench Press"].length===3
+    && data.workouts[0].sets["Bench Press"][0].w===135
+    && data.workouts[0].sets["Bench Press"][1].status==="skipped"
+    && data.workouts[0].sets["Bench Press"][2].status==="skipped"
+  `)
+);
 
 // leaving Train with unsaved work warns; canceling stays
 const T51b = boot(V3_CFG, EMPTY_DATA, null, TEST_PROGRAM);
@@ -848,6 +1124,88 @@ check("v51 leave-Train warning: canceling keeps you on Train with the work intac
 T51b.window.confirm = ()=>true;
 dT51b.querySelector('.tab[data-view="food"]').dispatchEvent(new T51b.window.Event("click",{bubbles:true}));
 check("v51 leave-Train warning: confirming leaves (entries remain in memory)", dT51b.getElementById("view-food").classList.contains("active") && T51b.window.eval(`sessionState["Bench Press"].rows[0].w`)===95);
+
+dT51b.querySelector('.tab[data-view="work"]').dispatchEvent(new T51b.window.Event("click",{bubbles:true}));
+
+check(
+  "v90-16 entered workout values remain visible after leaving and returning to Train",
+  dT51b.querySelector(
+    '#exerciseInputs input[data-field="weight"]'
+  ).value==="95"
+  && T51b.window.eval(`
+       sessionState["Bench Press"].rows[0].w===95
+     `)
+);
+
+const T9016 = boot(V3_CFG, EMPTY_DATA, null, TEST_PROGRAM);
+const dT9016 = T9016.window.document;
+
+dT9016.querySelector(
+  '.tab[data-view="work"]'
+).dispatchEvent(
+  new T9016.window.Event(
+    "click",
+    {bubbles:true}
+  )
+);
+
+const clearedWeight9016=
+  dT9016.querySelector(
+    '#exerciseInputs input[data-field="weight"]'
+  );
+
+const plannedReps9016=
+  dT9016.querySelector(
+    '#exerciseInputs input[data-field="reps"]'
+  );
+
+clearedWeight9016.value="95";
+clearedWeight9016.dispatchEvent(
+  new T9016.window.Event(
+    "input",
+    {bubbles:true}
+  )
+);
+
+clearedWeight9016.value="";
+clearedWeight9016.dispatchEvent(
+  new T9016.window.Event(
+    "input",
+    {bubbles:true}
+  )
+);
+
+let emptyLeavePrompts9016=0;
+
+T9016.window.confirm=()=>{
+  emptyLeavePrompts9016+=1;
+  return false;
+};
+
+dT9016.querySelector(
+  '.tab[data-view="food"]'
+).dispatchEvent(
+  new T9016.window.Event(
+    "click",
+    {bubbles:true}
+  )
+);
+
+check(
+  "v90-16 clearing the only user-entered value leaves no false unfinished exercise",
+  plannedReps9016.value==="5"
+  && emptyLeavePrompts9016===0
+  && dT9016
+       .getElementById("view-food")
+       .classList.contains("active")
+  && T9016.window.eval(`
+       sessionState["Bench Press"].rows[0].w===""
+       && sessionState["Bench Press"].rows[0].r===5
+       && sessionState["Bench Press"].rows[0].touched===false
+       && unsavedExerciseNames().length===0
+     `)
+);
+
 // saved-but-unlogged work also counts as meaningful for session-type switching
 const T51c = boot(V3_CFG, EMPTY_DATA, null, TEST_PROGRAM);
 const dT51c = T51c.window.document;
@@ -1678,7 +2036,7 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+(?:-\d+)?"/.test(sw));
-check("v90 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v90-4"'));
+check("v90 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v90-16"'));
 
 const nativePrep76 = fs.readFileSync(
   path.join(__dirname,"..","tools","prepare-native.sh"),
@@ -1692,6 +2050,12 @@ check(
 );
 
 const rawIndex = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+
+check(
+  "v90-15 set fields keep focus visible and Remove copy contained",
+  /\.set-controls-line \.snum:focus-visible \{[^}]*position:relative;[^}]*z-index:2;[^}]*outline-offset:0;/.test(rawIndex)
+  && /\.workout-set-row \.set-remove-direct \{[^}]*padding:5px 1px;[^}]*overflow:hidden;[^}]*font-size:10px;[^}]*white-space:nowrap;/.test(rawIndex)
+);
 
 check("Undo reserves bottom space and stacks above both collapsed and expanded Train timer controls",
   /body\.undo-toast-visible\s*\{\s*padding-bottom:164px;\s*\}/.test(rawIndex)
@@ -1924,37 +2288,276 @@ check(
 );
 
 // ================= v56: persistent drafts, action safety, offline fast-fail =================
-const D56 = boot(V3_CFG, V2_DATA, null, TEST_PROGRAM);
-const dD56 = D56.window.document;
-const wD56=dD56.querySelector('#exerciseInputs input[data-field="weight"]');
-const rD56=dD56.querySelector('#exerciseInputs input[data-field="reps"]');
-wD56.value="145"; wD56.dispatchEvent(new D56.window.Event("input",{bubbles:true}));
-rD56.value="5"; rD56.dispatchEvent(new D56.window.Event("input",{bubbles:true}));
-dD56.querySelector("#exerciseInputs .saveExBtn").dispatchEvent(new D56.window.Event("click",{bubbles:true}));
-const draft56Raw=D56.window.localStorage.getItem("forge:data");
-const draft56=JSON.parse(draft56Raw).activeWorkoutDraft;
-check("v56 Save Exercise persists a resumable workout draft", !!draft56 && draft56.day==="D1" && draft56.sets["Bench Press"][0].w===145);
-check("v56 saved draft refreshes last-known-good recovery", JSON.parse(JSON.parse(D56.window.localStorage.getItem("forge:lkg")).strings.data).activeWorkoutDraft.sets["Bench Press"][0].w===145);
-check("v56 active draft stays out of the way while the workout is already open", dD56.getElementById("workoutDraftCard").classList.contains("hidden"));
-const D56Reload=bootRaw({cfg:D56.window.localStorage.getItem("forge:cfg"),data:draft56Raw,program:D56.window.localStorage.getItem("forge:program"),lkg:D56.window.localStorage.getItem("forge:lkg")});
-const dD56R=D56Reload.window.document;
-check("v56 reload offers Resume or Discard instead of losing saved exercise work", !dD56R.getElementById("workoutDraftCard").classList.contains("hidden") && dD56R.getElementById("resumeWorkoutDraftBtn") && dD56R.getElementById("discardWorkoutDraftBtn"));
-dD56R.getElementById("resumeWorkoutDraftBtn").dispatchEvent(new D56Reload.window.Event("click",{bubbles:true}));
-check("v56 Resume restores the exercise as Completed", D56Reload.window.eval(`workoutDraftLoaded && sessionState["Bench Press"].status==="saved" && sessionState["Bench Press"].saved[0].w===145`) && /Completed/.test(dD56R.getElementById("exerciseInputs").textContent));
-dD56R.getElementById("logWorkoutBtn").dispatchEvent(new D56Reload.window.Event("click",{bubbles:true}));
-check("v56 successful Log Session clears the draft and saves history", D56Reload.window.eval(`data.activeWorkoutDraft===null && data.workouts.length===1 && data.workouts[0].sets["Bench Press"][0].w===145`) && JSON.parse(D56Reload.window.localStorage.getItem("forge:data")).activeWorkoutDraft===null);
+const D56 = boot(
+  V3_CFG,
+  V2_DATA,
+  null,
+  TEST_PROGRAM
+);
 
-const D56Fail=bootRaw({cfg:D56.window.localStorage.getItem("forge:cfg"),data:draft56Raw,program:D56.window.localStorage.getItem("forge:program")});
-D56Fail.window.document.getElementById("resumeWorkoutDraftBtn").dispatchEvent(new D56Fail.window.Event("click",{bubbles:true}));
-const d56Proto=Object.getPrototypeOf(D56Fail.window.localStorage), d56Set=d56Proto.setItem;
-d56Proto.setItem=function(k,v){ if(k==="forge:data") throw new Error("blocked"); return d56Set.call(this,k,v); };
-D56Fail.window.document.getElementById("logWorkoutBtn").dispatchEvent(new D56Fail.window.Event("click",{bubbles:true}));
+const dD56=D56.window.document;
+
+const wD56=
+  dD56.querySelector(
+    '#exerciseInputs input[data-field="weight"]'
+  );
+
+const rD56=
+  dD56.querySelector(
+    '#exerciseInputs input[data-field="reps"]'
+  );
+
+wD56.value="145";
+wD56.dispatchEvent(
+  new D56.window.Event("input",{bubbles:true})
+);
+
+rD56.value="5";
+rD56.dispatchEvent(
+  new D56.window.Event("input",{bubbles:true})
+);
+
+dD56.querySelector(
+  "#exerciseInputs .saveExBtn"
+).dispatchEvent(
+  new D56.window.Event("click",{bubbles:true})
+);
+
+const draft56Raw=
+  D56.window.localStorage.getItem("forge:data");
+
+const draft56=
+  JSON.parse(draft56Raw).activeWorkoutDraft;
+
+check(
+  "v56 Save Exercise persists a resumable workout draft",
+  !!draft56
+  && draft56.day==="D1"
+  && draft56.sets["Bench Press"][0].w===145
+);
+
+check(
+  "v90 partial saved draft preserves all programmed row positions",
+  !!draft56.rowStates
+  && Array.isArray(draft56.rowStates["Bench Press"])
+  && draft56.rowStates["Bench Press"].length===3
+  && draft56.rowStates["Bench Press"][0].touched===true
+  && draft56.rowStates["Bench Press"][1].touched===false
+  && draft56.rowStates["Bench Press"][2].touched===false
+  && draft56.rowStates["Bench Press"].every(
+       row=>row.prescribed===true
+     )
+);
+
+check(
+  "v56 saved draft refreshes last-known-good recovery",
+  JSON.parse(
+    JSON.parse(
+      D56.window.localStorage.getItem("forge:lkg")
+    ).strings.data
+  ).activeWorkoutDraft.sets["Bench Press"][0].w===145
+);
+
+check(
+  "v56 active draft stays out of the way while the workout is already open",
+  dD56.getElementById("workoutDraftCard")
+    .classList.contains("hidden")
+);
+
+const D56Reload=
+  bootRaw({
+    cfg:D56.window.localStorage.getItem("forge:cfg"),
+    data:draft56Raw,
+    program:D56.window.localStorage.getItem("forge:program"),
+    lkg:D56.window.localStorage.getItem("forge:lkg")
+  });
+
+const dD56R=D56Reload.window.document;
+
+check(
+  "v56 reload offers Resume or Discard instead of losing saved exercise work",
+  !dD56R.getElementById("workoutDraftCard")
+    .classList.contains("hidden")
+  && dD56R.getElementById("resumeWorkoutDraftBtn")
+  && dD56R.getElementById("discardWorkoutDraftBtn")
+);
+
+dD56R.getElementById("resumeWorkoutDraftBtn")
+  .dispatchEvent(
+    new D56Reload.window.Event("click",{bubbles:true})
+  );
+
+check(
+  "v90 Resume restores the saved partial exercise and its unresolved programmed rows",
+  D56Reload.window.eval(`
+    workoutDraftLoaded
+    && sessionState["Bench Press"].status==="saved"
+    && sessionState["Bench Press"].saved[0].w===145
+    && sessionState["Bench Press"].rows.length===3
+    && sessionState["Bench Press"].rows[0].touched===true
+    && sessionState["Bench Press"].rows[1].touched===false
+    && sessionState["Bench Press"].rows[2].touched===false
+    && sessionState["Bench Press"].rows.every(
+         row=>row.prescribed===true
+       )
+  `)
+  && /Completed/.test(
+       dD56R.getElementById("exerciseInputs").textContent
+     )
+);
+
+dD56R.getElementById("logWorkoutBtn")
+  .dispatchEvent(
+    new D56Reload.window.Event("click",{bubbles:true})
+  );
+
+check(
+  "v90 resumed partial draft cannot silently log unresolved programmed sets",
+  D56Reload.window.eval(`
+    data.workouts.length===0
+    && data.activeWorkoutDraft!==null
+  `)
+  && /Resolve the remaining planned sets/.test(
+       dD56R.getElementById("workoutErr").textContent
+     )
+);
+
+const edit56=
+  [...dD56R.querySelectorAll("#exerciseInputs .xbtn")]
+    .find(button=>button.textContent==="Edit");
+
+edit56.dispatchEvent(
+  new D56Reload.window.Event("click",{bubbles:true})
+);
+
+dD56R.querySelector(
+  '[data-exercise="Bench Press"][data-set-action="skip-remaining"]'
+).dispatchEvent(
+  new D56Reload.window.Event("click",{bubbles:true})
+);
+
+dD56R.querySelector(
+  "#exerciseInputs .saveExBtn"
+).dispatchEvent(
+  new D56Reload.window.Event("click",{bubbles:true})
+);
+
+check(
+  "v90 resolved draft updates persisted row outcomes before final logging",
+  D56Reload.window.eval(`
+    data.activeWorkoutDraft
+    && data.activeWorkoutDraft.sets["Bench Press"].length===3
+    && data.activeWorkoutDraft.sets["Bench Press"][1].status==="skipped"
+    && data.activeWorkoutDraft.sets["Bench Press"][2].status==="skipped"
+  `)
+);
+
+dD56R.getElementById("logWorkoutBtn")
+  .dispatchEvent(
+    new D56Reload.window.Event("click",{bubbles:true})
+  );
+
+check(
+  "v56 successful Log Session clears the resolved draft and saves history",
+  D56Reload.window.eval(`
+    data.activeWorkoutDraft===null
+    && data.workouts.length===1
+    && data.workouts[0].sets["Bench Press"][0].w===145
+    && data.workouts[0].sets["Bench Press"][1].status==="skipped"
+    && data.workouts[0].sets["Bench Press"][2].status==="skipped"
+  `)
+  && JSON.parse(
+       D56Reload.window.localStorage.getItem("forge:data")
+     ).activeWorkoutDraft===null
+);
+
+const D56Fail=
+  bootRaw({
+    cfg:D56.window.localStorage.getItem("forge:cfg"),
+    data:draft56Raw,
+    program:D56.window.localStorage.getItem("forge:program")
+  });
+
+const dD56Fail=D56Fail.window.document;
+
+dD56Fail.getElementById("resumeWorkoutDraftBtn")
+  .dispatchEvent(
+    new D56Fail.window.Event("click",{bubbles:true})
+  );
+
+const edit56Fail=
+  [...dD56Fail.querySelectorAll("#exerciseInputs .xbtn")]
+    .find(button=>button.textContent==="Edit");
+
+edit56Fail.dispatchEvent(
+  new D56Fail.window.Event("click",{bubbles:true})
+);
+
+dD56Fail.querySelector(
+  '[data-exercise="Bench Press"][data-set-action="skip-remaining"]'
+).dispatchEvent(
+  new D56Fail.window.Event("click",{bubbles:true})
+);
+
+dD56Fail.querySelector(
+  "#exerciseInputs .saveExBtn"
+).dispatchEvent(
+  new D56Fail.window.Event("click",{bubbles:true})
+);
+
+const d56Proto=
+  Object.getPrototypeOf(D56Fail.window.localStorage);
+
+const d56Set=d56Proto.setItem;
+
+d56Proto.setItem=function(key,value){
+  if (key==="forge:data"){
+    throw new Error("blocked");
+  }
+
+  return d56Set.call(this,key,value);
+};
+
+dD56Fail.getElementById("logWorkoutBtn")
+  .dispatchEvent(
+    new D56Fail.window.Event("click",{bubbles:true})
+  );
+
 d56Proto.setItem=d56Set;
-check("v56 failed Log Session preserves the persisted and in-memory draft", D56Fail.window.eval(`data.activeWorkoutDraft!==null && data.workouts.length===0`) && JSON.parse(D56Fail.window.localStorage.getItem("forge:data")).activeWorkoutDraft!==null);
-const D56Discard=bootRaw({cfg:D56.window.localStorage.getItem("forge:cfg"),data:draft56Raw,program:D56.window.localStorage.getItem("forge:program")});
+
+check(
+  "v56 failed Log Session preserves the persisted and in-memory resolved draft",
+  D56Fail.window.eval(`
+    data.activeWorkoutDraft!==null
+    && data.workouts.length===0
+  `)
+  && JSON.parse(
+       D56Fail.window.localStorage.getItem("forge:data")
+     ).activeWorkoutDraft!==null
+);
+
+const D56Discard=
+  bootRaw({
+    cfg:D56.window.localStorage.getItem("forge:cfg"),
+    data:draft56Raw,
+    program:D56.window.localStorage.getItem("forge:program")
+  });
+
 D56Discard.window.confirm=()=>true;
-D56Discard.window.document.getElementById("discardWorkoutDraftBtn").dispatchEvent(new D56Discard.window.Event("click",{bubbles:true}));
-check("v56 confirmed Discard removes the saved draft", D56Discard.window.eval("data.activeWorkoutDraft===null") && JSON.parse(D56Discard.window.localStorage.getItem("forge:data")).activeWorkoutDraft===null);
+
+D56Discard.window.document
+  .getElementById("discardWorkoutDraftBtn")
+  .dispatchEvent(
+    new D56Discard.window.Event("click",{bubbles:true})
+  );
+
+check(
+  "v56 confirmed Discard removes the saved draft",
+  D56Discard.window.eval("data.activeWorkoutDraft===null")
+  && JSON.parse(
+       D56Discard.window.localStorage.getItem("forge:data")
+     ).activeWorkoutDraft===null
+);
 
 const deleteDay=dstr(0);
 const deleteData={food:{},workouts:[{date:deleteDay,day:"D1",title:"Delete Me",sets:{Squat:[{w:100,r:5}]},notes:""}],weights:[{date:deleteDay,lbs:200}],measure:[{date:deleteDay,waist:36,chest:42,arm:15}],myFoods:{abc:{name:"Saved Food",brand:"Mine",cal100:100,pro100:10,carb100:5,fat100:2}},meals:[{name:"Saved Meal",items:[{name:"Food",cal:100,pro:10,carb:5,fat:2,meal:"other"}]}],meta:{lastBackup:null,logsSince:0},activeWorkoutDraft:null};
@@ -9414,6 +10017,1483 @@ check(
        "trainingPlanReviewState===null"
      )===true
 );
+
+
+// ================= v90 flexible prescribed-set outcomes =================
+
+const FLEXIBLE_SET_PROGRAM_90={
+  name:"Flexible Set Test",
+  days:[{
+    id:"D1",
+    title:"Strength",
+    exercises:[{
+      name:"Bench Press",
+      scheme:"4×8"
+    }]
+  }]
+};
+
+const FlexSets90=boot(
+  V3_CFG,
+  Object.assign(
+    {},
+    EMPTY_DATA,
+    {
+      workouts:[],
+      activeWorkoutDraft:null
+    }
+  ),
+  null,
+  FLEXIBLE_SET_PROGRAM_90
+);
+
+const dFlexSets90=FlexSets90.window.document;
+
+FlexSets90.window.eval(`
+  wDaySel.value="D1";
+  initSessionState();
+  renderSessionInputs();
+`);
+
+check(
+  "v90-10 programmed strength rows expose compact outcomes bulk controls and Add set",
+  FlexSets90.window.eval(`
+    sessionState["Bench Press"].rows.length===4
+    && sessionState["Bench Press"].rows.every(
+         row=>row.prescribed===true
+       )
+  `)
+  && dFlexSets90.querySelectorAll(
+       '[data-exercise="Bench Press"][data-set-action="done"]'
+     ).length===0
+  && dFlexSets90.querySelectorAll(
+       '[data-exercise="Bench Press"][data-set-outcome="true"]'
+     ).length===4
+  && !!dFlexSets90.querySelector(
+       '[data-exercise="Bench Press"][data-set-action="skip-remaining"]'
+     )
+  && !!dFlexSets90.querySelector(
+       '[data-exercise="Bench Press"][data-set-action="remove-remaining"]'
+     )
+  && !!dFlexSets90.querySelector(
+       '[data-exercise="Bench Press"][data-set-action="add-set"]'
+     )
+);
+
+FlexSets90.window.eval(`
+  sessionState["Bench Press"]
+    .rows
+    .slice(0,3)
+    .forEach(row=>{
+      row.w=185;
+      row.r=8;
+      row.touched=true;
+    });
+
+  sessionState["Bench Press"].rows[3].w=185;
+  renderSessionInputs();
+`);
+
+const zeroReps90=
+  [...dFlexSets90.querySelectorAll(
+    '[data-exercise="Bench Press"][data-field="reps"]'
+  )].find(
+    field=>field.dataset.row==="3"
+  );
+
+zeroReps90.value="0";
+
+zeroReps90.dispatchEvent(
+  new FlexSets90.window.Event("input",{bubbles:true})
+);
+
+check(
+  "v90-12 entering zero reps does not create Missed",
+  FlexSets90.window.eval(`
+    sessionState["Bench Press"].rows[3].status!=="missed"
+    && sessionState["Bench Press"].rows[3].r===0
+  `)
+);
+
+const reason90=
+  dFlexSets90.querySelector(
+    '[data-exercise="Bench Press"][data-row="3"][data-set-reason="true"]'
+  );
+
+reason90.value="fatigue";
+
+reason90.dispatchEvent(
+  new FlexSets90.window.Event("change",{bubbles:true})
+);
+
+const flexSave90=
+  FlexSets90.window.eval(
+    'saveExercise("Bench Press")'
+  );
+
+check(
+  "v90-12 zero reps require actual reps or Remove",
+  flexSave90.ok===false
+  && /reps you actually completed/i.test(
+       dFlexSets90
+         .getElementById("workoutErr")
+         .textContent
+     )
+  && /Remove/i.test(
+       dFlexSets90
+         .getElementById("workoutErr")
+         .textContent
+     )
+  && FlexSets90.window.eval(`
+       sessionState["Bench Press"]
+         .rows[3]
+         .status!=="missed"
+     `)
+);
+
+check(
+  "v90-12 legacy Missed history remains readable by History and Coach",
+  /Set 1: 185×0 · Missed · Fatigue/.test(
+    FlexSets90.window.eval(`
+      formatSets([
+        {
+          w:185,
+          r:0,
+          status:"missed",
+          reason:"fatigue"
+        }
+      ])
+    `)
+  )
+  && /Missed/.test(
+       FlexSets90.window.eval(`
+         aiSafeWorkoutValue([
+           {
+             w:185,
+             r:0,
+             status:"missed",
+             reason:"fatigue"
+           }
+         ])
+       `)
+     )
+);
+
+check(
+  "v90-12 zero numeric entry has no visible Missed or Failed label",
+  ![
+    ...dFlexSets90.querySelectorAll(
+      "#exerciseInputs .srow .sx"
+    )
+  ].some(
+    element=>
+      /Missed|Failed/i.test(
+        element.textContent || ""
+      )
+  )
+);
+
+check(
+  "v90 missed programmed work blocks progression and status does not carry forward",
+  FlexSets90.window.eval(`
+    (()=>{
+      cfg.autoProgressionOn=true;
+
+      const next=
+        prefillRows(
+          {
+            name:"Bench Press",
+            scheme:"4×8"
+          },
+          [
+            {w:185,r:8},
+            {w:185,r:8},
+            {w:185,r:8},
+            {
+              w:185,
+              r:0,
+              status:"missed",
+              reason:"fatigue"
+            }
+          ]
+        );
+
+      return (
+        next.auto===false
+        && next.rows.length===4
+        && next.rows[3].r===8
+        && next.rows[3].w===185
+        && next.rows.every(
+             row=>
+               row.prescribed===true
+               && !row.status
+           )
+      );
+    })()
+  `)
+);
+
+const RemoveSets90=boot(
+  V3_CFG,
+  Object.assign(
+    {},
+    EMPTY_DATA,
+    {
+      workouts:[],
+      activeWorkoutDraft:null
+    }
+  ),
+  null,
+  FLEXIBLE_SET_PROGRAM_90
+);
+
+const dRemoveSets90=RemoveSets90.window.document;
+
+RemoveSets90.window.eval(`
+  wDaySel.value="D1";
+  initSessionState();
+
+  sessionState["Bench Press"]
+    .rows
+    .slice(0,2)
+    .forEach(row=>{
+      row.w=185;
+      row.r=8;
+      row.touched=true;
+    });
+
+  renderSessionInputs();
+`);
+
+dRemoveSets90.querySelector(
+  '[data-exercise="Bench Press"][data-set-action="remove-remaining"]'
+).dispatchEvent(
+  new RemoveSets90.window.Event("click",{bubbles:true})
+);
+
+check(
+  "v90 Remove remaining today records only-session removal and leaves program unchanged",
+  RemoveSets90.window.eval(`
+    sessionState["Bench Press"].rows[2].status==="removed"
+    && sessionState["Bench Press"].rows[3].status==="removed"
+    && program.days[0].exercises[0].scheme==="4×8"
+  `)
+  && RemoveSets90.window.eval(
+       'saveExercise("Bench Press").ok'
+     )===true
+);
+
+const SkipSets90=boot(
+  V3_CFG,
+  Object.assign(
+    {},
+    EMPTY_DATA,
+    {
+      workouts:[],
+      activeWorkoutDraft:null
+    }
+  ),
+  null,
+  FLEXIBLE_SET_PROGRAM_90
+);
+
+const dSkipSets90=SkipSets90.window.document;
+
+SkipSets90.window.eval(`
+  wDaySel.value="D1";
+  initSessionState();
+  renderSessionInputs();
+`);
+
+dSkipSets90.querySelector(
+  '[data-exercise="Bench Press"][data-set-action="skip-remaining"]'
+).dispatchEvent(
+  new SkipSets90.window.Event("click",{bubbles:true})
+);
+
+check(
+  "v90 whole programmed exercise can be skipped today without changing program",
+  SkipSets90.window.eval(`
+    sessionState["Bench Press"].rows.every(
+      row=>
+        row.status==="skipped"
+        && row.touched===true
+    )
+    && program.days[0].exercises[0].scheme==="4×8"
+  `)
+);
+
+const ExtraSet90=boot(
+  V3_CFG,
+  Object.assign(
+    {},
+    EMPTY_DATA,
+    {
+      workouts:[],
+      activeWorkoutDraft:null
+    }
+  ),
+  null,
+  FLEXIBLE_SET_PROGRAM_90
+);
+
+const dExtraSet90=ExtraSet90.window.document;
+
+ExtraSet90.window.eval(`
+  wDaySel.value="D1";
+  initSessionState();
+
+  sessionState["Bench Press"]
+    .rows
+    .forEach(row=>{
+      row.w=185;
+      row.r=8;
+      row.touched=true;
+    });
+
+  renderSessionInputs();
+`);
+
+dExtraSet90.querySelector(
+  '[data-exercise="Bench Press"][data-set-action="add-set"]'
+).dispatchEvent(
+  new ExtraSet90.window.Event("click",{bubbles:true})
+);
+
+check(
+  "v90 Add set creates session-only extra work without changing program",
+  ExtraSet90.window.eval(`
+    sessionState["Bench Press"].rows.length===5
+    && sessionState["Bench Press"].rows[4].extra===true
+    && sessionState["Bench Press"].rows[4].prescribed===false
+    && program.days[0].exercises[0].scheme==="4×8"
+  `)
+);
+
+check(
+  "v90 untouched extra set is ignored rather than logged as fake work",
+  ExtraSet90.window.eval(`
+    (()=>{
+      const result=
+        validateExerciseEntry(
+          sessionState["Bench Press"]
+        );
+
+      return (
+        result.ok
+        && result.value.length===4
+      );
+    })()
+  `)
+);
+
+ExtraSet90.window.eval(`
+  sessionState["Bench Press"].rows[4].w=185;
+  sessionState["Bench Press"].rows[4].r=6;
+  sessionState["Bench Press"].rows[4].touched=true;
+`);
+
+check(
+  "v90 completed extra set is retained explicitly",
+  ExtraSet90.window.eval(`
+    (()=>{
+      const result=
+        validateExerciseEntry(
+          sessionState["Bench Press"]
+        );
+
+      return (
+        result.ok
+        && result.value.length===5
+        && result.value[4].w===185
+        && result.value[4].r===6
+        && result.value[4].extra===true
+      );
+    })()
+  `)
+);
+
+check(
+  "v90 extra set does not block progression after all required sets were completed",
+  ExtraSet90.window.eval(`
+    (()=>{
+      cfg.autoProgressionOn=true;
+
+      const next=
+        prefillRows(
+          {
+            name:"Bench Press",
+            scheme:"4×8"
+          },
+          [
+            {w:185,r:8},
+            {w:185,r:8},
+            {w:185,r:8},
+            {w:185,r:8},
+            {
+              w:185,
+              r:4,
+              extra:true
+            }
+          ]
+        );
+
+      return (
+        next.auto===true
+        && next.rows.length===4
+        && next.rows.every(
+             row=>
+               row.w===190
+               && row.r===8
+           )
+      );
+    })()
+  `)
+);
+
+const BodyweightSets90=boot(
+  V3_CFG,
+  Object.assign(
+    {},
+    EMPTY_DATA,
+    {
+      workouts:[],
+      activeWorkoutDraft:null
+    }
+  ),
+  null,
+  {
+    name:"Bodyweight Flexible Sets",
+    days:[{
+      id:"D1",
+      title:"Bodyweight",
+      exercises:[{
+        name:"Push-Up",
+        scheme:"3×10"
+      }]
+    }]
+  }
+);
+
+const dBodyweightSets90=BodyweightSets90.window.document;
+
+BodyweightSets90.window.eval(`
+  wDaySel.value="D1";
+  initSessionState();
+  renderSessionInputs();
+`);
+
+const bodyweightReps90=
+  dBodyweightSets90.querySelector(
+    '[data-exercise="Push-Up"][data-row="0"][data-field="reps"]'
+  );
+
+bodyweightReps90.value="10";
+
+bodyweightReps90.dispatchEvent(
+  new BodyweightSets90.window.Event(
+    "input",
+    {bubbles:true}
+  )
+);
+
+dBodyweightSets90.querySelector(
+  '[data-exercise="Push-Up"][data-set-action="skip-remaining"]'
+).dispatchEvent(
+  new BodyweightSets90.window.Event("click",{bubbles:true})
+);
+
+check(
+  "v90-10 bodyweight set records shown reps and remaining sets skipped",
+  BodyweightSets90.window.eval(`
+    (()=>{
+      const result=
+        validateExerciseEntry(
+          sessionState["Push-Up"]
+        );
+
+      return (
+        result.ok
+        && result.value[0].r===10
+        && result.value[1].status==="skipped"
+        && result.value[2].status==="skipped"
+      );
+    })()
+  `)
+);
+
+check(
+  "v90 storage accepts completed missed skipped removed and extra rows",
+  FlexSets90.window.eval(`
+    validSetRows([
+      {w:185,r:8},
+      {
+        w:185,
+        r:0,
+        status:"missed",
+        reason:"fatigue"
+      },
+      {
+        status:"skipped",
+        reason:"time"
+      },
+      {
+        status:"removed"
+      },
+      {
+        w:185,
+        r:6,
+        extra:true
+      }
+    ])
+    && !validSetRows([
+      {
+        status:"mystery"
+      }
+    ])
+  `)
+);
+
+const flexibleFaq90=
+  fs.readFileSync(
+    path.join(
+      __dirname,
+      "..",
+      "data-faq.js"
+    ),
+    "utf8"
+  );
+
+check(
+  "v90-12 FAQ explains actual work, Remove, Undo, and final resolution",
+  /Save Exercise/.test(flexibleFaq90)
+  && /actually did/.test(flexibleFaq90)
+  && /Zero is not a special command/.test(flexibleFaq90)
+  && /<b>Remove<\/b>/.test(flexibleFaq90)
+  && /<b>Undo<\/b>/.test(flexibleFaq90)
+  && /\+ Add set/.test(flexibleFaq90)
+  && /every programmed set/.test(flexibleFaq90)
+  && /do not count as completed prescription/.test(flexibleFaq90)
+);
+
+
+
+// ================= v90-10 universal non-row outcomes =================
+
+const UniversalOutcome90=boot(
+  V3_CFG,
+  Object.assign(
+    {},
+    EMPTY_DATA,
+    {
+      workouts:[],
+      activeWorkoutDraft:null
+    }
+  ),
+  null,
+  {
+    name:"Universal Outcome",
+    days:[{
+      id:"D1",
+      title:"Mixed",
+      exercises:[
+        {name:"Run"},
+        {name:"Plank"},
+        {name:"Sprinting"},
+        {name:"Farmer Carry"},
+        {name:"EMOM Conditioning"},
+        {name:"Physical Therapy"}
+      ]
+    }]
+  }
+);
+
+const dUniversalOutcome90=
+  UniversalOutcome90.window.document;
+
+UniversalOutcome90.window.eval(`
+  wDaySel.value="D1";
+  initSessionState();
+  renderSessionInputs();
+`);
+
+[
+  "Run",
+  "Plank",
+  "Sprinting",
+  "Farmer Carry",
+  "EMOM Conditioning",
+  "Physical Therapy"
+].forEach(name=>{
+  const control=
+    dUniversalOutcome90.querySelector(
+      '[data-exercise-outcome-control="'
+        +name
+        +'"]'
+    );
+
+  check(
+    "v90-10 "+name+" supports exercise-level outcomes",
+    !!control
+    && [...control.options].some(
+         option=>option.value==="missed"
+       )
+    && [...control.options].some(
+         option=>option.value==="skipped"
+       )
+    && [...control.options].some(
+         option=>option.value==="removed"
+       )
+  );
+});
+
+const runOutcome90=
+  dUniversalOutcome90.querySelector(
+    '[data-exercise-outcome-control="Run"]'
+  );
+
+runOutcome90.value="skipped";
+
+runOutcome90.dispatchEvent(
+  new UniversalOutcome90.window.Event(
+    "change",
+    {bubbles:true}
+  )
+);
+
+const runReason90=
+  dUniversalOutcome90.querySelector(
+    '[aria-label="Run optional outcome reason"]'
+  );
+
+runReason90.value="time";
+
+runReason90.dispatchEvent(
+  new UniversalOutcome90.window.Event(
+    "change",
+    {bubbles:true}
+  )
+);
+
+check(
+  "v90-10 non-row outcome saves and formats",
+  UniversalOutcome90.window.eval(`
+    (()=>{
+      const result=
+        saveExercise("Run");
+
+      const saved=
+        sessionState["Run"].saved;
+
+      return (
+        result.ok
+        && saved.t==="exerciseOutcome"
+        && saved.status==="skipped"
+        && saved.reason==="time"
+        && validStoredExerciseValue(saved)
+        && formatSets(saved)==="Skipped · Time"
+      );
+    })()
+  `)
+);
+
+dUniversalOutcome90
+  .getElementById("logWorkoutBtn")
+  .dispatchEvent(
+    new UniversalOutcome90.window.Event(
+      "click",
+      {bubbles:true}
+    )
+  );
+
+check(
+  "v90-10 untouched planned non-row exercises cannot silently disappear",
+  UniversalOutcome90.window.eval(
+    "data.workouts.length===0"
+  )
+  && /Plank|Sprinting|Farmer Carry|EMOM Conditioning|Physical Therapy/.test(
+       dUniversalOutcome90
+         .getElementById(
+           "workoutErr"
+         )
+         .textContent
+     )
+);
+
+
+
+// ================= v90-11 simple removal UX =================
+
+const SIMPLE_REMOVE_90_11={
+  name:"Simple Removal",
+  days:[{
+    id:"D1",
+    title:"Workout",
+    exercises:[
+      {
+        name:"Bench Press",
+        scheme:"3×5"
+      },
+      {
+        name:"Run"
+      }
+    ]
+  }]
+};
+
+const SimpleRemove9011=boot(
+  V3_CFG,
+  Object.assign(
+    {},
+    EMPTY_DATA,
+    {
+      workouts:[],
+      activeWorkoutDraft:null
+    }
+  ),
+  null,
+  SIMPLE_REMOVE_90_11
+);
+
+const dSimpleRemove9011=
+  SimpleRemove9011.window.document;
+
+SimpleRemove9011.window.eval(`
+  wDaySel.value="D1";
+  initSessionState();
+  renderSessionInputs();
+`);
+
+const legacyModeButtons9011=
+  [
+    ...dSimpleRemove9011.querySelectorAll(
+      "#exerciseInputs button.xbtn"
+    )
+  ].filter(
+    button=>
+      button.textContent==="Aa"
+      || button.textContent==="#"
+  );
+
+check(
+  "v90-11 Aa and # are hidden",
+  legacyModeButtons9011.every(
+    button=>button.hidden===true
+  )
+);
+
+check(
+  "v90-11 sets have direct Remove buttons",
+  dSimpleRemove9011.querySelectorAll(
+    '[data-exercise="Bench Press"][data-set-remove]'
+  ).length===3
+);
+
+check(
+  "v90-11 old set outcome controls are hidden",
+  [
+    ...dSimpleRemove9011.querySelectorAll(
+      '[data-exercise="Bench Press"][data-set-outcome="true"]'
+    )
+  ].every(
+    control=>control.hidden===true
+  )
+);
+
+const firstRemove9011=
+  dSimpleRemove9011.querySelector(
+    '[data-exercise="Bench Press"][data-set-remove="0"]'
+  );
+
+firstRemove9011.dispatchEvent(
+  new SimpleRemove9011.window.Event(
+    "click",
+    {bubbles:true}
+  )
+);
+
+check(
+  "v90-11 Remove hides the normal set and exposes Undo",
+  SimpleRemove9011.window.eval(`
+    sessionState["Bench Press"].rows[0].status==="removed"
+  `)
+  && !!dSimpleRemove9011.querySelector(
+       '[data-set-undo="0"]'
+     )
+);
+
+dSimpleRemove9011.querySelector(
+  '[data-set-undo="0"]'
+).dispatchEvent(
+  new SimpleRemove9011.window.Event(
+    "click",
+    {bubbles:true}
+  )
+);
+
+check(
+  "v90-11 set Undo restores the set",
+  SimpleRemove9011.window.eval(`
+    sessionState["Bench Press"].rows[0].status===""
+  `)
+  && !!dSimpleRemove9011.querySelector(
+       '[data-exercise="Bench Press"][data-set-remove="0"]'
+     )
+);
+
+check(
+  "v90-11 whole exercise outcome select is hidden",
+  dSimpleRemove9011.querySelector(
+    '[data-exercise-outcome-control="Bench Press"]'
+  ).hidden===true
+);
+
+check(
+  "v90-11 planned exercises have direct Remove exercise",
+  !!dSimpleRemove9011.querySelector(
+       '[data-exercise-remove-today="Bench Press"]'
+     )
+  && !!dSimpleRemove9011.querySelector(
+       '[data-exercise-remove-today="Run"]'
+     )
+);
+
+check(
+  "v90-11 secondary tools use a true three-dot button",
+  [
+    ...dSimpleRemove9011.querySelectorAll(
+      ".exercise-more-toggle"
+    )
+  ].every(
+    button=>button.textContent==="•••"
+  )
+);
+
+const runRemove9011=
+  dSimpleRemove9011.querySelector(
+    '[data-exercise-remove-today="Run"]'
+  );
+
+runRemove9011.dispatchEvent(
+  new SimpleRemove9011.window.Event(
+    "click",
+    {bubbles:true}
+  )
+);
+
+check(
+  "v90-11 non-row Remove exercise offers Undo",
+  SimpleRemove9011.window.eval(`
+    sessionState["Run"].exerciseOutcome==="removed"
+  `)
+  && !!dSimpleRemove9011.querySelector(
+       '[data-exercise-removal-undo="Run"]'
+     )
+);
+
+dSimpleRemove9011.querySelector(
+  '[data-exercise-removal-undo="Run"]'
+).dispatchEvent(
+  new SimpleRemove9011.window.Event(
+    "click",
+    {bubbles:true}
+  )
+);
+
+check(
+  "v90-11 exercise Undo restores non-row exercise",
+  SimpleRemove9011.window.eval(`
+    sessionState["Run"].exerciseOutcome===""
+  `)
+);
+
+check(
+  "v90-11 removal does not modify the program",
+  SimpleRemove9011.window.eval(`
+    program.days[0].exercises.length===2
+    && program.days[0].exercises[0].name==="Bench Press"
+    && program.days[0].exercises[0].scheme==="3×5"
+    && program.days[0].exercises[1].name==="Run"
+  `)
+);
+
+
+
+// ============================================================
+// v90-12 — record actual work or Remove
+// ============================================================
+
+const RECORD_REMOVE_90_12={
+  name:"Record or Remove",
+  days:[{
+    id:"D1",
+    title:"Workout",
+    exercises:[
+      {
+        name:"Bench Press",
+        scheme:"3×5"
+      },
+      {
+        name:"Run"
+      }
+    ]
+  }]
+};
+
+const RecordRemove9012=boot(
+  V3_CFG,
+  Object.assign(
+    {},
+    EMPTY_DATA,
+    {
+      workouts:[],
+      activeWorkoutDraft:null
+    }
+  ),
+  null,
+  RECORD_REMOVE_90_12
+);
+
+const dRecordRemove9012=
+  RecordRemove9012.window.document;
+
+RecordRemove9012.window.eval(`
+  wDaySel.value="D1";
+  initSessionState();
+  renderSessionInputs();
+`);
+
+const firstRemove9012=
+  dRecordRemove9012.querySelector(
+    '[data-exercise="Bench Press"]'
+      +'[data-set-remove="0"]'
+  );
+
+const firstValueRow9012=
+  firstRemove9012
+    ? firstRemove9012.closest(
+        ".srow"
+      )
+    : null;
+
+const firstValueRowIndex9012=
+  firstValueRow9012
+    ? [...firstValueRow9012.parentNode.children]
+        .indexOf(firstValueRow9012)
+    : -1;
+
+check(
+  "v90-13 Remove shares the set value row",
+  !!firstRemove9012
+  && !!firstValueRow9012
+  && firstValueRow9012
+       .classList
+       .contains("srow")
+  && firstValueRow9012
+       .querySelector(
+         "[data-set-remove]"
+       )
+);
+
+check(
+  "v90-13 Set Weight Reps and Remove remain on one row",
+  !!firstValueRow9012
+  && firstValueRow9012.classList.contains(
+       "workout-set-row"
+     )
+  && !!firstValueRow9012
+       .querySelector(
+         '[data-field="weight"]'
+       )
+  && !!firstValueRow9012
+       .querySelector(
+         '[data-field="reps"]'
+       )
+  && !!firstValueRow9012
+       .querySelector(
+         '[data-set-remove="0"]'
+       )
+  && firstValueRow9012.querySelectorAll(
+       ".set-controls-line > button.step"
+     ).length===4
+);
+
+const more9012=
+  dRecordRemove9012.querySelector(
+    "details.exercise-more"
+  );
+
+if (more9012){
+  more9012.open=true;
+
+  dRecordRemove9012.body.dispatchEvent(
+    new RecordRemove9012.window.MouseEvent(
+      "click",
+      {bubbles:true}
+    )
+  );
+}
+
+check(
+  "v90-12 tapping elsewhere closes the three-dot menu",
+  !!more9012
+  && more9012.open===false
+);
+
+/*
+ * Test Remove/Undo while the workout card is still in
+ * the normal editable state.
+ */
+if (firstRemove9012){
+  firstRemove9012.dispatchEvent(
+    new RecordRemove9012.window.Event(
+      "click",
+      {bubbles:true}
+    )
+  );
+}
+
+const firstUndo9012=
+  dRecordRemove9012.querySelector(
+    '[data-set-undo="0"]'
+  );
+
+check(
+  "v90-13 explicit set Remove produces in-place Undo",
+  !!firstRemove9012
+  && RecordRemove9012.window.eval(`
+       sessionState["Bench Press"]
+         .rows[0]
+         .status==="removed"
+     `)
+  && !!firstUndo9012
+  && [...firstUndo9012.closest(
+         ".exercise"
+       ).children].indexOf(
+         firstUndo9012.closest(
+           ".removed-set-undo-row"
+         )
+       )===firstValueRowIndex9012
+);
+
+if (firstUndo9012){
+  firstUndo9012.dispatchEvent(
+    new RecordRemove9012.window.Event(
+      "click",
+      {bubbles:true}
+    )
+  );
+}
+
+check(
+  "v90-12 set Undo restores the removed set",
+  RecordRemove9012.window.eval(`
+    sessionState["Bench Press"]
+      .rows[0]
+      .status===""
+  `)
+  && !!dRecordRemove9012.querySelector(
+       '[data-exercise="Bench Press"]'
+         +'[data-set-remove="0"]'
+     )
+);
+
+const visibleLegacyControls9012=
+  [
+    ...dRecordRemove9012.querySelectorAll(
+      '#exerciseInputs '
+        +'select[data-set-outcome="true"],'
+        +'#exerciseInputs '
+        +'select.exercise-outcome-select,'
+        +'#exerciseInputs '
+        +'[data-set-action="skip-remaining"]'
+    )
+  ]
+  .filter(
+    element=>{
+      if (
+        element.hidden
+        || element.getAttribute(
+             "aria-hidden"
+           )==="true"
+      ){
+        return false;
+      }
+
+      return (
+        RecordRemove9012.window
+          .getComputedStyle(element)
+          .display!=="none"
+      );
+    }
+  );
+
+check(
+  "v90-12 fresh workout exposes no Missed or Skipped controls",
+  visibleLegacyControls9012.length===0
+);
+
+
+/*
+ * Separate fresh instance for zero and actual-rep behavior.
+ */
+const Actual9012=boot(
+  V3_CFG,
+  Object.assign(
+    {},
+    EMPTY_DATA,
+    {
+      workouts:[],
+      activeWorkoutDraft:null
+    }
+  ),
+  null,
+  RECORD_REMOVE_90_12
+);
+
+const dActual9012=
+  Actual9012.window.document;
+
+Actual9012.window.eval(`
+  wDaySel.value="D1";
+  initSessionState();
+  renderSessionInputs();
+`);
+
+const zeroWeight9012=
+  dActual9012.querySelector(
+    '[data-exercise="Bench Press"]'
+      +'[data-row="0"]'
+      +'[data-field="weight"]'
+  );
+
+const zeroReps9012=
+  dActual9012.querySelector(
+    '[data-exercise="Bench Press"]'
+      +'[data-row="0"]'
+      +'[data-field="reps"]'
+  );
+
+if (
+  zeroWeight9012
+  && zeroReps9012
+){
+  zeroWeight9012.value="185";
+
+  zeroWeight9012.dispatchEvent(
+    new Actual9012.window.Event(
+      "input",
+      {bubbles:true}
+    )
+  );
+
+  zeroReps9012.value="0";
+
+  zeroReps9012.dispatchEvent(
+    new Actual9012.window.Event(
+      "input",
+      {bubbles:true}
+    )
+  );
+}
+
+check(
+  "v90-13 typing zero does not create Missed and shows inline guidance",
+  !!zeroWeight9012
+  && !!zeroReps9012
+  && Actual9012.window.eval(`
+       sessionState["Bench Press"]
+         .rows[0]
+         .r===0
+       && sessionState["Bench Press"]
+         .rows[0]
+         .status!=="missed"
+     `)
+  && !!zeroReps9012.closest(".srow")
+       .querySelector(".set-zero-help:not([hidden])")
+  && /Enter the reps you completed, or Remove this set\./i.test(
+       zeroReps9012.closest(".srow")
+         .querySelector(".set-zero-help").textContent
+     )
+);
+
+const zeroHelp9014=
+  zeroReps9012.closest(".srow")
+    .querySelector(".set-zero-help");
+
+const repPlus9014=
+  [...zeroReps9012.closest(".srow")
+    .querySelectorAll("button.step")]
+    .find(button=>
+      /Increase .* repetitions by 1/i.test(
+        button.getAttribute("aria-label") || ""
+      )
+    );
+
+const repMinus9014=
+  [...zeroReps9012.closest(".srow")
+    .querySelectorAll("button.step")]
+    .find(button=>
+      /Decrease .* repetitions by 1/i.test(
+        button.getAttribute("aria-label") || ""
+      )
+    );
+
+if (repPlus9014){
+  repPlus9014.dispatchEvent(
+    new Actual9012.window.Event(
+      "click",
+      {bubbles:true}
+    )
+  );
+}
+
+check(
+  "v90-14 increasing from zero hides inline guidance",
+  !!zeroHelp9014
+  && !!repPlus9014
+  && zeroHelp9014.hidden===true
+  && Actual9012.window.eval(`
+       sessionState["Bench Press"].rows[0].r===1
+     `)
+);
+
+if (repMinus9014){
+  repMinus9014.dispatchEvent(
+    new Actual9012.window.Event(
+      "click",
+      {bubbles:true}
+    )
+  );
+}
+
+check(
+  "v90-14 decreasing to zero restores inline guidance",
+  !!zeroHelp9014
+  && !!repMinus9014
+  && zeroHelp9014.hidden===false
+  && Actual9012.window.eval(`
+       sessionState["Bench Press"].rows[0].r===0
+     `)
+);
+
+const INTERVAL_HEADER_90_13={
+  name:"Intervals and long headers",
+  days:[{
+    id:"D1",
+    title:"Workout",
+    exercises:[{
+      name:"Stationary Cycling",
+      scheme:"10 intervals · 60 seconds work · 60 seconds recovery with a deliberately long instruction that must wrap inside the card",
+      prescription:{
+        intervals:10,
+        durationSeconds:60,
+        recoverySeconds:60
+      }
+    }]
+  }]
+};
+
+const IntervalHeader9013=boot(
+  V3_CFG,
+  Object.assign({},EMPTY_DATA,{workouts:[],activeWorkoutDraft:null}),
+  null,
+  INTERVAL_HEADER_90_13
+);
+const dIntervalHeader9013=IntervalHeader9013.window.document;
+IntervalHeader9013.window.eval(`
+  wDaySel.value="D1";
+  initSessionState();
+  renderSessionInputs();
+`);
+const intervalCard9013=dIntervalHeader9013.querySelector(".exercise");
+const intervalHead9013=intervalCard9013.querySelector(".x-head");
+const intervalPrescription9013=intervalCard9013.querySelector(
+  ".exercise-prescription"
+);
+check(
+  "v90-13 Stationary Cycling interval prescription uses timed interval card",
+  IntervalHeader9013.window.eval(`
+    sessionState["Stationary Cycling"].profile==="timedIntervals"
+    && sessionState["Stationary Cycling"].typed.intervals===10
+    && sessionState["Stationary Cycling"].typed.workMinutes===1
+    && sessionState["Stationary Cycling"].typed.workSeconds===0
+    && sessionState["Stationary Cycling"].typed.recoverySeconds===60
+  `)
+  && !!intervalCard9013.querySelector('[data-profile-field="intervals"]')
+);
+check(
+  "v90-13 long prescription is below name and actions stay in top row",
+  !!intervalHead9013.querySelector(".exercise-name")
+  && !!intervalHead9013.querySelector(".x-tools")
+  && !intervalHead9013.querySelector(".scheme")
+  && !!intervalPrescription9013
+  && intervalPrescription9013.parentNode===intervalCard9013
+  && intervalPrescription9013.previousElementSibling===intervalHead9013
+  && !!intervalHead9013.querySelector(".exercise-more-toggle")
+);
+
+const zeroSave9012=
+  zeroWeight9012
+  && zeroReps9012
+    ? Actual9012.window.eval(
+        'saveExercise("Bench Press")'
+      )
+    : {ok:false};
+
+const zeroErr9012=
+  dActual9012.getElementById(
+    "workoutErr"
+  );
+
+check(
+  "v90-12 saving zero reps asks for actual reps or Remove",
+  zeroSave9012
+  && zeroSave9012.ok===false
+  && !!zeroErr9012
+  && /reps you actually completed/i.test(
+       zeroErr9012.textContent
+     )
+  && /Remove/i.test(
+       zeroErr9012.textContent
+     )
+);
+
+
+/*
+ * Another fresh instance proves fewer actual reps save
+ * normally with no label.
+ */
+const LowerReps9012=boot(
+  V3_CFG,
+  Object.assign(
+    {},
+    EMPTY_DATA,
+    {
+      workouts:[],
+      activeWorkoutDraft:null
+    }
+  ),
+  null,
+  RECORD_REMOVE_90_12
+);
+
+const dLowerReps9012=
+  LowerReps9012.window.document;
+
+LowerReps9012.window.eval(`
+  wDaySel.value="D1";
+  initSessionState();
+  renderSessionInputs();
+`);
+
+const lowerWeight9012=
+  dLowerReps9012.querySelector(
+    '[data-exercise="Bench Press"]'
+      +'[data-row="0"]'
+      +'[data-field="weight"]'
+  );
+
+const lowerReps9012=
+  dLowerReps9012.querySelector(
+    '[data-exercise="Bench Press"]'
+      +'[data-row="0"]'
+      +'[data-field="reps"]'
+  );
+
+if (
+  lowerWeight9012
+  && lowerReps9012
+){
+  lowerWeight9012.value="185";
+
+  lowerWeight9012.dispatchEvent(
+    new LowerReps9012.window.Event(
+      "input",
+      {bubbles:true}
+    )
+  );
+
+  lowerReps9012.value="3";
+
+  lowerReps9012.dispatchEvent(
+    new LowerReps9012.window.Event(
+      "input",
+      {bubbles:true}
+    )
+  );
+}
+
+const lowerSave9012=
+  lowerWeight9012
+  && lowerReps9012
+    ? LowerReps9012.window.eval(
+        'saveExercise("Bench Press")'
+      )
+    : {ok:false};
+
+check(
+  "v90-12 fewer-than-planned reps save as normal actual work",
+  lowerSave9012
+  && lowerSave9012.ok===true
+  && LowerReps9012.window.eval(`
+       Array.isArray(
+         sessionState["Bench Press"].saved
+       )
+       && sessionState["Bench Press"]
+            .saved.length===1
+       && sessionState["Bench Press"]
+            .saved[0].w===185
+       && sessionState["Bench Press"]
+            .saved[0].r===3
+       && !sessionState["Bench Press"]
+             .saved[0].status
+     `)
+);
+
+check(
+  "v90-12 lower actual reps receive no Missed or Failed label",
+  !/Missed|Failed/i.test(
+    [
+      ...dLowerReps9012
+        .querySelectorAll(
+          "#exerciseInputs .srow .sx"
+        )
+    ]
+    .map(
+      element=>
+        element.textContent || ""
+    )
+    .join(" ")
+  )
+);
+
+check(
+  "v90-12 historical Missed rows remain valid and readable",
+  LowerReps9012.window.eval(`
+    validSetRows([
+      {
+        w:185,
+        r:0,
+        status:"missed",
+        reason:"fatigue"
+      }
+    ])
+  `)===true
+  && /Missed/i.test(
+       LowerReps9012.window.eval(`
+         formatSets([
+           {
+             w:185,
+             r:0,
+             status:"missed",
+             reason:"fatigue"
+           }
+         ])
+       `)
+     )
+);
+
 
 summary("INTEGRATION");
 })().catch(e=>{ console.error(e); process.exit(1); });

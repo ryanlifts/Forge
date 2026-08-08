@@ -22,6 +22,18 @@
   ]);
 
   const ROW_PROFILES=new Set(["strengthSets","repetitionSets"]);
+  const ROW_OUTCOMES=new Set([
+    "missed",
+    "skipped",
+    "removed"
+  ]);
+  const ROW_REASONS=new Set([
+    "fatigue",
+    "pain",
+    "time",
+    "equipment",
+    "other"
+  ]);
 
   function clone(value){
     return value==null ? value : JSON.parse(JSON.stringify(value));
@@ -243,21 +255,56 @@
       }
     };
 
-    function resolve(entry){
+    function resolve(entry,prescription){
       if (!entry || typeof entry!=="object") return null;
       const id=String(entry.id||"");
+      let resolved;
       if (id && assignments[id]){
         const assigned=assignments[id];
-        return {
+        resolved={
           profile:assigned.profile,
           options:clone(assigned.options||{}),
           source:"canonical",
           exerciseId:id
         };
+      } else {
+        const shape=String(entry.shape||"");
+        if (!customDefaults[shape]) return null;
+        resolved=clone(customDefaults[shape]);
       }
-      const shape=String(entry.shape||"");
-      if (!customDefaults[shape]) return null;
-      return clone(customDefaults[shape]);
+
+      const p=
+        prescription && typeof prescription==="object"
+          ? prescription
+          : {};
+      const intervals=
+        positiveInteger(p.intervals)
+        || positiveInteger(p.rounds);
+
+      /*
+       * A steady-card canonical assignment describes the exercise's default,
+       * not every possible prescription. Dedicated interval assignments stay
+       * authoritative; only flexible steady cardio is promoted here.
+       */
+      if (
+        resolved.profile==="steadyTimeDistance"
+        && intervals!==null
+      ){
+        const timedWork=
+          positiveNumber(p.workSeconds)
+          || positiveNumber(p.durationSeconds);
+        const distanceWork=positiveNumber(p.distance);
+
+        if (timedWork!==null){
+          resolved.profile="timedIntervals";
+          resolved.source="prescription-intervals";
+        } else if (distanceWork!==null){
+          resolved.profile="distanceIntervals";
+          resolved.source="prescription-distance-intervals";
+        }
+      }
+
+      return resolved;
     }
 
     function profileDefinition(profile){
@@ -396,7 +443,11 @@
     }
 
     function validateRows(profile,rows,options){
-      const source=Array.isArray(rows) ? rows : [];
+      const source=
+        Array.isArray(rows)
+          ? rows
+          : [];
+
       const policy=
         profile==="strengthSets"
           ? "required"
@@ -404,6 +455,7 @@
               (options||{}).weightPolicy
               || "optional"
             );
+
       const entered=[];
 
       for (
@@ -412,28 +464,165 @@
         index+=1
       ){
         const row=source[index] || {};
+        const status=cleanText(row.status);
+        const reason=cleanText(row.reason);
+        const extra=row.extra===true;
 
-        if (!row.touched){
+        if (
+          status
+          && !ROW_OUTCOMES.has(status)
+        ){
+          return {
+            ok:false,
+            message:
+              "choose a valid outcome for Set "
+              +(index+1)+".",
+            rowIndex:index,
+            field:"status"
+          };
+        }
+
+        if (
+          reason
+          && (
+            !status
+            || !ROW_REASONS.has(reason)
+          )
+        ){
+          return {
+            ok:false,
+            message:
+              "choose a valid reason for Set "
+              +(index+1)+".",
+            rowIndex:index,
+            field:"reason"
+          };
+        }
+
+        if (!row.touched && !status){
           continue;
         }
 
-        const reps=positiveInteger(row.r);
+        if (
+          status==="skipped"
+          || status==="removed"
+        ){
+          const savedRow={
+            status:status
+          };
+
+          if (reason){
+            savedRow.reason=reason;
+          }
+
+          if (extra){
+            savedRow.extra=true;
+          }
+
+          entered.push(savedRow);
+          continue;
+        }
+
+        if (status==="missed"){
+          let savedRow;
+
+          if (policy==="required"){
+            const weight=
+              positiveNumber(row.w);
+
+            if (weight===null){
+              return {
+                ok:false,
+                message:
+                  "enter the attempted weight for missed Set "
+                  +(index+1)+".",
+                rowIndex:index,
+                field:"weight"
+              };
+            }
+
+            // Preserve established weight-before-reps row ordering.
+            savedRow={
+              w:weight,
+              r:0,
+              status:"missed"
+            };
+          } else {
+            const hasWeight=
+              policy==="optional"
+              && row.w!==""
+              && row.w!==null
+              && row.w!==undefined;
+
+            if (hasWeight){
+              const weight=
+                finiteNumber(row.w);
+
+              if (
+                weight===null
+                || weight<0
+              ){
+                return {
+                  ok:false,
+                  message:
+                    "enter a valid optional weight for missed Set "
+                    +(index+1)+", or clear it.",
+                  rowIndex:index,
+                  field:"weight"
+                };
+              }
+
+              savedRow=
+                weight>0
+                  ? {
+                      w:weight,
+                      r:0,
+                      status:"missed"
+                    }
+                  : {
+                      r:0,
+                      status:"missed"
+                    };
+            } else {
+              savedRow={
+                r:0,
+                status:"missed"
+              };
+            }
+          }
+
+          if (reason){
+            savedRow.reason=reason;
+          }
+
+          if (extra){
+            savedRow.extra=true;
+          }
+
+          entered.push(savedRow);
+          continue;
+        }
+
+        const reps=
+          positiveInteger(row.r);
 
         if (reps===null){
           return {
             ok:false,
             message:
               "enter reps for Set "+(index+1)
-              +", or clear it, before saving.",
+              +", or choose Missed, Skipped, "
+              +"or Remove today.",
             rowIndex:index,
             field:"reps"
           };
         }
 
-        const savedRow={r:reps};
+        let savedRow;
 
         if (policy==="required"){
-          const weight=positiveNumber(row.w);
+          const weight=
+            positiveNumber(row.w);
 
           if (weight===null){
             return {
@@ -441,43 +630,60 @@
               message:
                 "enter weight and reps for Set "
                 +(index+1)
-                +", or clear it, before saving.",
+                +", or choose a set outcome.",
               rowIndex:index,
               field:"weight"
             };
           }
 
-          savedRow.w=weight;
-        }else if (policy==="optional"){
+          // CRITICAL: exact legacy row contract is {w,r}.
+          savedRow={
+            w:weight,
+            r:reps
+          };
+        } else if (policy==="optional"){
           const hasWeight=
             row.w!==""
             && row.w!==null
             && row.w!==undefined;
 
           if (hasWeight){
-            const weight=positiveNumber(row.w);
+            const weight=
+              positiveNumber(row.w);
 
             if (weight===null){
               return {
                 ok:false,
                 message:
                   "enter a valid optional weight for Set "
-                  +(index+1)
-                  +", or clear it.",
+                  +(index+1)+", or clear it.",
                 rowIndex:index,
                 field:"weight"
               };
             }
 
-            savedRow.w=weight;
+            // Preserve established weighted repetition {w,r}.
+            savedRow={
+              w:weight,
+              r:reps
+            };
+          } else {
+            // Preserve established bodyweight {r}.
+            savedRow={
+              r:reps
+            };
           }
+        } else {
+          savedRow={
+            r:reps
+          };
         }
 
-        entered.push(
-          Object.prototype.hasOwnProperty.call(savedRow,"w")
-            ? {w:savedRow.w,r:savedRow.r}
-            : {r:savedRow.r}
-        );
+        if (extra){
+          savedRow.extra=true;
+        }
+
+        entered.push(savedRow);
       }
 
       if (!entered.length){

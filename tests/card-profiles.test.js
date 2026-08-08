@@ -313,6 +313,42 @@ const runDraft=engine.prefill("steadyTimeDistance",{
   distanceUnit:"km",
   pace:"easy"
 });
+
+const stationaryIntervals=engine.resolve(
+  {id:"bp:stationary-cycling",shape:"timeDist"},
+  {intervals:10,durationSeconds:60,recoverySeconds:60}
+);
+check(
+  "steady cardio with timed interval prescription selects timedIntervals",
+  stationaryIntervals.profile==="timedIntervals"
+    && stationaryIntervals.source==="prescription-intervals"
+);
+
+const runDistanceRepeats=engine.resolve(
+  {id:"bp:run",shape:"timeDist"},
+  {intervals:6,distance:400,distanceUnit:"m",recoverySeconds:90}
+);
+check(
+  "steady cardio with distance-repeat prescription selects distanceIntervals",
+  runDistanceRepeats.profile==="distanceIntervals"
+    && runDistanceRepeats.source==="prescription-distance-intervals"
+);
+
+check(
+  "steady cardio without interval count keeps canonical profile",
+  engine.resolve(
+    {id:"bp:stationary-cycling",shape:"timeDist"},
+    {durationSeconds:1800,distance:8,distanceUnit:"mi"}
+  ).profile==="steadyTimeDistance"
+);
+
+check(
+  "dedicated Sprinting assignment remains timedIntervals",
+  engine.resolve(
+    {id:"bp:sprinting",shape:"timeDist"},
+    {durationSeconds:20}
+  ).profile==="timedIntervals"
+);
 const runSaved=engine.validate("steadyTimeDistance",runDraft);
 check(
   "Run preserves time, distance, unit and pace",
@@ -470,6 +506,221 @@ check(
     [{w:"",r:5,touched:true}],
     {weightPolicy:"required"}
   ).ok===false
+);
+
+
+const exactLegacyStrengthRow=engine.validateRows(
+  "strengthSets",
+  [{
+    w:225,
+    r:5,
+    touched:true
+  }],
+  {weightPolicy:"required"}
+);
+check(
+  "Flexible-set contract preserves exact legacy strength serialization",
+  exactLegacyStrengthRow.ok
+    && JSON.stringify(exactLegacyStrengthRow.value)
+       ==='[{"w":225,"r":5}]'
+);
+
+const exactLegacyBodyweightRow=engine.validateRows(
+  "repetitionSets",
+  [{
+    w:"",
+    r:12,
+    touched:true
+  }],
+  {weightPolicy:"hidden"}
+);
+check(
+  "Flexible-set contract preserves exact legacy bodyweight serialization",
+  exactLegacyBodyweightRow.ok
+    && JSON.stringify(exactLegacyBodyweightRow.value)
+       ==='[{"r":12}]'
+);
+
+const unresolvedPrescribedRows=engine.validateRows(
+  "strengthSets",
+  [{
+    w:185,
+    r:8,
+    touched:false,
+    prescribed:true
+  }],
+  {weightPolicy:"required"}
+);
+check(
+  "Untouched prescribed set remains a plan until session completion",
+  unresolvedPrescribedRows.ok===true
+    && unresolvedPrescribedRows.value===null
+);
+
+const missedStrengthRows=engine.validateRows(
+  "strengthSets",
+  [{
+    w:185,
+    r:0,
+    touched:true,
+    prescribed:true,
+    status:"missed",
+    reason:"fatigue"
+  }],
+  {weightPolicy:"required"}
+);
+check(
+  "Missed strength set preserves load zero reps and reason",
+  missedStrengthRows.ok
+    && JSON.stringify(
+         missedStrengthRows.value
+       )===JSON.stringify([
+         {
+           w:185,
+           r:0,
+           status:"missed",
+           reason:"fatigue"
+         }
+       ])
+);
+
+const skippedRows=engine.validateRows(
+  "strengthSets",
+  [{
+    w:185,
+    r:8,
+    touched:true,
+    prescribed:true,
+    status:"skipped",
+    reason:"time"
+  }],
+  {weightPolicy:"required"}
+);
+check(
+  "Skipped set never pretends weight or reps were completed",
+  skippedRows.ok
+    && JSON.stringify(
+         skippedRows.value
+       )===JSON.stringify([
+         {
+           status:"skipped",
+           reason:"time"
+         }
+       ])
+);
+
+const removedRows=engine.validateRows(
+  "repetitionSets",
+  [{
+    r:12,
+    touched:true,
+    prescribed:true,
+    status:"removed"
+  }],
+  {weightPolicy:"hidden"}
+);
+check(
+  "Removed-today set is a valid session outcome",
+  removedRows.ok
+    && JSON.stringify(
+         removedRows.value
+       )===JSON.stringify([
+         {
+           status:"removed"
+         }
+       ])
+);
+
+const missedBodyweightRows=engine.validateRows(
+  "repetitionSets",
+  [{
+    r:0,
+    touched:true,
+    prescribed:true,
+    status:"missed"
+  }],
+  {weightPolicy:"hidden"}
+);
+check(
+  "Bodyweight set can record zero reps as missed",
+  missedBodyweightRows.ok
+    && JSON.stringify(
+         missedBodyweightRows.value
+       )===JSON.stringify([
+         {
+           r:0,
+           status:"missed"
+         }
+       ])
+);
+
+const unusedExtraRows=engine.validateRows(
+  "strengthSets",
+  [
+    {
+      w:185,
+      r:8,
+      touched:true,
+      prescribed:true
+    },
+    {
+      w:185,
+      r:8,
+      touched:false,
+      prescribed:false,
+      extra:true
+    }
+  ],
+  {weightPolicy:"required"}
+);
+check(
+  "Untouched extra set is ignored",
+  unusedExtraRows.ok
+    && JSON.stringify(
+         unusedExtraRows.value
+       )===JSON.stringify([
+         {
+           w:185,
+           r:8
+         }
+       ])
+);
+
+const completedExtraRows=engine.validateRows(
+  "strengthSets",
+  [
+    {
+      w:185,
+      r:8,
+      touched:true,
+      prescribed:true
+    },
+    {
+      w:185,
+      r:6,
+      touched:true,
+      prescribed:false,
+      extra:true
+    }
+  ],
+  {weightPolicy:"required"}
+);
+check(
+  "Completed extra set is preserved explicitly",
+  completedExtraRows.ok
+    && JSON.stringify(
+         completedExtraRows.value
+       )===JSON.stringify([
+         {
+           w:185,
+           r:8
+         },
+         {
+           w:185,
+           r:6,
+           extra:true
+         }
+       ])
 );
 
 check(

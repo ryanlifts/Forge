@@ -127,13 +127,228 @@ function validateUserExercisesMap(map){
   });
   return true;
 }
+const WORKOUT_SET_ROW_STATUSES = [
+  "missed",
+  "skipped",
+  "removed"
+];
+
+const WORKOUT_SET_ROW_REASONS = [
+  "fatigue",
+  "pain",
+  "time",
+  "equipment",
+  "other"
+];
+
 function validSetRows(value){
-  return Array.isArray(value) && value.length>0 && value.every(row=>{
-    if (!isPlainObject(row) || !(Number(row.r)>0)) return false;
-    if (hasOwn(row,"w") && !(Number(row.w)>=0)) return false;
-    return Object.keys(row).every(k=>k==="w" || k==="r");
+  return Array.isArray(value)
+    && value.length>0
+    && value.every(row=>{
+      if (!isPlainObject(row)){
+        return false;
+      }
+
+      if (
+        Object.keys(row).some(
+          key=>
+            ![
+              "w",
+              "r",
+              "status",
+              "reason",
+              "extra"
+            ].includes(key)
+        )
+      ){
+        return false;
+      }
+
+      if (
+        hasOwn(row,"extra")
+        && row.extra!==true
+      ){
+        return false;
+      }
+
+      const status =
+        hasOwn(row,"status")
+          ? String(row.status||"")
+          : "";
+
+      const reason =
+        hasOwn(row,"reason")
+          ? String(row.reason||"")
+          : "";
+
+      if (status){
+        if (
+          !WORKOUT_SET_ROW_STATUSES
+            .includes(status)
+        ){
+          return false;
+        }
+
+        if (
+          reason
+          && !WORKOUT_SET_ROW_REASONS
+               .includes(reason)
+        ){
+          return false;
+        }
+
+        if (status==="missed"){
+          if (Number(row.r)!==0){
+            return false;
+          }
+
+          if (
+            hasOwn(row,"w")
+            && !(Number(row.w)>=0)
+          ){
+            return false;
+          }
+
+          return true;
+        }
+
+        return (
+          !hasOwn(row,"w")
+          && !hasOwn(row,"r")
+        );
+      }
+
+      if (reason){
+        return false;
+      }
+
+      if (!(Number(row.r)>0)){
+        return false;
+      }
+
+      if (
+        hasOwn(row,"w")
+        && !(Number(row.w)>=0)
+      ){
+        return false;
+      }
+
+      return true;
+    });
+}
+
+function validWorkoutDraftRowStates(value){
+  if (!Array.isArray(value) || !value.length){
+    return false;
+  }
+
+  return value.every(row=>{
+    if (!isPlainObject(row)){
+      return false;
+    }
+
+    if (
+      Object.keys(row).some(
+        key=>
+          ![
+            "w",
+            "r",
+            "status",
+            "reason",
+            "extra",
+            "prescribed",
+            "touched"
+          ].includes(key)
+      )
+    ){
+      return false;
+    }
+
+    if (
+      hasOwn(row,"extra")
+      && typeof row.extra!=="boolean"
+    ){
+      return false;
+    }
+
+    if (
+      hasOwn(row,"prescribed")
+      && typeof row.prescribed!=="boolean"
+    ){
+      return false;
+    }
+
+    if (
+      hasOwn(row,"touched")
+      && typeof row.touched!=="boolean"
+    ){
+      return false;
+    }
+
+    if (
+      hasOwn(row,"w")
+      && row.w!==""
+      && row.w!==null
+      && row.w!==undefined
+      && !(
+        Number.isFinite(Number(row.w))
+        && Number(row.w)>=0
+      )
+    ){
+      return false;
+    }
+
+    if (
+      hasOwn(row,"r")
+      && row.r!==""
+      && row.r!==null
+      && row.r!==undefined
+      && !(
+        Number.isInteger(Number(row.r))
+        && Number(row.r)>=0
+      )
+    ){
+      return false;
+    }
+
+    const status=
+      hasOwn(row,"status")
+        ? String(row.status||"")
+        : "";
+
+    const reason=
+      hasOwn(row,"reason")
+        ? String(row.reason||"")
+        : "";
+
+    if (
+      status
+      && !WORKOUT_SET_ROW_STATUSES.includes(status)
+    ){
+      return false;
+    }
+
+    if (
+      reason
+      && (
+        !status
+        || !WORKOUT_SET_ROW_REASONS.includes(reason)
+      )
+    ){
+      return false;
+    }
+
+    if (
+      status==="missed"
+      && Number(row.r)!==0
+    ){
+      return false;
+    }
+
+    return true;
   });
 }
+
 function validTypedExerciseValue(value){
   if (
     !isPlainObject(value)
@@ -184,6 +399,21 @@ function validTypedExerciseValue(value){
 
     return true;
   };
+
+  if (value.t==="exerciseOutcome"){
+    const status=String(value.status||"");
+    const reason=
+      hasOwn(value,"reason")
+        ? String(value.reason||"")
+        : "";
+
+    return WORKOUT_SET_ROW_STATUSES.includes(status)
+      && (
+        !reason
+        || WORKOUT_SET_ROW_REASONS.includes(reason)
+      )
+      && keysAllowed(["t","status","reason"]);
+  }
 
   if (value.t==="timeDist"){
     return Number(value.secs)>0
@@ -483,10 +713,50 @@ function validateDataShape(obj){
   if (Array.isArray(obj.workouts)) obj.workouts.forEach((record,i)=>validateWorkoutRecord(record,"Saved workout "+(i+1)));
   if (obj.activeWorkoutDraft!=null){
     const d = obj.activeWorkoutDraft;
-    if (!isPlainObject(d) || typeof d.date!=="string" || typeof d.day!=="string" || !isPlainObject(d.sets)) throw new Error("Saved workout draft has an unusable shape.");
+
+    if (
+      !isPlainObject(d)
+      || typeof d.date!=="string"
+      || typeof d.day!=="string"
+      || !isPlainObject(d.sets)
+    ){
+      throw new Error(
+        "Saved workout draft has an unusable shape."
+      );
+    }
+
     Object.keys(d.sets).forEach(name=>{
-      if (!normalizeExerciseName(name) || !validStoredExerciseValue(d.sets[name])) throw new Error("Saved workout draft exercise has an unusable shape.");
+      if (
+        !normalizeExerciseName(name)
+        || !validStoredExerciseValue(d.sets[name])
+      ){
+        throw new Error(
+          "Saved workout draft exercise has an unusable shape."
+        );
+      }
     });
+
+    if (
+      hasOwn(d,"rowStates")
+      && d.rowStates!==null
+    ){
+      if (!isPlainObject(d.rowStates)){
+        throw new Error(
+          "Saved workout draft row state has an unusable shape."
+        );
+      }
+
+      Object.keys(d.rowStates).forEach(name=>{
+        if (
+          !normalizeExerciseName(name)
+          || !validWorkoutDraftRowStates(d.rowStates[name])
+        ){
+          throw new Error(
+            "Saved workout draft row state has an unusable shape."
+          );
+        }
+      });
+    }
   }
 }
 function validateCfgShape(obj){
