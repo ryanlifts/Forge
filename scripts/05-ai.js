@@ -701,7 +701,7 @@ document.getElementById("foodHandoffToggleBtn").addEventListener("click", ()=>{
   cfg.foodHandoffOn = !foodHandoffEnabled();
   saveCfg();
   renderAIGates();
-  flashSave(cfg.foodHandoffOn ? "ChatGPT food handoff enabled ✓" : "ChatGPT food handoff hidden");
+  flashSave(cfg.foodHandoffOn ? "AI food handoff enabled ✓" : "AI food handoff hidden");
 });
 
 document.getElementById("sAiProvider").addEventListener("change", ()=>{
@@ -741,7 +741,7 @@ function renderAIGates(){
   const foodHandoff = useFoodHandoff();
   const foodHandoffOn = foodHandoffEnabled();
   const foodToggle = document.getElementById("foodHandoffToggleBtn");
-  foodToggle.textContent = foodHandoffOn ? "Disable ChatGPT food handoff" : "Enable ChatGPT food handoff";
+  foodToggle.textContent = foodHandoffOn ? "Disable AI food handoff" : "Enable AI food handoff";
   foodToggle.setAttribute("aria-pressed", String(foodHandoffOn));
   document.getElementById("aiFoodCard").classList.toggle("hidden", !hasAIKey() && !foodHandoff);
   document.getElementById("aiHandoffControls").classList.toggle("hidden", !foodHandoff);
@@ -752,17 +752,17 @@ function renderAIGates(){
   const note = document.getElementById("coachKeyNote");
   if (isHandoff()){
     note.classList.remove("hidden");
-    note.textContent = "Handoff mode: tap Copy report and paste it into ChatGPT — it contains everything your coach needs, including how to send a program back.";
+    note.textContent = "Handoff mode: tap Copy report and paste it into your preferred AI app — it contains everything your coach needs, including how to send a program back.";
   } else if (hasAIKey()){ note.classList.add("hidden"); }
   else {
     note.classList.remove("hidden");
-    note.textContent = "Chat needs a one-time API key — add it in Settings → AI Coach. Or choose ChatGPT handoff mode there to work key-free. Copy report always works.";
+    note.textContent = "Chat needs a one-time API key — add it in Settings → AI Coach. Or choose AI handoff mode there to work key-free. Copy report always works.";
   }
   renderCheckin();
 }
 
 async function anthropicCall(messages, system, maxTokens){
-  if (isOffline()) throw new Error("You're offline — reconnect to use the live AI coach, or switch to ChatGPT handoff mode in Settings.");
+  if (isOffline()) throw new Error("You're offline — reconnect to use the live AI coach, or switch to AI handoff mode in Settings.");
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -783,7 +783,7 @@ async function anthropicCall(messages, system, maxTokens){
 }
 
 async function openaiCall(messages, system, maxTokens){
-  if (isOffline()) throw new Error("You're offline — reconnect to use the live AI coach, or switch to ChatGPT handoff mode in Settings.");
+  if (isOffline()) throw new Error("You're offline — reconnect to use the live AI coach, or switch to AI handoff mode in Settings.");
   const msgs = [{role:"system", content:system}].concat(messages.map(m=>{
     if (Array.isArray(m.content)){
       return { role:m.role, content:m.content.map(b=>
@@ -1304,7 +1304,7 @@ function hfSetPhoto(file){
   hfClearPhoto(true);
   hfPhoto = file;
   try { hfPhotoUrl = URL.createObjectURL(file); document.getElementById("hfPhotoThumb").src = hfPhotoUrl; } catch(e){}
-  document.getElementById("hfPhotoStatus").textContent = "Photo selected — now share to ChatGPT or attach it manually.";
+  document.getElementById("hfPhotoStatus").textContent = "Photo selected — now share to your AI app or attach it manually.";
   document.getElementById("hfPhotoStage").classList.remove("hidden");
   aiFoodStatus(null);
 }
@@ -1325,7 +1325,7 @@ async function hfCopyPromptOnly(ackId){
 }
 document.getElementById("hfCopy2Btn").addEventListener("click", async ()=>{
   await hfCopyPromptOnly("hfCopy2Btn");
-  aiFoodStatus("Prompt copied (text only — the photo is NOT copied). Attach the photo in ChatGPT yourself, then paste its reply back here.");
+  aiFoodStatus("Prompt copied (text only — the photo is NOT copied). Attach the photo in your AI app, then paste its reply back here.");
 });
 document.getElementById("hfClearBtn").addEventListener("click", ()=>{
   hfClearPhoto();
@@ -1338,7 +1338,7 @@ document.getElementById("hfShareGoBtn").addEventListener("click", async ()=>{
     try {
       await navigator.share({ files:[hfPhoto], title:"BlackPyre food estimate", text: promptTxt });
       hfClearPhoto(true); // successful share: photo's job is done
-      aiFoodStatus("Shared ✓ — when ChatGPT replies, tap Paste reply.");
+      aiFoodStatus("Shared ✓ — when your AI replies, tap Paste reply.");
       return;
     } catch(e){
       if (e && e.name==="AbortError"){
@@ -1350,7 +1350,7 @@ document.getElementById("hfShareGoBtn").addEventListener("click", async ()=>{
     }
   }
   await hfCopyPromptOnly(null);
-  aiFoodStatus("Prompt copied. ChatGPT may not accept photos from this share sheet. Open ChatGPT and attach the photo manually, then paste its reply back here.", true);
+  aiFoodStatus("Prompt copied. Your AI app may not accept photos from this share sheet. Open it and attach the photo manually, then paste its reply back here.", true);
 });
 document.getElementById("hfPasteBtn").addEventListener("click", async ()=>{
   // always show the visible paste box — clipboard access is unreliable in home-screen apps
@@ -1377,7 +1377,7 @@ document.getElementById("hfPasteCancelBtn").addEventListener("click", ()=>{
 document.getElementById("hfReviewBtn").addEventListener("click", ()=>{
   const raw = document.getElementById("hfPasteText").value;
   if (!raw.trim()){
-    aiFoodStatus("The box is empty — paste ChatGPT's reply into it first.", true);
+    aiFoodStatus("The box is empty — paste the AI reply into it first.", true);
     return;
   }
   try {
@@ -1388,7 +1388,7 @@ document.getElementById("hfReviewBtn").addEventListener("click", ()=>{
     document.getElementById("aiFoodText").value = "";
     hfClearPhoto(true); // result imported — the photo's flow is complete
   } catch(e){
-    aiFoodStatus("Could not read that JSON. Copy ChatGPT's whole response and try again.", true);
+    aiFoodStatus("Could not read that JSON. Copy the AI’s whole response and try again.", true);
   }
 });
 

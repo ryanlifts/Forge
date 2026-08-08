@@ -70,6 +70,7 @@
     width:100%;
   }
   .btn.ghost { background:transparent; border:1px solid var(--border); color:var(--text); }
+  .btn.ghost.accent-outline { border-color:var(--ember); }
   .btn.small { padding:10px 14px; font-size:12px; width:auto; }
   .btn:disabled { opacity:.55; }
   .row { display:flex; gap:10px; flex-wrap:wrap; }
@@ -854,7 +855,7 @@
           <div style="font-size:13px; line-height:1.7; margin:0 0 12px;">
             Turn any AI into your personal trainer. One tap builds a progress report from your real data —
             weight trend, nutrition adherence, lift progression, and your current program — ready to paste into
-            Claude, ChatGPT, or any AI. It can assess your progress and hand back an adjusted program that loads
+            your preferred AI. It can assess your progress and hand back an adjusted program that loads
             straight into BlackPyre. <span style="color:var(--dim);">Totally optional — BlackPyre works fully without it.</span>
           </div>
           <button class="btn" id="coachOpenBtn" style="width:100%; margin-bottom:10px;">Chat with your Coach</button>
@@ -983,8 +984,8 @@
     </div>
 
     <div class="row" style="margin-bottom:12px;">
-      <button class="btn ghost small hidden" id="recentsOpenBtn">Recent foods</button>
-      <button class="btn ghost small" id="myFoodsOpenBtn">My foods</button>
+      <button class="btn ghost small accent-outline hidden" id="recentsOpenBtn">Recent foods</button>
+      <button class="btn ghost small accent-outline" id="myFoodsOpenBtn">My foods</button>
     </div>
     <div class="card hidden" id="usualCard" style="border-color:var(--ember);">
       <div class="label">Your usual <span id="usualMealName">breakfast</span></div>
@@ -1009,7 +1010,7 @@
         <div id="hfPhotoStage" class="hidden" style="margin-top:10px; padding:10px; border:1px solid var(--border); border-radius:12px; background:var(--panel);">
           <div style="display:flex; gap:10px; align-items:center;">
             <img id="hfPhotoThumb" alt="Selected meal photo" style="width:56px; height:56px; object-fit:cover; border-radius:10px; border:1px solid var(--border); flex:0 0 auto;">
-            <div class="note" id="hfPhotoStatus" style="margin:0;">Photo selected — now share to ChatGPT or attach it manually.</div>
+            <div class="note" id="hfPhotoStatus" style="margin:0;">Photo selected — now share to your AI app or attach it manually.</div>
           </div>
           <div class="row mt10">
             <button class="btn ghost small" id="hfShareGoBtn">Share photo + prompt</button>
@@ -1017,17 +1018,17 @@
           </div>
           <button class="btn ghost small mt10" id="hfClearBtn" aria-label="Clear selected meal photo" style="width:100%;">✕ Clear photo</button>
         </div>
-        <button class="btn ghost small mt10" id="hfPasteBtn" style="width:100%;">Paste ChatGPT's reply &amp; review</button>
+        <button class="btn ghost small mt10" id="hfPasteBtn" style="width:100%;">Paste AI reply &amp; review</button>
         <div id="hfPasteBox" class="hidden" style="margin-top:10px; padding:10px; border:1px solid var(--border); border-radius:12px; background:var(--panel);">
-          <div class="label">Paste ChatGPT reply here</div>
-          <textarea id="hfPasteText" aria-label="ChatGPT food estimate reply" rows="4" style="width:100%; margin:8px 0 10px; resize:vertical;" placeholder='{"foods":[{"name":"...","cal":0,"pro":0,"carb":0,"fat":0}]}'></textarea>
+          <div class="label">Paste AI reply here</div>
+          <textarea id="hfPasteText" aria-label="AI food estimate reply" rows="4" style="width:100%; margin:8px 0 10px; resize:vertical;" placeholder='{"foods":[{"name":"...","cal":0,"pro":0,"carb":0,"fat":0}]}'></textarea>
           <div class="row">
             <button class="btn ghost small" id="hfReviewBtn">✓ Review estimate</button>
             <button class="btn ghost small" id="hfPasteCancelBtn">Cancel</button>
           </div>
         </div>
-        <div class="note" style="margin-top:6px;">Copy the prompt into ChatGPT (attach the photo if you chose one), then paste its reply back here to review before logging.</div>
-        <div class="note" style="margin-top:6px; color:var(--dim);">Some phones/browsers cannot send photos directly to ChatGPT from a home-screen app. If the photo does not appear in ChatGPT, attach the same photo manually, then paste the prompt.</div>
+        <div class="note" style="margin-top:6px;">Copy the prompt into your preferred AI app (attach the photo if you chose one), then paste its reply back here to review before logging.</div>
+        <div class="note" style="margin-top:6px; color:var(--dim);">Some phones and browsers cannot send photos directly to an AI app from a home-screen app. If the photo does not appear, attach the same photo manually, then paste the prompt.</div>
       </div>
       <input type="file" id="aiPhotoFile" aria-label="Meal photo file" accept="image/*" class="hidden">
       <div class="note" style="margin-top:6px;">Photos are analyzed and immediately discarded — never stored, never uploaded anywhere but the AI. Pasted replies are parsed, confirmed, then cleared.</div>
@@ -1437,7 +1438,7 @@
         </div>
       </div>
     </details>
-    <button class="btn ghost small" id="faqOpenBtn" style="width:100%; margin-bottom:12px;">Help & FAQ — how everything works</button>
+    <button class="btn ghost small accent-outline" id="faqOpenBtn" style="width:100%; margin-bottom:12px;">Help & FAQ — how everything works</button>
     <details class="disclosure" id="settingsGoalsDetails" open>
       <summary><div><div class="disclosure-title">Goals, targets & tracking</div><div class="disclosure-sub">Calculator, calorie schedule, measurements, water, and accent</div></div></summary>
       <div class="disclosure-body">
@@ -1562,7 +1563,7 @@
       <div class="disclosure-body">
     <div class="card">
       <div class="label" style="margin-bottom:10px;">Food search sources</div>
-      <div class="note"><b>No account or API key is needed.</b> My Foods and built-in staples work offline. Packaged-food search and barcode lookup use <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener" style="color:var(--ember);">Open Food Facts</a> when connected, and results identify their source. If a product is missing or the service is unavailable, copy the nutrition label into manual entry; BlackPyre remembers saved barcodes on this device. The optional 120-food suggestion catalog is bundled USDA reference data and also works offline.</div>
+      <div class="note">My Foods and built-in staples work offline. Packaged-food search and barcode lookup use <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener" style="color:var(--ember);">Open Food Facts</a> when connected, and results identify their source. If a product is missing or the service is unavailable, copy the nutrition label into manual entry; BlackPyre remembers saved barcodes on this device. The optional 120-food suggestion catalog is bundled USDA reference data and also works offline.</div>
     </div>
 
     <div class="card">
@@ -1579,15 +1580,15 @@
 
     <div class="card">
       <div class="label" style="margin-bottom:10px;">AI tools (optional)</div>
-      <div class="label">ChatGPT food handoff</div>
-      <button class="btn ghost small" id="foodHandoffToggleBtn" aria-pressed="true" style="width:100%; margin:8px 0 6px;">Disable ChatGPT food handoff</button>
+      <div class="label">AI food handoff</div>
+      <button class="btn ghost small" id="foodHandoffToggleBtn" aria-pressed="true" style="width:100%; margin:8px 0 6px;">Disable AI food handoff</button>
       <div class="note" style="margin:0 0 14px;">On by default and no API key is needed. When no live AI key is available, BlackPyre shows copy-and-paste food-estimate tools. Turn this off to hide those tools; normal food logging is unchanged.</div>
       <div class="note" style="margin:0 0 10px;">The provider below controls live in-app Coach chat and API-based food tools. Keys are stored only on this device and excluded from backups.</div>
       <div class="label">Live AI provider</div>
       <select id="sAiProvider" aria-label="AI provider" style="margin-bottom:10px;">
         <option value="anthropic">Claude (Anthropic API key)</option>
         <option value="openai">ChatGPT (OpenAI API key)</option>
-        <option value="handoff">ChatGPT handoff — no key, copy &amp; paste</option>
+        <option value="handoff">AI handoff — no key, copy &amp; paste</option>
       </select>
       <div id="aiKeyAnthRow">
         <div class="label">Anthropic API key</div>
@@ -1603,7 +1604,7 @@
         <div class="label">Model (optional)</div>
         <input id="sAiModel" aria-label="AI model override" placeholder="" autocomplete="off" style="margin-bottom:10px;">
       </div>
-      <div class="note hidden" id="aiHandoffNote" style="margin:0 0 10px;">No key needed. BlackPyre writes the prompts; you paste them into the ChatGPT app (or claude.ai) and paste the reply back. Works with the subscription you already have.</div>
+      <div class="note hidden" id="aiHandoffNote" style="margin:0 0 10px;">No key needed. BlackPyre writes the prompts; you paste them into your preferred AI app and paste the reply back. Works with the AI service you already use.</div>
       <button class="xbtn" id="saveAiBtn">Save AI settings</button>
     </div>
       </div>

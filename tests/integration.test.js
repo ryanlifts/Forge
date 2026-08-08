@@ -1609,7 +1609,7 @@ const H60 = boot(V3_CFG, EMPTY_DATA);
 const dH60 = H60.window.document;
 const clickH60 = id=>dH60.getElementById(id).dispatchEvent(new H60.window.Event("click",{bubbles:true}));
 check("v60 food handoff is visible by default without a key", !dH60.getElementById("aiFoodCard").classList.contains("hidden") && !dH60.getElementById("aiHandoffControls").classList.contains("hidden"));
-check("v60 Settings toggle reports the default-on state accessibly", dH60.getElementById("foodHandoffToggleBtn").getAttribute("aria-pressed")==="true" && /Disable ChatGPT food handoff/.test(dH60.getElementById("foodHandoffToggleBtn").textContent));
+check("v60 Settings toggle reports the default-on state accessibly", dH60.getElementById("foodHandoffToggleBtn").getAttribute("aria-pressed")==="true" && /Disable AI food handoff/.test(dH60.getElementById("foodHandoffToggleBtn").textContent));
 clickH60("foodHandoffToggleBtn");
 check("v60 disabling food handoff persists false and hides the no-key card", H60.window.eval("cfg.foodHandoffOn")===false && JSON.parse(H60.window.localStorage.getItem("forge:cfg")).foodHandoffOn===false && dH60.getElementById("aiFoodCard").classList.contains("hidden"));
 clickH60("foodHandoffToggleBtn");
@@ -2036,7 +2036,7 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+(?:-\d+)?"/.test(sw));
-check("v90 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v90-20"'));
+check("v90 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v90-21"'));
 
 const nativePrep76 = fs.readFileSync(
   path.join(__dirname,"..","tools","prepare-native.sh"),
