@@ -5,6 +5,7 @@ set -e
 cd "$(dirname "$0")"
 npm ci --silent
 cd ..
+node tests/brand-onboarding.test.js
 node tests/phase1-nutrition-safety.test.js
 node tests/unit.test.js
 node tests/integration.test.js

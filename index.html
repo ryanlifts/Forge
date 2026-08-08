@@ -153,6 +153,45 @@
   .view { display:none; }
   .view.active { display:block; }
   .hidden { display:none !important; }
+  .brand-launch-overlay{
+    position:fixed; inset:0; z-index:63; display:grid; place-items:center; background:var(--bg);
+    padding:calc(24px + env(safe-area-inset-top)) 18px calc(24px + env(safe-area-inset-bottom));
+  }
+  .brand-presentation{ text-align:center; }
+  .brand-presentation-title{
+    font-family:'Oswald',sans-serif; font-weight:700; font-size:clamp(42px, 14vw, 68px); line-height:1.05;
+    letter-spacing:.04em; white-space:nowrap;
+    background:linear-gradient(135deg,var(--ember) 30%,var(--ember-deep));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    text-shadow:0 0 26px rgba(var(--ember-rgb),.22);
+  }
+  .brand-presentation-motto{
+    font-family:'IBM Plex Mono',monospace; font-size:clamp(10px, 2.8vw, 13px); color:var(--dim);
+    letter-spacing:.07em; margin-top:4px; white-space:nowrap;
+  }
+  .brand-story-overlay{
+    position:fixed; inset:0; z-index:62; background:var(--bg); overflow-y:auto;
+    -webkit-overflow-scrolling:touch; overscroll-behavior:contain;
+    padding:calc(20px + env(safe-area-inset-top)) 18px 40px;
+  }
+  .brand-story-shell{ max-width:560px; margin:0 auto; }
+  .brand-story-close{ display:block; margin:0 0 12px auto; }
+  .brand-story-header{ margin:2px 0 20px; }
+  #brandStoryBrandTitle{ position:relative; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; cursor:default; }
+  #brandStoryBrandTitleText{ transition:opacity .7s ease; }
+  #brandStoryBellaEgg{
+    position:absolute; inset:4%; background:linear-gradient(135deg, var(--ember), var(--ember-deep));
+    -webkit-mask:var(--bella) center / contain no-repeat; mask:var(--bella) center / contain no-repeat;
+    opacity:0; transition:opacity .7s ease; pointer-events:none;
+  }
+  .brand-story-title{ margin:0 0 18px; text-align:center; font-family:'Oswald',sans-serif; font-size:clamp(26px, 7vw, 34px); line-height:1.15; font-weight:700; letter-spacing:.025em; }
+  .brand-story-section{ margin:0 0 12px; padding:14px 16px; border:1px solid var(--border); border-radius:14px; background:var(--panel); }
+  .brand-story-section h2{ margin:0 0 7px; color:var(--ember); font-family:'Oswald',sans-serif; font-size:16px; font-weight:700; letter-spacing:.035em; }
+  .brand-story-section p{ margin:0; color:var(--text); font-size:14px; line-height:1.65; }
+  .brand-story-section.combined{ border-color:rgba(var(--ember-rgb),.55); background:rgba(var(--ember-rgb),.06); }
+  .brand-story-finale{ margin:18px 0 20px; padding:16px; border:1px solid var(--ember); border-radius:14px; background:linear-gradient(135deg,var(--ember),var(--ember-deep)); color:#16100B; }
+  .brand-story-final{ text-align:center; font:inherit; font-size:14px; line-height:1.65; font-weight:700; }
+  .brand-story-motto{ margin-top:14px; padding-top:14px; border-top:1px solid rgba(22,16,11,.32); font-weight:800; letter-spacing:.035em; }
   .mt10 { margin-top:10px; } .mt14 { margin-top:14px; }
   .exercise { margin-bottom:12px; }
   .exercise .x-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:5px; font-size:12px; min-width:0; }
@@ -724,7 +763,7 @@
   </div>
   <div class="hdr">
     <h1 id="bpTitle" style="position:relative; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; cursor:default;"><span id="bpTitleText" style="transition:opacity .7s ease;">BlackPyre</span><span id="bellaEgg" aria-hidden="true"></span></h1>
-    <div class="motto">Burn the guesswork. Forge your body.</div>
+    <div class="motto">Burn away the old. Forge what comes next.</div>
     <div id="saveState" class="note hdr-save" role="status" aria-live="polite"></div>
   </div>
   <div id="offlineBanner" class="hidden" role="status" aria-live="polite"><b>Offline.</b> Logging, workouts, weights, saved foods, backups, and recovery still work. Online food/barcode lookups and connected AI features need a connection.</div>
@@ -1388,6 +1427,16 @@
 
   <!-- ============ SETTINGS ============ -->
   <div id="view-settings" class="view" role="tabpanel" aria-labelledby="tab-settings" aria-hidden="true">
+    <details class="disclosure" id="settingsAboutDetails">
+      <summary><div><div class="disclosure-title">About BlackPyre</div><div class="disclosure-sub">The meaning and philosophy behind BlackPyre</div></div></summary>
+      <div class="disclosure-body">
+        <div class="card">
+          <div class="label">Why BlackPyre?</div>
+          <div class="note" style="margin:7px 0 12px;">Return to the message shown before first-time personal setup.</div>
+          <button class="btn ghost small" id="whyBlackPyreOpenBtn" style="width:100%;">Why BlackPyre?</button>
+        </div>
+      </div>
+    </details>
     <button class="btn ghost small" id="faqOpenBtn" style="width:100%; margin-bottom:12px;">Help & FAQ — how everything works</button>
     <details class="disclosure" id="settingsGoalsDetails" open>
       <summary><div><div class="disclosure-title">Goals, targets & tracking</div><div class="disclosure-sub">Calculator, calorie schedule, measurements, water, and accent</div></div></summary>
@@ -1683,6 +1732,41 @@
   </div>
 </div>
 
+<div id="brandLaunchOverlay" class="brand-launch-overlay hidden" aria-hidden="true">
+  <div class="brand-presentation">
+    <div class="brand-presentation-title">BlackPyre</div>
+    <div class="brand-presentation-motto">Burn away the old. Forge what comes next.</div>
+  </div>
+</div>
+
+<div id="brandStoryOverlay" class="brand-story-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="brandStoryTitle" tabindex="-1" data-initial-focus="self">
+  <div class="brand-story-shell">
+    <button class="xbtn brand-story-close hidden" id="brandStoryCloseBtn" aria-label="Close Why BlackPyre">✕ Close</button>
+    <div class="brand-presentation brand-story-header">
+      <div class="brand-presentation-title" id="brandStoryBrandTitle"><span id="brandStoryBrandTitleText">BlackPyre</span><span id="brandStoryBellaEgg" aria-hidden="true"></span></div>
+      <div class="brand-presentation-motto">Burn away the old. Forge what comes next.</div>
+    </div>
+    <div class="brand-story-title" id="brandStoryTitle">Why BlackPyre?</div>
+    <section class="brand-story-section" aria-labelledby="brandStoryBlackTitle">
+      <h2 id="brandStoryBlackTitle">Black</h2>
+      <p>Black represents discipline, strength, and focus. It’s about cutting through the noise and distractions, staying committed, and getting serious about what you want to accomplish.</p>
+    </section>
+    <section class="brand-story-section" aria-labelledby="brandStoryPyreTitle">
+      <h2 id="brandStoryPyreTitle">Pyre</h2>
+      <p>A pyre is a powerful, concentrated fire. Fire can destroy, but it can also transform, refine, and forge. It burns away what was there before and creates the opportunity for something stronger to take its place.</p>
+    </section>
+    <section class="brand-story-section combined" aria-labelledby="brandStoryCombinedTitle">
+      <h2 id="brandStoryCombinedTitle">BlackPyre</h2>
+      <p>Together, those ideas represent what BlackPyre is about: having the discipline to create real change.<br><br>It’s about putting in the work, pushing beyond the limits that have held you back, and continually becoming stronger, healthier, and more capable than you were before.</p>
+    </section>
+    <div class="brand-story-finale">
+      <div class="brand-story-final brand-story-core">The fire is the transformation.<br>The discipline is what keeps it burning.</div>
+      <div class="brand-story-final brand-story-motto">Burn away the old.<br>Forge what comes next.</div>
+    </div>
+    <button class="btn" id="brandStoryActionBtn" style="width:100%;">Get Started</button>
+  </div>
+</div>
+
 <div id="disclaimerOverlay" class="hidden" role="dialog" aria-modal="true" aria-labelledby="disclaimerTitle" tabindex="-1" data-initial-focus="self" style="position:fixed; inset:0; z-index:61; background:var(--bg); overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; padding:calc(20px + env(safe-area-inset-top)) 18px 40px;">
   <div style="max-width:560px; margin:0 auto;">
     <div style="text-align:center;">
@@ -1707,7 +1791,7 @@
   <div style="max-width:520px; margin:0 auto;">
     <div style="text-align:center; margin-bottom:6px;">
       <div id="setupTitle" style="font-family:'Oswald',sans-serif; font-weight:700; font-size:28px; letter-spacing:.06em;">BlackPyre</div>
-      <div class="note" style="margin:2px 0 14px;" id="setupTagline">Burn the guesswork. Forge your body.<br>Setup takes about a minute.</div>
+      <div class="note" style="margin:2px 0 14px;" id="setupTagline">Burn away the old. Forge what comes next.<br>Setup takes about a minute.</div>
     </div>
     <div class="su-dots" id="setupDots"></div>
     <div id="setupBody"></div>

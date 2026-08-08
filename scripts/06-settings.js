@@ -29,6 +29,49 @@ const setupChoice = {
 function hasAnyData(){
   return (data.weights||[]).length>0 || (data.workouts||[]).length>0 || Object.keys(data.food||{}).length>0;
 }
+let brandStoryMode = "onboarding";
+let brandLaunchTimer = null;
+const BRAND_LAUNCH_MS = 4000;
+function existingInstallForBrandStory(){
+  return !!(
+    cfg.setupDone
+    || cfg.disclaimerAccepted
+    || hasAnyData()
+    || (typeof cfgShowsEstablishedUse==="function" && cfgShowsEstablishedUse(cfg))
+    || (typeof dataContentScore==="function" && dataContentScore(data)>0)
+  );
+}
+function openBrandStory(mode){
+  brandStoryMode = mode==="informational" ? "informational" : "onboarding";
+  const overlay=document.getElementById("brandStoryOverlay");
+  const close=document.getElementById("brandStoryCloseBtn");
+  const action=document.getElementById("brandStoryActionBtn");
+  close.classList.toggle("hidden",brandStoryMode!=="informational");
+  action.textContent=brandStoryMode==="onboarding" ? "Get Started" : "Done";
+  overlay.scrollTop=0;
+  lockScroll();
+  overlay.classList.remove("hidden");
+  requestAnimationFrame(()=>{ try { overlay.focus(); } catch(e){} });
+}
+function finishBrandLaunch(){
+  if(brandLaunchTimer!==null){ clearTimeout(brandLaunchTimer); brandLaunchTimer=null; }
+  const launch=document.getElementById("brandLaunchOverlay");
+  launch.classList.add("hidden");
+  launch.setAttribute("aria-hidden","true");
+  openBrandStory("onboarding");
+}
+function openBrandLaunch(){
+  const launch=document.getElementById("brandLaunchOverlay");
+  lockScroll();
+  launch.setAttribute("aria-hidden","false");
+  launch.classList.remove("hidden");
+  brandLaunchTimer=setTimeout(finishBrandLaunch,BRAND_LAUNCH_MS);
+}
+function closeInformationalBrandStory(){
+  if(brandStoryMode!=="informational") return;
+  document.getElementById("brandStoryOverlay").classList.add("hidden");
+  unlockScroll();
+}
 function openSetup(){
   setupStep = 0;
   setupChoice.measureOn = !!cfg.measureOn;
@@ -265,6 +308,49 @@ function afterDisclaimer(){
     else { openSetup(); }
   }
 }
+function continueFirstLaunchGates(){
+  if(brandLaunchTimer!==null){ clearTimeout(brandLaunchTimer); brandLaunchTimer=null; }
+  document.getElementById("brandLaunchOverlay").classList.add("hidden");
+  document.getElementById("brandStoryOverlay").classList.add("hidden");
+  document.getElementById("disclaimerOverlay").classList.add("hidden");
+  document.getElementById("setupOverlay").classList.add("hidden");
+  if(protectedMode) return;
+  if(!cfg.disclaimerAccepted){
+    lockScroll();
+    document.getElementById("disclaimerOverlay").classList.remove("hidden");
+  } else {
+    unlockScroll();
+    afterDisclaimer();
+  }
+}
+function startFirstLaunchGates(){
+  if(protectedMode){
+    if(brandLaunchTimer!==null){ clearTimeout(brandLaunchTimer); brandLaunchTimer=null; }
+    document.getElementById("brandLaunchOverlay").classList.add("hidden");
+    document.getElementById("brandStoryOverlay").classList.add("hidden");
+    document.getElementById("disclaimerOverlay").classList.add("hidden");
+    document.getElementById("setupOverlay").classList.add("hidden");
+    return;
+  }
+  if(!hasCompletedBrandOnboarding() && existingInstallForBrandStory()){
+    markBrandOnboardingCompleted();
+  }
+  if(!hasCompletedBrandOnboarding()){
+    openBrandLaunch();
+    return;
+  }
+  continueFirstLaunchGates();
+}
+document.getElementById("brandStoryActionBtn").addEventListener("click",()=>{
+  if(brandStoryMode==="informational"){
+    closeInformationalBrandStory();
+    return;
+  }
+  markBrandOnboardingCompleted();
+  continueFirstLaunchGates();
+});
+document.getElementById("brandStoryCloseBtn").addEventListener("click",closeInformationalBrandStory);
+document.getElementById("whyBlackPyreOpenBtn").addEventListener("click",()=>openBrandStory("informational"));
 document.getElementById("disclaimerAgreeBtn").addEventListener("click", ()=>{
   if (protectedMode){ flashSave("Not saved — protected mode", true); return; }
   cfg.disclaimerAccepted = todayStr();
@@ -273,25 +359,9 @@ document.getElementById("disclaimerAgreeBtn").addEventListener("click", ()=>{
   unlockScroll();
   afterDisclaimer();
 });
-if (protectedMode){
-  document.getElementById("disclaimerOverlay").classList.add("hidden");
-  document.getElementById("setupOverlay").classList.add("hidden");
-} else if (!cfg.disclaimerAccepted){
-  lockScroll();
-  document.getElementById("disclaimerOverlay").classList.remove("hidden");
-} else {
-  afterDisclaimer();
-}
+startFirstLaunchGates();
 function resumeGatesAfterRecovery(){
-  document.getElementById("disclaimerOverlay").classList.add("hidden");
-  document.getElementById("setupOverlay").classList.add("hidden");
-  if (!cfg.disclaimerAccepted){
-    lockScroll();
-    document.getElementById("disclaimerOverlay").classList.remove("hidden");
-  } else {
-    unlockScroll();
-    afterDisclaimer();
-  }
+  startFirstLaunchGates();
 }
 
 // ================== HELP & FAQ ==================
