@@ -2036,7 +2036,7 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+(?:-\d+)?"/.test(sw));
-check("v90 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v90-21"'));
+check("native service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v94"'));
 
 const nativePrep76 = fs.readFileSync(
   path.join(__dirname,"..","tools","prepare-native.sh"),
@@ -2694,8 +2694,10 @@ check("v57 every dynamically rendered onboarding control has an accessible name"
 
 fresh57.window.eval(`setupStep=6; renderSetupStep();`);
 await wait(20);
-check("v81 food-database onboarding requires no key or account",
-  /No food-database account or API key is needed/.test(dFresh57.getElementById("setupBody").textContent) &&
+check("food onboarding explains logging without obsolete credential language or fields",
+  /Search packaged foods or scan a barcode when connected/.test(dFresh57.getElementById("setupBody").textContent) &&
+  /If a product is missing, enter the nutrition label/.test(dFresh57.getElementById("setupBody").textContent) &&
+  !/account or API key/i.test(dFresh57.getElementById("setupBody").textContent) &&
   !dFresh57.querySelector("#setupBody input"));
 dFresh57.getElementById("setupNext").click();
 await wait(20);

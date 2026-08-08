@@ -1,3 +1,9 @@
+<!--
+  BlackPyre
+  Copyright (c) 2026 Ryan Allen Wilsey. All rights reserved.
+  Proprietary. Unauthorized copying, modification, or distribution is prohibited.
+  See LICENSE for terms.
+-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -75,6 +81,17 @@
   .btn:disabled { opacity:.55; }
   .row { display:flex; gap:10px; flex-wrap:wrap; }
   .row > * { flex:1; }
+  .weigh-in-datetime {
+    display:grid; grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:18px; width:100%; max-width:100%; margin-bottom:12px;
+  }
+  .weigh-in-datetime > div { min-width:0; width:100%; max-width:100%; }
+  .weigh-in-datetime input {
+    -webkit-appearance:none; appearance:none; display:block; overflow:hidden;
+    min-width:0; width:100%; max-width:100%; padding-left:6px; padding-right:6px;
+    font-size:16px !important; text-align:center;
+  }
+  .weigh-in-datetime input::-webkit-date-and-time-value { min-width:0; text-align:center; }
   .big { font-family:'Oswald',sans-serif; font-weight:700; font-size:50px; line-height:1.05; }
   .big small { font-size:20px; color:var(--dim); font-weight:500; }
   .err { color:var(--warn); font-size:12px; margin-top:8px; }
@@ -1401,7 +1418,10 @@
   <div id="view-weight" class="view" role="tabpanel" aria-labelledby="tab-weight" aria-hidden="true">
     <div class="card">
       <div>
-        <div class="label">Date</div><input type="date" id="wtDate" aria-label="Weigh-in date" style="max-width:190px; margin-bottom:12px;">
+        <div class="weigh-in-datetime">
+          <div><div class="label">Date</div><input type="date" id="wtDate" aria-label="Weigh-in date"></div>
+          <div><div class="label">Time</div><input type="time" id="wtTime" aria-label="Weigh-in time"></div>
+        </div>
         <div class="label">Weight (lb)</div><input type="number" id="wtVal" aria-label="Body weight in pounds" placeholder="e.g. 221.4" inputmode="decimal" step="any" style="margin-bottom:12px;">
         <button class="btn" id="addWtBtn" style="width:100%;">Record</button>
       </div>
@@ -1642,6 +1662,7 @@
     </div>
       </div>
     </details>
+    <div class="note" id="appCopyright" style="text-align:center; margin:18px 8px 0; line-height:1.6;">© 2026 Ryan Allen Wilsey. All rights reserved.</div>
   </div>
 </div>
 

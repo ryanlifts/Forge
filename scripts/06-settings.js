@@ -132,7 +132,7 @@ function validateSetupStep(){
     if (!gw || gw<50 || gw>700){ flashSave("Enter a goal weight", true); return false; }
     cfg.startWt=cw; cfg.goalWt=gw;
     const dt=todayStr();
-    if (!data.weights.some(w=>w.date===dt)) data.weights.push({date:dt,lbs:cw});
+    if (!data.weights.some(w=>w.date===dt)) data.weights.push({date:dt,time:currentTimeValue(),lbs:cw});
     cfg.lastTargetWt=cw; saveCfg(); save(); renderJourney();
   }
   if (setupStep===1){
@@ -1203,7 +1203,7 @@ document.getElementById("dashWtBtn").addEventListener("click", ()=>{
   if(!v || v<50 || v>700){ flashSave("Enter a weight", true); return; }
   const dt = todayStr();
   data.weights = data.weights.filter(w=>w.date!==dt);
-  data.weights.push({date:dt, lbs:v});
+  data.weights.push({date:dt, time:currentTimeValue(), lbs:v});
   bumpLog();
   document.getElementById("dashWtInput").value="";
   if (data.weights.length===1){
