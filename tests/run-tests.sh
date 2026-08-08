@@ -14,5 +14,6 @@ node tests/unit.test.js
 node tests/integration.test.js
 node tests/v84-ui-polish.test.js
 node tests/card-profiles.test.js
+node tests/manual-food-slider.test.js
 echo ""
 echo "GAUNTLET GREEN — safe to ship."

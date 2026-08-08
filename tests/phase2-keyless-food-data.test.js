@@ -139,6 +139,133 @@ const readyBarcodeCorrectionV84 =
     })
   );
 
+const readyBarcodeConfirmationV91 =
+  barcodeBoot(
+    ()=>Promise.resolve({
+      ok:true,
+      status:200,
+      json:()=>Promise.resolve({
+        status:1,
+        product:
+          readyBarcodeCorrectionProductV84
+      })
+    })
+  );
+
+await lookup(
+  readyBarcodeConfirmationV91,
+  "0847644005066"
+);
+
+const readyConfirmationDocumentV91 =
+  readyBarcodeConfirmationV91
+    .dom
+    .window
+    .document;
+
+const readyConfirmationButtonV91 =
+  readyConfirmationDocumentV91
+    .getElementById("barcodeConfirmBtn");
+
+check(
+  "barcode verification actions have separate highlighted treatments",
+  readyConfirmationButtonV91
+    .classList
+    .contains("barcode-confirm-action")
+  && readyConfirmationDocumentV91
+    .getElementById("barcodeCorrectionBtn")
+    .classList
+    .contains("barcode-correct-action")
+);
+
+readyConfirmationButtonV91.click();
+
+check(
+  "Looks correct saves the barcode, closes verification, and keeps logging controls",
+  readyBarcodeConfirmationV91
+    .dom
+    .window
+    .eval(
+      `!!data.myFoods["847644005066"]
+      && data.myFoods["847644005066"].sourceLabel==="My Foods"
+      && selected.sourceLabel==="My Foods"`
+    )
+  && readyConfirmationDocumentV91
+    .getElementById("barcodeCorrectionReview")
+    .classList
+    .contains("hidden")
+  && !readyConfirmationDocumentV91
+    .getElementById("calcCard")
+    .classList
+    .contains("hidden")
+  && !readyConfirmationDocumentV91
+    .getElementById("qtySlider")
+    .classList
+    .contains("hidden")
+  && !readyConfirmationDocumentV91
+    .getElementById("addSelBtn")
+    .classList
+    .contains("hidden")
+);
+
+const zeroNutritionBarcodeV91 =
+  barcodeBoot(
+    ()=>Promise.resolve({
+      ok:true,
+      status:200,
+      json:()=>Promise.resolve({
+        status:1,
+        product:{
+          code:"000000000091",
+          product_name:"Zero nutrition test",
+          brands:"Test",
+          serving_size:"1 serving (100 g)",
+          serving_quantity:100,
+          nutrition_data_per:"100g",
+          nutriments:{
+            "energy-kcal_100g":0,
+            "proteins_100g":0,
+            "carbohydrates_100g":0,
+            "fat_100g":0
+          }
+        }
+      })
+    })
+  );
+
+await lookup(
+  zeroNutritionBarcodeV91,
+  "000000000091"
+);
+
+zeroNutritionBarcodeV91
+  .dom
+  .window
+  .document
+  .getElementById("barcodeConfirmBtn")
+  .click();
+
+check(
+  "Looks correct accepts zero calories and macros and closes verification",
+  zeroNutritionBarcodeV91
+    .dom
+    .window
+    .eval(
+      `!!data.myFoods["000000000091"]
+      && data.myFoods["000000000091"].cal100===0
+      && data.myFoods["000000000091"].pro100===0
+      && data.myFoods["000000000091"].carb100===0
+      && data.myFoods["000000000091"].fat100===0`
+    )
+  && zeroNutritionBarcodeV91
+    .dom
+    .window
+    .document
+    .getElementById("barcodeCorrectionReview")
+    .classList
+    .contains("hidden")
+);
+
 await lookup(
   readyBarcodeCorrectionV84,
   "0847644005066"
@@ -424,7 +551,7 @@ check("normal backups exclude a legacy USDA credential",
   !backupText.includes("should-never-export") &&
   !Object.prototype.hasOwnProperty.call(JSON.parse(backupText).cfg,"usdaKey"));
 
-check("service worker cache is bumped for Phase 2",/blackpyre-v86-faq-2/.test(fs.readFileSync(path.join(root,"sw.js"),"utf8")));
+check("service worker cache is bumped for the web workflow release",/blackpyre-v91-web-workflow-4/.test(fs.readFileSync(path.join(root,"sw.js"),"utf8")));
 
 
 const ServingReviewCorrection = boot(

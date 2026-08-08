@@ -77,6 +77,14 @@
   .btn.ghost { background:transparent; border:1px solid var(--border); color:var(--text); }
   .btn.small { padding:10px 14px; font-size:12px; width:auto; }
   .btn:disabled { opacity:.55; }
+  #barcodeCorrectionReview .barcode-confirm-action {
+    background:rgba(74,222,128,.18); border:2px solid var(--ok); color:var(--text);
+    box-shadow:0 0 0 1px rgba(74,222,128,.12); font-weight:700;
+  }
+  #barcodeCorrectionReview .barcode-correct-action {
+    background:rgba(232,176,75,.16); border:2px solid var(--amber); color:var(--text);
+    box-shadow:0 0 0 1px rgba(232,176,75,.10); font-weight:700;
+  }
   .row { display:flex; gap:10px; flex-wrap:wrap; }
   .row > * { flex:1; }
   .big { font-family:'Oswald',sans-serif; font-weight:700; font-size:50px; line-height:1.05; }
@@ -172,11 +180,11 @@
   .hidden { display:none !important; }
   .mt10 { margin-top:10px; } .mt14 { margin-top:14px; }
   .exercise { margin-bottom:12px; }
-  .exercise .x-head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:5px; font-size:12px; }
-  .exercise .x-head b {
-    font-family:'Oswald',sans-serif; font-weight:700; font-size:14px;
-  }
-  .exercise .x-head .scheme { color:var(--ember); font-size:12px; }
+  .exercise .x-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:5px; font-size:12px; min-width:0; }
+  .exercise .exercise-name { min-width:0; flex:1 1 auto; }
+  .exercise .x-head b { min-width:0; font-family:'Oswald',sans-serif; font-size:14px; line-height:1.2; font-weight:700; letter-spacing:.015em; overflow-wrap:anywhere; }
+  .exercise .x-head .scheme { flex:0 0 auto; padding-top:3px; color:var(--ember); font-size:12px; line-height:1.3; }
+  .exercise-prescription { margin:0 0 9px; color:var(--ember); font-size:12px; line-height:1.45; overflow-wrap:anywhere; }
   svg { width:100%; display:block; }
   /* full-page overlays: respect iPhone status bar + smooth scrolling */
   #faqOverlay, #recentsOverlay, #liftOverlay, #myFoodsOverlay, #coachOverlay, #myExercisesOverlay {
@@ -263,7 +271,36 @@
   .xbtn:active { border-color:var(--ember); }
   .btn.small, .chip, .faq-q, .seg button { min-height:44px; }
   .del { min-width:44px; min-height:44px; }
-  .x-tools { display:flex; gap:6px; }
+  .x-tools { display:flex; gap:6px; align-items:center; }
+  .exercise .snum { font-weight:700; border-color:rgba(var(--ember-rgb),.35); background:rgba(var(--ember-rgb),.035); }
+  .exercise .srow .slabel { color:var(--dim); font-weight:600; }
+  .set-outcome-compact,
+  .exercise-outcome-select,
+  [data-set-action="miss-remaining"],
+  [data-set-action="skip-remaining"],
+  [data-set-action="remove-remaining"],
+  [data-set-reason="true"] { display:none !important; }
+  .set-remove-direct { min-height:38px; margin-left:auto; padding:7px 9px; border-color:rgba(255,255,255,.12); color:var(--warn); font-size:12px; flex-shrink:0; }
+  .exercise-remove-today { min-height:44px; padding:8px 10px; border-color:rgba(255,255,255,.12); color:var(--warn); font-size:12px; flex-shrink:0; }
+  .removed-set-undo-row { display:flex; align-items:center; justify-content:space-between; gap:10px; min-height:44px; margin:5px 0; padding:7px 9px; border:1px solid rgba(255,255,255,.08); border-radius:9px; background:rgba(255,255,255,.025); }
+  .removed-set-copy { color:var(--dim); font-size:12px; }
+  .removal-undo-btn { min-height:36px; padding:6px 10px; color:var(--ember); flex-shrink:0; }
+  .simple-exercise-removal { justify-content:space-between; }
+  .exercise-more { position:relative; flex-shrink:0; }
+  .exercise-more > summary { list-style:none; }
+  .exercise-more > summary::-webkit-details-marker { display:none; }
+  .exercise-more-toggle { width:44px; height:44px; min-width:44px; padding:0; display:flex; align-items:center; justify-content:center; font-size:16px; letter-spacing:1px; }
+  .exercise-more-menu { position:absolute; z-index:90; right:0; top:48px; width:190px; padding:6px; border:1px solid var(--border); border-radius:10px; background:var(--panel); box-shadow:0 12px 30px rgba(0,0,0,.45); }
+  .exercise-more-item { display:block; width:100%; min-height:42px; margin:0; padding:8px 10px; border:0; text-align:left; background:transparent; }
+  .workout-set-row { display:flex; flex-direction:column; align-items:stretch; gap:3px; }
+  .set-controls-line { display:flex; align-items:center; flex-wrap:nowrap; gap:2px; width:100%; min-width:0; }
+  .set-controls-line .slabel { flex:0 0 25px; width:25px; font-size:10px; white-space:nowrap; }
+  .set-controls-line .step { flex:0 0 44px; width:44px; height:44px; font-size:12px; }
+  .set-controls-line .snum { flex:0 1 44px; min-width:40px; max-width:44px; width:44px; height:44px; padding:7px 2px; font-size:16px; }
+  .set-controls-line .snum:focus-visible { position:relative; z-index:2; outline-offset:0; }
+  .set-controls-line .sx { flex:0 0 auto; font-size:11px; }
+  .workout-set-row .set-remove-direct { flex:0 0 44px; min-width:44px; min-height:44px; margin-left:auto; padding:5px 1px; overflow:hidden; font-size:10px; line-height:1; white-space:nowrap; }
+  .set-zero-help { margin:0 0 3px 30px; color:var(--warn); font-size:12px; line-height:1.35; }
   .autoUp { color:var(--ok); font-size:10px; }
   #hfPasteText { font-family:inherit; font-size:16px; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--panel-up); color:var(--text); outline:none; color-scheme:dark; }
   #hfPasteText::placeholder { color:#565D68; }
@@ -353,6 +390,9 @@
     .srow .slabel { flex:1 1 100%; width:auto; font-size:11px; }
     .srow > .step, .srow > .snum, .srow > .sx { order:2; }
     .snum { flex:1 1 44px; min-width:44px; width:auto; height:44px; }
+    .set-controls-line .slabel { flex:0 0 25px; width:25px; }
+    .set-controls-line > .step { display:block; }
+    .set-controls-line > .snum { flex:0 1 44px; min-width:40px; max-width:44px; }
   }
   .shapeChip { display:inline-flex; align-items:center; min-height:22px; margin-left:5px; padding:2px 7px; border:1px solid rgba(var(--ember-rgb),.42); border-radius:999px; color:var(--ember); font-size:9px; letter-spacing:.04em; text-transform:uppercase; vertical-align:middle; }
   .shape-grid { display:grid; gap:8px; margin:8px 0; }
@@ -1270,6 +1310,40 @@
         <button class="btn ghost small" id="editProgBtn" aria-label="Edit current program">✎ Edit this program</button>
         <button class="btn ghost small" id="newProgBtn" aria-label="Build a new program">＋ Build new program</button>
       </div>
+      <button class="btn ghost small mt10" id="createAIPlanBtn" style="width:100%;" aria-expanded="false" aria-controls="aiPlanHelperCard">Create a plan with AI</button>
+      <div class="card hidden" id="aiPlanHelperCard" style="margin:12px 0 0; padding:12px;">
+        <div class="label">Create a plan with AI</div>
+        <div class="note" style="margin-top:6px;">Describe the plan you want, then copy BlackPyre’s instructions into your AI.</div>
+        <label class="label" for="aiPlanGoal" style="display:block; margin-top:12px;">Main goal</label>
+        <input id="aiPlanGoal" placeholder="Example: build strength and improve conditioning" style="width:100%;">
+        <label class="label" for="aiPlanDays" style="display:block; margin-top:10px;">Days per week</label>
+        <input id="aiPlanDays" type="number" min="1" max="7" inputmode="numeric" placeholder="Example: 4" style="width:100%;">
+        <label class="label" for="aiPlanEquipment" style="display:block; margin-top:10px;">Equipment</label>
+        <textarea id="aiPlanEquipment" rows="2" placeholder="Example: barbell, dumbbells, pull-up bar" style="width:100%; resize:vertical;"></textarea>
+        <label class="label" for="aiPlanLength" style="display:block; margin-top:10px;">Workout length</label>
+        <input id="aiPlanLength" placeholder="Example: 45 minutes" style="width:100%;">
+        <label class="label" for="aiPlanExperience" style="display:block; margin-top:10px;">Experience</label>
+        <select id="aiPlanExperience" style="width:100%;">
+          <option value="">Leave blank</option>
+          <option value="Beginner">Beginner</option>
+          <option value="Intermediate">Intermediate</option>
+          <option value="Advanced">Advanced</option>
+        </select>
+        <label class="label" for="aiPlanLimits" style="display:block; margin-top:10px;">Injuries or limits</label>
+        <textarea id="aiPlanLimits" rows="2" placeholder="Leave blank if none" style="width:100%; resize:vertical;"></textarea>
+        <label class="label" for="aiPlanPreferences" style="display:block; margin-top:10px;">Preferred training style or activities</label>
+        <textarea id="aiPlanPreferences" rows="2" placeholder="Example: powerlifting, sprinting, rowing" style="width:100%; resize:vertical;"></textarea>
+        <button class="btn small mt14" id="copyAIPlanInstructionsBtn" style="width:100%;">Copy instructions for AI</button>
+        <div class="note hidden" id="aiPlanCopyStatus" role="status" aria-live="polite" style="margin-top:10px;"></div>
+      </div>
+      <button class="btn ghost small mt10" id="loadPlanHelpBtn" style="width:100%;" aria-expanded="false" aria-controls="loadPlanHelpCard">How to load a plan</button>
+      <div class="card hidden" id="loadPlanHelpCard" style="margin:12px 0 0; padding:12px;">
+        <div class="label">How to load a plan</div>
+        <div style="font-size:13px; line-height:1.7; margin-top:8px;">
+          Choose <b>Load</b>, select the BlackPyre .json file, review every exercise, fix anything BlackPyre could not identify, then confirm.
+        </div>
+        <div class="note" style="margin-top:8px;">Your current program is not replaced until you confirm. Completed workout history is kept.</div>
+      </div>
       <button class="btn ghost small mt10" id="pasteProgBtn" aria-label="Paste a program from an AI" style="width:100%;">Paste program from an AI</button>
       <input type="file" id="importFile" aria-label="Program file to load" accept=".json,application/json" class="hidden">
       <div class="err hidden" id="programErr" role="alert" aria-live="assertive"></div>
@@ -1316,10 +1390,11 @@
 
         <div
           class="err hidden"
-          id="trainingPlanReviewErr"
+          id="trainingPlanReviewError"
           role="alert"
           aria-live="assertive"
         ></div>
+        <div class="err hidden" id="trainingPlanReviewErr" aria-hidden="true"></div>
 
         <div class="training-plan-review-actions">
           <button
@@ -1443,6 +1518,7 @@
           <div class="disclosure-title">History</div>
           <div class="disclosure-sub">Logged training sessions</div>
         </div>
+        <span id="workHistoryCount" style="color:var(--dim); font-size:11px;">0 sessions</span>
       </summary>
       <div class="disclosure-body history-disclosure-body" id="workHistoryBody">
         <div id="workHistory"><div style="padding:18px; font-size:13px; color:var(--dim);">No sessions yet.</div></div>

@@ -62,10 +62,10 @@ check(
 );
 
 check(
-  "manual-food validator accepts explicitly entered zero macros",
+  "manual-food validator accepts explicitly entered zero calories and macros",
   E(`validateFoodNutritionDraft({
-    name:"Zero macro food",
-    cal:100,
+    name:"Zero nutrition food",
+    cal:0,
     pro:0,
     carb:0,
     fat:0
@@ -94,7 +94,7 @@ click("addManualBtn");
 check(
   "missing calories preserves the draft and focuses calories",
   D.activeElement===D.getElementById("mCal")
-  && /calories greater than 0/.test(
+  && /Calories is required/.test(
     D.getElementById("saveState").textContent
   )
   && D.getElementById("mName").value==="Manual safety food"

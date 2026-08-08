@@ -778,8 +778,11 @@ function buildServingFood(values){
   const amount =
     Number(source.servingAmount);
 
+  const caloriesRaw =
+    source.calories;
+
   const calories =
-    Number(source.calories);
+    Number(caloriesRaw);
 
   const protein =
     Number(source.protein||0);
@@ -799,13 +802,17 @@ function buildServingFood(values){
   }
 
   if (
+    caloriesRaw===""
+    || caloriesRaw===null
+    || caloriesRaw===undefined
+    ||
     !Number.isFinite(calories)
-    || calories<=0
+    || calories<0
   ){
     return {
       ok:false,
       field:"calories",
-      message:"Enter calories greater than 0"
+      message:"Enter valid calories; 0 is allowed"
     };
   }
 
@@ -2012,12 +2019,33 @@ function syncBarcodeCorrectionReview(food){
       "barcodeCorrectionMessage";
 
     message.textContent=
-      "This result came from Open Food Facts. The serving total below is calculated from database values and may be wrong. Compare it with the package before logging.";
+      "This result came from Open Food Facts. The serving total below is calculated from database values and may be wrong. Compare the serving and nutrition with the package before logging.";
 
     message.style.cssText=
       "font-size:13px;"
       +"line-height:1.5;"
       +"color:var(--text);";
+
+    const confirmButton=
+      document.createElement("button");
+
+    confirmButton.id=
+      "barcodeConfirmBtn";
+
+    confirmButton.type="button";
+    confirmButton.textContent=
+      "✓ Looks correct";
+
+    confirmButton.className=
+      "btn small barcode-confirm-action";
+
+    confirmButton.style.width="100%";
+    confirmButton.style.marginTop="10px";
+
+    confirmButton.setAttribute(
+      "aria-describedby",
+      "barcodeCorrectionMessage"
+    );
 
     const button=
       document.createElement("button");
@@ -2030,10 +2058,10 @@ function syncBarcodeCorrectionReview(food){
       "Correct barcode data";
 
     button.className=
-      "btn ghost small";
+      "btn small barcode-correct-action";
 
     button.style.width="100%";
-    button.style.marginTop="10px";
+    button.style.marginTop="8px";
 
     button.setAttribute(
       "aria-describedby",
@@ -2042,6 +2070,7 @@ function syncBarcodeCorrectionReview(food){
 
     panel.appendChild(title);
     panel.appendChild(message);
+    panel.appendChild(confirmButton);
     panel.appendChild(button);
 
     const nutritionLine=
@@ -2082,17 +2111,113 @@ function syncBarcodeCorrectionReview(food){
     !eligible
   );
 
+  const title=
+    document.getElementById(
+      "barcodeCorrectionTitle"
+    );
+
+  const message=
+    document.getElementById(
+      "barcodeCorrectionMessage"
+    );
+
+  const confirmButton=
+    document.getElementById(
+      "barcodeConfirmBtn"
+    );
+
   const button=
     document.getElementById(
       "barcodeCorrectionBtn"
     );
 
-  if (button){
-    button.onclick=
-      eligible
-        ? ()=>openBarcodeCorrection(food)
-        : null;
+  if (!confirmButton || !button) return;
+
+  if (title){
+    title.textContent=
+      "⚠ Verify barcode nutrition";
   }
+
+  if (message){
+    message.textContent=
+      "This result came from Open Food Facts. The serving total below is calculated from database values and may be wrong. Compare the serving and nutrition with the package before logging.";
+  }
+
+  confirmButton.disabled=false;
+  confirmButton.textContent=
+    "✓ Looks correct";
+  button.classList.remove("hidden");
+
+  confirmButton.onclick=
+    eligible
+      ? ()=>confirmBarcodeFood(food)
+      : null;
+
+  button.onclick=
+    eligible
+      ? ()=>openBarcodeCorrection(food)
+      : null;
+}
+
+function rememberConfirmedBarcodeFood(food){
+  if (!food || food.sourceLabel!=="Open Food Facts") return false;
+
+  const barcode=normalizeBarcodeIdentity(
+    food.barcode
+    || food.lookupBarcode
+    || food.code
+  );
+
+  if (!barcode) return false;
+
+  const checked=validateFoodNutritionDraft({
+    name:food.name,
+    cal:food.cal100,
+    pro:food.pro100,
+    carb:food.carb100,
+    fat:food.fat100
+  });
+
+  if (!checked.ok) return false;
+
+  if (!data.myFoods || typeof data.myFoods!=="object"){
+    data.myFoods={};
+  }
+
+  const hadPrevious=Object.prototype.hasOwnProperty.call(
+    data.myFoods,
+    barcode
+  );
+  const previous=data.myFoods[barcode];
+
+  const saved=prepareReusableFoodName(
+    Object.assign({},food,{
+      barcode:barcode,
+      sourceLabel:"My Foods"
+    })
+  );
+
+  data.myFoods[barcode]=saved;
+
+  if (save()===false){
+    if (hadPrevious) data.myFoods[barcode]=previous;
+    else delete data.myFoods[barcode];
+    return false;
+  }
+
+  return saved;
+}
+
+function confirmBarcodeFood(food){
+  const saved=rememberConfirmedBarcodeFood(food);
+
+  if (!saved){
+    flashSave("Could not save this barcode",true);
+    return;
+  }
+
+  selectFood(saved);
+  flashSave("Barcode saved to My Foods ✓");
 }
 
 function selectFood(h){

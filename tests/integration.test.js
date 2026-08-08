@@ -1002,8 +1002,23 @@ clickT49(dT49.querySelector("#exerciseInputs .saveExBtn"));
 check("Save Exercise validates and saves only the entered set", T49.window.eval(`sessionState["Bench Press"].status==="saved" && sessionState["Bench Press"].saved.length===1 && sessionState["Bench Press"].saved[0].w===105`));
 check("saved exercise shows Completed with an Edit option", /Completed/.test(dT49.querySelector("#exerciseInputs .savedChip").textContent) && [...dT49.querySelectorAll("#exerciseInputs .xbtn")].some(b=>b.textContent==="Edit"));
 clickT49("logWorkoutBtn");
-check("logging saves only the genuinely saved set", T49.window.eval(`data.workouts.length===2 && data.workouts[1].sets["Bench Press"].length===1 && data.workouts[1].sets["Bench Press"][0].w===105`));
-check("partial saved history cannot trigger false progression next time", T49.window.eval(`sessionState["Bench Press"].auto===false && sessionState["Bench Press"].rows.length===1 && sessionState["Bench Press"].rows[0].w===105`));
+check("partially saved programmed exercise cannot silently drop remaining sets",
+  T49.window.eval(`data.workouts.length===1`)
+  && /Resolve the remaining planned sets.*Bench Press/.test(
+    dT49.getElementById("workoutErr").textContent
+  ));
+clickT49([...dT49.querySelectorAll("#exerciseInputs .xbtn")].find(b=>b.textContent==="Edit"));
+clickT49(dT49.querySelector('[data-exercise="Bench Press"][data-set-remove="1"]'));
+clickT49(dT49.querySelector('[data-exercise="Bench Press"][data-set-remove="2"]'));
+clickT49(dT49.querySelector("#exerciseInputs .saveExBtn"));
+clickT49("logWorkoutBtn");
+check("resolved partial exercise logs completed and explicitly removed sets",
+  T49.window.eval(`data.workouts.length===2
+    && data.workouts[1].sets["Bench Press"].length===3
+    && data.workouts[1].sets["Bench Press"][0].w===105
+    && data.workouts[1].sets["Bench Press"][1].status==="removed"
+    && data.workouts[1].sets["Bench Press"][2].status==="removed"`));
+check("partial completed history cannot trigger false progression next time", T49.window.eval(`sessionState["Bench Press"].auto===false && sessionState["Bench Press"].rows.length===3 && sessionState["Bench Press"].rows[0].w===105`));
 
 const T49Invalid = boot(V2_CFG, EMPTY_DATA, null, TEST_PROGRAM);
 const dT49Invalid = T49Invalid.window.document;
@@ -1079,7 +1094,7 @@ const sessionTypeTitle50=dT50.getElementById("sessionTypeCardTitle");
 const workoutTitle50=dT50.getElementById("workoutCardTitle");
 const plateTitle50=dT50.querySelector("#trainingToolsCard > .card-title");
 const exerciseName50=dT50.querySelector("#exerciseInputs .x-head b");
-const exerciseScheme50=dT50.querySelector("#exerciseInputs .x-head .scheme");
+const exerciseScheme50=dT50.querySelector("#exerciseInputs .exercise-prescription.scheme");
 check("native-final card headings share the 16px bold Oswald hierarchy",
   [sessionTypeTitle50,workoutTitle50,plateTitle50].every(el=>
     !!el
@@ -1389,11 +1404,11 @@ const sessionRemoveVideoParity76=
       .find(button=>button.textContent.trim()==="Video")
     :null;
 
-check("v76 parity Remove sits immediately left of Video in the exercise header action row",
+check("v90 session-added Remove stays direct while Video moves into the More menu",
   !!sessionRemoveToolsParity76
   && !!sessionRemoveVideoParity76
-  && sessionRemoveButtons78[0].nextElementSibling===
-    sessionRemoveVideoParity76);
+  && sessionRemoveVideoParity76.closest(".exercise-more-menu")
+  && sessionRemoveButtons78[0].closest(".exercise-more-menu")===null);
 
 check("v76 parity only session-added exercises receive a Remove control",
   removableExercise78.ok
@@ -1475,7 +1490,22 @@ check("v51 warning: even one unsaved exercise triggers the warning, by name", co
 check("v51 review path: choosing Review logs nothing and explains next steps", T51.window.eval("data.workouts.length")===0 && /Review the unsaved exercise/.test(dT51.getElementById("workoutErr").textContent));
 T51.window.confirm = (m)=>{ confirm51Msgs.push(m); return true; }; // Save valid & log
 clickT51("logWorkoutBtn");
-check("v51 save-and-log path: valid unsaved work is saved then logged, never silently dropped", T51.window.eval(`data.workouts.length===1 && data.workouts[0].sets["Bench Press"].length===1 && data.workouts[0].sets["Bench Press"][0].w===135`));
+check("v90 save-and-log path refuses to silently drop unresolved planned sets",
+  T51.window.eval(`data.workouts.length===0`)
+  && /Resolve the remaining planned sets.*Bench Press/.test(
+    dT51.getElementById("workoutErr").textContent
+  ));
+clickT51([...dT51.querySelectorAll("#exerciseInputs .xbtn")].find(b=>b.textContent==="Edit"));
+clickT51(dT51.querySelector('[data-exercise="Bench Press"][data-set-remove="1"]'));
+clickT51(dT51.querySelector('[data-exercise="Bench Press"][data-set-remove="2"]'));
+clickT51(dT51.querySelector("#exerciseInputs .saveExBtn"));
+clickT51("logWorkoutBtn");
+check("v90 save-and-log path logs only after every planned set is resolved",
+  T51.window.eval(`data.workouts.length===1
+    && data.workouts[0].sets["Bench Press"].length===3
+    && data.workouts[0].sets["Bench Press"][0].w===135
+    && data.workouts[0].sets["Bench Press"][1].status==="removed"
+    && data.workouts[0].sets["Bench Press"][2].status==="removed"`));
 
 // leaving Train with unsaved work warns; canceling stays
 const T51b = boot(V2_CFG, EMPTY_DATA, null, TEST_PROGRAM);
@@ -1489,6 +1519,41 @@ check("v51 leave-Train warning: canceling keeps you on Train with the work intac
 T51b.window.confirm = ()=>true;
 dT51b.querySelector('.tab[data-view="food"]').dispatchEvent(new T51b.window.Event("click",{bubbles:true}));
 check("v51 leave-Train warning: confirming leaves (entries remain in memory)", dT51b.getElementById("view-food").classList.contains("active") && T51b.window.eval(`sessionState["Bench Press"].rows[0].w`)===95);
+
+dT51b.querySelector('.tab[data-view="work"]').dispatchEvent(new T51b.window.Event("click",{bubbles:true}));
+check(
+  "v90-16 entered workout values remain visible after leaving and returning to Train",
+  dT51b.querySelector('#exerciseInputs input[data-field="weight"]').value==="95"
+  && T51b.window.eval(`sessionState["Bench Press"].rows[0].w`)===95
+);
+
+const T9016 = boot(V2_CFG, EMPTY_DATA, null, TEST_PROGRAM);
+const dT9016 = T9016.window.document;
+dT9016.querySelector('.tab[data-view="work"]').dispatchEvent(new T9016.window.Event("click",{bubbles:true}));
+const clearedWeight9016=dT9016.querySelector('#exerciseInputs input[data-field="weight"]');
+const plannedReps9016=dT9016.querySelector('#exerciseInputs input[data-field="reps"]');
+clearedWeight9016.value="95";
+clearedWeight9016.dispatchEvent(new T9016.window.Event("input",{bubbles:true}));
+clearedWeight9016.value="";
+clearedWeight9016.dispatchEvent(new T9016.window.Event("input",{bubbles:true}));
+let emptyLeavePrompts9016=0;
+T9016.window.confirm=()=>{
+  emptyLeavePrompts9016+=1;
+  return false;
+};
+dT9016.querySelector('.tab[data-view="food"]').dispatchEvent(new T9016.window.Event("click",{bubbles:true}));
+check(
+  "v90-16 clearing the only user-entered value leaves no false unfinished exercise",
+  plannedReps9016.value==="5"
+  && emptyLeavePrompts9016===0
+  && dT9016.getElementById("view-food").classList.contains("active")
+  && T9016.window.eval(`
+       sessionState["Bench Press"].rows[0].w===""
+       && sessionState["Bench Press"].rows[0].r===5
+       && sessionState["Bench Press"].rows[0].touched===false
+       && unsavedExerciseNames().length===0
+     `)
+);
 // saved-but-unlogged work also counts as meaningful for session-type switching
 const T51c = boot(V2_CFG, EMPTY_DATA, null, TEST_PROGRAM);
 const dT51c = T51c.window.document;
@@ -2048,7 +2113,7 @@ C62.window.eval(`reviewFoodSuggestion(foodSuggestionCandidates().find(c=>c.food.
 check("v62 a catalog suggestion opens its exact listed serving for review", dC62.getElementById("qtyUnit").value==="serving" && Number(dC62.getElementById("qtyAmount").value)===1 && /4 oz cooked \(113g\)/.test(dC62.getElementById("qtyUnit").selectedOptions[0].textContent));
 check("v62 review shows the USDA per-100g values and correctly scaled serving", /USDA reference · SR28/.test(dC62.getElementById("selName").textContent) && /165 kcal/.test(dC62.getElementById("selPer100").textContent) && dC62.getElementById("calcCal").textContent==="186" && dC62.getElementById("calcPro").textContent==="35");
 check("v62 reviewing a broad-catalog suggestion never auto-logs it", C62.window.eval(`(data.food[todayStr()]||[]).length`)===beforeReview62);
-check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v86-faq-2"'); })());
+check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v91-web-workflow-4"'); })());
 check("v62 keeps primary schemaVersion 3", C62.window.eval("SCHEMA_VERSION")===3);
 
 // ================= ChatGPT handoff paste flow =================
@@ -2495,8 +2560,8 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache key matches the BlackPyre web v82 release",
-  /const CACHE = "blackpyre-v86-faq-2";/.test(sw));
-check("Phase 1 service-worker cache is refreshed", sw.includes('const CACHE = "blackpyre-v86-faq-2"') && !sw.includes('blackpyre-phase1-nutrition-safety-1'));
+  /const CACHE = "blackpyre-v91-web-workflow-4";/.test(sw));
+check("Phase 1 service-worker cache remains refreshed", sw.includes('const CACHE = "blackpyre-v91-web-workflow-4"') && !sw.includes('blackpyre-phase1-nutrition-safety-1'));
 
 await wait(0);
 releaseTestWindows([
@@ -2708,6 +2773,10 @@ const dD56R=D56Reload.window.document;
 check("v56 reload offers Resume or Discard instead of losing saved exercise work", !dD56R.getElementById("workoutDraftCard").classList.contains("hidden") && dD56R.getElementById("resumeWorkoutDraftBtn") && dD56R.getElementById("discardWorkoutDraftBtn"));
 dD56R.getElementById("resumeWorkoutDraftBtn").dispatchEvent(new D56Reload.window.Event("click",{bubbles:true}));
 check("v56 Resume restores the exercise as Completed", D56Reload.window.eval(`workoutDraftLoaded && sessionState["Bench Press"].status==="saved" && sessionState["Bench Press"].saved[0].w===145`) && /Completed/.test(dD56R.getElementById("exerciseInputs").textContent));
+dD56R.querySelector("#exerciseInputs .xbtn").dispatchEvent(new D56Reload.window.Event("click",{bubbles:true}));
+dD56R.querySelector('[data-exercise="Bench Press"][data-set-remove="1"]').dispatchEvent(new D56Reload.window.Event("click",{bubbles:true}));
+dD56R.querySelector('[data-exercise="Bench Press"][data-set-remove="2"]').dispatchEvent(new D56Reload.window.Event("click",{bubbles:true}));
+dD56R.querySelector("#exerciseInputs .saveExBtn").dispatchEvent(new D56Reload.window.Event("click",{bubbles:true}));
 dD56R.getElementById("logWorkoutBtn").dispatchEvent(new D56Reload.window.Event("click",{bubbles:true}));
 check("v56 successful Log Session clears the draft and saves history", D56Reload.window.eval(`data.activeWorkoutDraft===null && data.workouts.length===1 && data.workouts[0].sets["Bench Press"][0].w===145`) && JSON.parse(D56Reload.window.localStorage.getItem("forge:data")).activeWorkoutDraft===null);
 
@@ -2756,7 +2825,7 @@ dM56.getElementById("addManualBtn").dispatchEvent(new M56.window.Event("click",{
 check("v56 manual food missing a name explains and focuses the name field", dM56.activeElement===dM56.getElementById("mName") && /food name/.test(dM56.getElementById("saveState").textContent));
 dM56.getElementById("mName").value="Test food"; dM56.getElementById("mCal").value="";
 dM56.getElementById("addManualBtn").dispatchEvent(new M56.window.Event("click",{bubbles:true}));
-check("v56 manual food missing calories explains and focuses calories", dM56.activeElement===dM56.getElementById("mCal") && /calories greater than 0/.test(dM56.getElementById("saveState").textContent));
+check("v56 manual food missing calories explains and focuses calories", dM56.activeElement===dM56.getElementById("mCal") && /Calories is required/.test(dM56.getElementById("saveState").textContent));
 
 const P56=boot(V2_CFG,Object.assign({},V2_DATA,{workouts:[{date:deleteDay,day:"D1",title:"History",sets:{},notes:""}]}),null,TEST_PROGRAM);
 P56.window.confirm=()=>false;
@@ -5487,7 +5556,7 @@ const unknownPriorButtons76=[
 check(
   "v76 an unknown newer-shape prior value remains visible without an unusable same-as-last action",
   unknownPriorButtons76.length===0
-  && /last: Newer-version workout entry preserved read-only\./.test(
+  && /last: .*newer BlackPyre version/i.test(
     dUnknownPriorValue76
       .getElementById("exerciseInputs")
       .textContent
@@ -7860,7 +7929,7 @@ check(
   V78ServiceWorker.includes('"./data-exercise-card-profiles.js"')
   && V78ServiceWorker.includes('"./scripts/03-card-profiles.js"')
   && V78ServiceWorker.includes(
-    'const CACHE = "blackpyre-v86-faq-2"'
+    'const CACHE = "blackpyre-v91-web-workflow-4"'
   )
 );
 
