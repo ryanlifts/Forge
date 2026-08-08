@@ -68,7 +68,7 @@ check(
 
 check(
   "v85 no-label-scanner cache is active",
-  /blackpyre-v96/.test(sw)
+  /blackpyre-v97/.test(sw)
 );
 
 check(

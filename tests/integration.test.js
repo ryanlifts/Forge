@@ -112,6 +112,8 @@ const RAW_PROGRAM = JSON.stringify(TEST_PROGRAM);
 // ================= elapsed-time web backup reminder =================
 const backupOldEstablishedAt =
   new Date(Date.now()-15*86400000).toISOString();
+const backupOldFirstLogAt =
+  new Date(Date.now()-8*86400000).toISOString();
 const backupOldInstall = JSON.stringify({
   formatVersion:1,
   establishedAt:backupOldEstablishedAt,
@@ -119,8 +121,22 @@ const backupOldInstall = JSON.stringify({
   schemaVersion:3
 });
 const backupReminderSeed = Object.assign({},V2_DATA,{
-  meta:{lastBackup:null,logsSince:0}
+  meta:{lastBackup:null,logsSince:1,firstMeaningfulLogAt:backupOldFirstLogAt}
 });
+
+const FreshBackupReminder = bootRaw({
+  cfg:RAW_V2_CFG,
+  data:JSON.stringify(Object.assign({},EMPTY_DATA,{meta:{lastBackup:null,logsSince:0}})),
+  program:RAW_PROGRAM,
+  install:backupOldInstall
+});
+const dFreshBackupReminder = FreshBackupReminder.window.document;
+check("finishing onboarding does not immediately show a backup reminder",
+  dFreshBackupReminder.getElementById("backupCard").classList.contains("hidden"));
+FreshBackupReminder.window.eval(`bumpLog(); renderBackup();`);
+check("the first meaningful log starts the seven-day reminder clock without showing the card",
+  !!FreshBackupReminder.window.eval("data.meta.firstMeaningfulLogAt")
+  && dFreshBackupReminder.getElementById("backupCard").classList.contains("hidden"));
 
 const BackupReminder = bootRaw({
   cfg:RAW_V2_CFG,
@@ -130,16 +146,18 @@ const BackupReminder = bootRaw({
 });
 const dBackupReminder = BackupReminder.window.document;
 
-check("web backup reminder is due from elapsed time even with zero new logs",
+check("web backup reminder becomes due seven days after the first meaningful log",
   !dBackupReminder.getElementById("backupCard").classList.contains("hidden")
-  && BackupReminder.window.eval("data.meta.logsSince")===0);
+  && BackupReminder.window.eval("data.meta.logsSince")===1);
 
 dBackupReminder.getElementById("backupLaterBtn").dispatchEvent(
   new BackupReminder.window.Event("click",{bubbles:true})
 );
 check("Remind me later stores a future snooze and hides the reminder",
-  Date.parse(BackupReminder.window.eval("data.meta.backupReminderSnoozedUntil"))>Date.now()
-  && dBackupReminder.getElementById("backupCard").classList.contains("hidden"));
+  Date.parse(BackupReminder.window.eval("data.meta.backupReminderSnoozedUntil"))>Date.now()+6*86400000
+  && dBackupReminder.getElementById("backupCard").classList.contains("hidden")
+  && !dBackupReminder.getElementById("backupStatusToast").classList.contains("hidden")
+  && dBackupReminder.getElementById("backupStatusToast").textContent==="Backup reminder postponed for 7 days.");
 
 BackupReminder.window.eval(`
   data.meta.backupReminderSnoozedUntil =
@@ -1114,7 +1132,7 @@ check("native-final hierarchy preserves the existing smaller global labels",
 
 await wait(0);
 releaseTestWindows([
-  A,BackupReminder,CancelBackup,ShareBackup,T49,T49Invalid,T49Switch,T50
+  A,FreshBackupReminder,BackupReminder,CancelBackup,ShareBackup,T49,T49Invalid,T49Switch,T50
 ]);
 
 const MyExercisesParity76=boot(
@@ -2113,7 +2131,7 @@ C62.window.eval(`reviewFoodSuggestion(foodSuggestionCandidates().find(c=>c.food.
 check("v62 a catalog suggestion opens its exact listed serving for review", dC62.getElementById("qtyUnit").value==="serving" && Number(dC62.getElementById("qtyAmount").value)===1 && /4 oz cooked \(113g\)/.test(dC62.getElementById("qtyUnit").selectedOptions[0].textContent));
 check("v62 review shows the USDA per-100g values and correctly scaled serving", /USDA reference · SR28/.test(dC62.getElementById("selName").textContent) && /165 kcal/.test(dC62.getElementById("selPer100").textContent) && dC62.getElementById("calcCal").textContent==="186" && dC62.getElementById("calcPro").textContent==="35");
 check("v62 reviewing a broad-catalog suggestion never auto-logs it", C62.window.eval(`(data.food[todayStr()]||[]).length`)===beforeReview62);
-check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v96"'); })());
+check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v97"'); })());
 check("v62 keeps primary schemaVersion 3", C62.window.eval("SCHEMA_VERSION")===3);
 
 // ================= ChatGPT handoff paste flow =================
@@ -2560,8 +2578,8 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache key matches the BlackPyre web v82 release",
-  /const CACHE = "blackpyre-v96";/.test(sw));
-check("Phase 1 service-worker cache remains refreshed", sw.includes('const CACHE = "blackpyre-v96"') && !sw.includes('blackpyre-phase1-nutrition-safety-1'));
+  /const CACHE = "blackpyre-v97";/.test(sw));
+check("Phase 1 service-worker cache remains refreshed", sw.includes('const CACHE = "blackpyre-v97"') && !sw.includes('blackpyre-phase1-nutrition-safety-1'));
 
 await wait(0);
 releaseTestWindows([
@@ -7930,7 +7948,7 @@ check(
   V78ServiceWorker.includes('"./data-exercise-card-profiles.js"')
   && V78ServiceWorker.includes('"./scripts/03-card-profiles.js"')
   && V78ServiceWorker.includes(
-    'const CACHE = "blackpyre-v96"'
+    'const CACHE = "blackpyre-v97"'
   )
 );
 

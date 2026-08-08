@@ -133,6 +133,12 @@
     padding:10px 12px; box-shadow:0 6px 24px rgba(0,0,0,.45);
   }
   #undoToast .ut-msg{ flex:1; font-size:13px; color:var(--text); }
+  #backupStatusToast {
+    position:fixed; left:18px; right:18px; bottom:calc(76px + env(safe-area-inset-bottom, 0px));
+    z-index:224; padding:13px 14px; border:1px solid var(--ember-deep); border-radius:12px;
+    background:var(--ember); color:#16100B; box-shadow:0 8px 28px rgba(0,0,0,.55);
+    font-size:13px; font-weight:700; line-height:1.45; text-align:center;
+  }
   .exFoot{ display:flex; align-items:center; gap:10px; margin:6px 0 4px; }
   .xbtn.saveExBtn{
     min-height:44px; padding:0 16px; font-weight:700;
@@ -903,8 +909,8 @@
   <div id="view-dash" class="view active" role="tabpanel" aria-labelledby="tab-dash" aria-hidden="false">
     <div id="streakLine" class="note hidden" style="margin:0 0 10px; font-size:12px;"></div>
     <button class="btn hidden" id="nextWorkoutBtn" aria-label="Start the next suggested workout" style="margin-bottom:12px;"></button>
-    <div class="card hidden" id="backupCard" style="border-color:var(--warn);">
-      <div class="label" style="color:var(--warn);">Backup recommended</div>
+    <div class="card hidden" id="backupCard" style="border-color:var(--ember);">
+      <div class="label" style="color:var(--ember);">Backup recommended</div>
       <div id="backupText" style="font-size:13px; line-height:1.7; margin:6px 0 12px;"></div>
       <div class="row">
         <button class="btn ghost small" id="backupNowBtn">Back up now</button>
@@ -2024,6 +2030,7 @@
   </div>
 </div>
 
+<div id="backupStatusToast" class="hidden" role="status" aria-live="polite"></div>
 <div id="undoToast" class="hidden" role="status" aria-live="polite">
   <span class="ut-msg" id="undoMsg"></span>
   <button id="undoBtn" class="btn ghost small">Undo</button>

@@ -735,8 +735,18 @@ document.getElementById("saveSettingsBtn").addEventListener("click", ()=>{
   ackBtn("saveSettingsBtn", "✓ Saved");
 });
 const BACKUP_REMINDER_DAYS = 14;
-const BACKUP_REMINDER_SNOOZE_DAYS = 3;
+const BACKUP_FIRST_REMINDER_DAYS = 7;
+const BACKUP_REMINDER_SNOOZE_DAYS = 7;
 const BACKUP_DAY_MS = 86400000;
+let backupStatusTimer = null;
+function showBackupStatus(message){
+  const toast = document.getElementById("backupStatusToast");
+  if (!toast) return;
+  toast.textContent = message;
+  toast.classList.remove("hidden");
+  clearTimeout(backupStatusTimer);
+  backupStatusTimer = setTimeout(()=>toast.classList.add("hidden"),4000);
+}
 
 function currentBackupMeta(){
   if (!data.meta || typeof data.meta!=="object"){
@@ -910,7 +920,7 @@ function remindBackupLater(){
     new Date(Date.now()+BACKUP_REMINDER_SNOOZE_DAYS*BACKUP_DAY_MS).toISOString();
   save();
   renderBackup();
-  flashSave("Backup reminder postponed for "+BACKUP_REMINDER_SNOOZE_DAYS+" days.");
+  showBackupStatus("Backup reminder postponed for "+BACKUP_REMINDER_SNOOZE_DAYS+" days.");
   return true;
 }
 document.getElementById("exportDataBtn").addEventListener("click", ()=>doBackup("exportDataBtn",false));
@@ -1052,12 +1062,8 @@ function recordedBackupActivity(meta){
 function backupReminderAnchor(meta){
   const activity = recordedBackupActivity(meta);
   if (activity) return {time:activity.time,source:"backup"};
-
-  const marker = installMarkerStatus();
-  const established = marker.ok
-    ? validBackupTime(marker.record.establishedAt,false)
-    : 0;
-  return established ? {time:established,source:"install"} : null;
+  const firstLog = validBackupTime(meta.firstMeaningfulLogAt,false);
+  return firstLog ? {time:firstLog,source:"first-log"} : null;
 }
 function renderBackup(){
   renderStorageUse();
@@ -1094,10 +1100,13 @@ function renderBackup(){
   const anchor = backupReminderAnchor(meta);
   const snoozedUntil = validBackupTime(meta.backupReminderSnoozedUntil,false);
   const snoozed = snoozedUntil>Date.now();
+  const reminderDays = anchor && anchor.source==="first-log"
+    ? BACKUP_FIRST_REMINDER_DAYS
+    : BACKUP_REMINDER_DAYS;
   const due = !!(
     anchor
     && !snoozed
-    && Date.now()-anchor.time >= BACKUP_REMINDER_DAYS*BACKUP_DAY_MS
+    && Date.now()-anchor.time >= reminderDays*BACKUP_DAY_MS
   );
 
   if (!due){
@@ -1110,7 +1119,7 @@ function renderBackup(){
   document.getElementById("backupText").textContent =
     anchor.source==="backup"
       ? "It has been "+days+" days since your last recorded backup activity. Export a fresh copy and save it somewhere you can access later."
-      : "It has been "+days+" days since BlackPyre was established on this device and no backup activity is recorded. Export a copy and save it somewhere you can access later.";
+      : "It has been "+days+" days since your first log and no backup activity is recorded. Export a copy and save it somewhere you can access later.";
 }
 function restoreBackupEnvelope(b){
   if (protectedMode){
