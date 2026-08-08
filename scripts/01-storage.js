@@ -4,6 +4,7 @@ const DATA_KEY = "forge:data", CFG_KEY = "forge:cfg", PROG_KEY = "forge:program"
 const LKG_KEY = "forge:lkg", LKG_PREVIOUS_KEY = "forge:lkg:previous", LKG_OLDER_KEY = "forge:lkg:older";
 const QUARANTINE_KEY = "forge:quarantine", INSTALL_KEY = "forge:install";
 const REST_TIMER_KEY = "forge:rest-timer";
+const BRAND_ONBOARDING_KEY = "forge:brand-onboarding";
 const SCHEMA_VERSION = 3, RECOVERY_FORMAT_VERSION = 1;
 const REST_TIMER_FORMAT_VERSION = 1;
 const AI_CFG_FIELDS = ["anthropicKey","openaiKey","aiProvider","aiModelAnth","aiModelOai","foodHandoffOn"];
@@ -42,6 +43,16 @@ function isPlainObject(v){
   if (!v || Object.prototype.toString.call(v)!=="[object Object]") return false;
   const p = Object.getPrototypeOf(v);
   return p===Object.prototype || p===null;
+}
+function hasCompletedBrandOnboarding(){
+  try { return localStorage.getItem(BRAND_ONBOARDING_KEY)==="1"; }
+  catch(e){ return false; }
+}
+function markBrandOnboardingCompleted(){
+  try {
+    localStorage.setItem(BRAND_ONBOARDING_KEY,"1");
+    return localStorage.getItem(BRAND_ONBOARDING_KEY)==="1";
+  } catch(e){ return false; }
 }
 function cloneJSON(v){ return JSON.parse(JSON.stringify(v)); }
 

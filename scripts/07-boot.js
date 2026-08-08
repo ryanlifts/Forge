@@ -124,6 +124,38 @@ function eggDisarm(){
   t.addEventListener("contextmenu", e=>e.preventDefault()); // iOS long-press callout
 })();
 
+// Mirror Bella's protected title interaction on the Why BlackPyre header.
+let brandEggTimer = null, brandEggBackTimer = null, brandEggActive = false;
+function brandEggShow(){
+  if(brandEggActive) return;
+  brandEggActive = true;
+  document.getElementById("brandStoryBrandTitleText").style.opacity = "0";
+  document.getElementById("brandStoryBellaEgg").style.opacity = "1";
+  brandEggBackTimer = setTimeout(brandEggHide, EGG_SHOW_MS);
+}
+function brandEggHide(){
+  document.getElementById("brandStoryBellaEgg").style.opacity = "0";
+  document.getElementById("brandStoryBrandTitleText").style.opacity = "1";
+  if(brandEggBackTimer){ clearTimeout(brandEggBackTimer); brandEggBackTimer = null; }
+  setTimeout(()=>{ brandEggActive = false; }, 750);
+}
+function brandEggArm(){
+  if(brandEggActive) return;
+  brandEggDisarm();
+  brandEggTimer = setTimeout(brandEggShow, EGG_HOLD_MS);
+}
+function brandEggDisarm(){
+  if(brandEggTimer){ clearTimeout(brandEggTimer); brandEggTimer = null; }
+}
+(function(){
+  const title = document.getElementById("brandStoryBrandTitle");
+  const source = document.getElementById("bellaEgg");
+  title.style.setProperty("--bella",getComputedStyle(source).getPropertyValue("--bella"));
+  title.addEventListener("pointerdown",brandEggArm);
+  ["pointerup","pointercancel","pointerleave"].forEach(ev=>title.addEventListener(ev,brandEggDisarm));
+  title.addEventListener("contextmenu",e=>e.preventDefault());
+})();
+
 function diagnosticAreaText(){
   const d = protectedModeDiagnostic || {};
   const names = {cfg:"settings",data:"logged data",program:"training program",state:"saved state"};
