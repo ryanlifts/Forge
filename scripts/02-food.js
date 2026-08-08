@@ -593,8 +593,11 @@ function buildServingFood(values){
   const amount =
     Number(source.servingAmount);
 
+  const caloriesRaw =
+    source.calories;
+
   const calories =
-    Number(source.calories);
+    Number(caloriesRaw);
 
   const protein =
     Number(source.protein||0);
@@ -614,13 +617,17 @@ function buildServingFood(values){
   }
 
   if (
+    caloriesRaw===""
+    || caloriesRaw===null
+    || caloriesRaw===undefined
+    ||
     !Number.isFinite(calories)
-    || calories<=0
+    || calories<0
   ){
     return {
       ok:false,
       field:"calories",
-      message:"Enter calories greater than 0"
+      message:"Enter valid calories; 0 is allowed"
     };
   }
 
@@ -958,10 +965,19 @@ document.getElementById("cfSaveBtn").addEventListener("click", ()=>{
   const barcode = document.getElementById("cfBarcode").value.trim().replace(/\D/g,"");
   const servingLabel = document.getElementById("cfServingLabel").value.trim();
   const servG = Number(document.getElementById("cfServG").value);
-  const cal = Number(document.getElementById("cfCal").value);
+  const calRaw = document.getElementById("cfCal").value;
+  const cal = Number(calRaw);
 
-  if(!name || !barcode || !servG || !cal){
-    flashSave("Need name, barcode, serving size, calories", true);
+  if(
+    !name
+    || !barcode
+    || !Number.isFinite(servG)
+    || servG<=0
+    || calRaw===""
+    || !Number.isFinite(cal)
+    || cal<0
+  ){
+    flashSave("Need name, barcode, serving size, and valid calories; 0 is allowed", true);
     return;
   }
 
@@ -2433,6 +2449,7 @@ document.getElementById("addManualBtn").addEventListener("click", ()=>{
   const nameInput = document.getElementById("mName");
   const calInput = document.getElementById("mCal");
   const n = nameInput.value.trim();
+  const calRaw = calInput.value;
   const c = Number(calInput.value);
   if(!n){
     flashSave("Enter a food name before adding this entry", true);
@@ -2440,8 +2457,8 @@ document.getElementById("addManualBtn").addEventListener("click", ()=>{
     if (nameInput.scrollIntoView) nameInput.scrollIntoView({behavior:"smooth", block:"center"});
     return;
   }
-  if(!Number.isFinite(c) || c<=0){
-    flashSave("Enter calories greater than 0 before adding this entry", true);
+  if(calRaw==="" || !Number.isFinite(c) || c<0){
+    flashSave("Enter valid calories before adding this entry; 0 is allowed", true);
     calInput.focus();
     if (calInput.scrollIntoView) calInput.scrollIntoView({behavior:"smooth", block:"center"});
     return;

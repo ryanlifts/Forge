@@ -2036,7 +2036,7 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+(?:-\d+)?"/.test(sw));
-check("v90 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v90-16"'));
+check("v90 service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v90-17"'));
 
 const nativePrep76 = fs.readFileSync(
   path.join(__dirname,"..","tools","prepare-native.sh"),
@@ -2592,7 +2592,7 @@ dM56.getElementById("addManualBtn").dispatchEvent(new M56.window.Event("click",{
 check("v56 manual food missing a name explains and focuses the name field", dM56.activeElement===dM56.getElementById("mName") && /food name/.test(dM56.getElementById("saveState").textContent));
 dM56.getElementById("mName").value="Test food"; dM56.getElementById("mCal").value="";
 dM56.getElementById("addManualBtn").dispatchEvent(new M56.window.Event("click",{bubbles:true}));
-check("v56 manual food missing calories explains and focuses calories", dM56.activeElement===dM56.getElementById("mCal") && /calories greater than 0/.test(dM56.getElementById("saveState").textContent));
+check("v56 manual food missing calories explains and focuses calories", dM56.activeElement===dM56.getElementById("mCal") && /valid calories/.test(dM56.getElementById("saveState").textContent));
 
 const P56=boot(V3_CFG,Object.assign({},V2_DATA,{workouts:[{date:deleteDay,day:"D1",title:"History",sets:{},notes:""}]}),null,TEST_PROGRAM);
 P56.window.confirm=()=>false;
