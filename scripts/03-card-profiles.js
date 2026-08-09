@@ -35,6 +35,18 @@
     "other"
   ]);
 
+  // Unit helpers are supplied by the app. The fallbacks keep this standalone
+  // engine deterministic for interchange tooling and isolated contract tests.
+  function runtimeUnitCall(name,args,fallback){
+    const fn=typeof globalThis!=="undefined" ? globalThis[name] : null;
+    return typeof fn==="function" ? fn.apply(null,args) : fallback();
+  }
+  function currentUnitSystem(){return runtimeUnitCall("currentUnitSystem",[],()=>"imperial");}
+  function isMetricSystem(system){return runtimeUnitCall("isMetricSystem",[system],()=>String(system||currentUnitSystem())==="metric");}
+  function poundsFromUnit(value,system){return runtimeUnitCall("poundsFromUnit",[value,system],()=>Number(value));}
+  function poundsToUnit(value,system,digits){return runtimeUnitCall("poundsToUnit",[value,system,digits],()=>Number(value));}
+  function formatBodyWeight(value,system,digits){return runtimeUnitCall("formatBodyWeight",[value,system,digits],()=>Number(value)+" lb");}
+
   function clone(value){
     return value==null ? value : JSON.parse(JSON.stringify(value));
   }
@@ -407,7 +419,9 @@
         }
         case "loadedDistance": {
           draft.count=prescriptionCount(p,"trips","sets") || "";
-          draft.lbs=positiveNumber(p.weight)||"";
+          const prescribedLoad=positiveNumber(p.weight);
+          const canonicalLoad=prescribedLoad===null?null:poundsFromUnit(prescribedLoad,p.weightUnit==="kg"?"metric":"imperial");
+          draft.lbs=canonicalLoad===null?"":poundsToUnit(canonicalLoad,currentUnitSystem(),1);
           draft.distance=positiveNumber(p.distance)||"";
           if (p.distanceUnit && distanceUnits.includes(p.distanceUnit)) draft.distanceUnit=p.distanceUnit;
           assignDuration(draft,"duration",positiveNumber(p.durationSeconds)||0,false);
@@ -775,8 +789,9 @@
           return {ok:true,value:value};
         }
         case "loadedDistance": {
-          const load=positiveNumber(d.lbs);
-          if (load===null) return {ok:false,message:"enter the load.",field:"lbs"};
+          const displayedLoad=positiveNumber(d.lbs);
+          if (displayedLoad===null) return {ok:false,message:"enter the load.",field:"lbs"};
+          const load=poundsFromUnit(displayedLoad,currentUnitSystem());
           const distance=positiveNumber(d.distance);
           if (distance===null) return {ok:false,message:"enter the distance.",field:"distance"};
           if (!distanceUnits.includes(d.distanceUnit)) return {ok:false,message:"choose a distance unit.",field:"distanceUnit"};
@@ -887,7 +902,7 @@
             return draft;
           case "loadedDistance":
             draft.count=value.count!==undefined ? value.count : "";
-            draft.lbs=value.lbs;
+            draft.lbs=poundsToUnit(value.lbs,currentUnitSystem(),1);
             draft.distance=value.dist;
             if (value.distUnit) draft.distanceUnit=value.distUnit;
             if (value.secs!==undefined) assignDuration(draft,"duration",value.secs,false);
@@ -931,7 +946,7 @@
       }
 
       if (profile==="loadedDistance" && type==="carry"){
-        draft.lbs=value.lbs;
+        draft.lbs=poundsToUnit(value.lbs,currentUnitSystem(),1);
         draft.distance=value.dist;
         if (value.distUnit) draft.distanceUnit=value.distUnit;
         return draft;
@@ -1016,7 +1031,7 @@
           return parts.filter(Boolean).join(" · ");
         case "loadedDistance":
           if (value.count!==undefined) parts.push(formatCount(value.count,"trip / set","trips / sets"));
-          parts.push(value.lbs+" lb");
+          parts.push(formatBodyWeight(value.lbs,currentUnitSystem(),1));
           parts.push(value.dist+" "+value.distUnit);
           if (value.secs!==undefined) parts.push(formatSeconds(value.secs));
           if (value.recSecs!==undefined) parts.push(formatSeconds(value.recSecs)+" recovery");
@@ -1104,7 +1119,7 @@
         case "loadedDistance":
           return [
             {key:"count",label:(opts.countLabel||"Trips / sets")+" (optional)",type:"number",inputMode:"numeric"},
-            {key:"lbs",label:(opts.loadLabel||"Load")+" in pounds (required)",type:"number",inputMode:"decimal",required:true},
+            {key:"lbs",label:(opts.loadLabel||"Load")+" in "+(isMetricSystem()?"kilograms":"pounds")+" (required)",type:"number",inputMode:"decimal",required:true},
             {key:"distance",label:"Distance (required)",type:"number",inputMode:"decimal",required:true},
             {key:"distanceUnit",label:"Distance unit (required)",type:"select",options:distanceUnits,required:true},
             {key:"durationMinutes",label:"Duration minutes (optional)",type:"number",inputMode:"numeric"},

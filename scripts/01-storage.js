@@ -7,9 +7,28 @@ const REST_TIMER_KEY = "forge:rest-timer";
 const BRAND_ONBOARDING_KEY = "forge:brand-onboarding";
 const SCHEMA_VERSION = 3, RECOVERY_FORMAT_VERSION = 1;
 const REST_TIMER_FORMAT_VERSION = 1;
-const AI_CFG_FIELDS = ["anthropicKey","openaiKey","aiProvider","aiModelAnth","aiModelOai","foodHandoffOn"];
+const DEVICE_LOCAL_CFG_FIELDS = ["foodHandoffOn"];
 
-const DEFAULT_CFG = { startWt:0, goalWt:0, calTarget:0, proTarget:0, carbGoal:0, fatGoal:0, accent:"gold", aiProvider:"handoff", foodHandoffOn:true, autoProgressionOn:false, foodSuggestionsOn:false, foodSuggestionsWeightLoss:true, foodSuggestionsAvoid:"" };
+const DEFAULT_CFG = { startWt:0, goalWt:0, calTarget:0, proTarget:0, carbGoal:0, fatGoal:0, unitSystem:"imperial", accent:"gold", foodHandoffOn:true, autoProgressionOn:false, foodSuggestionsOn:false, foodSuggestionsWeightLoss:true, foodSuggestionsAvoid:"" };
+const LB_TO_KG = 0.45359237;
+const IN_TO_CM = 2.54;
+const SUPPORTED_GOAL_ADJUSTMENTS = Object.freeze([-1000,-500,-250,0,250]);
+function normalizedUnitSystem(value){ return value==="metric" ? "metric" : "imperial"; }
+function currentUnitSystem(){ return normalizedUnitSystem(typeof cfg!=="undefined"&&cfg?cfg.unitSystem:DEFAULT_CFG.unitSystem); }
+function isMetricSystem(system){ return normalizedUnitSystem(system===undefined?currentUnitSystem():system)==="metric"; }
+function unitWeightLabel(system){ return isMetricSystem(system)?"kg":"lb"; }
+function unitMeasurementLabel(system){ return isMetricSystem(system)?"cm":"in"; }
+function roundUnitValue(value,digits){ const n=Number(value),p=Number.isInteger(digits)?digits:1;if(!Number.isFinite(n))return null;const f=Math.pow(10,p);return Math.round((n+Number.EPSILON)*f)/f; }
+function poundsToUnit(value,system,digits){ const n=Number(value);return Number.isFinite(n)?roundUnitValue(isMetricSystem(system)?n*LB_TO_KG:n,digits===undefined?1:digits):null; }
+function poundsFromUnit(value,system){ const n=Number(value);return Number.isFinite(n)?(isMetricSystem(system)?n/LB_TO_KG:n):null; }
+function inchesToUnit(value,system,digits){ const n=Number(value);return Number.isFinite(n)?roundUnitValue(isMetricSystem(system)?n*IN_TO_CM:n,digits===undefined?1:digits):null; }
+function inchesFromUnit(value,system){ const n=Number(value);return Number.isFinite(n)?(isMetricSystem(system)?n/IN_TO_CM:n):null; }
+function formatBodyWeight(value,system,digits){ const shown=poundsToUnit(value,system,digits===undefined?1:digits);return shown===null?"":shown+" "+unitWeightLabel(system); }
+function trainingStepPounds(system){ return isMetricSystem(system)?2.5/LB_TO_KG:5; }
+function trainingStepDisplay(system){ return isMetricSystem(system)?2.5:5; }
+function totalInchesFromFeetInches(feet,inches){ return Number(feet)*12+Number(inches); }
+function feetInchesFromTotalInches(total){ const n=Number(total);if(!Number.isFinite(n))return{ft:null,inches:null};const ft=Math.floor(n/12);return{ft:ft,inches:roundUnitValue(n-ft*12,2)}; }
+function goalRateLabel(value,system){ const labels=isMetricSystem(system)?{"-1000":"Lose 1 kg/week (aggressive)","-500":"Lose 0.5 kg/week","-250":"Lose 0.25 kg/week","0":"Maintain","250":"Gain 0.25 kg/week (lean bulk)"}:{"-1000":"Lose 2 lb/week (aggressive)","-500":"Lose 1 lb/week","-250":"Lose 0.5 lb/week","0":"Maintain","250":"Gain 0.5 lb/week (lean bulk)"};return labels[String(value)]||"Maintain"; }
 const ACCENT_KEYS = ["ember","steel","emerald","crimson","violet","gold","pink"];
 
 const DEFAULT_PROGRAM = {
@@ -204,14 +223,15 @@ function validateDailyCalories(value,label,field){
   }
   return {ok:true,value:n};
 }
-function validateSupportedWeight(value,label,allowEmpty,field){
+function validateSupportedWeight(value,label,allowEmpty,field,system){
   const n=finiteNutritionNumber(value);
   const fields=field?[field]:[];
+  const range=isMetricSystem(system)?"23 and 318 kg":"50 and 700 lb";
   if (n===null || n===0){
-    return allowEmpty ? {ok:true,value:0,present:false} : {ok:false,message:"Enter "+String(label||"weight").toLowerCase()+" between 50 and 700 lb.",fields:fields};
+    return allowEmpty ? {ok:true,value:0,present:false} : {ok:false,message:"Enter "+String(label||"weight").toLowerCase()+" between "+range+".",fields:fields};
   }
   if (n<NUTRITION_SAFETY.minWeightLb || n>NUTRITION_SAFETY.maxWeightLb){
-    return {ok:false,message:(label||"Weight")+" must be between 50 and 700 lb.",fields:fields};
+    return {ok:false,message:(label||"Weight")+" must be between "+range+".",fields:fields};
   }
   return {ok:true,value:n,present:true};
 }
@@ -265,9 +285,9 @@ function validateCalorieSchedule(baseValue,modeValue,customDays){
 }
 function validateNutritionSettingsDraft(draft){
   const source=draft||{};
-  const start=validateSupportedWeight(source.startWt,"Start weight",true,"startWt");
+  const start=validateSupportedWeight(source.startWt,"Start weight",true,"startWt",source.unitSystem);
   if (!start.ok) return start;
-  const goal=validateSupportedWeight(source.goalWt,"Goal weight",true,"goalWt");
+  const goal=validateSupportedWeight(source.goalWt,"Goal weight",true,"goalWt",source.unitSystem);
   if (!goal.ok) return goal;
   const calories=validateDailyCalories(source.calTarget,"Daily calorie target","calTarget");
   if (!calories.ok) return calories;
@@ -286,20 +306,25 @@ function validateNutritionSettingsDraft(draft){
 }
 function validateNutritionCalculatorInput(input){
   const x=input||{};
+  const system=normalizedUnitSystem(x.unitSystem===undefined?currentUnitSystem():x.unitSystem);
   if (x.sex!=="m" && x.sex!=="f") return {ok:false,message:"Choose a supported sex value for the calorie estimate.",fields:["sex"]};
   const age=finiteNutritionNumber(x.age);
   if (age!==null && age<NUTRITION_SAFETY.minAge) return {ok:false,message:"The calculator supports ages 13–100. It is not designed for children under 13.",fields:["age"]};
   if (!Number.isInteger(age) || age>NUTRITION_SAFETY.maxAge) return {ok:false,message:"Age must be a whole number from 13 to 100.",fields:["age"]};
   const feet=finiteNutritionNumber(x.ft);
   const inches=finiteNutritionNumber(x.inches===undefined?0:x.inches);
-  if (!Number.isInteger(feet) || !Number.isInteger(inches) || inches<0 || inches>11){
-    return {ok:false,message:"Enter height using whole feet and 0–11 inches.",fields:["ft","inches"]};
+  if (!Number.isInteger(feet) || inches===null || inches<0 || inches>=12){
+    return isMetricSystem(system)
+      ? {ok:false,message:"Enter height in centimeters.",fields:["cm"]}
+      : {ok:false,message:"Enter height using whole feet and 0–11.99 inches.",fields:["ft","inches"]};
   }
   const totalInches=feet*12+inches;
   if (totalInches<NUTRITION_SAFETY.minHeightInches || totalInches>NUTRITION_SAFETY.maxHeightInches){
-    return {ok:false,message:"Height must be between 48 and 96 total inches.",fields:["ft","inches"]};
+    return isMetricSystem(system)
+      ? {ok:false,message:"Height must be between 122 and 244 cm.",fields:["cm"]}
+      : {ok:false,message:"Height must be between 48 and 96 total inches.",fields:["ft","inches"]};
   }
-  const weight=validateSupportedWeight(x.lb,"Weight",false,"lb");
+  const weight=validateSupportedWeight(x.lb,"Weight",false,"lb",system);
   if (!weight.ok) return weight;
   const activity=finiteNutritionNumber(x.activity);
   if (!nutritionActivityOption(activity)){
@@ -309,7 +334,7 @@ function validateNutritionCalculatorInput(input){
   if (!NUTRITION_SAFETY.goalAdjustments.includes(goalAdjustment)){
     return {ok:false,message:"Choose a supported weight-goal rate.",fields:["goalAdj"]};
   }
-  return {ok:true,value:{sex:x.sex,age:age,ft:feet,inches:inches,totalInches:totalInches,lb:weight.value,activity:activity,goalAdj:goalAdjustment}};
+  return {ok:true,value:{sex:x.sex,age:age,ft:feet,inches:inches,totalInches:totalInches,lb:weight.value,activity:activity,goalAdj:goalAdjustment,unitSystem:system}};
 }
 function youthEnergyMaintenance(x,kg,cm){
   const option=nutritionActivityOption(x.activity);
@@ -805,10 +830,18 @@ function migrateTargets(obj){
   if (!Number.isFinite(obj.calTarget) && Number.isFinite(obj.calLo) && Number.isFinite(obj.calHi)) obj.calTarget = Math.round((obj.calLo+obj.calHi)/2);
   if (!Number.isFinite(obj.proTarget) && Number.isFinite(obj.proLo) && Number.isFinite(obj.proHi)) obj.proTarget = Math.round((obj.proLo+obj.proHi)/2);
 }
-function migrateCfgObject(obj){
-  // Phase 2 removed live USDA credentials. Scrub any legacy value from
-  // device storage so it cannot remain unused or enter normal backups.
+function scrubRetiredCredentials(obj){
+  if (!obj || typeof obj!=="object") return obj;
   delete obj.usdaKey;
+  Object.keys(obj).forEach(k=>{
+    if (/^(?:anthropic|openai|aiProvider|aiModel)/.test(k)) delete obj[k];
+  });
+  return obj;
+}
+function migrateCfgObject(obj){
+  // Scrub retired credentials and direct-AI provider settings so legacy
+  // installs cannot retain or restore unused secrets.
+  scrubRetiredCredentials(obj);
   ["startWt","goalWt","calTarget","proTarget","carbGoal","fatGoal"].forEach(k=>{
     const v = Number(obj[k]);
     obj[k] = Number.isFinite(v) && v>0 ? v : 0;
@@ -904,6 +937,7 @@ function prepareState(rawCfg, rawData, rawProgram, options){
 
   const rawCfgObj = parsed.cfg.missing ? {} : cloneJSON(parsed.cfg.value);
   const hadDeprecatedUsdaKey = hasOwn(rawCfgObj,"usdaKey");
+  const hadRetiredDirectAI = Object.keys(rawCfgObj).some(k=>/^(?:anthropic|openai|aiProvider|aiModel)/.test(k));
   // v66 introduced this setting without changing the primary schema. A truly fresh
   // install has no settings record and starts with progression off. Any pre-v66
   // settings record that lacks the field is an existing install and keeps the old
@@ -924,7 +958,7 @@ function prepareState(rawCfg, rawData, rawProgram, options){
     program:parsed.program.missing ? cloneJSON(DEFAULT_PROGRAM) : cloneJSON(parsed.program.value)
   };
   const changed = {cfg:false, data:false, program:false};
-  if (hadDeprecatedUsdaKey) changed.cfg = true;
+  if (hadDeprecatedUsdaKey || hadRetiredDirectAI) changed.cfg = true;
   try {
     let current = version;
     while (current<SCHEMA_VERSION){
@@ -1372,12 +1406,12 @@ function prepareRecoveryBackupEnvelope(b){
     if (present.cfg){
       cfgObj = cloneJSON(b.cfg);
       if (isPlainObject(cfgObj) && bestCfg){
-        AI_CFG_FIELDS.forEach(k=>{ if (!hasOwn(cfgObj,k) && bestCfg[k]!==undefined) cfgObj[k]=bestCfg[k]; });
+        DEVICE_LOCAL_CFG_FIELDS.forEach(k=>{ if (!hasOwn(cfgObj,k) && bestCfg[k]!==undefined) cfgObj[k]=bestCfg[k]; });
       }
     } else {
       cfgObj = parts.cfg.usable ? cloneJSON(parts.cfg.value) : currentSchemaCfg();
       if (!parts.cfg.usable && bestCfg){
-        AI_CFG_FIELDS.forEach(k=>{ if (bestCfg[k]!==undefined) cfgObj[k]=bestCfg[k]; });
+        DEVICE_LOCAL_CFG_FIELDS.forEach(k=>{ if (bestCfg[k]!==undefined) cfgObj[k]=bestCfg[k]; });
       }
     }
     dataObj = present.data ? cloneJSON(b.data) : (parts.data.usable ? cloneJSON(parts.data.value) : makeDefaultData());
@@ -1713,7 +1747,7 @@ function save(){
 function saveCfg(){
   if (blockProtectedWrite() || blockUnexpectedPrimaryLossBeforeWrite()) return false;
   let raw;
-  try { raw = JSON.stringify(cfg); }
+  try { scrubRetiredCredentials(cfg); raw = JSON.stringify(cfg); }
   catch(e){ flashSave("Save failed", true); return false; }
   const written = writePrimaryString(CFG_KEY, raw);
   if (!written.ok){ flashSave("Save failed", true); return false; }
@@ -1803,7 +1837,7 @@ function isOffline(){ return navigator.onLine===false; }
 
 // ================== ACCESSIBILITY ==================
 const ACCESSIBLE_DYNAMIC_NAMES = {
-  suWt:"Current body weight in pounds", suGoalWt:"Goal body weight in pounds",
+  suWt:"Current body weight", suGoalWt:"Goal body weight",
   suSex:"Sex used for calorie calculation", suAge:"Age in years", suFt:"Height feet", suIn:"Height inches",
   suAct:"Activity level", suGoal:"Weight goal rate", suSpP:"Protein percentage",
   suSpC:"Carbohydrate percentage", suSpF:"Fat percentage", suSched:"Calorie schedule mode",
@@ -1938,7 +1972,7 @@ function inferredControlName(el){
   if (el.id && ACCESSIBLE_DYNAMIC_NAMES[el.id]) return ACCESSIBLE_DYNAMIC_NAMES[el.id];
   if (el.dataset && el.dataset.exercise && el.dataset.field){
     const setNo = setNumberFor(el);
-    return exerciseNameFor(el)+(setNo ? " set "+setNo : "")+" "+(el.dataset.field==="weight" ? "weight in pounds" : "repetitions");
+    return exerciseNameFor(el)+(setNo ? " set "+setNo : "")+" "+(el.dataset.field==="weight" ? "weight in "+(isMetricSystem()?"kilograms":"pounds") : "repetitions");
   }
   if (el.classList && el.classList.contains("bname")){
     return el.closest(".bday") && el.closest(".row") ? "Program day name" : "Exercise name";
@@ -1950,8 +1984,8 @@ function inferredControlName(el){
     if (title) return title;
     const text=el.textContent.trim();
     const ex=exerciseNameFor(el), setNo=setNumberFor(el), where=setNo ? " for "+ex+" set "+setNo : "";
-    if (text==="−5" || text==="-5") return "Decrease weight by 5 pounds"+where;
-    if (text==="+5") return "Increase weight by 5 pounds"+where;
+    if (text==="−5" || text==="-5" || text==="−2.5" || text==="-2.5") return "Decrease weight by "+trainingStepDisplay()+" "+(isMetricSystem()?"kilograms":"pounds")+where;
+    if (text==="+5" || text==="+2.5") return "Increase weight by "+trainingStepDisplay()+" "+(isMetricSystem()?"kilograms":"pounds")+where;
     if (text==="−1" || text==="-1") return "Decrease repetitions by 1"+where;
     if (text==="+1") return "Increase repetitions by 1"+where;
     if (text==="↑") return "Move exercise up";

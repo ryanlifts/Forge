@@ -54,18 +54,18 @@ const FAQ = [
 
   {q:"Why is BlackPyre suggesting that I review my targets?", a:"As your weight changes, your estimated calorie needs can change too. BlackPyre may suggest reopening the calculator after a meaningful change. Nothing updates automatically; you decide whether to recalculate and save new targets."},
 
-  {q:"What can the optional AI tools do, and what information is sent?", a:"Optional AI tools can help estimate foods, discuss your progress, or help create training programs. Some tools copy or share a prompt for you; connected tools send only the prompt, report, or photo you choose to the selected AI service. Photos and raw replies are not kept after processing. Review every result before saving it. AI food estimates are estimates."},
+  {q:"What can the optional AI tools do, and what information is sent?", a:"Optional AI tools can help estimate foods, discuss your progress, or create training programs through copy/paste handoffs. BlackPyre never contacts an AI service. You choose what to copy, share, or paste into your own AI app. Selected photos stay in memory only for the handoff and raw replies are cleared after review. Review every result before saving it. AI food estimates are estimates."},
 
 
   {sec:"Your data & recovery"},
 
-  {q:"Where is my data stored? Is it private?", a:"Your settings, logs, program, saved foods, and recovery data are stored in BlackPyre’s browser/PWA site storage on this device. BlackPyre has no user account or central BlackPyre database that can read your personal log. Online searches send the search or barcode request to the online food service, and optional AI features send only the information you choose when you use them."},
+  {q:"Where is my data stored? Is it private?", a:"Your settings, logs, program, saved foods, and recovery data are stored in BlackPyre’s browser/PWA site storage on this device. BlackPyre has no user account or central BlackPyre database that can read your personal log. Online food searches send only the search or barcode request to the online food service. BlackPyre never transmits your logs, prompts, reports, or photos to an AI service; you control any copy, paste, or share handoff."},
 
-  {q:"How do I back up or move BlackPyre to another device?", a:"Open <b>Settings → Data &amp; recovery</b>. Create a backup on the device or use the share/save option to keep another copy somewhere safe. On another device, install BlackPyre and restore that backup. Private AI access keys are excluded from normal backups and must be entered again."},
+  {q:"How do I back up or move BlackPyre to another device?", a:"Open <b>Settings → Data &amp; recovery</b>. Create a backup on the device or use the share/save option to keep another copy somewhere safe. On another device, install BlackPyre and restore that backup."},
 
   {q:"What is Protected mode, and what if my data disappears?", a:"If BlackPyre cannot safely read established saved data, it pauses normal saving instead of replacing it with empty information. <b>Do not remove the installed web app or clear its site data.</b> Open recovery and choose a validated recovery snapshot or one of your own backups. BlackPyre preserves the original saved information while recovery is being handled."},
 
-  {q:"What works without an internet connection?", a:"Your saved foods, manual food logging, local suggestions, workouts, workout drafts, weights, measurements, water, programs, backups, and recovery features continue to work. Saved barcodes can still load local foods. New online searches, unknown barcode lookups, and live connected AI features need a connection."},
+  {q:"What works without an internet connection?", a:"Your saved foods, manual food logging, local suggestions, workouts, workout drafts, weights, measurements, water, programs, AI handoff prompts, backups, and recovery features continue to work. Saved barcodes can still load local foods. Only new online food searches and unknown barcode lookups need a connection."},
 
 
   {sec:"Legal"},

@@ -15,11 +15,24 @@ check("no live USDA credential or request path ships",
   !/DEFAULT_USDA_KEY|effectiveUsdaKey|searchUSDA|mapUSDA|api\.nal\.usda\.gov|api_key=/i.test(shippedSource));
 check("settings and onboarding no longer expose USDA-key controls",
   !/sUsdaKey|saveUsdaBtn|suUsda|api-key-signup/i.test(shippedSource));
+check("web app ships no direct AI endpoint, credential field, provider link, or live-chat control",
+  !/api\.openai\.com|api\.anthropic\.com|sOpenaiKey|sAnthropicKey|sAiProvider|sAiModel|saveAiBtn|platform\.openai\.com|console\.anthropic\.com|coachOverlay|coachOpenBtn/.test(shippedSource));
 
 const migrated = boot(Object.assign({},EXISTING_CFG,{usdaKey:"legacy-device-secret"}),EMPTY_DATA);
 check("legacy saved USDA credentials are scrubbed during healthy boot",
   migrated.window.eval(`!Object.prototype.hasOwnProperty.call(cfg,"usdaKey")`) &&
   !Object.prototype.hasOwnProperty.call(JSON.parse(migrated.window.localStorage.getItem("forge:cfg")),"usdaKey"));
+const retiredAI = boot(Object.assign({},EXISTING_CFG,{
+  aiProvider:"anthropic",anthropicKey:"legacy-a",openaiKey:"legacy-o",aiModelAnth:"legacy-model"
+}),EMPTY_DATA);
+const retiredStoredCfg = JSON.parse(retiredAI.window.localStorage.getItem("forge:cfg"));
+check("legacy direct-AI credentials and provider settings are scrubbed from runtime and storage",
+  ["aiProvider","anthropicKey","openaiKey","aiModelAnth"].every(key=>
+    !Object.prototype.hasOwnProperty.call(retiredAI.window.eval("cfg"),key)
+    && !Object.prototype.hasOwnProperty.call(retiredStoredCfg,key)));
+check("copy/paste food handoff remains available after direct AI removal",
+  !retiredAI.window.document.getElementById("aiFoodCard").classList.contains("hidden")
+  && !retiredAI.window.document.getElementById("aiHandoffControls").classList.contains("hidden"));
 check("settings explain the food source and manual fallback without obsolete setup language",
   !/No account or API key is needed/.test(migrated.window.document.getElementById("settingsServicesDetails").textContent) &&
   /Open Food Facts/.test(migrated.window.document.getElementById("settingsServicesDetails").textContent) &&
@@ -551,7 +564,7 @@ check("normal backups exclude a legacy USDA credential",
   !backupText.includes("should-never-export") &&
   !Object.prototype.hasOwnProperty.call(JSON.parse(backupText).cfg,"usdaKey"));
 
-check("service worker cache is bumped for the current release",/blackpyre-v97/.test(fs.readFileSync(path.join(root,"sw.js"),"utf8")));
+check("service worker cache is bumped for the current release",/blackpyre-v101/.test(fs.readFileSync(path.join(root,"sw.js"),"utf8")));
 
 
 const ServingReviewCorrection = boot(

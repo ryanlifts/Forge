@@ -10,9 +10,9 @@ function renderJourney(){
   pct = Math.max(0, Math.min(1, pct));
   document.getElementById("jyFill").style.width = (pct*100)+"%";
   document.getElementById("jyDot").style.left = (pct*100)+"%";
-  document.getElementById("jyNow").textContent = (pct>=1 ? "✓ " : "") + cur + " lb";
-  document.getElementById("jyStart").textContent = cfg.startWt + " start";
-  document.getElementById("jyGoal").textContent = cfg.goalWt + " goal";
+  document.getElementById("jyNow").textContent = (pct>=1 ? "✓ " : "") + formatBodyWeight(cur,currentUnitSystem(),1);
+  document.getElementById("jyStart").textContent = poundsToUnit(cfg.startWt,currentUnitSystem(),1) + " start";
+  document.getElementById("jyGoal").textContent = poundsToUnit(cfg.goalWt,currentUnitSystem(),1) + " goal";
   renderJourneyMsg();
 }
 function renderDash(){
@@ -28,10 +28,11 @@ function renderDash(){
     toGo=Math.abs(cur-cfg.goalWt);
     pct=Math.max(0,Math.min(100,(moved/total)*100));
   }
-  document.getElementById("dashWt").textContent=cur==null?"—":cur;
+  document.getElementById("dashWt").textContent=cur==null?"—":poundsToUnit(cur,currentUnitSystem(),1);
+  document.getElementById("dashWtUnit").textContent=" "+unitWeightLabel();const dashInput=document.getElementById("dashWtInput");dashInput.placeholder="Today's "+unitWeightLabel();dashInput.setAttribute("aria-label","Today’s body weight in "+(isMetricSystem()?"kilograms":"pounds"));
   document.getElementById("dashWtNote").textContent=(cur==null||!hasStart||!hasGoal)
     ? "Set your bodyweight goal in Settings"
-    : (moved>0?((cfg.startWt>cfg.goalWt?"−":"+")+moved.toFixed(1)+" lb · "):"Baseline · ")+toGo.toFixed(1)+" to go";
+    : (moved>0?((cfg.startWt>cfg.goalWt?"−":"+")+poundsToUnit(moved,currentUnitSystem(),1)+" "+unitWeightLabel()+" · "):"Baseline · ")+poundsToUnit(toGo,currentUnitSystem(),1)+" "+unitWeightLabel()+" to go";
   document.getElementById("dashPct").textContent=pct.toFixed(0);
   document.getElementById("dashPctFill").style.width=pct+"%";
   const t=todayStr(), s=daySums(t);
@@ -63,7 +64,7 @@ function renderNextWorkout(){
   btn.textContent = "Start next: "+(nd.id?nd.id+" · ":"")+nd.title;
   btn.classList.remove("hidden");
 }
-function renderAll(){ renderDash(); renderFood(); renderWork(); renderWeight(); renderSettings(); renderMeals(); renderPRs(); renderTDEE(); renderNextWorkout(); renderWeek(); renderProjection(); renderMeasureToggle(); renderMeasure(); renderWater(); renderAccentRow(); renderBackup();
+function renderAll(){ renderDash(); renderFood(); renderWork(); renderWeight(); renderSettings(); renderMeals(); renderPRs(); renderTDEE(); renderNextWorkout(); renderWeek(); renderProjection(); renderMeasureToggle(); renderMeasure(); renderWater(); renderAccentRow(); renderPlateUnits(); renderBackup();
   const st = computeStreak();
   const sl = document.getElementById("streakLine");
   if (st>=2){ sl.textContent = ""+st+"-day logging streak — keep the chain alive"; sl.classList.remove("hidden"); }

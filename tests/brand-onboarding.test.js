@@ -70,12 +70,11 @@ check("food shortcuts and Help & FAQ use the accent outline",
   && (index.match(/btn ghost small accent-outline/g)||[]).length>=3
   && /\.btn\.ghost\.accent-outline \{ border-color:var\(--ember\); \}/.test(index));
 
-check("handoff wording is provider-neutral outside provider-specific API settings",
+check("handoff wording is provider-neutral and contains no API-key setup",
   /Paste AI reply &amp; review/.test(index)
   && /AI food handoff/.test(index)
-  && /AI handoff — no key, copy &amp; paste/.test(index)
   && !/ChatGPT food handoff|ChatGPT handoff — no key|Paste ChatGPT/.test(index)
-  && !/No account or API key is needed/.test(index));
+  && !/No account or API key is needed|API key|Live AI provider/.test(index));
 
 const bellaCss=(index.match(/#bellaEgg\{.*?\.bar \.fill\.over \{ background:var\(--warn\); \}/s)||[])[0]||"";
 const bellaTitle=(index.match(/<h1 id="bpTitle".*?<\/h1>/s)||[])[0]||"";

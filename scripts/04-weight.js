@@ -17,7 +17,7 @@ function weighInDateTimeLabel(entry){
 document.getElementById("wtDate").value = todayStr();
 document.getElementById("wtTime").value = currentTimeValue();
 document.getElementById("addWtBtn").addEventListener("click", ()=>{
-  const v = Number(document.getElementById("wtVal").value);
+  const v = poundsFromUnit(document.getElementById("wtVal").value,currentUnitSystem());
   const dt = document.getElementById("wtDate").value;
   const tm = document.getElementById("wtTime").value;
   if(!v || v<50 || v>700 || !validWeighInTime(tm)) return;
@@ -29,7 +29,7 @@ document.getElementById("addWtBtn").addEventListener("click", ()=>{
     const cutting = cfg.goalWt < cfg.startWt;
     if ((cutting && v > cfg.startWt) || (!cutting && v < cfg.startWt)){
       cfg.startWt = v; saveCfg();
-      flashSave("Starting line set at "+v+" — the journey begins today");
+      flashSave("Starting line set at "+formatBodyWeight(v,currentUnitSystem(),1)+" — the journey begins today");
     }
   }
   save(); renderWeight(); renderDash(); renderProjection(); renderWeek();
@@ -37,8 +37,9 @@ document.getElementById("addWtBtn").addEventListener("click", ()=>{
 });
 
 function renderWeight(){
+  const metric=isMetricSystem(),unit=unitWeightLabel();document.getElementById("wtValLabel").textContent="Weight ("+unit+")";document.getElementById("wtVal").placeholder=metric?"e.g. 100.4":"e.g. 221.4";document.getElementById("wtVal").setAttribute("aria-label","Body weight in "+(metric?"kilograms":"pounds"));
   const goals = Number(cfg.startWt)>0 && Number(cfg.goalWt)>0;
-  document.getElementById("chartLabel").textContent = goals ? ("Trend · "+cfg.startWt+" → "+cfg.goalWt) : "Trend";
+  document.getElementById("chartLabel").textContent = goals ? ("Trend · "+(metric?formatBodyWeight(cfg.startWt,currentUnitSystem(),1)+" → "+formatBodyWeight(cfg.goalWt,currentUnitSystem(),1):cfg.startWt+" → "+cfg.goalWt)) : "Trend";
   const sorted = data.weights.slice().sort((a,b)=>a.date.localeCompare(b.date));
   const w=640,h=230,pad=38;
   const all=(goals?[{date:"start",lbs:cfg.startWt}]:[]).concat(sorted);
@@ -59,14 +60,14 @@ function renderWeight(){
   const pts=all.map((p,i)=>x(i)+","+y(p.lbs)).join(" ");
   let grid=""; for(let i=0;i<5;i++){const gy=pad+(i/4)*(h-pad*2); grid+='<line x1="'+pad+'" x2="'+(w-pad)+'" y1="'+gy+'" y2="'+gy+'" stroke="var(--border)" stroke-width="1"/>';}
   const dots=all.map((p,i)=>'<circle cx="'+x(i)+'" cy="'+y(p.lbs)+'" r="4.5" fill="var(--panel)" stroke="var(--ember)" stroke-width="2.5"/>'
-    +'<text x="'+x(i)+'" y="'+(y(p.lbs)-11)+'" text-anchor="middle" font-size="10" fill="var(--text)" font-family="IBM Plex Mono">'+p.lbs+'</text>').join("");
+    +'<text x="'+x(i)+'" y="'+(y(p.lbs)-11)+'" text-anchor="middle" font-size="10" fill="var(--text)" font-family="IBM Plex Mono">'+poundsToUnit(p.lbs,currentUnitSystem(),1)+'</text>').join("");
   document.getElementById("chart").innerHTML =
   '<svg viewBox="0 0 '+w+' '+h+'">'
     +'<defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="var(--ember-deep)"/><stop offset="100%" stop-color="var(--ember)"/></linearGradient>'
     +'<linearGradient id="fg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(var(--ember-rgb),.25)"/><stop offset="100%" stop-color="rgba(var(--ember-rgb),0)"/></linearGradient></defs>'
     +grid
     +(goals ? '<line x1="'+pad+'" x2="'+(w-pad)+'" y1="'+y(cfg.goalWt)+'" y2="'+y(cfg.goalWt)+'" stroke="var(--ok)" stroke-width="1.5" stroke-dasharray="6 5"/>'
-    +'<text x="'+(w-pad)+'" y="'+(y(cfg.goalWt)-7)+'" text-anchor="end" font-size="11" fill="var(--ok)" font-family="IBM Plex Mono">GOAL '+cfg.goalWt+'</text>' : "")
+    +'<text x="'+(w-pad)+'" y="'+(y(cfg.goalWt)-7)+'" text-anchor="end" font-size="11" fill="var(--ok)" font-family="IBM Plex Mono">GOAL '+poundsToUnit(cfg.goalWt,currentUnitSystem(),1)+' '+unitWeightLabel()+'</text>' : "")
     +(all.length>1?('<polygon points="'+pts+' '+x(all.length-1)+','+(h-pad)+' '+x(0)+','+(h-pad)+'" fill="url(#fg)"/>'
       +'<polyline points="'+pts+'" fill="none" stroke="url(#lg)" stroke-width="3" stroke-linecap="round"/>'):"")
     +dots
@@ -76,7 +77,7 @@ function renderWeight(){
   card.classList.remove("hidden");
   document.getElementById("wtList").innerHTML=sorted.slice().reverse().map(wp=>
     '<div class="list-item"><span style="flex:1; color:var(--dim);">'+weighInDateTimeLabel(wp)+'</span>'
-    +'<span style="flex:1; text-align:right; font-weight:600;">'+wp.lbs+' lb</span>'
+    +'<span style="flex:1; text-align:right; font-weight:600;">'+formatBodyWeight(wp.lbs,currentUnitSystem(),1)+'</span>'
     +'<button class="del delWt" data-d="'+wp.date+'" aria-label="Delete">✕</button></div>'
   ).join("");
   document.getElementById("wtList").querySelectorAll(".delWt").forEach(b=>b.addEventListener("click",()=>{
@@ -186,8 +187,8 @@ function renderPRs(){
   names.sort((a,b)=>map[b].e1rm-map[a].e1rm);
   document.getElementById("prList").innerHTML = names.slice(0,8).map(ex=>
     '<div class="list-item" style="cursor:pointer;" data-ex="'+esc(ex)+'"><span style="flex:2;">'+esc(ex)+' <span style="color:var(--dim); font-size:10px;"></span></span>'
-    +'<span style="flex:1.4; text-align:right; color:var(--dim);">'+map[ex].w+'×'+map[ex].r+'</span>'
-    +'<span style="flex:1; text-align:right; font-weight:600; color:var(--ember);">~'+Math.round(map[ex].e1rm)+'</span></div>'
+    +'<span style="flex:1.4; text-align:right; color:var(--dim);">'+poundsToUnit(map[ex].w,currentUnitSystem(),1)+'×'+map[ex].r+'</span>'
+    +'<span style="flex:1; text-align:right; font-weight:600; color:var(--ember);">~'+poundsToUnit(map[ex].e1rm,currentUnitSystem(),1)+' '+unitWeightLabel()+'</span></div>'
   ).join("");
   document.getElementById("prList").querySelectorAll("[data-ex]").forEach(row=>
     row.addEventListener("click", ()=>openLiftChart(row.dataset.ex)));
@@ -263,7 +264,7 @@ function renderTDEE(){
   document.getElementById("tdeeText").innerHTML =
     'Estimated TDEE from your logs: <b class="ember-text">'+lastTDEE.tdee+' kcal/day</b><br>'
     +'Based on '+lastTDEE.days+' logged days, avg '+lastTDEE.avgCal+' kcal, trending '
-    +(lastTDEE.weeklyChange<=0? lastTDEE.weeklyChange : "+"+lastTDEE.weeklyChange)+' lb/week';
+    +(()=>{const change=poundsToUnit(lastTDEE.weeklyChange,currentUnitSystem(),2);return(change<=0?change:"+"+change)+' '+unitWeightLabel()+'/week';})()
   const button=document.getElementById("tdeeApplyBtn");
   button.textContent="Review suggested target";
   button.disabled=!lastTDEE.proposalSafe;
@@ -379,10 +380,10 @@ function renderMeals(){
 }
 
 // ================== PLATE MATH & REST TIMER ==================
-function plateMath(target, bar){
+function plateMath(target, bar, system){
   const perSide = (target-bar)/2;
   if (perSide<0) return "Lighter than the bar";
-  const plates = [45,35,25,10,5,2.5];
+  const plates = isMetricSystem(system)?[25,20,15,10,5,2.5,1.25]:[45,35,25,10,5,2.5];
   let rem = perSide; const out = [];
   plates.forEach(p=>{ const n = Math.floor(rem/p); if(n>0){ out.push(n+"×"+p); rem = Math.round((rem-n*p)*100)/100; } });
   return out.length ? out.join(" + ")+" per side"+(rem>0?" (+"+rem+" left)":"") : "Empty bar";
@@ -390,8 +391,9 @@ function plateMath(target, bar){
 function updatePlates(){
   const t = Number(document.getElementById("plateTarget").value);
   const b = Number(document.getElementById("plateBar").value);
-  document.getElementById("plateOut").textContent = t ? plateMath(t,b) : "";
+  document.getElementById("plateOut").textContent = t ? plateMath(t,b,currentUnitSystem()) : "";
 }
+function renderPlateUnits(){const target=document.getElementById("plateTarget"),bar=document.getElementById("plateBar"),metric=isMetricSystem();if(!target||!bar)return;target.placeholder=metric?"Target weight, e.g. 100":"Target weight, e.g. 275";target.setAttribute("aria-label","Target loaded weight in "+(metric?"kilograms":"pounds"));const values=metric?[[20,"20 kg"],[15,"15 kg"],[10,"10 kg"]]:[[45,"45 lb"],[35,"35 lb"],[15,"15 lb"]];bar.innerHTML=values.map(x=>'<option value="'+x[0]+'">'+x[1]+'</option>').join("");updatePlates();}
 document.getElementById("plateTarget").addEventListener("input", updatePlates);
 document.getElementById("plateBar").addEventListener("change", updatePlates);
 

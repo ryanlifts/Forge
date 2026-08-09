@@ -947,5 +947,21 @@ check(
   )==="8 intervals · 15 sec each · 75 sec recovery"
 );
 
+// ---------- measurement systems ----------
+check("existing installs default to Imperial units", E(`currentUnitSystem()`)==="imperial");
+check("100 kg converts to the canonical pound value", Math.abs(E(`poundsFromUnit(100,"metric")`)-220.462262)<0.0001);
+check("canonical pounds display as 100 kg", E(`poundsToUnit(220.462262,"metric",1)`)===100);
+check("weight conversion round-trips without rewriting canonical history", Math.abs(E(`poundsFromUnit(poundsToUnit(225,"metric",8),"metric")`)-225)<0.000001);
+check("70 inches displays as 177.8 centimeters", E(`inchesToUnit(70,"metric",1)`)===177.8);
+check("metric goal-rate wording is available", E(`goalRateLabel(-500,"metric")`)==="Lose 0.5 kg/week");
+check("180 centimeters converts to a valid calculator height", E(`validateNutritionCalculatorInput({sex:"m",age:30,ft:5,inches:10.87,lb:180,activity:1.55,goalAdj:-500}).ok`)===true);
+const metricNutrition=E(`(()=>{const height=feetInchesFromTotalInches(inchesFromUnit(180,"metric"));return calculateNutritionTargets({sex:"m",age:30,ft:height.ft,inches:height.inches,lb:poundsFromUnit(100,"metric"),activity:1.55,goalAdj:-500,unitSystem:"metric"});})()`);
+check("100 kg and 180 cm produce coherent adult calorie targets",metricNutrition.ok&&metricNutrition.value.tdee===3069&&metricNutrition.value.cal===2569);
+check("metric adult macros match the same canonical person",metricNutrition.value.pro===198&&metricNutrition.value.fat===71&&metricNutrition.value.carb===285);
+check("rounded metric macros remain within four kcal of their calorie target",Math.abs(metricNutrition.value.pro*4+metricNutrition.value.carb*4+metricNutrition.value.fat*9-metricNutrition.value.cal)<=4);
+const metricYouth=E(`(()=>{const height=feetInchesFromTotalInches(inchesFromUnit(165,"metric"));return calculateNutritionTargets({sex:"f",age:15,ft:height.ft,inches:height.inches,lb:poundsFromUnit(60,"metric"),activity:1.55,goalAdj:0,unitSystem:"metric"});})()`);
+check("metric youth calculation keeps the 20/55/25 starting split",metricYouth.ok&&metricYouth.value.isYouth&&Math.abs(metricYouth.value.pro*4/metricYouth.value.cal-.20)<.003&&Math.abs(metricYouth.value.carb*4/metricYouth.value.cal-.55)<.003&&Math.abs(metricYouth.value.fat*9/metricYouth.value.cal-.25)<.003);
+check("metric calculator errors use kg and cm instead of Imperial units",E(`validateSupportedWeight(40,"Weight",false,"lb","metric").message.includes("kg")&&!validateNutritionCalculatorInput({sex:"m",age:30,ft:3,inches:0,lb:180,activity:1.55,goalAdj:-500,unitSystem:"metric"}).ok&&validateNutritionCalculatorInput({sex:"m",age:30,ft:3,inches:0,lb:180,activity:1.55,goalAdj:-500,unitSystem:"metric"}).message.includes("cm")`));
+
 summary("UNIT");
 })().catch(e=>{ console.error(e); process.exit(1); });

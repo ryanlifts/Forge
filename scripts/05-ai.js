@@ -678,7 +678,7 @@ function renderJourneyMsg(){
     el.textContent = "New starting line, same destination. Today's number is just where this stretch begins — every meal logged and every rep from here counts. You've got this.";
     el.classList.remove("hidden");
   } else if (drifting && downOverall > 1){
-    el.textContent = "One rough stretch doesn't erase your work — you're still "+downOverall+" lb "+(cutting?"down":"up")+" overall. Champions have bad weeks; they don't have bad months. Tighten up and go.";
+    el.textContent = "One rough stretch doesn't erase your work — you're still "+poundsToUnit(downOverall,currentUnitSystem(),1)+" "+unitWeightLabel()+" "+(cutting?"down":"up")+" overall. Champions have bad weeks; they don't have bad months. Tighten up and go.";
     el.classList.remove("hidden");
   }
 }
@@ -981,22 +981,10 @@ function foodKudos(entry){
   kudosTimer = setTimeout(()=>el.classList.add("hidden"), 3500);
 }
 
-// ================== AI ENGINE (bring-your-own-key) ==================
-const AI_DEFAULT_MODELS = { anthropic:"claude-sonnet-4-6", openai:"gpt-4o" };
-function aiProvider(){ return cfg.aiProvider || "handoff"; }
-function aiModelFor(p){
-  const override = p==="openai" ? cfg.aiModelOai : cfg.aiModelAnth;
-  return (override && override.trim()) ? override.trim() : AI_DEFAULT_MODELS[p];
-}
-function hasAIKey(){
-  const p = aiProvider();
-  if (p==="openai") return !!(cfg.openaiKey && cfg.openaiKey.trim());
-  if (p==="anthropic") return !!(cfg.anthropicKey && cfg.anthropicKey.trim());
-  return false; // handoff mode: no live API
-}
-function isHandoff(){ return aiProvider()==="handoff"; }
+// ================== AI HANDOFF ==================
+// BlackPyre never contacts an AI service. Users deliberately copy or share a
+// prompt, then paste the reply back for local review.
 function foodHandoffEnabled(){ return cfg.foodHandoffOn !== false; }
-function useFoodHandoff(){ return foodHandoffEnabled() && (isHandoff() || !hasAIKey()); }
 
 document.getElementById("foodHandoffToggleBtn").addEventListener("click", ()=>{
   cfg.foodHandoffOn = !foodHandoffEnabled();
@@ -1005,475 +993,46 @@ document.getElementById("foodHandoffToggleBtn").addEventListener("click", ()=>{
   flashSave(cfg.foodHandoffOn ? "AI food handoff enabled ✓" : "AI food handoff hidden");
 });
 
-document.getElementById("sAiProvider").addEventListener("change", ()=>{
-  cfg.aiProvider = document.getElementById("sAiProvider").value;
-  saveCfg();
-  renderAIGates();
-});
-document.getElementById("saveAiBtn").addEventListener("click", ()=>{
-  cfg.aiProvider = document.getElementById("sAiProvider").value;
-  cfg.anthropicKey = document.getElementById("sAnthropicKey").value.trim();
-  cfg.openaiKey = document.getElementById("sOpenaiKey").value.trim();
-  const m = document.getElementById("sAiModel").value.trim();
-  if (cfg.aiProvider==="openai") cfg.aiModelOai = m;
-  else if (cfg.aiProvider==="anthropic") cfg.aiModelAnth = m;
-  saveCfg();
-  renderAIGates();
-  ackBtn("saveAiBtn", "✓ Saved");
-  flashSave(isHandoff() ? "Handoff mode ready ✓" : (hasAIKey() ? "AI Coach unlocked ✓" : "Saved — add a key to go live"));
-});
-
 function renderAIGates(){
-  const p = aiProvider();
-  document.getElementById("sAiProvider").value = p;
-  document.getElementById("sAnthropicKey").value = cfg.anthropicKey || "";
-  document.getElementById("sOpenaiKey").value = cfg.openaiKey || "";
-  document.getElementById("aiKeyAnthRow").classList.toggle("hidden", p!=="anthropic");
-  document.getElementById("aiKeyOaiRow").classList.toggle("hidden", p!=="openai");
-  document.getElementById("aiModelRow").classList.toggle("hidden", p==="handoff");
-  document.getElementById("aiHandoffNote").classList.toggle("hidden", p!=="handoff");
-  const mEl = document.getElementById("sAiModel");
-  if (p!=="handoff"){
-    mEl.placeholder = "default: " + AI_DEFAULT_MODELS[p];
-    mEl.value = (p==="openai" ? cfg.aiModelOai : cfg.aiModelAnth) || "";
-  }
-  // Food handoff is on by default and independent from the live coach provider.
-  // A configured live API key still gets the faster in-app food flow; handoff is the key-free fallback.
-  const foodHandoff = useFoodHandoff();
   const foodHandoffOn = foodHandoffEnabled();
   const foodToggle = document.getElementById("foodHandoffToggleBtn");
   foodToggle.textContent = foodHandoffOn ? "Disable AI food handoff" : "Enable AI food handoff";
   foodToggle.setAttribute("aria-pressed", String(foodHandoffOn));
-  document.getElementById("aiFoodCard").classList.toggle("hidden", !hasAIKey() && !foodHandoff);
-  document.getElementById("aiHandoffControls").classList.toggle("hidden", !foodHandoff);
-  document.getElementById("aiFoodGoBtn").classList.toggle("hidden", foodHandoff);
-  document.getElementById("aiPhotoBtn").classList.toggle("hidden", foodHandoff);
-  // coach chat: live API only; handoff points at Copy report
-  document.getElementById("coachOpenBtn").classList.toggle("hidden", isHandoff());
-  const note = document.getElementById("coachKeyNote");
-  if (isHandoff()){
-    note.classList.remove("hidden");
-    note.textContent = "Handoff mode: tap Copy report and paste it into your preferred AI app — it contains everything your coach needs, including how to send a program back.";
-  } else if (hasAIKey()){ note.classList.add("hidden"); }
-  else {
-    note.classList.remove("hidden");
-    note.textContent = "Chat needs a one-time API key — add it in Settings → AI Coach. Or choose AI handoff mode there to work key-free. Copy report always works.";
-  }
-  renderCheckin();
+  document.getElementById("aiFoodCard").classList.toggle("hidden", !foodHandoffOn);
+  document.getElementById("aiHandoffControls").classList.toggle("hidden", !foodHandoffOn);
 }
-
-async function anthropicCall(messages, system, maxTokens){
-  if (isOffline()) throw new Error("You're offline — reconnect to use the live AI coach, or switch to AI handoff mode in Settings.");
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": cfg.anthropicKey,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true",
-    },
-    body: JSON.stringify({ model: aiModelFor("anthropic"), max_tokens: maxTokens || 3000, system: system, messages: messages }),
-  });
-  if (!res.ok){
-    if (res.status===401 || res.status===403) throw new Error("Your Anthropic key was rejected — check it in Settings.");
-    if (res.status===429) throw new Error("Rate limited — wait a few seconds and try again.");
-    throw new Error("The AI service returned an error ("+res.status+"). Try again.");
-  }
-  const j = await res.json();
-  return (j.content||[]).map(b=>b.type==="text"?b.text:"").join("");
-}
-
-async function openaiCall(messages, system, maxTokens){
-  if (isOffline()) throw new Error("You're offline — reconnect to use the live AI coach, or switch to AI handoff mode in Settings.");
-  const msgs = [{role:"system", content:system}].concat(messages.map(m=>{
-    if (Array.isArray(m.content)){
-      return { role:m.role, content:m.content.map(b=>
-        b.type==="image"
-          ? { type:"image_url", image_url:{ url:"data:"+b.source.media_type+";base64,"+b.source.data } }
-          : { type:"text", text:b.text }) };
-    }
-    return { role:m.role, content:m.content };
-  }));
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { "content-type":"application/json", "authorization":"Bearer "+cfg.openaiKey },
-    body: JSON.stringify({ model: aiModelFor("openai"), max_tokens: maxTokens || 3000, messages: msgs }),
-  });
-  if (!res.ok){
-    if (res.status===401 || res.status===403) throw new Error("Your OpenAI key was rejected — check it in Settings.");
-    if (res.status===429) throw new Error("Rate limited — wait a few seconds and try again.");
-    throw new Error("The AI service returned an error ("+res.status+"). Try again.");
-  }
-  const j = await res.json();
-  return (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || "";
-}
-
-function aiCall(messages, system, maxTokens){
-  return aiProvider()==="openai" ? openaiCall(messages, system, maxTokens) : anthropicCall(messages, system, maxTokens);
-}
-
-// ---------- payload extraction from AI replies ----------
-
-function aiTrainingPlanCandidate(value){
-  if(
-    value
-    && value.format===TRAINING_PLAN_FORMAT
-    && value.version===TRAINING_PLAN_VERSION
-    && isPlainObject(value.program)
-  ){
-    return value;
-  }
-
-  if(
-    value
-    && Array.isArray(value.days)
-  ){
-    return value;
-  }
-
-  return null;
-}
-
-function aiTrainingPlanName(value){
-  const candidate=
-    aiTrainingPlanCandidate(value);
-
-  if(!candidate){
-    return "Updated program";
-  }
-
-  const source=
-    candidate.program
-    && Array.isArray(
-      candidate.program.days
-    )
-      ? candidate.program
-      : candidate;
-
-  return source.name||"Updated program";
-}
-
-function aiPublicTrainingPlanFromProgram(
-  sourceProgram
-){
-  const exported=
-    trainingPlanInterchangeFromProgram(
-      sourceProgram
-    );
-
-  exported.program.days.forEach(day=>{
-    day.exercises.forEach(exercise=>{
-      delete exercise.exerciseId;
-      delete exercise.trackingShape;
-    });
-  });
-
-  return exported;
-}
-
-function extractAIPayloads(text){
-  const out={
-    display:text,
-    program:null,
-    targets:null
-  };
-
-  const blocks=[];
-  const re=/```(?:json)?\s*([\s\S]*?)```/g;
-  let match;
-
-  while((match=re.exec(text))!==null){
-    blocks.push({
-      raw:match[0],
-      body:match[1]
-    });
-  }
-
-  blocks.forEach(block=>{
-    try{
-      const parsed=JSON.parse(block.body);
-      const program=
-        aiTrainingPlanCandidate(parsed);
-
-      if(program){
-        out.program=program;
-        out.display=out.display
-          .replace(block.raw,"")
-          .trim();
-      }else if(
-        parsed
-        && parsed.bpTargets
-      ){
-        out.targets=parsed.bpTargets;
-        out.display=out.display
-          .replace(block.raw,"")
-          .trim();
-      }
-    }catch(error){
-      // Leave non-JSON code visible.
-    }
-  });
-
-  return out;
-}
-
-// ================== COACH CHAT ==================
-let coachHistory = [];
-
-function coachSystem(){
-  return "You are the user's personal fitness coach inside the BlackPyre app. Be direct, specific, and evidence-based — no generic filler. Their live data follows.\n\n"
-    +aiReport()
-    +"\n\n---\nResponse contract:\n"
-    +"- If you propose a new or edited training program, include EXACTLY ONE ```json code block containing the COMPLETE BlackPyre public training-plan file: {\"format\":\"blackpyre-training-plan\",\"version\":1,\"program\":{\"name\":...,\"days\":[{\"id\":\"D1\",\"title\":...,\"exercises\":[{\"name\":...,\"scheme\":...,\"prescription\":{...}}]}]}}. Use exercise names, do not invent exercise IDs, and do not choose tracking types. BlackPyre verifies every exercise and chooses its tracking type during review.\n"
-    +"- If you propose new nutrition targets, include a ```json block: {\"bpTargets\":{\"calTarget\":...,\"proTarget\":...,\"carbGoal\":...,\"fatGoal\":...}} — exact daily numbers, not ranges.\n"
-    +"- Otherwise reply in plain prose. Keep replies under 300 words unless asked for detail.";
-}
-
-function openCoach(prefillSend){
-  lockScroll();
-  document.getElementById("coachOverlay").classList.remove("hidden");
-  if (!coachHistory.length){
-    addCoachBubble("ai", "Hey — I have your full BlackPyre data in front of me: weight trend, nutrition, lift progression, and your current program. Ask me anything, or try:\n\n• How is my progress?\n• Adjust my program — [what's bugging you]\n• Why has my weight stalled?\n• Should I change my calories?", null);
-  }
-  if (prefillSend){
-    document.getElementById("coachInput").value = prefillSend;
-    sendCoach();
-  }
-}
-document.getElementById("coachOpenBtn").addEventListener("click", ()=>{
-  if (!hasAIKey()){
-    flashSave("Add your AI key in Settings first", true);
-    renderAIGates();
-    return;
-  }
-  openCoach();
-});
-document.getElementById("coachCloseBtn").addEventListener("click", ()=>{
-  document.getElementById("coachOverlay").classList.add("hidden");
-  unlockScroll();
-});
-function addCoachBubble(role, text, payloads){
-  const wrap = document.getElementById("coachMsgs");
-  const div = document.createElement("div");
-  div.className = "cmsg " + (role==="user" ? "user" : "ai");
-  div.textContent = text;
-
-  if(payloads && payloads.program){
-    const b=document.createElement(
-      "button"
-    );
-
-    b.className="act";
-    b.textContent=
-      "Review program: "
-      +aiTrainingPlanName(
-        payloads.program
-      );
-
-    b.addEventListener("click",()=>{
-      const prepared=
-        prepareTrainingPlanImport(
-          payloads.program
-        );
-
-      if(
-        !prepared
-        || !prepared.ok
-        || !Array.isArray(prepared.review)
-      ){
-        flashSave(
-          "That training program could not be read.",
-          true
-        );
-        return;
-      }
-
-      document.getElementById(
-        "coachOverlay"
-      ).classList.add("hidden");
-
-      unlockScroll();
-
-      openTrainingPlanReview(
-        prepared,
-        "AI Coach response"
-      );
-
-      b.textContent="Review opened";
-      b.disabled=true;
-    });
-
-    div.appendChild(b);
-  }
-
-  if (payloads && payloads.targets){
-    const t = payloads.targets;
-    const b = document.createElement("button");
-    b.className = "act";
-    // accept exact keys; tolerate legacy range keys from older prompts by averaging
-    const calT = typeof t.calTarget==="number" ? t.calTarget : (typeof t.calLo==="number" && typeof t.calHi==="number" ? Math.round((t.calLo+t.calHi)/2) : null);
-    const proT = typeof t.proTarget==="number" ? t.proTarget : (typeof t.proLo==="number" && typeof t.proHi==="number" ? Math.round((t.proLo+t.proHi)/2) : null);
-    b.textContent = "Apply targets: " + (calT||"?") + " kcal";
-    b.addEventListener("click", ()=>{
-      const draft={
-        startWt:cfg.startWt,goalWt:cfg.goalWt,
-        calTarget:calT!=null?calT:cfg.calTarget,proTarget:proT!=null?proT:cfg.proTarget,
-        carbGoal:typeof t.carbGoal==="number"?t.carbGoal:cfg.carbGoal,
-        fatGoal:typeof t.fatGoal==="number"?t.fatGoal:cfg.fatGoal,
-        calSchedMode:cfg.calSchedMode||"same",calSchedDays:cfg.calSchedDays
-      };
-      const checked=validateNutritionSettingsDraft(draft);
-      if(!checked.ok){ flashSave(checked.message,true); return; }
-      const previous=cloneJSON(cfg);
-      cfg=Object.assign({},cfg,checked.value);
-      const sortedW = data.weights.slice().sort((a,b2)=>a.date.localeCompare(b2.date));
-      cfg.lastTargetWt = sortedW.length ? sortedW[sortedW.length-1].lbs : cfg.lastTargetWt;
-      delete cfg.adjustPromptedAt;
-      if(!saveCfg()){ cfg=previous; return; }
-      renderAll();
-      b.textContent = "✓ Applied — bars updated";
-      b.disabled = true;
-      flashSave("Targets applied ✓");
-    });
-    div.appendChild(b);
-  }
-  wrap.appendChild(div);
-  wrap.scrollTop = wrap.scrollHeight;
-}
-async function sendCoach(){
-  const inp = document.getElementById("coachInput");
-  const msg = inp.value.trim();
-  if (!msg) return;
-  inp.value = "";
-  addCoachBubble("user", msg, null);
-  coachHistory.push({role:"user", content: msg});
-  const typing = document.getElementById("coachTyping");
-  typing.classList.remove("hidden");
-  document.getElementById("coachSendBtn").disabled = true;
-  try {
-    const reply = await aiCall(coachHistory, coachSystem(), 3000);
-    coachHistory.push({role:"assistant", content: reply});
-    const p = extractAIPayloads(reply);
-    addCoachBubble("ai", p.display || "Here you go:", p);
-    cfg.lastCoachDate = todayStr();
-    saveCfg();
-    renderCheckin();
-  } catch(e){
-    addCoachBubble("ai", "" + e.message, null);
-  }
-  typing.classList.add("hidden");
-  document.getElementById("coachSendBtn").disabled = false;
-}
-document.getElementById("coachSendBtn").addEventListener("click", sendCoach);
-
-// ================== WEEKLY CHECK-IN ==================
-function renderCheckin(){
-  const card = document.getElementById("checkinCard");
-  if (!hasAIKey() || !hasAnyData()){ card.classList.add("hidden"); return; }
-  const last = cfg.lastCoachDate;
-  const days = last ? Math.floor((new Date(todayStr()) - new Date(last))/86400000) : 999;
-  card.classList.toggle("hidden", days < 7);
-}
-document.getElementById("checkinBtn").addEventListener("click", ()=>{
-  openCoach("Give me my weekly review — assess my week, call out what needs fixing, and tell me what to focus on next week.");
-});
-
-
 // ================== PASTE PROGRAM FROM AI ==================
-document.getElementById(
-  "pasteProgBtn"
-).addEventListener("click",async ()=>{
-  let text="";
+document.getElementById("pasteProgBtn").addEventListener("click", async ()=>{
+  let text = "";
 
-  try{
-    if(
-      navigator.clipboard
-      && navigator.clipboard.readText
-    ){
-      text=
-        await navigator.clipboard.readText();
+  try {
+    if (navigator.clipboard && navigator.clipboard.readText){
+      text = await navigator.clipboard.readText();
     }
-  }catch(error){
-    // Clipboard permission was denied.
+  } catch(e){
+    // Clipboard permission denied; use manual paste fallback.
   }
 
-  if(!text){
-    text=
-      prompt(
-        "Paste the AI's reply or BlackPyre JSON program here:"
-      )
-      || "";
+  if (!text){
+    text = prompt("Paste the AI's reply or JSON training plan here:") || "";
   }
+  if (!text.trim()) return;
 
-  if(!text.trim())return;
-
-  let candidate=null;
-  const payloads=extractAIPayloads(text);
-
-  if(payloads.program){
-    candidate=payloads.program;
-  }
-
-  if(!candidate){
-    try{
-      candidate=
-        aiTrainingPlanCandidate(
-          JSON.parse(text.trim())
-        );
-    }catch(error){
-      candidate=null;
-    }
-  }
-
-  if(!candidate){
-    const match=text.match(
-      /\{[\s\S]*"days"[\s\S]*\}/
-    );
-
-    if(match){
-      try{
-        candidate=
-          aiTrainingPlanCandidate(
-            JSON.parse(match[0])
-          );
-      }catch(error){
-        candidate=null;
-      }
-    }
-  }
-
-  if(!candidate){
-    flashSave(
-      "No BlackPyre training program was found in that text.",
-      true
-    );
+  const documentValue = extractTrainingPlanDocumentFromText(text);
+  if (!documentValue){
+    flashSave("No BlackPyre training plan was found. Use Create a plan with AI to make a new file.",true);
     return;
   }
 
-  const prepared=
-    prepareTrainingPlanImport(candidate);
-
-  if(
-    !prepared
-    || !prepared.ok
-    || !Array.isArray(prepared.review)
-  ){
-    flashSave(
-      "That training program could not be read.",
-      true
-    );
-    return;
+  const opened = openTrainingPlanReview(documentValue,{
+    source:"AI paste",
+    successMessage:"Program loaded ✓",
+    onImported:()=>ackBtn("pasteProgBtn","✓ Loaded: "+(program.name||"program"))
+  });
+  if (!opened.ok){
+    console.error("Pasted training plan rejected:",opened.code||"",opened.message||"");
+    flashSave(blackpyreTrainingPlanRejectionMessage(),true);
   }
-
-  openTrainingPlanReview(
-    prepared,
-    "Pasted AI response"
-  );
-
-  ackBtn(
-    "pasteProgBtn",
-    "Review ready"
-  );
 });
 
 // ================== AI FOOD LOGGING (text + photo) ==================
@@ -1622,10 +1181,12 @@ function showFoodConfirm(foods){
       row.appendChild(second);
 
       const remove=document.createElement("button");
-      remove.className="del";
-      remove.textContent="✕";
-      remove.setAttribute("aria-label","Remove");
+      remove.className="btn ghost small ai-food-remove";
+      remove.textContent="Remove item";
+      remove.setAttribute("aria-label","Remove this estimated food");
       remove.style.marginTop="10px";
+      remove.style.width="100%";
+      remove.style.color="var(--warn)";
 
       remove.addEventListener("click",()=>{
         items.splice(index,1);
@@ -1685,18 +1246,14 @@ function showFoodConfirm(foods){
     const loggedCount=reviewed.length;
     container.classList.add("hidden");
 
-    if(isHandoff()){
-      hfCloseParseBox();
-      aiFoodStatus(
-        "Logged "+loggedCount+" ✓ — ready for another."
-      );
-      scrollAiFoodIntoView(
-        document.getElementById("aiFoodCard"),
-        "start"
-      );
-    } else {
-      aiFoodStatus(null);
-    }
+    hfCloseParseBox();
+    aiFoodStatus(
+      "Logged "+loggedCount+" ✓ — ready for another."
+    );
+    scrollAiFoodIntoView(
+      document.getElementById("aiFoodCard"),
+      "start"
+    );
 
     flashSave("Logged "+loggedCount+" ✓");
   });
@@ -1719,69 +1276,14 @@ function showFoodConfirm(foods){
   );
 }
 
-document.getElementById("aiFoodGoBtn").addEventListener("click", async ()=>{
-  const q = document.getElementById("aiFoodText").value.trim();
-  if (!q) return;
-  aiFoodStatus("Estimating…");
-  document.getElementById("aiFoodConfirm").classList.add("hidden");
-  document.getElementById("aiFoodGoBtn").disabled = true;
-  try {
-    const reply = await aiCall([{role:"user", content:q}], FOOD_AI_SYSTEM, 1200);
-    const foods = parseFoodsReply(reply);
-    aiFoodStatus(null);
-    showFoodConfirm(foods);
-    document.getElementById("aiFoodText").value = "";
-  } catch(e){
-    aiFoodStatus(""+(e.message||"Could not estimate that"), true);
-  }
-  document.getElementById("aiFoodGoBtn").disabled = false;
+// The shared file input feeds only the explicit copy/share handoff.
+document.getElementById("aiPhotoFile").addEventListener("change", ev=>{
+  const file=ev.target.files && ev.target.files[0];
+  ev.target.value="";
+  if(file) hfSetPhoto(file);
 });
-document.getElementById("aiPhotoBtn").addEventListener("click", ()=>{ photoMode = "api"; document.getElementById("aiPhotoFile").click(); });
-document.getElementById("aiPhotoFile").addEventListener("change", async (ev)=>{
-  const file = ev.target.files && ev.target.files[0];
-  ev.target.value = "";
-  if (!file) return;
-  if (photoMode==="handoff"){ hfSetPhoto(file); return; }
-  aiFoodStatus("Reading photo…");
-  document.getElementById("aiFoodConfirm").classList.add("hidden");
-  try {
-    const b64 = await downscaleImage(file, 1024);
-    aiFoodStatus("Coach is looking at your plate…");
-    const reply = await aiCall([{role:"user", content:[
-      {type:"image", source:{type:"base64", media_type:"image/jpeg", data:b64}},
-      {type:"text", text:"Identify the foods in this meal photo and estimate portions and macros."
-        + (document.getElementById("aiPhotoCaption").value.trim() ? " Context from the user: " + document.getElementById("aiPhotoCaption").value.trim() + " — use it to identify the restaurant/dish and improve accuracy." : "")},
-    ]}], FOOD_AI_SYSTEM, 1200);
-    const foods = parseFoodsReply(reply);
-    aiFoodStatus(null);
-    showFoodConfirm(foods);
-    document.getElementById("aiPhotoCaption").value = "";
-  } catch(e){
-    aiFoodStatus(""+(e.message||"Could not read that photo"), true);
-  }
-});
-function downscaleImage(file, maxDim){
-  return new Promise((resolve, reject)=>{
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = ()=>{
-      try {
-        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-        const c = document.createElement("canvas");
-        c.width = Math.round(img.width*scale);
-        c.height = Math.round(img.height*scale);
-        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-        URL.revokeObjectURL(url);
-        resolve(c.toDataURL("image/jpeg", 0.8).split(",")[1]);
-      } catch(e){ reject(e); }
-    };
-    img.onerror = ()=>{ URL.revokeObjectURL(url); reject(new Error("Could not open that image")); };
-    img.src = url;
-  });
-}
 
-// ================== CHATGPT HANDOFF MODE (no API key) ==================
-let photoMode = "api"; // which flow the file input feeds
+// ================== AI FOOD HANDOFF MODE ==================
 function handoffFoodPrompt(){
   const desc = document.getElementById("aiFoodText").value.trim();
   const cap = document.getElementById("aiPhotoCaption").value.trim();
@@ -1800,7 +1302,6 @@ document.getElementById("hfCopyFoodBtn").addEventListener("click", ()=>{
   } else { fallbackCopy(txt); done(); }
 });
 document.getElementById("hfShareBtn").addEventListener("click", ()=>{
-  photoMode = "handoff";
   document.getElementById("aiPhotoFile").click();
 });
 
@@ -2000,7 +1501,7 @@ function exercisePrLine(name,value,excludeIdx){
   const entry=exerciseDescriptor(name,value),metric=deriveExerciseValue(entry,value);
   if(!metric)return null;
   const prior=aggregateExerciseMetrics(entry,exerciseHistoryRecords(entry,excludeIdx));
-  if(metric.kind==="e1rm"&&(!prior.e1rm||metric.e1rm>prior.e1rm.e1rm))return entry.name+" ~"+Math.round(metric.e1rm)+" lb est. 1RM";
+  if(metric.kind==="e1rm"&&(!prior.e1rm||metric.e1rm>prior.e1rm.e1rm))return entry.name+" ~"+poundsToUnit(metric.e1rm,currentUnitSystem(),1)+" "+unitWeightLabel()+" est. 1RM";
   if(metric.kind==="maxReps"&&metric.reps>prior.maxReps)return entry.name+" "+metric.reps+" reps";
   if(metric.kind==="timeDist"){
     const lines=[];
@@ -2012,8 +1513,8 @@ function exercisePrLine(name,value,excludeIdx){
   }
   if(metric.kind==="carry"){
     const priorAtWeight=prior.carryAtWeight[String(metric.lbs)];
-    if(metric.lbs>prior.carryHeaviest)return entry.name+" · heaviest "+metric.lbs+" lb";
-    if(metric.lbs===prior.carryHeaviest&&(!priorAtWeight||metric.meters>priorAtWeight.meters))return entry.name+" · longest at "+metric.lbs+" lb: "+metric.dist+" "+metric.distUnit;
+    if(metric.lbs>prior.carryHeaviest)return entry.name+" · heaviest "+formatBodyWeight(metric.lbs,currentUnitSystem(),1);
+    if(metric.lbs===prior.carryHeaviest&&(!priorAtWeight||metric.meters>priorAtWeight.meters))return entry.name+" · longest at "+formatBodyWeight(metric.lbs,currentUnitSystem(),1)+": "+metric.dist+" "+metric.distUnit;
   }
   return null;
 }
@@ -2028,11 +1529,11 @@ function allPRs(){
   const map={};
   Object.keys(groups).forEach(groupKey=>{
     const group=groups[groupKey],agg=aggregateExerciseMetrics(group.entry,group.records),item={name:group.entry.name,date:agg.latestDate,chart:false};
-    if(agg.e1rm){item.kind="e1rm";item.display=agg.e1rm.w+"×"+agg.e1rm.r;item.value="~"+Math.round(agg.e1rm.e1rm)+" lb";item.chart=true;}
+    if(agg.e1rm){item.kind="e1rm";item.display=poundsToUnit(agg.e1rm.w,currentUnitSystem(),1)+"×"+agg.e1rm.r;item.value="~"+formatBodyWeight(agg.e1rm.e1rm,currentUnitSystem(),1);item.chart=true;}
     else if(agg.maxReps>0){item.kind="maxReps";item.display="Best set";item.value=agg.maxReps+" reps";}
     else if(agg.longestDistance){item.kind="timeDist";item.display="Longest";item.value=agg.longestDistance.dist+" "+agg.longestDistance.distUnit;}
     else if(agg.longestSecs>0){item.kind="timeDist";item.display="Longest";item.value=formatDuration(agg.longestSecs);}
-    else if(agg.carryHeaviest>0){const best=agg.carryAtWeight[String(agg.carryHeaviest)];item.kind="carry";item.display="Heaviest";item.value=agg.carryHeaviest+" lb"+(best?" · "+best.dist+" "+best.distUnit:"");}
+    else if(agg.carryHeaviest>0){const best=agg.carryAtWeight[String(agg.carryHeaviest)];item.kind="carry";item.display="Heaviest";item.value=formatBodyWeight(agg.carryHeaviest,currentUnitSystem(),1)+(best?" · "+best.dist+" "+best.distUnit:"");}
     else return;
     map[groupKey]=item;
   });
@@ -2126,8 +1627,8 @@ function aiReport(){
   L.push("5. Be direct — no generic advice.");
   L.push("");
   L.push("## Goal & weight");
-  L.push("- Start: "+cfg.startWt+" lb · Current: "+cur+" lb · Goal: "+cfg.goalWt+" lb");
-  L.push(rate!=null ? "- Trend (last 28 days): "+(rate>0?"+":"")+rate+" lb/week" : "- Trend: not enough weigh-ins yet ("+sorted.length+" recorded)");
+  L.push("- Start: "+formatBodyWeight(cfg.startWt,currentUnitSystem(),1)+" · Current: "+formatBodyWeight(cur,currentUnitSystem(),1)+" · Goal: "+formatBodyWeight(cfg.goalWt,currentUnitSystem(),1));
+  L.push(rate!=null ? "- Trend (last 28 days): "+(rate>0?"+":"")+poundsToUnit(rate,currentUnitSystem(),2)+" "+unitWeightLabel()+"/week" : "- Trend: not enough weigh-ins yet ("+sorted.length+" recorded)");
   if (tdee && tdee.tdee) L.push("- Estimated TDEE from my food and weight logs: ~"+tdee.tdee+" kcal/day (a trend estimate, not a measurement or prescription)");
   L.push("");
   L.push("## Nutrition (last 14 days)");
@@ -2141,11 +1642,12 @@ function aiReport(){
   L.push("");
   L.push("## My current program (edit this and return the full updated JSON)");
   L.push("```json");
-  L.push(JSON.stringify(
-    aiPublicTrainingPlanFromProgram(program),
-    null,
-    2
-  ));
+  const handoffPlan=trainingPlanInterchangeFromProgram(program);
+  handoffPlan.program.days.forEach(day=>day.exercises.forEach(exercise=>{
+    delete exercise.exerciseId;
+    delete exercise.trackingShape;
+  }));
+  L.push(JSON.stringify(handoffPlan,null,2));
   L.push("```");
   L.push("");
   L.push("Program format rules: top level {format:\"blackpyre-training-plan\", version:1, program:{name, days:[...]}}. Each exercise uses its name and structured prescription. Do not invent exercise IDs or choose tracking types. BlackPyre verifies every exercise and chooses its tracking type during review.");
@@ -2207,11 +1709,17 @@ function openLiftChart(exName){
   const goalMatch=liftGoalMatch(exName);
   const goal=goalMatch?Number(goalMatch.value):null;
   const pts = liftHistory(exName);
-  document.getElementById("liftChart").innerHTML = lineChartSVG(pts, goal);
-  document.getElementById("liftGoalInput").value = goal || "";
+  const displayPts=pts.map(point=>({date:point.date,y:poundsToUnit(point.y,currentUnitSystem(),2)}));
+  const displayGoal=goal?poundsToUnit(goal,currentUnitSystem(),2):null;
+  document.getElementById("liftChart").innerHTML = lineChartSVG(displayPts, displayGoal);
+  document.getElementById("liftGoalInput").value = displayGoal || "";
+  const unit=unitWeightLabel(), metric=isMetricSystem();
+  const label=document.getElementById("liftGoalLabel");if(label)label.textContent="Goal for this lift ("+unit+", est. 1RM)";
+  document.getElementById("liftGoalInput").setAttribute("aria-label","Estimated one rep max goal in "+(metric?"kilograms":"pounds"));
+  document.getElementById("liftGoalInput").placeholder=metric?"e.g. 140":"e.g. 315";
   const best = pts.length ? Math.round(Math.max.apply(null, pts.map(p=>p.y))) : 0;
   document.getElementById("liftGoalNote").textContent = goal
-    ? "Current best: ~"+best+" est. 1RM · "+Math.max(0, goal-best)+" lb to go"
+    ? "Current best: ~"+poundsToUnit(best,currentUnitSystem(),1)+" "+unit+" est. 1RM · "+poundsToUnit(Math.max(0, goal-best),currentUnitSystem(),1)+" "+unit+" to go"
     : "Set a goal to draw a target line on the chart.";
   if (document.getElementById("liftOverlay").classList.contains("hidden")){
     lockScroll();
@@ -2224,7 +1732,7 @@ document.getElementById("liftCloseBtn").addEventListener("click", ()=>{
   unlockScroll();
 });
 document.getElementById("liftGoalSave").addEventListener("click", ()=>{
-  const v = Number(document.getElementById("liftGoalInput").value);
+  const v = poundsFromUnit(document.getElementById("liftGoalInput").value,currentUnitSystem());
   setLiftGoalForExercise(liftOverlayEx,v);
   saveCfg();
   ackBtn("liftGoalSave", "✓ Goal set");
@@ -2258,7 +1766,7 @@ function renderWeek(){
   html += 'Sessions: <b>'+sessions+'</b> this week<br>';
   if (wIn.length>=2){
     const dw = Math.round((wIn[wIn.length-1].lbs - wIn[0].lbs)*10)/10;
-    html += 'Weight: <b style="color:'+(dw<=0?'var(--ok)':'var(--text)')+'">'+(dw>0?'+':'')+dw+' lb</b> this week';
+    html += 'Weight: <b style="color:'+(dw<=0?'var(--ok)':'var(--text)')+'">'+(dw>0?'+':'')+poundsToUnit(dw,currentUnitSystem(),1)+' '+unitWeightLabel()+'</b> this week';
   }
   document.getElementById("weekBody").innerHTML = html;
 }
@@ -2283,7 +1791,8 @@ function renderProjection(){
   const el = document.getElementById("projLine");
   const r = weightSlope(35);
   if (!r){ el.classList.add("hidden"); return; }
-  const rate = Math.round(r.slope*7*10)/10; // lb/week
+  const rate = Math.round(r.slope*7*10)/10; // canonical lb/week
+  const shownRate=poundsToUnit(rate,currentUnitSystem(),2), unit=unitWeightLabel();
   const toGo = cfg.goalWt - r.current;      // negative when cutting
   el.classList.remove("hidden");
   if (Math.abs(rate) < 0.15){
@@ -2291,21 +1800,24 @@ function renderProjection(){
     return;
   }
   if ((toGo<0 && rate>=0) || (toGo>0 && rate<=0)){
-    el.textContent = "Trending "+(rate>0?"+":"")+rate+" lb/week right now — but you are here, logging, which is how every turnaround starts. Refocus this week; the trend follows the work.";
+    el.textContent = "Trending "+(shownRate>0?"+":"")+shownRate+" "+unit+"/week right now — but you are here, logging, which is how every turnaround starts. Refocus this week; the trend follows the work.";
     return;
   }
   const weeks = toGo/rate;
   if (weeks > 104){
-    el.textContent = "Trending "+(rate>0?"+":"")+rate+" lb/week — over ~2 years to goal at this rate.";
+    el.textContent = "Trending "+(shownRate>0?"+":"")+shownRate+" "+unit+"/week — over ~2 years to goal at this rate.";
     return;
   }
   const eta = new Date(Date.now() + weeks*7*86400000);
   const fmt = eta.toLocaleDateString("en-US", {month:"short", day:"numeric", year:"numeric"});
-  el.innerHTML = 'At your current rate (<b>'+(rate>0?'+':'')+rate+' lb/week</b>), you reach <b class="ember-text">'+cfg.goalWt+' lb around '+fmt+'</b>.';
+  el.innerHTML = 'At your current rate (<b>'+(shownRate>0?'+':'')+shownRate+' '+unit+'/week</b>), you reach <b class="ember-text">'+formatBodyWeight(cfg.goalWt,currentUnitSystem(),1)+' around '+fmt+'</b>.';
 }
 
 // --- body measurements (optional) ---
 function renderMeasureToggle(){
+  const metric=isMetricSystem(), unit=unitMeasurementLabel();
+  const label=document.getElementById("bodyMeasurementsLabel"); if(label) label.textContent="Body measurements ("+(metric?"centimeters":"inches")+")";
+  [["mWaist","Waist"],["mChest","Chest"],["mArm","Arm"]].forEach(item=>{const el=document.getElementById(item[0]);if(!el)return;el.placeholder=unit;el.setAttribute("aria-label",item[1]+" measurement in "+(metric?"centimeters":"inches"));});
   document.getElementById("measureToggleBtn").textContent = cfg.measureOn ? "Disable body measurements" : "Enable body measurements";
   document.getElementById("measureCard").classList.toggle("hidden", !cfg.measureOn);
 }
@@ -2317,9 +1829,10 @@ document.getElementById("measureToggleBtn").addEventListener("click", ()=>{
   renderMeasure();
 });
 document.getElementById("mSaveBtn").addEventListener("click", ()=>{
-  const waist = Number(document.getElementById("mWaist").value)||null;
-  const chest = Number(document.getElementById("mChest").value)||null;
-  const arm = Number(document.getElementById("mArm").value)||null;
+  const convert=id=>{const value=document.getElementById(id).value;return value===""?null:inchesFromUnit(value,currentUnitSystem());};
+  const waist = convert("mWaist");
+  const chest = convert("mChest");
+  const arm = convert("mArm");
   if (!waist && !chest && !arm){ flashSave("Enter at least one", true); return; }
   if (!data.measure) data.measure = [];
   const dt = todayStr();
@@ -2336,12 +1849,13 @@ function renderMeasure(){
   if (!list.length){ el.innerHTML = ""; return; }
   el.innerHTML = list.map((m,i)=>{
     const prev = list[i+1];
-    const delta = (cur, pre)=> (cur!=null && pre!=null) ? ' <span style="color:'+(cur<pre?'var(--ok)':'var(--dim)')+'; font-size:10px;">('+(cur-pre>0?'+':'')+Math.round((cur-pre)*10)/10+')</span>' : '';
+    const shown=value=>inchesToUnit(value,currentUnitSystem(),1);
+    const delta = (cur, pre)=> (cur!=null && pre!=null) ? ' <span style="color:'+(cur<pre?'var(--ok)':'var(--dim)')+'; font-size:10px;">('+(cur-pre>0?'+':'')+shown(cur-pre)+')</span>' : '';
     return '<div class="list-item"><span style="flex:1; color:var(--dim);">'+fmtDate(m.date)+'</span>'
       +'<span style="flex:3; text-align:right; font-size:12px;">'
-      +(m.waist!=null?('W '+m.waist+delta(m.waist, prev&&prev.waist)+'  '):'')
-      +(m.chest!=null?('C '+m.chest+delta(m.chest, prev&&prev.chest)+'  '):'')
-      +(m.arm!=null?('A '+m.arm+delta(m.arm, prev&&prev.arm)):'')
+      +(m.waist!=null?('W '+shown(m.waist)+delta(m.waist, prev&&prev.waist)+'  '):'')
+      +(m.chest!=null?('C '+shown(m.chest)+delta(m.chest, prev&&prev.chest)+'  '):'')
+      +(m.arm!=null?('A '+shown(m.arm)+delta(m.arm, prev&&prev.arm)):'')+' '+unitMeasurementLabel()
       +'</span>'
       +'<button class="del mdel" data-d="'+m.date+'" aria-label="Delete">✕</button></div>';
   }).join("");

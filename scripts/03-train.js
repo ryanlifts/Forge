@@ -183,6 +183,8 @@ function populateUnifiedExercisePicker(sel,options){
 
   sel.innerHTML = "";
 
+  if(includeCustom){const customGroup=document.createElement("optgroup");customGroup.label="My library";customGroup.dataset.exerciseSource="custom";const custom=document.createElement("option");custom.value="__CUSTOM__";custom.textContent="＋ Add custom exercise…";customGroup.appendChild(custom);sel.appendChild(customGroup);}
+
   const ranked=searchExercises(
     query,
     query ? 120 : allExerciseEntries(false).length
@@ -282,28 +284,14 @@ function populateUnifiedExercisePicker(sel,options){
     sel.appendChild(emptyGroup);
   }
 
-  if (includeCustom){
-    const customGroup =
-      document.createElement("optgroup");
-
-    customGroup.label = "My library";
-
-    const custom =
-      document.createElement("option");
-
-    custom.value = "__CUSTOM__";
-    custom.textContent = "Type my own…";
-
-    customGroup.appendChild(custom);
-    sel.appendChild(customGroup);
-  }
-
   if (
     previousValue
     && [...sel.options]
       .some(option=>option.value===previousValue)
   ){
     sel.value = previousValue;
+  }else{
+    const first=[...sel.options].find(option=>!option.disabled&&option.value&&option.value!=="__CUSTOM__");if(first)sel.value=first.value;
   }
 
   return {
@@ -4340,19 +4328,19 @@ function appendWorkoutSetRows(div,ex,st){
           ? (
               weightLabel==="Assistance"
                 ? "assist"
-                : "lb"
+                : unitWeightLabel()
             )
           : (
               weightLabel==="Assistance"
                 ? "assist opt."
-                : "lb opt."
+                : unitWeightLabel()+" opt."
             );
 
       weightInput.value=
         row.w===undefined
         || row.w===null
           ? ""
-          : row.w;
+          : poundsToUnit(row.w,currentUnitSystem(),2);
 
       weightInput.dataset.exercise=ex.name;
       weightInput.dataset.row=String(rowIndex);
@@ -4369,7 +4357,7 @@ function appendWorkoutSetRows(div,ex,st){
           +(rowIndex+1)
           +" "
           +weightLabel.toLowerCase()
-          +" in pounds"
+          +" in "+(isMetricSystem()?"kilograms":"pounds")
       );
 
       if (weightPolicy==="required"){
@@ -4383,7 +4371,7 @@ function appendWorkoutSetRows(div,ex,st){
         row.w=
           weightInput.value===""
             ? ""
-            : Number(weightInput.value);
+            : poundsFromUnit(weightInput.value,currentUnitSystem());
 
         row._weightInputTouched=
           weightInput.value!=="";
@@ -4394,24 +4382,24 @@ function appendWorkoutSetRows(div,ex,st){
 
       shell.appendChild(
         makeStep(
-          "−5",
+          "−"+trainingStepDisplay(),
           "Decrease "
             +cleanName
             +" set "
             +(rowIndex+1)
             +" "
             +weightLabel.toLowerCase()
-            +" by 5 pounds",
+            +" by "+trainingStepDisplay()+" "+(isMetricSystem()?"kilograms":"pounds"),
           ()=>{
             row.w=
               Math.max(
                 0,
-                (Number(row.w)||0)-5
+                (Number(row.w)||0)-trainingStepPounds()
               );
 
             row._weightInputTouched=true;
             row.touched=true;
-            weightInput.value=row.w;
+            weightInput.value=poundsToUnit(row.w,currentUnitSystem(),2);
             mark();
           }
         )
@@ -4421,19 +4409,19 @@ function appendWorkoutSetRows(div,ex,st){
 
       shell.appendChild(
         makeStep(
-          "+5",
+          "+"+trainingStepDisplay(),
           "Increase "
             +cleanName
             +" set "
             +(rowIndex+1)
             +" "
             +weightLabel.toLowerCase()
-            +" by 5 pounds",
+            +" by "+trainingStepDisplay()+" "+(isMetricSystem()?"kilograms":"pounds"),
           ()=>{
-            row.w=(Number(row.w)||0)+5;
+            row.w=(Number(row.w)||0)+trainingStepPounds();
             row._weightInputTouched=true;
             row.touched=true;
-            weightInput.value=row.w;
+            weightInput.value=poundsToUnit(row.w,currentUnitSystem(),2);
             mark();
           }
         )
@@ -5079,7 +5067,7 @@ function formatWorkoutRow(row){
 
     return (
       hasWeight
-        ? row.w+"\u00d70 · Missed"
+        ? poundsToUnit(row.w,currentUnitSystem(),2)+"\u00d70 · Missed"
         : "0 reps · Missed"
     )+(
       reason
@@ -5107,7 +5095,7 @@ function formatWorkoutRow(row){
     && row.r!=="";
 
   if (hasWeight && hasReps){
-    return row.w+"\u00d7"+row.r;
+    return poundsToUnit(row.w,currentUnitSystem(),2)+"\u00d7"+row.r;
   }
 
   if (hasReps){
@@ -5115,7 +5103,7 @@ function formatWorkoutRow(row){
   }
 
   if (hasWeight){
-    return String(row.w);
+    return String(poundsToUnit(row.w,currentUnitSystem(),2));
   }
 
   return "";
@@ -5185,7 +5173,7 @@ function formatSets(val){
       .join(", ");
   }
 
-  if (kind==="legacyText") return val;
+  if (kind==="legacyText") return String(val).replace(/(\d+(?:\.\d+)?)\s*([x×])\s*(\d+)/g,(all,w,x,r)=>poundsToUnit(w,currentUnitSystem(),2)+x+r);
 
   if (BP_WORKOUT_PROFILES){
     const formatted=BP_WORKOUT_PROFILES.formatStored(val);
@@ -11447,7 +11435,7 @@ function makePlanSessionState(ex,lastVal){
 
       const prescribedWeight=
         hasPrescribedWeight
-          ? Number(prescription.weight)
+          ? poundsFromUnit(Number(prescription.weight),prescription.weightUnit==="kg"?"metric":"imperial")
           : null;
 
       const prescribedRows=[];
@@ -11757,7 +11745,7 @@ function parseScheme(scheme){
 }
 function autoProgressionEnabled(){ return cfg.autoProgressionOn !== false; }
 function isAssistedExercise(name){ return /\bassist(?:ed|ance)\b/i.test(String(name||"")); }
-function progressionDeltaFor(ex){ return isAssistedExercise(ex&&ex.name) ? -5 : 5; }
+function progressionDeltaFor(ex){const step=trainingStepPounds();return isAssistedExercise(ex&&ex.name)?-step:step;}
 function prefillRows(ex,lastVal,allowProgression){
   const structured=
     isPlainObject(ex && ex.prescription)
@@ -11789,7 +11777,7 @@ function prefillRows(ex,lastVal,allowProgression){
     && structured.weight!==undefined
     && Number.isFinite(Number(structured.weight))
     && Number(structured.weight)>0
-      ? Number(structured.weight)
+      ? poundsFromUnit(Number(structured.weight),structured.weightUnit==="kg"?"metric":"imperial")
       : "";
   const canProgress=allowProgression!==false;
 
@@ -12268,7 +12256,7 @@ function validateExerciseEntry(st){
       return {
         ok:false,
         message:
-          "enter a carry weight greater than 0 lb before saving."
+          "enter a carry weight greater than 0 "+unitWeightLabel()+" before saving."
       };
     }
 
@@ -13050,9 +13038,7 @@ function appendTypedWorkoutEditor(div, ex, st){
     inp.className = "snum";
     inp.inputMode = options && options.integer ? "numeric" : "decimal";
     inp.placeholder = placeholder || "";
-    inp.value = st.typed[key]===undefined || st.typed[key]===null
-      ? ""
-      : st.typed[key];
+    const stored=st.typed[key];inp.value=stored===undefined||stored===null||stored===""?"":(options&&options.toDisplay?options.toDisplay(stored):stored);
 
     if (options && options.min!==undefined) inp.min = String(options.min);
     if (options && options.step!==undefined) inp.step = String(options.step);
@@ -13060,7 +13046,7 @@ function appendTypedWorkoutEditor(div, ex, st){
     inp.setAttribute("aria-label",name+" "+label.toLowerCase());
 
     inp.addEventListener("input",()=>{
-      st.typed[key] = inp.value==="" ? "" : Number(inp.value);
+      st.typed[key] = inp.value==="" ? "" : (options&&options.fromDisplay?options.fromDisplay(inp.value):Number(inp.value));
       touchTypedWorkoutState(st,div);
     });
 
@@ -13188,7 +13174,7 @@ function appendTypedWorkoutEditor(div, ex, st){
   }
 
   if (st.mode==="carry"){
-    addNumber("Weight (lb)","lbs","lb",{min:0,step:"any"});
+    addNumber("Weight ("+unitWeightLabel()+")","lbs",unitWeightLabel(),{min:0,step:"any",toDisplay:v=>poundsToUnit(v,currentUnitSystem(),2),fromDisplay:v=>poundsFromUnit(v,currentUnitSystem())});
     addNumber("Distance","dist","distance",{min:0,step:"any"});
     addUnit("Distance unit","distUnit");
     return;
@@ -13368,7 +13354,7 @@ function renderSessionInputs(){
     const head = document.createElement("div");
     head.className = "x-head";
     head.innerHTML = '<span class="exercise-name"><b>'+esc(ex.name.replace("[Cardio] ",""))+'</b>'
-      +(st.auto?' <span class="autoUp">'+(st.autoDelta<0?'−5 assist':'+5 auto')+'</span>':'')+'</span>';
+      +(st.auto?' <span class="autoUp">'+(st.autoDelta<0?'−'+trainingStepDisplay()+' assist':'+'+trainingStepDisplay()+' auto')+'</span>':'')+'</span>';
     const tools = document.createElement("div");
     tools.className = "x-tools";
     if (prevVal && editableWorkoutValueKind(workoutValueKind(prevVal))){

@@ -91,12 +91,11 @@ check("downloaded normal backup passes the existing restore-envelope verifier",
 B.window.eval(`
   const b = JSON.parse(window.__dl);
   delete b.cfg.calTarget; delete b.cfg.proTarget; b.cfg.calLo=1500; b.cfg.calHi=1700; b.cfg.proLo=160; b.cfg.proHi=180;
-  const keepAI={}; ["anthropicKey","openaiKey","aiProvider","aiModelAnth","aiModelOai"].forEach(k=>{ if(b.cfg[k]===undefined && cfg[k]!==undefined) keepAI[k]=cfg[k]; });
   migrateTargets(b.cfg);
-  cfg = Object.assign({}, DEFAULT_CFG, b.cfg, keepAI); migrateCfg(); saveCfg();
+  cfg = Object.assign({}, DEFAULT_CFG, b.cfg); migrateCfg(); saveCfg();
 `);
 check("old-range backup restores + migrates", B.window.eval("cfg.calTarget")===1600);
-check("restore preserves AI key + provider", B.window.eval("cfg.anthropicKey")==="sk-test-A" && B.window.eval("cfg.aiProvider")==="anthropic");
+check("restore cannot revive retired direct-AI credentials", B.window.eval("cfg.anthropicKey")===undefined && B.window.eval("cfg.openaiKey")===undefined && B.window.eval("cfg.aiProvider")===undefined);
 
 // ================= v45: schemaVersion & protected migrations =================
 const V1_CFG = Object.assign({}, EXISTING_CFG, {schemaVersion:1});
@@ -443,7 +442,7 @@ const rangeCfg = Object.assign({},EXISTING_CFG,{calLo:1500,calHi:1700,proLo:160,
 delete rangeCfg.calTarget; delete rangeCfg.proTarget;
 let restoreResult = R45.window.eval(`restoreBackupEnvelope({cfg:${JSON.stringify(rangeCfg)}})`);
 check("range-era backup restores through shared pipeline", restoreResult.ok && R45.window.eval("cfg.calTarget")===1600 && R45.window.eval("cfg.proTarget")===170);
-check("restore preserves absent device AI fields", R45.window.eval("cfg.anthropicKey")==="sk-device" && R45.window.eval("cfg.aiProvider")==="anthropic");
+check("restore scrubs retired direct-AI fields", R45.window.eval("cfg.anthropicKey")===undefined && R45.window.eval("cfg.aiProvider")===undefined);
 check("v60 restore preserves an absent food-handoff preference", R45.window.eval("cfg.foodHandoffOn")===false);
 check("cfg-only partial restore leaves data and program bytes untouched", R45.window.localStorage.getItem("forge:data")===beforeRangeData && R45.window.localStorage.getItem("forge:program")===beforeRangeProgram);
 const cfgBeforeDataOnly = R45.window.localStorage.getItem("forge:cfg");
@@ -649,7 +648,7 @@ const backupCandidate=BackupRecovery.window.eval(`prepareRecoveryBackupEnvelope(
 check("partial recovery backup uses backup/readable/default sources exactly", backupCandidate.ok && /Use backup logs/.test(backupCandidate.summary) && /Keep readable training program/.test(backupCandidate.summary) && /Reset settings/.test(backupCandidate.summary));
 const backupRecoveryResult=BackupRecovery.window.eval(`performRecoveryCandidate(prepareRecoveryBackupEnvelope({data:${JSON.stringify(recoveryBackupData)}}),{})`);
 check("partial recovery backup restores data and keeps readable program", backupRecoveryResult.ok && BackupRecovery.window.eval(`data.food["2026-07-14"][0].name`)==="Backup food" && BackupRecovery.window.eval("program.name")==="Readable Live Program");
-check("recovery backup preserves AI fields from validated LKG when live cfg is unreadable", BackupRecovery.window.eval("cfg.anthropicKey")==="sk-lkg" && BackupRecovery.window.eval("cfg.aiProvider")==="anthropic");
+check("recovery backup scrubs retired direct-AI fields from validated LKG", BackupRecovery.window.eval("cfg.anthropicKey")===undefined && BackupRecovery.window.eval("cfg.aiProvider")===undefined);
 let RangeRecovery=bootRaw({cfg:"{bad",data:liveDifferentData,program:RAW_PROGRAM,lkg:recoveryLkgRaw});
 const recoveryRangeCfg=Object.assign({},EXISTING_CFG,{calLo:1400,calHi:1600,proLo:150,proHi:170}); delete recoveryRangeCfg.calTarget; delete recoveryRangeCfg.proTarget;
 const rangeRecoveryCandidate=RangeRecovery.window.eval(`prepareRecoveryBackupEnvelope({cfg:${JSON.stringify(recoveryRangeCfg)}})`);
@@ -764,7 +763,7 @@ let PartialKeys46=bootRaw({cfg:JSON.stringify(Object.assign({},V1_CFG,{anthropic
 PartialKeys46.window.eval(`window.__partialKeys=null; window.confirm=()=>true; download=(n,c)=>{window.__partialKeys={n,c};}; doBackup("recoveryPartialExportBtn");`);
 const partialKeysText=PartialKeys46.window.eval("window.__partialKeys.c");
 check("readable partial export still strips both API keys", !partialKeysText.includes("sk-secret-a") && !partialKeysText.includes("sk-secret-o"));
-check("device-only LKG may retain API keys while normal exports do not", JSON.parse(recoveryLkgRaw).strings.cfg.includes("sk-lkg") && !normalBackupText.includes("sk-lkg"));
+check("validated LKG and normal exports both exclude retired API keys", !JSON.parse(recoveryLkgRaw).strings.cfg.includes("sk-lkg") && !normalBackupText.includes("sk-lkg"));
 const cleanBefore=fiveBytes(RecoverLkg);
 RecoverLkg.window.confirm=()=>false;
 RecoverLkg.window.document.getElementById("deleteQuarantineBtn").dispatchEvent(new RecoverLkg.window.Event("click",{bubbles:true}));
@@ -2020,26 +2019,22 @@ const DistinctRecurring = boot(
 check("usual foods do not merge unrelated products merely because they share a vague phrase",
   DistinctRecurring.window.eval(`usualFor("lunch")`)===null);
 
-// ================= v69: default ChatGPT handoff provider =================
+// ================= copy/paste AI handoff only =================
 releaseTestWindows([
   UsualControls,UsualPartial,UsualAllMeals,DistinctRecurring
 ]);
 const H68Cfg = Object.assign({},V2_CFG);
-delete H68Cfg.aiProvider;
 delete H68Cfg.foodHandoffOn;
 const H68 = boot(H68Cfg,EMPTY_DATA);
 const dH68 = H68.window.document;
-check("v69 missing AI provider defaults to ChatGPT handoff",
-  H68.window.eval("cfg.aiProvider")==="handoff"
-  && H68.window.eval("aiProvider()")==="handoff"
-  && dH68.getElementById("sAiProvider").value==="handoff");
-check("v69 default provider and Quick Log defaults are aligned",
+check("AI Quick Log defaults to copy/paste handoff",
   H68.window.eval("foodHandoffEnabled()")===true
   && !dH68.getElementById("aiHandoffControls").classList.contains("hidden"));
 const H68Claude = boot(Object.assign({},V2_CFG,{aiProvider:"anthropic",anthropicKey:"sk-test"}),EMPTY_DATA);
-check("v69 explicit Claude provider remains unchanged",
-  H68Claude.window.eval("cfg.aiProvider")==="anthropic"
-  && H68Claude.window.document.getElementById("sAiProvider").value==="anthropic");
+check("legacy provider settings and credentials are removed on boot",
+  H68Claude.window.eval("cfg.aiProvider")===undefined
+  && H68Claude.window.eval("cfg.anthropicKey")===undefined
+  && !H68Claude.window.localStorage.getItem("forge:cfg").includes("sk-test"));
 
 // ================= v60: default-on ChatGPT food handoff =================
 const H60 = boot(V2_CFG, EMPTY_DATA);
@@ -2052,9 +2047,9 @@ check("v60 disabling food handoff persists false and hides the no-key card", H60
 clickH60("foodHandoffToggleBtn");
 check("v60 food handoff can be restored from Settings", H60.window.eval("cfg.foodHandoffOn")===true && !dH60.getElementById("aiFoodCard").classList.contains("hidden") && dH60.getElementById("foodHandoffToggleBtn").getAttribute("aria-pressed")==="true");
 const H60Api = boot(Object.assign({},V2_CFG,{aiProvider:"anthropic",anthropicKey:"sk-test",foodHandoffOn:true}),EMPTY_DATA);
-check("v60 a configured live API key keeps the live food flow", H60Api.window.document.getElementById("aiHandoffControls").classList.contains("hidden") && !H60Api.window.document.getElementById("aiFoodGoBtn").classList.contains("hidden"));
+check("legacy live-AI settings cannot replace the copy/paste food flow", !H60Api.window.document.getElementById("aiHandoffControls").classList.contains("hidden") && H60Api.window.eval("cfg.anthropicKey")===undefined);
 const H60Off = boot(Object.assign({},V2_CFG,{aiProvider:"handoff",foodHandoffOn:false}),EMPTY_DATA);
-check("v60 disabling food handoff also hides it in handoff provider mode", H60Off.window.document.getElementById("aiFoodCard").classList.contains("hidden"));
+check("disabling food handoff hides it after retired provider settings are scrubbed", H60Off.window.document.getElementById("aiFoodCard").classList.contains("hidden") && H60Off.window.eval("cfg.aiProvider")===undefined);
 check("v60 keeps primary schemaVersion 3", H60.window.eval("SCHEMA_VERSION")===3);
 
 // ================= v61: local food suggestions =================
@@ -2131,7 +2126,7 @@ C62.window.eval(`reviewFoodSuggestion(foodSuggestionCandidates().find(c=>c.food.
 check("v62 a catalog suggestion opens its exact listed serving for review", dC62.getElementById("qtyUnit").value==="serving" && Number(dC62.getElementById("qtyAmount").value)===1 && /4 oz cooked \(113g\)/.test(dC62.getElementById("qtyUnit").selectedOptions[0].textContent));
 check("v62 review shows the USDA per-100g values and correctly scaled serving", /USDA reference · SR28/.test(dC62.getElementById("selName").textContent) && /165 kcal/.test(dC62.getElementById("selPer100").textContent) && dC62.getElementById("calcCal").textContent==="186" && dC62.getElementById("calcPro").textContent==="35");
 check("v62 reviewing a broad-catalog suggestion never auto-logs it", C62.window.eval(`(data.food[todayStr()]||[]).length`)===beforeReview62);
-check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v97"'); })());
+check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v101"'); })());
 check("v62 keeps primary schemaVersion 3", C62.window.eval("SCHEMA_VERSION")===3);
 
 // ================= ChatGPT handoff paste flow =================
@@ -2149,6 +2144,7 @@ check("training weight and rep inputs use 16px text to prevent mobile focus zoom
 dH.getElementById("hfPasteText").value = 'Here! {\u201Cfoods\u201D:[{\u201Cname\u201D:\u201CRice\u201D,\u201Ccal\u201D:260,\u201Cpro\u201D:5,\u201Ccarb\u201D:57,\u201Cfat\u201D:1}]}';
 clickH("hfReviewBtn"); await wait(30);
 check("curly-quote paste reaches review card", dH.querySelectorAll("#aiFoodConfirm .list-item").length===1);
+check("AI review uses a clearly labeled remove-item control instead of a floating red X", dH.querySelector("#aiFoodConfirm .ai-food-remove").textContent==="Remove item");
 check("review flow centers the first item instead of clipping it above the viewport", /list-item/.test(H.window.eval("window.__aiScroll && window.__aiScroll.className")||"") && H.window.eval("window.__aiScroll && window.__aiScroll.block")==="center");
 const hfLogBtn = dH.querySelector("#aiFoodConfirm .ai-confirm-log");
 check("review log action stays visible while reviewing", !!hfLogBtn);
@@ -2520,11 +2516,12 @@ const currentFaqContract = P.window.eval(`(()=>{
     && has("How do I save or share a training program?","Save file")
     && has("How do I save or share a training program?","Share")
     && has("What can the optional AI tools do, and what information is sent?","Optional AI tools")
-    && has("What can the optional AI tools do, and what information is sent?","Photos and raw replies are not kept")
+    && has("What can the optional AI tools do, and what information is sent?","BlackPyre never contacts an AI service")
+    && has("What can the optional AI tools do, and what information is sent?","Selected photos stay in memory only")
     && has("Where is my data stored? Is it private?","browser/PWA site storage on this device")
     && has("Where is my data stored? Is it private?","no user account or central BlackPyre database")
     && has("How do I back up or move BlackPyre to another device?","Create a backup")
-    && has("How do I back up or move BlackPyre to another device?","excluded from normal backups")
+    && !has("How do I back up or move BlackPyre to another device?","API key")
     && has("What is Protected mode, and what if my data disappears?","pauses normal saving")
     && has("What is Protected mode, and what if my data disappears?","Do not remove the installed web app or clear its site data")
     && has("What works without an internet connection?","Saved barcodes")
@@ -2578,8 +2575,8 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache key matches the BlackPyre web v82 release",
-  /const CACHE = "blackpyre-v97";/.test(sw));
-check("Phase 1 service-worker cache remains refreshed", sw.includes('const CACHE = "blackpyre-v97"') && !sw.includes('blackpyre-phase1-nutrition-safety-1'));
+  /const CACHE = "blackpyre-v101";/.test(sw));
+check("Phase 1 service-worker cache remains refreshed", sw.includes('const CACHE = "blackpyre-v101"') && !sw.includes('blackpyre-phase1-nutrition-safety-1'));
 
 await wait(0);
 releaseTestWindows([
@@ -2865,8 +2862,7 @@ check("v56 offline barcode lookup skips network and opens manual entry", O56.win
 dO56.getElementById("scanBtn").dispatchEvent(new O56.window.Event("click",{bubbles:true}));
 await wait(5);
 check("v56 offline scanner fast-fails without loading its external library", O56.window.__netCalls.length===0 && /needs a connection/.test(dO56.getElementById("scanErr").textContent) && ![...dO56.querySelectorAll('script[src]')].some(x=>/html5-qrcode/.test(x.src)));
-await O56.window.eval(`anthropicCall([],"",10).catch(e=>{window.__offlineAI=e.message;})`);
-check("v56 direct-provider AI fast-fails offline and points to handoff", O56.window.__netCalls.length===0 && /offline/.test(O56.window.__offlineAI) && /handoff/.test(O56.window.__offlineAI));
+check("offline AI handoff remains local and makes no network request", O56.window.__netCalls.length===0 && O56.window.eval("foodHandoffEnabled()")===true);
 
 // ================= v53: mobile set-row alignment =================
 check("mobile set controls stay together after checkmark removal",
@@ -2885,7 +2881,7 @@ const hasAccessibleName57 = el=>{
   }
   return el.tagName==="BUTTON" && !!el.textContent.trim();
 };
-const A57=boot(Object.assign({},V2_CFG,{anthropicKey:"sk-test",aiProvider:"anthropic"}),V2_DATA,null,TEST_PROGRAM);
+const A57=boot(V2_CFG,V2_DATA,null,TEST_PROGRAM);
 const dA57=A57.window.document;
 A57.window.eval(`renderSessionInputs(); renderRecents(); renderMyFoods(); openBuilder(false); renderResults([{name:"Accessible chicken",brand:"Suite",cal100:165,pro100:31,carb100:0,fat100:3.6}]);`);
 await wait(40);
@@ -2910,12 +2906,6 @@ faqOpen57.focus(); faqOpen57.click(); await wait(40);
 check("v57 opening Help moves focus into its dialog", dA57.activeElement===dA57.getElementById("faqCloseBtn"));
 dA57.getElementById("faqCloseBtn").click(); await wait(40);
 check("v57 closing Help returns focus to its opener", dA57.activeElement===faqOpen57);
-const coachOpen57=dA57.getElementById("coachOpenBtn");
-coachOpen57.classList.remove("hidden"); coachOpen57.focus(); coachOpen57.click(); await wait(40);
-check("v57 opening Coach focuses its message field", dA57.activeElement===dA57.getElementById("coachInput"));
-dA57.getElementById("coachCloseBtn").click(); await wait(40);
-check("v57 closing Coach returns focus to its opener", dA57.activeElement===coachOpen57);
-
 const result57=dA57.querySelector("#results .result");
 check("v57 food search results are named native buttons", result57 && result57.tagName==="BUTTON" && hasAccessibleName57(result57));
 result57.click();
@@ -3250,15 +3240,18 @@ check("v76 exercise picker keeps shape sections alphabetical and complete",
 
 dExercise76.getElementById("exerciseSearch").value="pull";
 Exercise76.window.eval("renderLibraryOptions()");
-const firstPull76=dExercise76.getElementById("addExSel").options[0];
+const firstPull76=[...dExercise76.getElementById("addExSel").options].find(option=>option.value.startsWith("bp:"));
 
 dExercise76.getElementById("exerciseSearch").value="chin";
 Exercise76.window.eval("renderLibraryOptions()");
-const firstChin76=dExercise76.getElementById("addExSel").options[0];
+const firstChin76=[...dExercise76.getElementById("addExSel").options].find(option=>option.value.startsWith("bp:"));
 
 check("v76 search surfaces Pull-Up and Chin-Up ahead of weaker matches",
   firstPull76.value==="bp:pull-up"
   && firstChin76.value==="bp:chin-up");
+
+check("custom exercise action stays at the top of the exercise picker",
+  dExercise76.getElementById("addExSel").options[0].value==="__CUSTOM__");
 
 check("v76 legacy cardio selector is alphabetical with Other last",
   Exercise76.window.eval(`(()=>{
@@ -7948,7 +7941,7 @@ check(
   V78ServiceWorker.includes('"./data-exercise-card-profiles.js"')
   && V78ServiceWorker.includes('"./scripts/03-card-profiles.js"')
   && V78ServiceWorker.includes(
-    'const CACHE = "blackpyre-v97"'
+    'const CACHE = "blackpyre-v101"'
   )
 );
 
@@ -8840,29 +8833,6 @@ NativeParity77.window.eval(
   `closeTrainingPlanReview({skipFocus:true})`
 );
 
-const NativeParityPublicPayload77=
-  NativeParity77.window.eval(`
-    extractAIPayloads(
-      'Here is the plan.\\n\\n\`\`\`json\\n'
-      +JSON.stringify(
-        aiPublicTrainingPlanFromProgram(
-          program
-        )
-      )
-      +'\\n\`\`\`'
-    )
-  `);
-
-check(
-  "v77 AI extraction accepts the public training-plan envelope",
-  !!NativeParityPublicPayload77.program
-  && NativeParityPublicPayload77
-    .program.format
-      ==="blackpyre-training-plan"
-  && NativeParityPublicPayload77
-    .program.version===1
-);
-
 const NativeParityAISource77=
   fs.readFileSync(
     "scripts/05-ai.js",
@@ -8870,24 +8840,18 @@ const NativeParityAISource77=
   );
 
 check(
-  "v77 AI instructions use public format and route programs through review",
+  "training-plan AI handoff remains copy/paste and routes imports through review",
   NativeParityAISource77.includes(
-    '\\"format\\":\\"blackpyre-training-plan\\"'
+    "extractTrainingPlanDocumentFromText(text)"
   )
   && NativeParityAISource77.includes(
-    "aiPublicTrainingPlanFromProgram(program)"
+    '"AI paste"'
   )
   && NativeParityAISource77.includes(
-    '"Pasted AI response"'
-  )
-  && NativeParityAISource77.includes(
-    '"AI Coach response"'
+    "openTrainingPlanReview("
   )
   && !NativeParityAISource77.includes(
     "replaceActiveProgram(payloads.program)"
-  )
-  && !NativeParityAISource77.includes(
-    "const replaced = replaceActiveProgram(prog);"
   )
 );
 
@@ -8941,6 +8905,21 @@ check(
   "v77 normal interface text remains capped at 16px",
   NativeParityOversizeFonts77.length===0
 );
+
+// Measurement-system presentation preserves canonical history.
+const Metric=boot(
+  Object.assign({},EXISTING_CFG,{unitSystem:"metric",calcInputs:{sex:"m",age:42,ft:5,inches:11,lb:220.462262,act:1.55,goal:-500}}),
+  {food:{},workouts:[],weights:[{date:"2026-07-02",time:"08:00",lbs:220.462262}],measure:[],meta:{lastBackup:null,logsSince:0}}
+);
+const dMetric=Metric.window.document;
+check("metric Settings and calculator fields render",dMetric.getElementById("unitMetricBtn").getAttribute("aria-pressed")==="true"&&dMetric.getElementById("cCm").value==="180.3"&&Number(dMetric.getElementById("cWt").value)===100);
+check("metric weight history renders kilograms without rewriting storage",dMetric.getElementById("wtList").textContent.includes("100 kg")&&Metric.window.eval(`data.weights[0].lbs`)===220.462262);
+dMetric.getElementById("wtVal").value="95";
+dMetric.getElementById("addWtBtn").dispatchEvent(new Metric.window.Event("click",{bubbles:true}));
+check("metric weigh-in saves canonical pounds",Math.abs(Metric.window.eval(`data.weights.find(w=>w.date===todayStr()).lbs`)-209.439149)<0.0001);
+dMetric.getElementById("unitImperialBtn").dispatchEvent(new Metric.window.Event("click",{bubbles:true}));
+check("switching units changes presentation without rewriting history",Metric.window.eval(`cfg.unitSystem`)==="imperial"&&dMetric.getElementById("wtList").textContent.includes("209.4 lb")&&Math.abs(Metric.window.eval(`data.weights.find(w=>w.date===todayStr()).lbs`)-209.439149)<0.0001);
+Metric.window.close();
 
 summary("INTEGRATION");
 })().catch(e=>{ console.error(e); process.exit(1); });
