@@ -2135,7 +2135,7 @@ C62.window.eval(`reviewFoodSuggestion(foodSuggestionCandidates().find(c=>c.food.
 check("v62 a catalog suggestion opens its exact listed serving for review", dC62.getElementById("qtyUnit").value==="serving" && Number(dC62.getElementById("qtyAmount").value)===1 && /4 oz cooked \(113g\)/.test(dC62.getElementById("qtyUnit").selectedOptions[0].textContent));
 check("v62 review shows the USDA per-100g values and correctly scaled serving", /USDA reference · SR28/.test(dC62.getElementById("selName").textContent) && /165 kcal/.test(dC62.getElementById("selPer100").textContent) && dC62.getElementById("calcCal").textContent==="186" && dC62.getElementById("calcPro").textContent==="35");
 check("v62 reviewing a broad-catalog suggestion never auto-logs it", C62.window.eval(`(data.food[todayStr()]||[]).length`)===beforeReview62);
-check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v102"'); })());
+check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v103"'); })());
 check("v62 keeps primary schemaVersion 3", C62.window.eval("SCHEMA_VERSION")===3);
 
 // ================= ChatGPT handoff paste flow =================
@@ -2584,8 +2584,8 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache key matches the BlackPyre web v82 release",
-  /const CACHE = "blackpyre-v102";/.test(sw));
-check("Phase 1 service-worker cache remains refreshed", sw.includes('const CACHE = "blackpyre-v102"') && !sw.includes('blackpyre-phase1-nutrition-safety-1'));
+  /const CACHE = "blackpyre-v103";/.test(sw));
+check("Phase 1 service-worker cache remains refreshed", sw.includes('const CACHE = "blackpyre-v103"') && !sw.includes('blackpyre-phase1-nutrition-safety-1'));
 
 await wait(0);
 releaseTestWindows([
@@ -3267,6 +3267,25 @@ dExercise76.getElementById("addExSel").dispatchEvent(new Exercise76.window.Event
 check("Add custom exercise reveals its name and tracking options",
   !dExercise76.getElementById("customExerciseFields").classList.contains("hidden")
   && Exercise76.window.eval(`ensureFreestyleCustomShapeSelect().id`)==="addExShape");
+
+check("custom exercise tracking offers a plainly labeled Time option",
+  Exercise76.window.eval(`EXERCISE_SHAPES.includes("duration")`)
+  && [...dExercise76.getElementById("addExShape").options]
+    .some(option=>option.value==="duration" && option.textContent==="Time"));
+
+check("custom Time exercise creates a duration-only workout profile",
+  Exercise76.window.eval(`(()=>{
+    const created=createUserExercise("Pickup Basketball","duration");
+    if(!created.ok) return false;
+    const entry=data.myExercises[created.entry.id];
+    const resolved=BP_WORKOUT_PROFILES.resolve(entry,{});
+    const fields=BP_WORKOUT_PROFILES.fields(resolved.profile,resolved.options);
+    return entry.shape==="duration"
+      && entry.tags.includes("sport")
+      && resolved.profile==="durationActivity"
+      && resolved.options.timeOnly===true
+      && fields.map(field=>field.key).join(",")==="hours,minutes,seconds";
+  })()`));
 
 check("v76 legacy cardio selector is alphabetical with Other last",
   Exercise76.window.eval(`(()=>{
@@ -7956,7 +7975,7 @@ check(
   V78ServiceWorker.includes('"./data-exercise-card-profiles.js"')
   && V78ServiceWorker.includes('"./scripts/03-card-profiles.js"')
   && V78ServiceWorker.includes(
-    'const CACHE = "blackpyre-v102"'
+    'const CACHE = "blackpyre-v103"'
   )
 );
 

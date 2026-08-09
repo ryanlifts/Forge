@@ -388,7 +388,7 @@ function recognizedNutritionGoalAdjustment(settings){
 }
 
 // ================== exercise model contract ==================
-const EXERCISE_SHAPES = ["lift","reps","timeDist","carry","rounds","text"];
+const EXERCISE_SHAPES = ["lift","reps","duration","timeDist","carry","rounds","text"];
 const EXERCISE_TAGS = ["strength","push","pull","squat","hinge","lunge","core","carry","conditioning","cardio","mobility","power","olympic","strongman","bodyweight","machine","isolation","upper","lower","full-body","recovery","sport","rehab"];
 const EXERCISE_EQUIPMENT = ["barbell","dumbbell","kettlebell","machine","cable","bodyweight","bench","rack","pull-up-bar","bands","suspension","medicine-ball","sled","yoke","trap-bar","landmine","box","step","bike","rower","treadmill","elliptical","stair-machine","pool","track","road","trail","jump-rope","battle-rope","sandbag","other"];
 const EXERCISE_DISTANCE_UNITS = ["mi","km","m","ft"];
