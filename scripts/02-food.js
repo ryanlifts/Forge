@@ -1993,9 +1993,9 @@ function syncBarcodeCorrectionReview(food){
     panel.style.cssText=
       "margin:12px 0 10px;"
       +"padding:12px;"
-      +"border:2px solid var(--amber);"
+      +"border:2px solid var(--ember);"
       +"border-radius:12px;"
-      +"background:rgba(232,176,75,.14);";
+      +"background:rgba(var(--ember-rgb),.08);";
 
     const title=
       document.createElement("div");
@@ -2004,13 +2004,48 @@ function syncBarcodeCorrectionReview(food){
       "barcodeCorrectionTitle";
 
     title.textContent=
-      "⚠ Verify barcode nutrition";
+      "VERIFY BARCODE NUTRITION";
+
+    title.className=
+      "barcode-review-title";
 
     title.style.cssText=
       "font-size:15px;"
       +"font-weight:700;"
       +"line-height:1.3;"
       +"margin-bottom:6px;";
+
+    const status=
+      document.createElement("div");
+
+    status.id="barcodeCorrectionStatus";
+    status.className="barcode-review-status";
+    status.textContent="NOT YET VERIFIED";
+
+    const servingLabel=
+      document.createElement("div");
+
+    servingLabel.className="barcode-review-label";
+    servingLabel.textContent="SCANNED SERVING";
+
+    const serving=
+      document.createElement("div");
+
+    serving.id="barcodeCorrectionServing";
+    serving.className="barcode-review-serving";
+
+    const nutrition=
+      document.createElement("div");
+
+    nutrition.id="barcodeCorrectionNutrition";
+    nutrition.className="barcode-review-nutrition";
+
+    const source=
+      document.createElement("div");
+
+    source.id="barcodeCorrectionSource";
+    source.className="note";
+    source.style.margin="0 0 12px";
 
     const message=
       document.createElement("div");
@@ -2019,7 +2054,7 @@ function syncBarcodeCorrectionReview(food){
       "barcodeCorrectionMessage";
 
     message.textContent=
-      "This result came from Open Food Facts. The serving total below is calculated from database values and may be wrong. Compare the serving and nutrition with the package before logging.";
+      "Compare these scanned values with the package label before logging.";
 
     message.style.cssText=
       "font-size:13px;"
@@ -2034,10 +2069,10 @@ function syncBarcodeCorrectionReview(food){
 
     confirmButton.type="button";
     confirmButton.textContent=
-      "✓ Looks correct";
+      "NUTRITION MATCHES PACKAGE";
 
     confirmButton.className=
-      "btn small barcode-confirm-action";
+      "btn barcode-confirm-action";
 
     confirmButton.style.width="100%";
     confirmButton.style.marginTop="10px";
@@ -2055,10 +2090,10 @@ function syncBarcodeCorrectionReview(food){
 
     button.type="button";
     button.textContent=
-      "Correct barcode data";
+      "NUTRITION NEEDS EDITING";
 
     button.className=
-      "btn small barcode-correct-action";
+      "btn barcode-correct-action";
 
     button.style.width="100%";
     button.style.marginTop="8px";
@@ -2069,6 +2104,11 @@ function syncBarcodeCorrectionReview(food){
     );
 
     panel.appendChild(title);
+    panel.appendChild(status);
+    panel.appendChild(servingLabel);
+    panel.appendChild(serving);
+    panel.appendChild(nutrition);
+    panel.appendChild(source);
     panel.appendChild(message);
     panel.appendChild(confirmButton);
     panel.appendChild(button);
@@ -2121,6 +2161,18 @@ function syncBarcodeCorrectionReview(food){
       "barcodeCorrectionMessage"
     );
 
+  const status=
+    document.getElementById("barcodeCorrectionStatus");
+
+  const serving=
+    document.getElementById("barcodeCorrectionServing");
+
+  const nutrition=
+    document.getElementById("barcodeCorrectionNutrition");
+
+  const source=
+    document.getElementById("barcodeCorrectionSource");
+
   const confirmButton=
     document.getElementById(
       "barcodeConfirmBtn"
@@ -2135,17 +2187,47 @@ function syncBarcodeCorrectionReview(food){
 
   if (title){
     title.textContent=
-      "⚠ Verify barcode nutrition";
+      "VERIFY BARCODE NUTRITION";
   }
 
   if (message){
     message.textContent=
-      "This result came from Open Food Facts. The serving total below is calculated from database values and may be wrong. Compare the serving and nutrition with the package before logging.";
+      "Compare these scanned values with the package label before logging.";
+  }
+
+  if (status){
+    status.textContent="NOT YET VERIFIED";
+  }
+
+  const scannedValues=
+    food ? servingValuesFromFood(food) : null;
+
+  if (serving){
+    serving.textContent=
+      food
+        ? String(food.servingLabel || (Number(food.servingG)>0 ? food.servingG+" G" : "1 SERVING")).toUpperCase()
+        : "";
+  }
+
+  if (nutrition){
+    nutrition.textContent=
+      scannedValues
+        ? Math.round(Number(scannedValues.cal)||0)+" KCAL · "
+          +r1(scannedValues.pro)+"G PROTEIN · "
+          +r1(scannedValues.carb)+"G CARBS · "
+          +r1(scannedValues.fat)+"G FAT"
+        : "";
+  }
+
+  if (source){
+    source.textContent=food ? "SOURCE: OPEN FOOD FACTS" : "";
   }
 
   confirmButton.disabled=false;
   confirmButton.textContent=
-    "✓ Looks correct";
+    "NUTRITION MATCHES PACKAGE";
+  button.textContent=
+    "NUTRITION NEEDS EDITING";
   button.classList.remove("hidden");
 
   confirmButton.onclick=
@@ -2471,7 +2553,9 @@ function updateRecentPortion(item, amount, unit){
 }
 
 
+const FOOD_ADD_CONFIRMATION_MS=30000;
 let foodAddConfirmationRef=null;
+let foodAddConfirmationTimer=null;
 
 function ensureFoodAddConfirmation(){
   let panel=
@@ -2511,9 +2595,7 @@ function ensureFoodAddConfirmation(){
     "foodAddConfirmationMessage";
 
   message.style.cssText=
-    "font-size:14px;"
-    +"font-weight:600;"
-    +"margin-bottom:9px;";
+    "margin-bottom:9px;";
 
   const actions=
     document.createElement("div");
@@ -2528,7 +2610,7 @@ function ensureFoodAddConfirmation(){
   undo.id="foodAddUndoBtn";
   undo.type="button";
   undo.className="btn ghost small";
-  undo.textContent="Undo";
+  undo.textContent="UNDO";
   undo.style.flex="1";
 
   const view=
@@ -2537,7 +2619,7 @@ function ensureFoodAddConfirmation(){
   view.id="foodAddViewBtn";
   view.type="button";
   view.className="btn ghost small";
-  view.textContent="View entry";
+  view.textContent="VIEW ENTRY";
   view.style.flex="1";
 
   actions.appendChild(undo);
@@ -2563,6 +2645,8 @@ function ensureFoodAddConfirmation(){
 }
 
 function hideFoodAddedConfirmation(){
+  clearTimeout(foodAddConfirmationTimer);
+  foodAddConfirmationTimer=null;
   foodAddConfirmationRef=null;
 
   const panel=
@@ -2619,8 +2703,8 @@ function showFoodAddedConfirmation(
   if (message){
     message.textContent=
       dateStr===todayStr()
-        ? "✓ Added to today’s log"
-        : "✓ Added to "+fmtDate(dateStr);
+        ? "✓ ADDED TO TODAY’S LOG"
+        : "✓ ADDED TO "+fmtDate(dateStr).toUpperCase();
   }
 
   const undo=
@@ -2735,6 +2819,11 @@ function showFoodAddedConfirmation(
   }
 
   panel.classList.remove("hidden");
+  clearTimeout(foodAddConfirmationTimer);
+  foodAddConfirmationTimer=setTimeout(
+    hideFoodAddedConfirmation,
+    FOOD_ADD_CONFIRMATION_MS
+  );
 }
 
 document.getElementById("addSelBtn").addEventListener("click", ()=>{

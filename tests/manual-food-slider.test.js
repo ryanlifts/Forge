@@ -152,7 +152,7 @@ check(
     )
     .classList
     .contains("hidden")
-  && /Added to today/.test(
+  && /ADDED TO TODAY/.test(
     d
       .getElementById(
         "foodAddConfirmationMessage"
@@ -730,7 +730,7 @@ const sw = fs.readFileSync(
 check(
   "manual food-slider candidate uses the current cache",
   sw.includes(
-    'const CACHE = "blackpyre-v101"'
+    'const CACHE = "blackpyre-v102"'
   )
 );
 

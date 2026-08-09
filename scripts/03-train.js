@@ -707,6 +707,9 @@ function makeExerciseShapeSelect(label){
 }
 
 function ensureFreestyleCustomShapeSelect(){
+  const builtIn = document.getElementById("addExShape");
+  if (builtIn) return builtIn;
+
   let sel = document.getElementById("addExCustomShape");
   if (sel) return sel;
 
@@ -721,11 +724,15 @@ function ensureFreestyleCustomShapeSelect(){
 }
 
 function setFreestyleCustomControlsVisible(visible){
+  const fields = document.getElementById("customExerciseFields");
   const nameInput = document.getElementById("addExCustom");
   const shapeSel = ensureFreestyleCustomShapeSelect();
 
-  nameInput.classList.toggle("hidden",!visible);
-  shapeSel.classList.toggle("hidden",!visible);
+  if (fields) fields.classList.toggle("hidden",!visible);
+  if (!fields){
+    nameInput.classList.toggle("hidden",!visible);
+    shapeSel.classList.toggle("hidden",!visible);
+  }
 }
 
 function userExerciseIdBase(name){

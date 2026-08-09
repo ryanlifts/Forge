@@ -30,7 +30,8 @@ check("fresh boot completes", dA.getElementById("setupOverlay").classList.contai
 // every referenced ID exists; no duplicates (wizard su* IDs are rendered dynamically)
 const jsSrc = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m=>m[1]).join("\n");
 const refs = [...new Set([...jsSrc.matchAll(/getElementById\("([^"]+)"\)/g)].map(m=>m[1]))];
-const missing = refs.filter(id=>!id.startsWith("su") && !dA.getElementById(id));
+const dynamicIds = new Set(["barcodeCorrectionStatus","barcodeCorrectionServing","barcodeCorrectionNutrition","barcodeCorrectionSource","addExCustomShape"]);
+const missing = refs.filter(id=>!id.startsWith("su") && !dynamicIds.has(id) && !dA.getElementById(id));
 check("no missing element IDs ("+refs.length+" referenced)", missing.length===0 || (console.log("   missing:",missing),false));
 const ids = [...dA.querySelectorAll("[id]")].map(e=>e.id);
 check("no duplicate IDs ("+ids.length+" elements)", ids.filter((id,i)=>ids.indexOf(id)!==i).length===0);
@@ -72,8 +73,8 @@ check("weight page trend + goal line render", B.window.document.getElementById("
 
 // backup / restore round-trip
 check("web backup actions use distinct platform-appropriate labels and honest destinations",
-  B.window.document.getElementById("exportDataBtn").textContent==="BACK UP ON THIS DEVICE"
-  && B.window.document.getElementById("shareDataBtn").textContent==="SHARE OR SAVE ELSEWHERE…"
+  B.window.document.getElementById("exportDataBtn").textContent==="SAVE BACKUP"
+  && B.window.document.getElementById("shareDataBtn").textContent==="SAVE BACKUP ELSEWHERE…"
   && /configured Downloads location/.test(B.window.document.getElementById("exportDataBtn").parentElement.textContent)
   && /Safari’s Downloads location/.test(B.window.document.getElementById("exportDataBtn").parentElement.textContent)
   && /browser’s Downloads/.test(B.window.document.getElementById("exportDataBtn").parentElement.textContent)
@@ -1612,9 +1613,9 @@ check("v84 successful food logging preserves position and offers explicit follow
   F51.window.eval("window.__f51")===null
   && F51.window.eval("data.food[todayStr()].length")===4
   && !dF51.getElementById("foodAddConfirmationPanel").classList.contains("hidden")
-  && /Added to today/.test(dF51.getElementById("foodAddConfirmationMessage").textContent)
-  && dF51.getElementById("foodAddUndoBtn").textContent==="Undo"
-  && dF51.getElementById("foodAddViewBtn").textContent==="View entry");
+  && /ADDED TO TODAY/.test(dF51.getElementById("foodAddConfirmationMessage").textContent)
+  && dF51.getElementById("foodAddUndoBtn").textContent==="UNDO"
+  && dF51.getElementById("foodAddViewBtn").textContent==="VIEW ENTRY");
 
 dF51.getElementById("foodAddViewBtn").dispatchEvent(
   new F51.window.Event("click",{bubbles:true})
@@ -1630,6 +1631,14 @@ dF51.getElementById("foodAddUndoBtn").dispatchEvent(
 check("v84 inline Undo removes that exact newly added food",
   F51.window.eval("data.food[todayStr()].length")===3
   && dF51.getElementById("foodAddConfirmationPanel").classList.contains("hidden"));
+
+check("food-added follow-up is limited to 30 seconds",
+  F51.window.eval("FOOD_ADD_CONFIRMATION_MS")===30000);
+F51.window.eval(`showFoodAddedConfirmation(todayStr(),data.food[todayStr()][0])`);
+dF51.querySelector('.tab[data-view="dash"]').dispatchEvent(new F51.window.Event("click",{bubbles:true}));
+check("food-added follow-up closes when leaving Food",
+  dF51.getElementById("foodAddConfirmationPanel").classList.contains("hidden")
+  && F51.window.eval("foodAddConfirmationTimer")===null);
 
 check("v51 handoff behavior untouched by food changes", !!dF51.getElementById("hfPasteBtn"));
 
@@ -2126,7 +2135,7 @@ C62.window.eval(`reviewFoodSuggestion(foodSuggestionCandidates().find(c=>c.food.
 check("v62 a catalog suggestion opens its exact listed serving for review", dC62.getElementById("qtyUnit").value==="serving" && Number(dC62.getElementById("qtyAmount").value)===1 && /4 oz cooked \(113g\)/.test(dC62.getElementById("qtyUnit").selectedOptions[0].textContent));
 check("v62 review shows the USDA per-100g values and correctly scaled serving", /USDA reference · SR28/.test(dC62.getElementById("selName").textContent) && /165 kcal/.test(dC62.getElementById("selPer100").textContent) && dC62.getElementById("calcCal").textContent==="186" && dC62.getElementById("calcPro").textContent==="35");
 check("v62 reviewing a broad-catalog suggestion never auto-logs it", C62.window.eval(`(data.food[todayStr()]||[]).length`)===beforeReview62);
-check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v101"'); })());
+check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v102"'); })());
 check("v62 keeps primary schemaVersion 3", C62.window.eval("SCHEMA_VERSION")===3);
 
 // ================= ChatGPT handoff paste flow =================
@@ -2499,9 +2508,9 @@ const currentFaqContract = P.window.eval(`(()=>{
     && has("Can teenagers use the calorie and macro calculator?","13–17")
     && has("Can teenagers use the calorie and macro calculator?","parent or guardian")
     && has("How do I scan food?","Scan barcode")
-    && has("How do I scan food?","compared with the package")
+    && has("How do I scan food?","Compare those values with the package")
     && has("How do I scan food?","Add to log")
-    && has("What if scanned nutrition is wrong or missing?","Correct barcode data")
+    && has("What if scanned nutrition is wrong or missing?","Nutrition needs editing")
     && has("What if scanned nutrition is wrong or missing?","saves your correction")
     && has("What if scanned nutrition is wrong or missing?","uses it first on later scans")
     && has("How do I change, undo, or view a food entry?","Undo")
@@ -2520,7 +2529,7 @@ const currentFaqContract = P.window.eval(`(()=>{
     && has("What can the optional AI tools do, and what information is sent?","Selected photos stay in memory only")
     && has("Where is my data stored? Is it private?","browser/PWA site storage on this device")
     && has("Where is my data stored? Is it private?","no user account or central BlackPyre database")
-    && has("How do I back up or move BlackPyre to another device?","Create a backup")
+    && has("How do I back up or move BlackPyre to another device?","Save backup")
     && !has("How do I back up or move BlackPyre to another device?","API key")
     && has("What is Protected mode, and what if my data disappears?","pauses normal saving")
     && has("What is Protected mode, and what if my data disappears?","Do not remove the installed web app or clear its site data")
@@ -2575,8 +2584,8 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache key matches the BlackPyre web v82 release",
-  /const CACHE = "blackpyre-v101";/.test(sw));
-check("Phase 1 service-worker cache remains refreshed", sw.includes('const CACHE = "blackpyre-v101"') && !sw.includes('blackpyre-phase1-nutrition-safety-1'));
+  /const CACHE = "blackpyre-v102";/.test(sw));
+check("Phase 1 service-worker cache remains refreshed", sw.includes('const CACHE = "blackpyre-v102"') && !sw.includes('blackpyre-phase1-nutrition-safety-1'));
 
 await wait(0);
 releaseTestWindows([
@@ -3252,6 +3261,12 @@ check("v76 search surfaces Pull-Up and Chin-Up ahead of weaker matches",
 
 check("custom exercise action stays at the top of the exercise picker",
   dExercise76.getElementById("addExSel").options[0].value==="__CUSTOM__");
+
+dExercise76.getElementById("addExSel").value="__CUSTOM__";
+dExercise76.getElementById("addExSel").dispatchEvent(new Exercise76.window.Event("change",{bubbles:true}));
+check("Add custom exercise reveals its name and tracking options",
+  !dExercise76.getElementById("customExerciseFields").classList.contains("hidden")
+  && Exercise76.window.eval(`ensureFreestyleCustomShapeSelect().id`)==="addExShape");
 
 check("v76 legacy cardio selector is alphabetical with Other last",
   Exercise76.window.eval(`(()=>{
@@ -7941,7 +7956,7 @@ check(
   V78ServiceWorker.includes('"./data-exercise-card-profiles.js"')
   && V78ServiceWorker.includes('"./scripts/03-card-profiles.js"')
   && V78ServiceWorker.includes(
-    'const CACHE = "blackpyre-v101"'
+    'const CACHE = "blackpyre-v102"'
   )
 );
 

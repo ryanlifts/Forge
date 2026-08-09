@@ -18,9 +18,9 @@ const FAQ = [
 
   {sec:"Food logging"},
 
-  {q:"How do I scan food?", a:"Use <b>Scan barcode</b> for a packaged food, or type the barcode and tap <b>Look up</b>. BlackPyre checks <b>My Foods</b> first. A fresh online result should be compared with the package. Tap <b>✓ Looks correct</b> to save that barcode to My Foods for future scans, or tap <b>Correct barcode data</b> to fix it. Looks correct saves the food but does not log the meal. <b>Nothing is logged until you review it and tap Add to log.</b>"},
+  {q:"How do I scan food?", a:"Use <b>Scan barcode</b> for a packaged food, or type the barcode and tap <b>Look up</b>. BlackPyre checks <b>My Foods</b> first. For a fresh online result, the verification panel shows the scanned serving and nutrition. Compare those values with the package, then choose <b>Nutrition matches package</b> or <b>Nutrition needs editing</b>. A match saves the barcode to My Foods but does not log the meal. <b>Nothing is logged until you review it and tap Add to log.</b>"},
 
-  {q:"What if scanned nutrition is wrong or missing?", a:"If an online barcode result is wrong, tap <b>Correct barcode data</b> to open the correction form. Enter the serving, calories, and macros from the package and save it. BlackPyre saves your correction to <b>My Foods</b> and uses it first on later scans of the same barcode. If a barcode is not found, enter the package information manually and save it if you want to reuse it. The package label is the best source for packaged-food nutrition."},
+  {q:"What if scanned nutrition is wrong or missing?", a:"Choose <b>Nutrition needs editing</b> to open the correction form. Enter the serving, calories, and macros from the package and save it. BlackPyre saves your correction to <b>My Foods</b> and uses it first on later scans of the same barcode. If a barcode is not found, enter the package information manually and save it if you want to reuse it. The package label is the best source for packaged-food nutrition."},
 
   {q:"What is My Foods?", a:"<b>My Foods</b> is your personal food library. Save foods you use often, including homemade foods or products you entered manually. Saved foods can be edited or deleted, and a barcode can be added so future scans find the food locally."},
 
@@ -28,7 +28,7 @@ const FAQ = [
 
   {q:"How do food suggestions work?", a:"Food suggestions are optional and off by default. When enabled, BlackPyre compares reference foods and foods you already use with the calories and macros you have left, then offers individual choices. Suggestions are estimates, not allergy or medical-safety advice. For packaged foods, check the package label."},
 
-  {q:"How do I change, undo, or view a food entry?", a:"After choosing a food, adjust the amount with the <b>slider or amount field</b>. Calories and macros recalculate as the amount changes. Foods entered manually use the same amount-review controls, and you can enter a food without scanning anything. Foods without a known gram or liquid measurement can still scale by servings. Nothing is logged until you tap <b>Add to log</b>. After adding a food, BlackPyre keeps your place and shows <b>Undo</b> and <b>View entry</b>. Undo removes that exact new entry. View entry moves to it only when you ask. To correct an older entry, tap its edit control and update the values."},
+  {q:"How do I change, undo, or view a food entry?", a:"After choosing a food, adjust the amount with the <b>slider or amount field</b>. Calories and macros recalculate as the amount changes. Foods entered manually use the same amount-review controls, and you can enter a food without scanning anything. Foods without a known gram or liquid measurement can still scale by servings. Nothing is logged until you tap <b>Add to log</b>. After adding a food, BlackPyre keeps your place and briefly shows <b>Undo</b> and <b>View entry</b> for 30 seconds. Undo removes that exact new entry. View entry moves to it only when you ask. To correct an older entry, tap its edit control and update the values."},
 
 
   {sec:"Training"},
@@ -61,7 +61,7 @@ const FAQ = [
 
   {q:"Where is my data stored? Is it private?", a:"Your settings, logs, program, saved foods, and recovery data are stored in BlackPyre’s browser/PWA site storage on this device. BlackPyre has no user account or central BlackPyre database that can read your personal log. Online food searches send only the search or barcode request to the online food service. BlackPyre never transmits your logs, prompts, reports, or photos to an AI service; you control any copy, paste, or share handoff."},
 
-  {q:"How do I back up or move BlackPyre to another device?", a:"Open <b>Settings → Data &amp; recovery</b>. Create a backup on the device or use the share/save option to keep another copy somewhere safe. On another device, install BlackPyre and restore that backup."},
+  {q:"How do I back up or move BlackPyre to another device?", a:"Open <b>Settings → Data &amp; recovery</b>. <b>Save backup</b> quickly creates a verified file in your browser or device’s Downloads location. <b>Save backup elsewhere</b> opens supported share/save choices. Keep a second copy somewhere you will still control if this browser, installed PWA, or device is removed. On another device, install BlackPyre and restore that backup."},
 
   {q:"What is Protected mode, and what if my data disappears?", a:"If BlackPyre cannot safely read established saved data, it pauses normal saving instead of replacing it with empty information. <b>Do not remove the installed web app or clear its site data.</b> Open recovery and choose a validated recovery snapshot or one of your own backups. BlackPyre preserves the original saved information while recovery is being handled."},
 

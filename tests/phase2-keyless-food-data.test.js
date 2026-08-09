@@ -319,7 +319,7 @@ check(
   && !readyCorrectionPanelV84
     .classList
     .contains("hidden")
-  && /Verify barcode nutrition/.test(
+  && /VERIFY BARCODE NUTRITION/.test(
     readyCorrectionDocumentV84
       .getElementById(
         "barcodeCorrectionTitle"
@@ -329,7 +329,7 @@ check(
   && readyCorrectionPanelV84
     .style
     .cssText
-    .includes("var(--amber)")
+    .includes("var(--ember)")
   && readyCorrectionPanelV84
     .nextSibling===
       readyCorrectionDocumentV84
@@ -338,7 +338,12 @@ check(
     .getElementById(
       "barcodeCorrectionBtn"
     )
-    .textContent==="Correct barcode data"
+    .textContent==="NUTRITION NEEDS EDITING"
+  && readyCorrectionDocumentV84
+    .getElementById("barcodeCorrectionStatus")
+    .textContent==="NOT YET VERIFIED"
+  && /104 KCAL/.test(readyCorrectionDocumentV84
+    .getElementById("barcodeCorrectionNutrition").textContent)
 );
 
 check(
@@ -351,8 +356,8 @@ check(
 );
 
 check(
-  "fresh OFF warning explains that the slider total is database-calculated and may be wrong",
-  /serving total below is calculated from database values and may be wrong/.test(
+  "fresh OFF review tells the user to compare the scanned values with the package",
+  /Compare these scanned values with the package label before logging/.test(
     readyCorrectionDocumentV84
       .getElementById("barcodeCorrectionMessage")
       .textContent
@@ -564,7 +569,7 @@ check("normal backups exclude a legacy USDA credential",
   !backupText.includes("should-never-export") &&
   !Object.prototype.hasOwnProperty.call(JSON.parse(backupText).cfg,"usdaKey"));
 
-check("service worker cache is bumped for the current release",/blackpyre-v101/.test(fs.readFileSync(path.join(root,"sw.js"),"utf8")));
+check("service worker cache is bumped for the current release",/blackpyre-v102/.test(fs.readFileSync(path.join(root,"sw.js"),"utf8")));
 
 
 const ServingReviewCorrection = boot(
