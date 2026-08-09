@@ -21,7 +21,7 @@ cp \
   data-suggestions.js \
   www/
 
-cp -R scripts vendor www/
+cp -R scripts vendor assets www/
 
 npx cap sync ios
 

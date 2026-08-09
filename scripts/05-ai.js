@@ -336,7 +336,7 @@ function renderJourneyMsg(){
     el.textContent = "New starting line, same destination. Today's number is just where this stretch begins — every meal logged and every rep from here counts. You've got this.";
     el.classList.remove("hidden");
   } else if (drifting && downOverall > 1){
-    el.textContent = "One rough stretch doesn't erase your work — you're still "+downOverall+" lb "+(cutting?"down":"up")+" overall. Champions have bad weeks; they don't have bad months. Tighten up and go.";
+    el.textContent = "One rough stretch doesn't erase your work — you're still "+poundsToUnit(downOverall,currentUnitSystem(),1)+" "+unitWeightLabel()+" "+(cutting?"down":"up")+" overall. Champions have bad weeks; they don't have bad months. Tighten up and go.";
     el.classList.remove("hidden");
   }
 }
@@ -680,22 +680,10 @@ function foodKudos(entry){
   kudosTimer = setTimeout(()=>el.classList.add("hidden"), 3500);
 }
 
-// ================== AI ENGINE (bring-your-own-key) ==================
-const AI_DEFAULT_MODELS = { anthropic:"claude-sonnet-4-6", openai:"gpt-4o" };
-function aiProvider(){ return cfg.aiProvider || "handoff"; }
-function aiModelFor(p){
-  const override = p==="openai" ? cfg.aiModelOai : cfg.aiModelAnth;
-  return (override && override.trim()) ? override.trim() : AI_DEFAULT_MODELS[p];
-}
-function hasAIKey(){
-  const p = aiProvider();
-  if (p==="openai") return !!(cfg.openaiKey && cfg.openaiKey.trim());
-  if (p==="anthropic") return !!(cfg.anthropicKey && cfg.anthropicKey.trim());
-  return false; // handoff mode: no live API
-}
-function isHandoff(){ return aiProvider()==="handoff"; }
+// ================== AI HANDOFF ==================
+// Native BlackPyre never contacts an AI service. Users deliberately copy or
+// share a prompt, then paste the reply back for local review.
 function foodHandoffEnabled(){ return cfg.foodHandoffOn !== false; }
-function useFoodHandoff(){ return foodHandoffEnabled() && (isHandoff() || !hasAIKey()); }
 
 document.getElementById("foodHandoffToggleBtn").addEventListener("click", ()=>{
   cfg.foodHandoffOn = !foodHandoffEnabled();
@@ -704,354 +692,14 @@ document.getElementById("foodHandoffToggleBtn").addEventListener("click", ()=>{
   flashSave(cfg.foodHandoffOn ? "AI food handoff enabled ✓" : "AI food handoff hidden");
 });
 
-document.getElementById("sAiProvider").addEventListener("change", ()=>{
-  cfg.aiProvider = document.getElementById("sAiProvider").value;
-  saveCfg();
-  renderAIGates();
-});
-document.getElementById("saveAiBtn").addEventListener("click", ()=>{
-  cfg.aiProvider = document.getElementById("sAiProvider").value;
-  cfg.anthropicKey = document.getElementById("sAnthropicKey").value.trim();
-  cfg.openaiKey = document.getElementById("sOpenaiKey").value.trim();
-  const m = document.getElementById("sAiModel").value.trim();
-  if (cfg.aiProvider==="openai") cfg.aiModelOai = m;
-  else if (cfg.aiProvider==="anthropic") cfg.aiModelAnth = m;
-  saveCfg();
-  renderAIGates();
-  ackBtn("saveAiBtn", "✓ Saved");
-  flashSave(isHandoff() ? "Handoff mode ready ✓" : (hasAIKey() ? "AI Coach unlocked ✓" : "Saved — add a key to go live"));
-});
-
 function renderAIGates(){
-  const p = aiProvider();
-  document.getElementById("sAiProvider").value = p;
-  document.getElementById("sAnthropicKey").value = cfg.anthropicKey || "";
-  document.getElementById("sOpenaiKey").value = cfg.openaiKey || "";
-  document.getElementById("aiKeyAnthRow").classList.toggle("hidden", p!=="anthropic");
-  document.getElementById("aiKeyOaiRow").classList.toggle("hidden", p!=="openai");
-  document.getElementById("aiModelRow").classList.toggle("hidden", p==="handoff");
-  document.getElementById("aiHandoffNote").classList.toggle("hidden", p!=="handoff");
-  const mEl = document.getElementById("sAiModel");
-  if (p!=="handoff"){
-    mEl.placeholder = "default: " + AI_DEFAULT_MODELS[p];
-    mEl.value = (p==="openai" ? cfg.aiModelOai : cfg.aiModelAnth) || "";
-  }
-  // Food handoff is on by default and independent from the live coach provider.
-  // A configured live API key still gets the faster in-app food flow; handoff is the key-free fallback.
-  const foodHandoff = useFoodHandoff();
   const foodHandoffOn = foodHandoffEnabled();
   const foodToggle = document.getElementById("foodHandoffToggleBtn");
   foodToggle.textContent = foodHandoffOn ? "Disable AI food handoff" : "Enable AI food handoff";
   foodToggle.setAttribute("aria-pressed", String(foodHandoffOn));
-  document.getElementById("aiFoodCard").classList.toggle("hidden", !hasAIKey() && !foodHandoff);
-  document.getElementById("aiHandoffControls").classList.toggle("hidden", !foodHandoff);
-  document.getElementById("aiFoodGoBtn").classList.toggle("hidden", foodHandoff);
-  document.getElementById("aiPhotoBtn").classList.toggle("hidden", foodHandoff);
-  // coach chat: live API only; handoff points at Copy report
-  document.getElementById("coachOpenBtn").classList.toggle("hidden", isHandoff());
-  const note = document.getElementById("coachKeyNote");
-  if (isHandoff()){
-    note.classList.remove("hidden");
-    note.textContent = "Handoff mode: tap Copy report and paste it into your preferred AI app — it contains everything your coach needs, including how to send a program back.";
-  } else if (hasAIKey()){ note.classList.add("hidden"); }
-  else {
-    note.classList.remove("hidden");
-    note.textContent = "Chat needs a one-time API key — add it in Settings → AI Coach. Or choose AI handoff mode there to work key-free. Copy report always works.";
-  }
-  renderCheckin();
+  document.getElementById("aiFoodCard").classList.toggle("hidden", !foodHandoffOn);
+  document.getElementById("aiHandoffControls").classList.toggle("hidden", !foodHandoffOn);
 }
-
-async function anthropicCall(messages, system, maxTokens){
-  if (isOffline()) throw new Error("You're offline — reconnect to use the live AI coach, or switch to AI handoff mode in Settings.");
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": cfg.anthropicKey,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true",
-    },
-    body: JSON.stringify({ model: aiModelFor("anthropic"), max_tokens: maxTokens || 3000, system: system, messages: messages }),
-  });
-  if (!res.ok){
-    if (res.status===401 || res.status===403) throw new Error("Your Anthropic key was rejected — check it in Settings.");
-    if (res.status===429) throw new Error("Rate limited — wait a few seconds and try again.");
-    throw new Error("The AI service returned an error ("+res.status+"). Try again.");
-  }
-  const j = await res.json();
-  return (j.content||[]).map(b=>b.type==="text"?b.text:"").join("");
-}
-
-async function openaiCall(messages, system, maxTokens){
-  if (isOffline()) throw new Error("You're offline — reconnect to use the live AI coach, or switch to AI handoff mode in Settings.");
-  const msgs = [{role:"system", content:system}].concat(messages.map(m=>{
-    if (Array.isArray(m.content)){
-      return { role:m.role, content:m.content.map(b=>
-        b.type==="image"
-          ? { type:"image_url", image_url:{ url:"data:"+b.source.media_type+";base64,"+b.source.data } }
-          : { type:"text", text:b.text }) };
-    }
-    return { role:m.role, content:m.content };
-  }));
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { "content-type":"application/json", "authorization":"Bearer "+cfg.openaiKey },
-    body: JSON.stringify({ model: aiModelFor("openai"), max_tokens: maxTokens || 3000, messages: msgs }),
-  });
-  if (!res.ok){
-    if (res.status===401 || res.status===403) throw new Error("Your OpenAI key was rejected — check it in Settings.");
-    if (res.status===429) throw new Error("Rate limited — wait a few seconds and try again.");
-    throw new Error("The AI service returned an error ("+res.status+"). Try again.");
-  }
-  const j = await res.json();
-  return (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || "";
-}
-
-function aiCall(messages, system, maxTokens){
-  return aiProvider()==="openai" ? openaiCall(messages, system, maxTokens) : anthropicCall(messages, system, maxTokens);
-}
-
-// ---------- payload extraction from AI replies ----------
-function extractAIPayloads(text){
-  const out = { display: text, program: null, targets: null };
-  const blocks = [];
-  const re = /```(?:json)?\s*([\s\S]*?)```/g;
-  let m;
-  while((m = re.exec(text)) !== null) blocks.push({raw:m[0], body:m[1]});
-  blocks.forEach(b=>{
-    try {
-      const j = JSON.parse(b.body);
-      if (isTrainingPlanDocumentCandidate(j)){ out.program = j; out.display = out.display.replace(b.raw, "").trim(); }
-      else if (j && j.bpTargets){ out.targets = j.bpTargets; out.display = out.display.replace(b.raw, "").trim(); }
-    } catch(e){ /* not JSON — leave it visible */ }
-  });
-  return out;
-}
-
-// ================== COACH CHAT ==================
-let coachHistory = [];
-function coachSystem(){
-  return "You are the user's personal fitness coach inside the BlackPyre app. Be direct, specific, and evidence-based — no generic filler. Their live data follows.\n\n"
-    + aiReport()
-    + "\n\n---\nResponse contract:\n"
-    + "- If you propose a new or edited training program, include EXACTLY ONE ```json code block containing valid JSON. Do not put the program anywhere else in the reply.\n"
-    + blackpyreTrainingPlanFormatInstructions()
-    + "\n"
-    + "- If you propose new nutrition targets, include a ```json block: {\"bpTargets\":{\"calTarget\":...,\"proTarget\":...,\"carbGoal\":...,\"fatGoal\":...}} — exact daily numbers, not ranges.\n"
-    + "- Otherwise reply in plain prose. Keep replies under 300 words unless asked for detail.";
-}
-function setCoachAccessState(){
-  const available = hasAIKey();
-
-  const note =
-    document.getElementById("coachAccessNote");
-
-  const input =
-    document.getElementById("coachInput");
-
-  const send =
-    document.getElementById("coachSendBtn");
-
-  note.classList.toggle(
-    "hidden",
-    available
-  );
-
-  input.disabled = !available;
-  send.disabled = !available;
-
-  input.placeholder = available
-    ? "Ask your coach anything…"
-    : "Add an AI API key in Settings to chat";
-
-  return available;
-}
-
-function openCoach(prefillSend){
-  lockScroll();
-
-  document
-    .getElementById("coachOverlay")
-    .classList.remove("hidden");
-
-  if (!setCoachAccessState()){
-    return;
-  }
-
-  if (!coachHistory.length){
-    addCoachBubble("ai", "Hey — I have your full BlackPyre data in front of me: weight trend, nutrition, lift progression, and your current program. Ask me anything, or try:\n\n• How is my progress?\n• Adjust my program — [what's bugging you]\n• Why has my weight stalled?\n• Should I change my calories?", null);
-  }
-
-  if (prefillSend){
-    document.getElementById("coachInput").value = prefillSend;
-    sendCoach();
-  }
-}
-document.getElementById("coachOpenBtn").addEventListener("click", ()=>{
-  openCoach();
-});
-
-document.getElementById("coachPlanBtn").addEventListener("click",()=>{
-  setProgramManagerGuide(null);
-  setProgramManagerOpen(false);
-  openCoach();
-
-  if (!hasAIKey()){
-    return;
-  }
-
-  const input =
-    document.getElementById("coachInput");
-
-  input.value =
-    "Build me a training program. "
-    +"My goal is __. I can train __ days per week. "
-    +"My equipment is __. My workout length is __. "
-    +"My experience is __. My injuries or limits are __.";
-
-  input.focus();
-});
-document.getElementById("coachCloseBtn").addEventListener("click", ()=>{
-  document.getElementById("coachOverlay").classList.add("hidden");
-  unlockScroll();
-});
-function addCoachBubble(role, text, payloads){
-  const wrap = document.getElementById("coachMsgs");
-  const div = document.createElement("div");
-  div.className = "cmsg " + (role==="user" ? "user" : "ai");
-  div.textContent = text;
-  if (payloads && payloads.program){
-    const b = document.createElement("button");
-    const proposal =
-      payloads.program
-      && isPlainObject(payloads.program.program)
-        ? payloads.program.program
-        : payloads.program;
-
-    b.className = "act";
-    b.textContent =
-      "Review program: "
-      +(proposal.name || "Updated program");
-
-    b.addEventListener("click", ()=>{
-      const inspected =
-        inspectTrainingPlanDocument(
-          payloads.program
-        );
-
-      if (!inspected.ok){
-        console.error(
-          "Coach program proposal rejected:",
-          inspected.code || "",
-          inspected.message || ""
-        );
-
-        flashSave(
-          "This program proposal could not be reviewed. "
-          +"Ask BlackPyre Coach to create it again.",
-          true
-        );
-        return;
-      }
-
-      const coachOverlay =
-        document.getElementById("coachOverlay");
-
-      const coachWasOpen =
-        !coachOverlay.classList.contains("hidden");
-
-      if (coachWasOpen){
-        coachOverlay.classList.add("hidden");
-        unlockScroll();
-      }
-
-      const opened =
-        openTrainingPlanReview(
-          payloads.program,
-          {
-            source:"coach",
-            successMessage:"Program loaded ✓",
-            onImported:()=>{
-              b.textContent =
-                "✓ Loaded — it's your active program";
-              b.disabled = true;
-            }
-          }
-        );
-
-      if (!opened.ok){
-        flashSave(
-          "Program invalid: "
-          +(opened.message || "could not be reviewed"),
-          true
-        );
-      }
-    });
-
-    div.appendChild(b);
-  }
-  if (payloads && payloads.targets){
-    const t = payloads.targets;
-    const b = document.createElement("button");
-    b.className = "act";
-    // accept exact keys; tolerate legacy range keys from older prompts by averaging
-    const calT = typeof t.calTarget==="number" ? t.calTarget : (typeof t.calLo==="number" && typeof t.calHi==="number" ? Math.round((t.calLo+t.calHi)/2) : null);
-    const proT = typeof t.proTarget==="number" ? t.proTarget : (typeof t.proLo==="number" && typeof t.proHi==="number" ? Math.round((t.proLo+t.proHi)/2) : null);
-    b.textContent = "Apply targets: " + (calT||"?") + " kcal";
-    b.addEventListener("click", ()=>{
-      if (calT!=null){ cfg.calTarget = calT; }
-      if (proT!=null) cfg.proTarget = proT;
-      ["carbGoal","fatGoal"].forEach(k=>{ if (typeof t[k]==="number") cfg[k] = t[k]; });
-      const sortedW = data.weights.slice().sort((a,b2)=>a.date.localeCompare(b2.date));
-      cfg.lastTargetWt = sortedW.length ? sortedW[sortedW.length-1].lbs : cfg.lastTargetWt;
-      delete cfg.adjustPromptedAt;
-      saveCfg(); renderAll();
-      b.textContent = "✓ Applied — bars updated";
-      b.disabled = true;
-      flashSave("Targets applied ✓");
-    });
-    div.appendChild(b);
-  }
-  wrap.appendChild(div);
-  wrap.scrollTop = wrap.scrollHeight;
-}
-async function sendCoach(){
-  const inp = document.getElementById("coachInput");
-  const msg = inp.value.trim();
-  if (!msg) return;
-  inp.value = "";
-  addCoachBubble("user", msg, null);
-  coachHistory.push({role:"user", content: msg});
-  const typing = document.getElementById("coachTyping");
-  typing.classList.remove("hidden");
-  document.getElementById("coachSendBtn").disabled = true;
-  try {
-    const reply = await aiCall(coachHistory, coachSystem(), 3000);
-    coachHistory.push({role:"assistant", content: reply});
-    const p = extractAIPayloads(reply);
-    addCoachBubble("ai", p.display || "Here you go:", p);
-    cfg.lastCoachDate = todayStr();
-    saveCfg();
-    renderCheckin();
-  } catch(e){
-    addCoachBubble("ai", "" + e.message, null);
-  }
-  typing.classList.add("hidden");
-  document.getElementById("coachSendBtn").disabled = false;
-}
-document.getElementById("coachSendBtn").addEventListener("click", sendCoach);
-
-// ================== WEEKLY CHECK-IN ==================
-function renderCheckin(){
-  const card = document.getElementById("checkinCard");
-  if (!hasAIKey() || !hasAnyData()){ card.classList.add("hidden"); return; }
-  const last = cfg.lastCoachDate;
-  const days = last ? Math.floor((new Date(todayStr()) - new Date(last))/86400000) : 999;
-  card.classList.toggle("hidden", days < 7);
-}
-document.getElementById("checkinBtn").addEventListener("click", ()=>{
-  openCoach("Give me my weekly review — assess my week, call out what needs fixing, and tell me what to focus on next week.");
-});
 
 // ================== PASTE PROGRAM FROM AI ==================
 document.getElementById("pasteProgBtn").addEventListener("click", async ()=>{
@@ -1177,7 +825,8 @@ function showFoodConfirm(foods){
       row.innerHTML = '<div style="flex:1; min-width:0;"><div style="font-weight:500;">'+esc(f.name)+'</div>'
         +'<div style="color:var(--dim); font-size:11px;">'+Math.round(f.cal)+' kcal · '+Math.round(f.pro)+'P / '+Math.round(f.carb)+'C / '+Math.round(f.fat)+'F (estimate)</div></div>';
       const x = document.createElement("button");
-      x.className = "del"; x.textContent = "✕"; x.setAttribute("aria-label","Remove");
+      x.className = "xbtn"; x.textContent = "Remove item"; x.setAttribute("aria-label","Remove this estimated food");
+      x.style.flex = "0 0 auto";
       x.addEventListener("click", ()=>{ items.splice(i,1); redraw(); });
       row.appendChild(x);
       list.appendChild(row);
@@ -1198,13 +847,9 @@ function showFoodConfirm(foods){
       {allowDuplicate:true}
     ));
     el.classList.add("hidden");
-    if (isHandoff()){
-      hfCloseParseBox();
-      aiFoodStatus("Logged "+loggedCount+" ✓ — ready for another.");
-      scrollAiFoodIntoView(document.getElementById("aiFoodCard"), "start");
-    } else {
-      aiFoodStatus(null);
-    }
+    hfCloseParseBox();
+    aiFoodStatus("Logged "+loggedCount+" ✓ — ready for another.");
+    scrollAiFoodIntoView(document.getElementById("aiFoodCard"), "start");
     flashSave("Logged "+loggedCount+" ✓");
   });
   el.appendChild(add);
@@ -1212,69 +857,14 @@ function showFoodConfirm(foods){
   // pinning the confirmation container against the top edge on mobile.
   scrollAiFoodIntoView(list.firstElementChild || el, "center");
 }
-document.getElementById("aiFoodGoBtn").addEventListener("click", async ()=>{
-  const q = document.getElementById("aiFoodText").value.trim();
-  if (!q) return;
-  aiFoodStatus("Estimating…");
-  document.getElementById("aiFoodConfirm").classList.add("hidden");
-  document.getElementById("aiFoodGoBtn").disabled = true;
-  try {
-    const reply = await aiCall([{role:"user", content:q}], FOOD_AI_SYSTEM, 1200);
-    const foods = parseFoodsReply(reply);
-    aiFoodStatus(null);
-    showFoodConfirm(foods);
-    document.getElementById("aiFoodText").value = "";
-  } catch(e){
-    aiFoodStatus(""+(e.message||"Could not estimate that"), true);
-  }
-  document.getElementById("aiFoodGoBtn").disabled = false;
+// The shared file input feeds only the explicit copy/share handoff.
+document.getElementById("aiPhotoFile").addEventListener("change", ev=>{
+  const file=ev.target.files && ev.target.files[0];
+  ev.target.value="";
+  if(file) hfSetPhoto(file);
 });
-document.getElementById("aiPhotoBtn").addEventListener("click", ()=>{ photoMode = "api"; document.getElementById("aiPhotoFile").click(); });
-document.getElementById("aiPhotoFile").addEventListener("change", async (ev)=>{
-  const file = ev.target.files && ev.target.files[0];
-  ev.target.value = "";
-  if (!file) return;
-  if (photoMode==="handoff"){ hfSetPhoto(file); return; }
-  aiFoodStatus("Reading photo…");
-  document.getElementById("aiFoodConfirm").classList.add("hidden");
-  try {
-    const b64 = await downscaleImage(file, 1024);
-    aiFoodStatus("Coach is looking at your plate…");
-    const reply = await aiCall([{role:"user", content:[
-      {type:"image", source:{type:"base64", media_type:"image/jpeg", data:b64}},
-      {type:"text", text:"Identify the foods in this meal photo and estimate portions and macros."
-        + (document.getElementById("aiPhotoCaption").value.trim() ? " Context from the user: " + document.getElementById("aiPhotoCaption").value.trim() + " — use it to identify the restaurant/dish and improve accuracy." : "")},
-    ]}], FOOD_AI_SYSTEM, 1200);
-    const foods = parseFoodsReply(reply);
-    aiFoodStatus(null);
-    showFoodConfirm(foods);
-    document.getElementById("aiPhotoCaption").value = "";
-  } catch(e){
-    aiFoodStatus(""+(e.message||"Could not read that photo"), true);
-  }
-});
-function downscaleImage(file, maxDim){
-  return new Promise((resolve, reject)=>{
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = ()=>{
-      try {
-        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-        const c = document.createElement("canvas");
-        c.width = Math.round(img.width*scale);
-        c.height = Math.round(img.height*scale);
-        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-        URL.revokeObjectURL(url);
-        resolve(c.toDataURL("image/jpeg", 0.8).split(",")[1]);
-      } catch(e){ reject(e); }
-    };
-    img.onerror = ()=>{ URL.revokeObjectURL(url); reject(new Error("Could not open that image")); };
-    img.src = url;
-  });
-}
 
-// ================== CHATGPT HANDOFF MODE (no API key) ==================
-let photoMode = "api"; // which flow the file input feeds
+// ================== AI FOOD HANDOFF MODE ==================
 function handoffFoodPrompt(){
   const desc = document.getElementById("aiFoodText").value.trim();
   const cap = document.getElementById("aiPhotoCaption").value.trim();
@@ -1293,7 +883,6 @@ document.getElementById("hfCopyFoodBtn").addEventListener("click", ()=>{
   } else { fallbackCopy(txt); done(); }
 });
 document.getElementById("hfShareBtn").addEventListener("click", ()=>{
-  photoMode = "handoff";
   document.getElementById("aiPhotoFile").click();
 });
 
@@ -1618,11 +1207,11 @@ function aiReport(rangeKey){
 
   L.push("");
   L.push("## Goal & weight");
-  L.push("- Start: "+cfg.startWt+" lb · Current: "+cur+" lb · Goal: "+cfg.goalWt+" lb");
+  L.push("- Start: "+formatBodyWeight(cfg.startWt,currentUnitSystem(),1)+" · Current: "+formatBodyWeight(cur,currentUnitSystem(),1)+" · Goal: "+formatBodyWeight(cfg.goalWt,currentUnitSystem(),1));
 
   L.push(
     rate!=null
-      ? "- Weight trend (last 28 days): "+(rate>0?"+":"")+rate+" lb/week"
+      ? "- Weight trend (last 28 days): "+(rate>0?"+":"")+poundsToUnit(rate,currentUnitSystem(),2)+" "+unitWeightLabel()+"/week"
       : "- Weight trend: not enough weigh-ins yet ("+sorted.length+" recorded)"
   );
 
@@ -2129,11 +1718,17 @@ function openLiftChart(exName){
   document.getElementById("liftTitle").textContent = exName;
   const goal = (cfg.liftGoals||{})[exName] || null;
   const pts = liftHistory(exName);
-  document.getElementById("liftChart").innerHTML = lineChartSVG(pts, goal);
-  document.getElementById("liftGoalInput").value = goal || "";
-  const best = pts.length ? Math.round(Math.max.apply(null, pts.map(p=>p.y))) : 0;
+  const displayPts=pts.map(point=>({date:point.date,y:poundsToUnit(point.y,currentUnitSystem(),2)}));
+  const displayGoal=goal?poundsToUnit(goal,currentUnitSystem(),2):null;
+  document.getElementById("liftChart").innerHTML = lineChartSVG(displayPts, displayGoal);
+  document.getElementById("liftGoalInput").value = displayGoal || "";
+  const best = pts.length ? Math.max.apply(null, pts.map(p=>p.y)) : 0;
+  const unit=unitWeightLabel(), metric=isMetricSystem();
+  document.getElementById("liftGoalLabel").textContent="Goal for this lift ("+unit+", est. 1RM)";
+  document.getElementById("liftGoalInput").setAttribute("aria-label","Estimated one rep max goal in "+(metric?"kilograms":"pounds"));
+  document.getElementById("liftGoalInput").placeholder=metric?"e.g. 140":"e.g. 315";
   document.getElementById("liftGoalNote").textContent = goal
-    ? "Current best: ~"+best+" est. 1RM · "+Math.max(0, goal-best)+" lb to go"
+    ? "Current best: ~"+poundsToUnit(best,currentUnitSystem(),1)+" "+unit+" est. 1RM · "+poundsToUnit(Math.max(0, goal-best),currentUnitSystem(),1)+" "+unit+" to go"
     : "Set a goal to draw a target line on the chart.";
   if (document.getElementById("liftOverlay").classList.contains("hidden")){
     lockScroll();
@@ -2146,7 +1741,7 @@ document.getElementById("liftCloseBtn").addEventListener("click", ()=>{
   unlockScroll();
 });
 document.getElementById("liftGoalSave").addEventListener("click", ()=>{
-  const v = Number(document.getElementById("liftGoalInput").value);
+  const v = poundsFromUnit(document.getElementById("liftGoalInput").value,currentUnitSystem());
   if(!cfg.liftGoals) cfg.liftGoals = {};
   if (v>0) cfg.liftGoals[liftOverlayEx] = v; else delete cfg.liftGoals[liftOverlayEx];
   saveCfg();
@@ -2181,7 +1776,7 @@ function renderWeek(){
   html += 'Sessions: <b>'+sessions+'</b> this week<br>';
   if (wIn.length>=2){
     const dw = Math.round((wIn[wIn.length-1].lbs - wIn[0].lbs)*10)/10;
-    html += 'Weight: <b style="color:'+(dw<=0?'var(--ok)':'var(--text)')+'">'+(dw>0?'+':'')+dw+' lb</b> this week';
+    html += 'Weight: <b style="color:'+(dw<=0?'var(--ok)':'var(--text)')+'">'+(dw>0?'+':'')+poundsToUnit(dw,currentUnitSystem(),1)+' '+unitWeightLabel()+'</b> this week';
   }
   document.getElementById("weekBody").innerHTML = html;
 }
@@ -2206,7 +1801,8 @@ function renderProjection(){
   const el = document.getElementById("projLine");
   const r = weightSlope(35);
   if (!r){ el.classList.add("hidden"); return; }
-  const rate = Math.round(r.slope*7*10)/10; // lb/week
+  const rate = Math.round(r.slope*7*10)/10; // canonical lb/week
+  const shownRate=poundsToUnit(rate,currentUnitSystem(),2), unit=unitWeightLabel();
   const toGo = cfg.goalWt - r.current;      // negative when cutting
   el.classList.remove("hidden");
   if (Math.abs(rate) < 0.15){
@@ -2214,23 +1810,30 @@ function renderProjection(){
     return;
   }
   if ((toGo<0 && rate>=0) || (toGo>0 && rate<=0)){
-    el.textContent = "Trending "+(rate>0?"+":"")+rate+" lb/week right now — but you are here, logging, which is how every turnaround starts. Refocus this week; the trend follows the work.";
+    el.textContent = "Trending "+(shownRate>0?"+":"")+shownRate+" "+unit+"/week right now — but you are here, logging, which is how every turnaround starts. Refocus this week; the trend follows the work.";
     return;
   }
   const weeks = toGo/rate;
   if (weeks > 104){
-    el.textContent = "Trending "+(rate>0?"+":"")+rate+" lb/week — over ~2 years to goal at this rate.";
+    el.textContent = "Trending "+(shownRate>0?"+":"")+shownRate+" "+unit+"/week — over ~2 years to goal at this rate.";
     return;
   }
   const eta = new Date(Date.now() + weeks*7*86400000);
   const fmt = eta.toLocaleDateString("en-US", {month:"short", day:"numeric", year:"numeric"});
-  el.innerHTML = 'At your current rate (<b>'+(rate>0?'+':'')+rate+' lb/week</b>), you reach <b class="ember-text">'+cfg.goalWt+' lb around '+fmt+'</b>.';
+  el.innerHTML = 'At your current rate (<b>'+(shownRate>0?'+':'')+shownRate+' '+unit+'/week</b>), you reach <b class="ember-text">'+formatBodyWeight(cfg.goalWt,currentUnitSystem(),1)+' around '+fmt+'</b>.';
 }
 
 // --- body measurements (optional) ---
 function renderMeasureToggle(){
   document.getElementById("measureToggleBtn").textContent = cfg.measureOn ? "Disable body measurements" : "Enable body measurements";
   document.getElementById("measureCard").classList.toggle("hidden", !cfg.measureOn);
+  const metric=isMetricSystem(), unit=unitMeasurementLabel();
+  const label=document.getElementById("bodyMeasurementsLabel"); if(label) label.textContent="Body measurements ("+(metric?"centimeters":"inches")+")";
+  [["mWaist","Waist"],["mChest","Chest"],["mArm","Arm"]].forEach(item=>{
+    const el=document.getElementById(item[0]); if(!el) return;
+    el.placeholder=unit;
+    el.setAttribute("aria-label",item[1]+" measurement in "+(metric?"centimeters":"inches"));
+  });
 }
 document.getElementById("measureToggleBtn").addEventListener("click", ()=>{
   cfg.measureOn = !cfg.measureOn;
@@ -2240,9 +1843,10 @@ document.getElementById("measureToggleBtn").addEventListener("click", ()=>{
   renderMeasure();
 });
 document.getElementById("mSaveBtn").addEventListener("click", ()=>{
-  const waist = Number(document.getElementById("mWaist").value)||null;
-  const chest = Number(document.getElementById("mChest").value)||null;
-  const arm = Number(document.getElementById("mArm").value)||null;
+  const convert=id=>{ const value=document.getElementById(id).value; return value===""?null:inchesFromUnit(value,currentUnitSystem()); };
+  const waist = convert("mWaist");
+  const chest = convert("mChest");
+  const arm = convert("mArm");
   if (!waist && !chest && !arm){ flashSave("Enter at least one", true); return; }
   if (!data.measure) data.measure = [];
   const dt = todayStr();
@@ -2259,12 +1863,14 @@ function renderMeasure(){
   if (!list.length){ el.innerHTML = ""; return; }
   el.innerHTML = list.map((m,i)=>{
     const prev = list[i+1];
-    const delta = (cur, pre)=> (cur!=null && pre!=null) ? ' <span style="color:'+(cur<pre?'var(--ok)':'var(--dim)')+'; font-size:10px;">('+(cur-pre>0?'+':'')+Math.round((cur-pre)*10)/10+')</span>' : '';
+    const shown=value=>inchesToUnit(value,currentUnitSystem(),1);
+    const delta = (cur, pre)=> (cur!=null && pre!=null) ? ' <span style="color:'+(cur<pre?'var(--ok)':'var(--dim)')+'; font-size:10px;">('+(cur-pre>0?'+':'')+shown(cur-pre)+')</span>' : '';
     return '<div class="list-item"><span style="flex:1; color:var(--dim);">'+fmtDate(m.date)+'</span>'
       +'<span style="flex:3; text-align:right; font-size:12px;">'
-      +(m.waist!=null?('W '+m.waist+delta(m.waist, prev&&prev.waist)+'  '):'')
-      +(m.chest!=null?('C '+m.chest+delta(m.chest, prev&&prev.chest)+'  '):'')
-      +(m.arm!=null?('A '+m.arm+delta(m.arm, prev&&prev.arm)):'')
+      +(m.waist!=null?('W '+shown(m.waist)+delta(m.waist, prev&&prev.waist)+'  '):'')
+      +(m.chest!=null?('C '+shown(m.chest)+delta(m.chest, prev&&prev.chest)+'  '):'')
+      +(m.arm!=null?('A '+shown(m.arm)+delta(m.arm, prev&&prev.arm)):'')
+      +' '+unitMeasurementLabel()
       +'</span>'
       +'<button class="del mdel" data-d="'+m.date+'" aria-label="Delete">✕</button></div>';
   }).join("");

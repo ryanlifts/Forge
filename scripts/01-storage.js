@@ -7,7 +7,7 @@ const REST_TIMER_KEY = "forge:rest-timer";
 const BRAND_ONBOARDING_KEY = "forge:brand-onboarding";
 const SCHEMA_VERSION = 3, RECOVERY_FORMAT_VERSION = 1;
 const REST_TIMER_FORMAT_VERSION = 1;
-const AI_CFG_FIELDS = ["anthropicKey","openaiKey","aiProvider","aiModelAnth","aiModelOai","foodHandoffOn"];
+const DEVICE_LOCAL_CFG_FIELDS = ["foodHandoffOn"];
 
 // Nutrition guidance is for self-directed adult use. The lower bound follows
 // NIDDK guidance that eating under 1,200 kcal/day is not advised; the upper
@@ -21,8 +21,69 @@ const NUTRITION_CALCULATOR_LIMITS = Object.freeze({
 const SUPPORTED_ACTIVITY_LEVELS = Object.freeze([1.2,1.375,1.55,1.725,1.9]);
 const SUPPORTED_GOAL_ADJUSTMENTS = Object.freeze([-1000,-500,-250,0,250]);
 
-const DEFAULT_CFG = { startWt:0, goalWt:0, calTarget:0, proTarget:0, carbGoal:0, fatGoal:0, accent:"gold", aiProvider:"handoff", foodHandoffOn:true, autoProgressionOn:false, foodSuggestionsOn:false, foodSuggestionsWeightLoss:true, foodSuggestionsAvoid:"" };
+const DEFAULT_CFG = { startWt:0, goalWt:0, calTarget:0, proTarget:0, carbGoal:0, fatGoal:0, unitSystem:"imperial", accent:"gold", foodHandoffOn:true, autoProgressionOn:false, foodSuggestionsOn:false, foodSuggestionsWeightLoss:true, foodSuggestionsAvoid:"" };
 const ACCENT_KEYS = ["ember","steel","emerald","crimson","violet","gold","pink"];
+
+// Saved body and workout values remain pounds/inches for backward compatibility.
+// The selected unit system affects entry and presentation only, so toggling units
+// never rewrites history or introduces cumulative conversion drift.
+const LB_TO_KG = 0.45359237;
+const IN_TO_CM = 2.54;
+function normalizedUnitSystem(value){ return value==="metric" ? "metric" : "imperial"; }
+function currentUnitSystem(){ return normalizedUnitSystem(typeof cfg!=="undefined" && cfg ? cfg.unitSystem : DEFAULT_CFG.unitSystem); }
+function isMetricSystem(system){ return normalizedUnitSystem(system===undefined ? currentUnitSystem() : system)==="metric"; }
+function unitWeightLabel(system){ return isMetricSystem(system) ? "kg" : "lb"; }
+function unitHeightLabel(system){ return isMetricSystem(system) ? "cm" : "ft/in"; }
+function unitMeasurementLabel(system){ return isMetricSystem(system) ? "cm" : "in"; }
+function roundUnitValue(value,digits){
+  const n=Number(value), places=Number.isInteger(digits)?digits:1;
+  if(!Number.isFinite(n)) return null;
+  const factor=Math.pow(10,places);
+  return Math.round((n+Number.EPSILON)*factor)/factor;
+}
+function poundsToUnit(pounds,system,digits){
+  const n=Number(pounds);
+  if(!Number.isFinite(n)) return null;
+  return roundUnitValue(isMetricSystem(system) ? n*LB_TO_KG : n,digits===undefined?1:digits);
+}
+function poundsFromUnit(value,system){
+  const n=Number(value);
+  if(!Number.isFinite(n)) return null;
+  return isMetricSystem(system) ? n/LB_TO_KG : n;
+}
+function inchesToUnit(inches,system,digits){
+  const n=Number(inches);
+  if(!Number.isFinite(n)) return null;
+  return roundUnitValue(isMetricSystem(system) ? n*IN_TO_CM : n,digits===undefined?1:digits);
+}
+function inchesFromUnit(value,system){
+  const n=Number(value);
+  if(!Number.isFinite(n)) return null;
+  return isMetricSystem(system) ? n/IN_TO_CM : n;
+}
+function unitNumber(value,digits){
+  const n=roundUnitValue(value,digits===undefined?1:digits);
+  return n===null ? "" : String(n);
+}
+function formatBodyWeight(pounds,system,digits){
+  const shown=poundsToUnit(pounds,system,digits===undefined?1:digits);
+  return shown===null ? "" : unitNumber(shown,digits===undefined?1:digits)+" "+unitWeightLabel(system);
+}
+function trainingStepPounds(system){ return isMetricSystem(system) ? 2.5/LB_TO_KG : 5; }
+function trainingStepDisplay(system){ return isMetricSystem(system) ? 2.5 : 5; }
+function totalInchesFromFeetInches(feet,inches){ return Number(feet)*12+Number(inches); }
+function feetInchesFromTotalInches(total){
+  const n=Number(total);
+  if(!Number.isFinite(n)) return {ft:null,inches:null};
+  const ft=Math.floor(n/12);
+  return {ft:ft,inches:roundUnitValue(n-ft*12,2)};
+}
+function goalRateLabel(adjustment,system){
+  const labels=isMetricSystem(system)
+    ? {"-1000":"Lose 1 kg/week (aggressive)","-500":"Lose 0.5 kg/week","-250":"Lose 0.25 kg/week","0":"Maintain","250":"Gain 0.25 kg/week (lean bulk)"}
+    : {"-1000":"Lose 2 lb/week (aggressive)","-500":"Lose 1 lb/week","-250":"Lose 0.5 lb/week","0":"Maintain","250":"Gain 0.5 lb/week (lean bulk)"};
+  return labels[String(adjustment)] || "Maintain";
+}
 
 const DEFAULT_PROGRAM = {
   name: "Full Body Foundations (3-Day)",
@@ -686,10 +747,18 @@ function migrateTargets(obj){
   if (!Number.isFinite(obj.calTarget) && Number.isFinite(obj.calLo) && Number.isFinite(obj.calHi)) obj.calTarget = Math.round((obj.calLo+obj.calHi)/2);
   if (!Number.isFinite(obj.proTarget) && Number.isFinite(obj.proLo) && Number.isFinite(obj.proHi)) obj.proTarget = Math.round((obj.proLo+obj.proHi)/2);
 }
+function scrubRetiredCredentials(obj){
+  if (!obj || typeof obj!=="object") return obj;
+  delete obj.usdaKey;
+  Object.keys(obj).forEach(key=>{
+    if (/^(?:anthropic|openai|aiProvider|aiModel)/.test(key)) delete obj[key];
+  });
+  return obj;
+}
 function migrateCfgObject(obj){
   // Live USDA access was removed in Phase 2. Scrub any previously saved user
   // credential instead of leaving an unused secret in device storage or backups.
-  delete obj.usdaKey;
+  scrubRetiredCredentials(obj);
   ["startWt","goalWt","calTarget","proTarget","carbGoal","fatGoal"].forEach(k=>{
     const v = Number(obj[k]);
     obj[k] = Number.isFinite(v) && v>0 ? v : 0;
@@ -817,6 +886,7 @@ function prepareState(rawCfg, rawData, rawProgram, options){
 
   const rawCfgObj = parsed.cfg.missing ? {} : cloneJSON(parsed.cfg.value);
   const hadDeprecatedUsdaKey = hasOwn(rawCfgObj,"usdaKey");
+  const hadRetiredDirectAI = Object.keys(rawCfgObj).some(key=>/^(?:anthropic|openai|aiProvider|aiModel)/.test(key));
   // v66 introduced this setting without changing the primary schema. A truly fresh
   // install has no settings record and starts with progression off. Any pre-v66
   // settings record that lacks the field is an existing install and keeps the old
@@ -837,7 +907,7 @@ function prepareState(rawCfg, rawData, rawProgram, options){
     program:parsed.program.missing ? cloneJSON(DEFAULT_PROGRAM) : cloneJSON(parsed.program.value)
   };
   const changed = {cfg:false, data:false, program:false};
-  if (hadDeprecatedUsdaKey) changed.cfg = true;
+  if (hadDeprecatedUsdaKey || hadRetiredDirectAI) changed.cfg = true;
   try {
     let current = version;
     while (current<SCHEMA_VERSION){
@@ -2112,12 +2182,12 @@ function prepareRecoveryBackupEnvelope(b){
     if (present.cfg){
       cfgObj = cloneJSON(b.cfg);
       if (isPlainObject(cfgObj) && bestCfg){
-        AI_CFG_FIELDS.forEach(k=>{ if (!hasOwn(cfgObj,k) && bestCfg[k]!==undefined) cfgObj[k]=bestCfg[k]; });
+        DEVICE_LOCAL_CFG_FIELDS.forEach(k=>{ if (!hasOwn(cfgObj,k) && bestCfg[k]!==undefined) cfgObj[k]=bestCfg[k]; });
       }
     } else {
       cfgObj = parts.cfg.usable ? cloneJSON(parts.cfg.value) : currentSchemaCfg();
       if (!parts.cfg.usable && bestCfg){
-        AI_CFG_FIELDS.forEach(k=>{ if (bestCfg[k]!==undefined) cfgObj[k]=bestCfg[k]; });
+        DEVICE_LOCAL_CFG_FIELDS.forEach(k=>{ if (bestCfg[k]!==undefined) cfgObj[k]=bestCfg[k]; });
       }
     }
     dataObj = present.data ? cloneJSON(b.data) : (parts.data.usable ? cloneJSON(parts.data.value) : makeDefaultData());
@@ -2531,7 +2601,7 @@ function save(){
 function saveCfg(){
   if (blockProtectedWrite() || blockUnexpectedPrimaryLossBeforeWrite()) return false;
   let raw;
-  try { raw = JSON.stringify(cfg); }
+  try { scrubRetiredCredentials(cfg); raw = JSON.stringify(cfg); }
   catch(e){ flashSave("Save failed", true); return false; }
   const written = writePrimaryString(CFG_KEY, raw);
   if (!written.ok){ flashSave("Save failed", true); return false; }
@@ -2670,7 +2740,7 @@ function inferredControlName(el){
   if (el.id && ACCESSIBLE_DYNAMIC_NAMES[el.id]) return ACCESSIBLE_DYNAMIC_NAMES[el.id];
   if (el.dataset && el.dataset.exercise && el.dataset.field){
     const setNo = setNumberFor(el);
-    return exerciseNameFor(el)+(setNo ? " set "+setNo : "")+" "+(el.dataset.field==="weight" ? "weight in pounds" : "repetitions");
+    return exerciseNameFor(el)+(setNo ? " set "+setNo : "")+" "+(el.dataset.field==="weight" ? "weight in "+(isMetricSystem()?"kilograms":"pounds") : "repetitions");
   }
   if (el.classList && el.classList.contains("bname")){
     return el.closest(".bday") && el.closest(".row") ? "Program day name" : "Exercise name";
@@ -2682,8 +2752,8 @@ function inferredControlName(el){
     if (title) return title;
     const text=el.textContent.trim();
     const ex=exerciseNameFor(el), setNo=setNumberFor(el), where=setNo ? " for "+ex+" set "+setNo : "";
-    if (text==="−5" || text==="-5") return "Decrease weight by 5 pounds"+where;
-    if (text==="+5") return "Increase weight by 5 pounds"+where;
+    if (/^[−-](?:5|2\.5)$/.test(text)) return "Decrease weight by "+trainingStepDisplay()+" "+(isMetricSystem()?"kilograms":"pounds")+where;
+    if (/^\+(?:5|2\.5)$/.test(text)) return "Increase weight by "+trainingStepDisplay()+" "+(isMetricSystem()?"kilograms":"pounds")+where;
     if (text==="−1" || text==="-1") return "Decrease repetitions by 1"+where;
     if (text==="+1") return "Increase repetitions by 1"+where;
     if (text==="↑") return "Move exercise up";

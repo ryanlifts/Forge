@@ -17,7 +17,7 @@
 <link rel="manifest" href="manifest.json" />
 <link rel="apple-touch-icon" href="apple-touch-icon.png" />
 <title>BlackPyre — Training & Nutrition Log</title>
-<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="assets/fonts/fonts.css" rel="stylesheet">
 <style>
   :root {
     --bg:#101215; --panel:#191C21; --panel-up:#1F232A; --border:#2B3039;
@@ -239,7 +239,7 @@
   .xbtn.saveExBtn:active { filter:brightness(.94); }
   svg { width:100%; display:block; }
   /* full-page overlays: respect iPhone status bar + smooth scrolling */
-  #faqOverlay, #recentsOverlay, #liftOverlay, #myFoodsOverlay, #coachOverlay {
+  #faqOverlay, #recentsOverlay, #liftOverlay, #myFoodsOverlay {
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
     padding-top: calc(16px + env(safe-area-inset-top)) !important;
@@ -825,11 +825,6 @@
         </div>
       </div>
     </div>
-    <div class="card hidden" id="checkinCard" style="border-color:var(--ember);">
-      <div class="label">Coach check-in</div>
-      <div style="font-size:13px; line-height:1.7; margin:6px 0 12px;">A week of new data since your last review. Want your coach to take a look?</div>
-      <button class="btn ghost small" id="checkinBtn">Get my weekly review</button>
-    </div>
     <div class="card hidden" id="weekCard">
       <div class="label">This week</div>
       <div id="weekBody" style="font-size:13px; line-height:1.9;"></div>
@@ -837,7 +832,7 @@
     <div class="row" style="margin-bottom:12px;">
       <div class="card" style="margin-bottom:0; min-width:180px;">
         <div class="label">Current weight</div>
-        <div class="big"><span id="dashWt">—</span><small> lb</small></div>
+        <div class="big"><span id="dashWt">—</span><small id="dashWtUnit"> lb</small></div>
         <div class="note" id="dashWtNote"></div>
         <div class="row" style="margin-top:10px;">
           <input type="number" id="dashWtInput" aria-label="Today’s body weight in pounds" inputmode="decimal" placeholder="Today's lb" style="flex:1.4; padding:9px; font-size:16px;">
@@ -872,7 +867,7 @@
       </div>
     </details>
     <details class="disclosure" id="homeCoachDetails">
-      <summary><div><div class="disclosure-title">AI Coach</div><div class="disclosure-sub">Chat, copy, or download your progress report</div></div></summary>
+      <summary><div><div class="disclosure-title">AI coaching</div><div class="disclosure-sub">Copy or download your progress report</div></div></summary>
       <div class="disclosure-body">
         <div class="card" id="aiCoachCard">
           <div style="font-size:13px; line-height:1.7; margin:0 0 12px;">
@@ -881,7 +876,6 @@
             your preferred AI. It can assess your progress and hand back an adjusted program that loads
             straight into BlackPyre. <span style="color:var(--dim);">Totally optional — BlackPyre works fully without it.</span>
           </div>
-          <button class="btn" id="coachOpenBtn" style="width:100%; margin-bottom:10px;">Chat with your Coach</button>
           <div style="margin:12px 0 10px;">
             <div class="label" style="margin-bottom:6px;">Training history for AI</div>
             <select id="aiTrainingRange" aria-label="Training history range for AI report" style="width:100%; margin-bottom:6px;">
@@ -899,7 +893,7 @@
             <button class="btn ghost small" id="aiTrainingJsonShareBtn">Share training JSON</button>
             <button class="btn ghost small" id="aiTrainingJsonCopyBtn">Copy training JSON</button>
           </div>
-          <div class="note hidden" id="coachKeyNote"></div>
+          <div class="note" style="margin-top:10px;">BlackPyre never sends this report to an AI. You choose when and where to paste or share it.</div>
         </div>
       </div>
     </details>
@@ -1017,14 +1011,8 @@
     </div>
     <div class="card hidden" id="aiFoodCard">
       <div class="label">AI quick log</div>
-      <div class="row" style="margin:8px 0 0; align-items:flex-end;">
-        <div style="flex:1;"><input id="aiFoodText" aria-label="Food description for AI estimate" placeholder="e.g. 2 eggs, toast with butter, black coffee"></div>
-        <button class="xbtn" id="aiFoodGoBtn" style="flex:0 0 auto;">Log it</button>
-      </div>
-      <div class="row mt10" style="align-items:flex-end;">
-        <div style="flex:1;"><input id="aiPhotoCaption" aria-label="Optional meal photo description" placeholder="Optional: where/what (e.g. Chipotle chicken bowl)"></div>
-        <button class="xbtn" id="aiPhotoBtn" style="flex:0 0 auto;">Photo</button>
-      </div>
+      <div style="margin:8px 0 0;"><input id="aiFoodText" aria-label="Food description for AI estimate" placeholder="e.g. 2 eggs, toast with butter, black coffee"></div>
+      <div class="mt10"><input id="aiPhotoCaption" aria-label="Optional meal photo description" placeholder="Optional: where/what (e.g. Chipotle chicken bowl)"></div>
       <div id="aiHandoffControls" class="hidden">
         <div class="row mt10">
           <button class="btn ghost small" id="hfCopyFoodBtn">Copy prompt (text only)</button>
@@ -1054,7 +1042,7 @@
         <div class="note" style="margin-top:6px; color:var(--dim);">Some phones and browsers cannot send photos directly to an AI app from a home-screen app. If the photo does not appear, attach the same photo manually, then paste the prompt.</div>
       </div>
       <input type="file" id="aiPhotoFile" aria-label="Meal photo file" accept="image/*" class="hidden">
-      <div class="note" style="margin-top:6px;">Photos are analyzed and immediately discarded — never stored, never uploaded anywhere but the AI. Pasted replies are parsed, confirmed, then cleared.</div>
+      <div class="note" style="margin-top:6px;">BlackPyre never uploads the photo or prompt. A selected photo stays in memory until you share, clear, or finish the handoff; pasted replies are cleared after review.</div>
       <div id="aiFoodStatus" role="status" aria-live="polite" class="note hidden" style="margin-top:8px;"></div>
       <div id="aiFoodConfirm" class="hidden" style="margin-top:10px;"></div>
     </div>
@@ -1249,13 +1237,10 @@
       </div>
 
       <div class="note" id="programManagerIntro">
-        Build a program in BlackPyre, ask BlackPyre Coach to make one, or load a BlackPyre training plan file.
+        Build a program in BlackPyre, use any AI to make one with BlackPyre’s instructions, or load a BlackPyre training plan file.
       </div>
 
-      <div class="row mt10">
-        <button class="btn ghost small" id="newProgBtn" aria-label="Build a new program in BlackPyre">＋ Build it myself</button>
-        <button class="btn ghost small" id="coachPlanBtn">Ask BlackPyre Coach</button>
-      </div>
+      <button class="btn ghost small mt10" id="newProgBtn" aria-label="Build a new program in BlackPyre" style="width:100%;">＋ Build it myself</button>
 
       <button class="btn ghost small mt10" id="createAIPlanBtn" style="width:100%;" aria-expanded="false" aria-controls="aiPlanHelperCard">Create a plan with AI</button>
 
@@ -1393,7 +1378,7 @@
       <div class="row" style="align-items:flex-end;">
         <div style="flex:1.2;">
           <div class="label">Plate math (per side)</div>
-          <input type="number" id="plateTarget" aria-label="Target loaded weight" inputmode="decimal" placeholder="Target weight, e.g. 275">
+          <input type="number" id="plateTarget" aria-label="Target loaded weight in pounds" inputmode="decimal" placeholder="Target weight, e.g. 275">
         </div>
         <div style="flex:0.8;">
           <div class="label">Bar</div>
@@ -1428,7 +1413,7 @@
           <div><div class="label">Date</div><input type="date" id="wtDate" aria-label="Weigh-in date"></div>
           <div><div class="label">Time</div><input type="time" id="wtTime" aria-label="Weigh-in time"></div>
         </div>
-        <div class="label">Weight (lb)</div><input type="number" id="wtVal" aria-label="Body weight in pounds" placeholder="e.g. 221.4" inputmode="decimal" step="any" style="margin-bottom:12px;">
+        <div class="label" id="wtValLabel">Weight (lb)</div><input type="number" id="wtVal" aria-label="Body weight in pounds" placeholder="e.g. 221.4" inputmode="decimal" step="any" style="margin-bottom:12px;">
         <button class="btn" id="addWtBtn" style="width:100%;">Record</button>
       </div>
       <div class="note">Weigh same time of day · trust the weekly trend, not the daily number</div>
@@ -1439,7 +1424,7 @@
       <div class="note hidden" id="projLine" style="font-size:12px;"></div>
     </div>
     <div class="card hidden" id="measureCard">
-      <div class="label">Body measurements (inches)</div>
+      <div class="label" id="bodyMeasurementsLabel">Body measurements (inches)</div>
       <div class="row" style="margin:10px 0 12px;">
         <div><div class="label">Waist</div><input type="number" id="mWaist" aria-label="Waist measurement in inches" inputmode="decimal" step="any" placeholder="in"></div>
         <div><div class="label">Chest</div><input type="number" id="mChest" aria-label="Chest measurement in inches" inputmode="decimal" step="any" placeholder="in"></div>
@@ -1469,15 +1454,24 @@
       <summary><div><div class="disclosure-title">Goals, targets & tracking</div><div class="disclosure-sub">Calculator, calorie schedule, measurements, water, and accent</div></div></summary>
       <div class="disclosure-body">
     <div class="card">
+      <div class="label">Units &amp; measurements</div>
+      <div class="note" style="margin:7px 0 10px;">Choose how BlackPyre shows body and training measurements. Changing units converts the display without rewriting your saved history.</div>
+      <div class="row" role="group" aria-label="Measurement system">
+        <button class="btn ghost small" id="unitImperialBtn" aria-pressed="true">Imperial · lb, ft/in</button>
+        <button class="btn ghost small" id="unitMetricBtn" aria-pressed="false">Metric · kg, cm</button>
+      </div>
+    </div>
+    <div class="card">
       <div class="label" style="margin-bottom:12px;">Calorie & macro calculator</div>
       <div class="row" style="margin-bottom:12px;">
         <div><div class="label">Sex</div><select id="cSex" aria-label="Sex used for calorie calculation"><option value="m">Male</option><option value="f">Female</option></select></div>
         <div><div class="label">Age</div><input type="number" id="cAge" aria-label="Age in years" inputmode="numeric" min="13" max="100" placeholder="years"></div>
       </div>
-      <div class="row" style="margin-bottom:12px;">
+      <div class="row" id="calculatorBodyFields" style="margin-bottom:12px;">
         <div><div class="label">Height (ft)</div><input type="number" id="cFt" aria-label="Height feet" inputmode="numeric" min="4" max="8" placeholder="ft"></div>
         <div><div class="label">Height (in)</div><input type="number" id="cIn" aria-label="Height inches" inputmode="numeric" min="0" max="11" placeholder="in"></div>
         <div><div class="label">Weight (lb)</div><input type="number" id="cWt" aria-label="Body weight in pounds for calorie calculation" inputmode="decimal" min="50" max="700" step="any" placeholder="lb"></div>
+        <div class="hidden"><input type="number" id="cCm" aria-label="Height in centimeters" tabindex="-1"></div>
       </div>
       <div class="label">Activity level</div>
       <select id="cAct" aria-label="Activity level" style="margin-bottom:12px;">
@@ -1515,15 +1509,15 @@
         </div>
       </div>
       <div class="note">
-        Supports ages 13+. Ages 13–17 use the 2023 Dietary Reference Intake youth equation and a 20% protein / 55% carbohydrate / 25% fat starting split; they retain all goal, macro, apply, and scheduling controls. For teens, activity reflects total daily movement, not workouts alone; Moderate uses the conservative Low active youth category. Adults use the Mifflin-St Jeor equation, protein at ~0.9 g per lb of bodyweight, fat at ~25% of calories, and carbs from the remainder. Not for pregnancy or breastfeeding. BlackPyre will not suggest or save any day below 1,200 kcal. See the <a href="https://www.ncbi.nlm.nih.gov/books/NBK588659/" target="_blank" rel="noopener" style="color:var(--ember);">2023 Dietary Reference Intakes</a>, <a href="https://www.healthychildren.org/English/ages-stages/teen/nutrition/Pages/Fads-and-Diets.aspx" target="_blank" rel="noopener" style="color:var(--ember);">American Academy of Pediatrics teen guidance</a>, and <a href="https://www.niddk.nih.gov/health-information/diabetes/overview/preventing-type-2-diabetes/game-plan" target="_blank" rel="noopener" style="color:var(--ember);">NIDDK calorie guidance</a>.
+        Supports ages 13+. Ages 13–17 use the 2023 Dietary Reference Intake youth equation and a 20% protein / 55% carbohydrate / 25% fat starting split; they retain all goal, macro, apply, and scheduling controls. For teens, activity reflects total daily movement, not workouts alone; Moderate uses the conservative Low active youth category. Adults use the Mifflin-St Jeor equation, protein at <span id="adultProteinBasis">~0.9 g per lb</span> of bodyweight, fat at ~25% of calories, and carbs from the remainder. Not for pregnancy or breastfeeding. BlackPyre will not suggest or save any day below 1,200 kcal. See the <a href="https://www.ncbi.nlm.nih.gov/books/NBK588659/" target="_blank" rel="noopener" style="color:var(--ember);">2023 Dietary Reference Intakes</a>, <a href="https://www.healthychildren.org/English/ages-stages/teen/nutrition/Pages/Fads-and-Diets.aspx" target="_blank" rel="noopener" style="color:var(--ember);">American Academy of Pediatrics teen guidance</a>, and <a href="https://www.niddk.nih.gov/health-information/diabetes/overview/preventing-type-2-diabetes/game-plan" target="_blank" rel="noopener" style="color:var(--ember);">NIDDK calorie guidance</a>.
         For the research behind macro splits, see the <a href="https://jissn.biomedcentral.com/articles/10.1186/s12970-018-0242-y" target="_blank" rel="noopener" style="color:var(--ember);">International Society of Sports Nutrition's evidence review</a> (open access, peer-reviewed).
       </div>
     </div>
     <div class="card">
       <div class="label" style="margin-bottom:12px;">Bodyweight goal</div>
       <div class="row" style="margin-bottom:12px;">
-        <div><div class="label">Start weight (lb)</div><input type="number" id="sStartWt" aria-label="Starting body weight in pounds" inputmode="decimal" step="any"></div>
-        <div><div class="label">Goal weight (lb)</div><input type="number" id="sGoalWt" aria-label="Goal body weight in pounds" inputmode="decimal" step="any"></div>
+        <div><div class="label" id="sStartWtLabel">Start weight (lb)</div><input type="number" id="sStartWt" aria-label="Starting body weight in pounds" inputmode="decimal" step="any"></div>
+        <div><div class="label" id="sGoalWtLabel">Goal weight (lb)</div><input type="number" id="sGoalWt" aria-label="Goal body weight in pounds" inputmode="decimal" step="any"></div>
       </div>
       <div class="label" style="margin-bottom:12px; margin-top:6px;">Daily nutrition targets</div>
       <div class="row" style="margin-bottom:12px;">
@@ -1580,12 +1574,12 @@
         <div class="card">
           <div class="label">Automatic progression</div>
           <button class="btn ghost small" id="autoProgressionToggleBtn" aria-pressed="false" style="width:100%; margin:8px 0 6px;">Automatic progression: Off</button>
-          <div class="note">When enabled, BlackPyre may preload the next weight after every programmed set reaches its target. Standard exercises add 5 lb; assisted exercises reduce assistance by 5 lb. Turn it off to carry the last logged weights forward unchanged.</div>
+          <div class="note" id="autoProgressionNote">When enabled, BlackPyre may preload the next weight after every programmed set reaches its target. Standard exercises add 5 lb; assisted exercises reduce assistance by 5 lb. Turn it off to carry the last logged weights forward unchanged.</div>
         </div>
       </div>
     </details>
     <details class="disclosure" id="settingsServicesDetails">
-      <summary><div><div class="disclosure-title">Food database & AI</div><div class="disclosure-sub">Optional online services and provider settings</div></div></summary>
+      <summary><div><div class="disclosure-title">Food database & AI</div><div class="disclosure-sub">Food search, suggestions, and copy/paste AI tools</div></div></summary>
       <div class="disclosure-body">
     <div class="card">
       <div class="label" style="margin-bottom:10px;">Food search sources</div>
@@ -1608,30 +1602,7 @@
       <div class="label" style="margin-bottom:10px;">AI tools (optional)</div>
       <div class="label">AI food handoff</div>
       <button class="btn ghost small" id="foodHandoffToggleBtn" aria-pressed="true" style="width:100%; margin:8px 0 6px;">Disable AI food handoff</button>
-      <div class="note" style="margin:0 0 14px;">On by default and no API key is needed. When no live AI key is available, BlackPyre shows copy-and-paste food-estimate tools. Turn this off to hide those tools; normal food logging is unchanged.</div>
-      <div class="note" style="margin:0 0 10px;">The provider below controls live in-app Coach chat and API-based food tools. Keys are stored only on this device and excluded from backups.</div>
-      <div class="label">Live AI provider</div>
-      <select id="sAiProvider" aria-label="AI provider" style="margin-bottom:10px;">
-        <option value="anthropic">Claude (Anthropic API key)</option>
-        <option value="openai">ChatGPT (OpenAI API key)</option>
-        <option value="handoff">AI handoff — no key, copy &amp; paste</option>
-      </select>
-      <div id="aiKeyAnthRow">
-        <div class="label">Anthropic API key</div>
-        <input id="sAnthropicKey" aria-label="Anthropic API key" placeholder="sk-ant-…" autocomplete="off" style="margin-bottom:10px;">
-        <div class="note" style="margin:0 0 10px;">Get one at <a href="https://console.anthropic.com/" target="_blank" rel="noopener" style="color:var(--ember);">console.anthropic.com</a> — separate from a Claude subscription; pay-per-use, pennies per chat.</div>
-      </div>
-      <div id="aiKeyOaiRow" class="hidden">
-        <div class="label">OpenAI API key</div>
-        <input id="sOpenaiKey" aria-label="OpenAI API key" placeholder="sk-…" autocomplete="off" style="margin-bottom:10px;">
-        <div class="note" style="margin:0 0 10px;">Get one at <a href="https://platform.openai.com/" target="_blank" rel="noopener" style="color:var(--ember);">platform.openai.com</a> — separate from a ChatGPT Plus subscription; pay-per-use, pennies per chat.</div>
-      </div>
-      <div id="aiModelRow">
-        <div class="label">Model (optional)</div>
-        <input id="sAiModel" aria-label="AI model override" placeholder="" autocomplete="off" style="margin-bottom:10px;">
-      </div>
-      <div class="note hidden" id="aiHandoffNote" style="margin:0 0 10px;">No key needed. BlackPyre writes the prompts; you paste them into your preferred AI app and paste the reply back. Works with the AI service you already use.</div>
-      <button class="xbtn" id="saveAiBtn">Save AI settings</button>
+      <div class="note" style="margin:0;">BlackPyre prepares prompts for the AI service you already use. You copy or share what you choose, then paste the reply back for review. BlackPyre never contacts an AI service itself. Turn this off to hide the food handoff; normal food logging is unchanged.</div>
     </div>
       </div>
     </details>
@@ -1652,7 +1623,7 @@
       <div class="note" id="snapshotMetaLine" style="margin-top:8px;"></div>
       <div style="height:10px;"></div>
       <button class="btn ghost small" id="exportDiagnosticBtn">Export recovery diagnostic</button>
-      <div class="note" style="margin-top:8px;">Emergency diagnostic files preserve exact local storage and may contain private API keys. Store them securely.</div>
+      <div class="note" style="margin-top:8px;">Emergency diagnostic files preserve exact local storage and may contain private personal logs. Store them securely.</div>
       <div class="note" id="backupMetaLine" style="margin-top:8px;"></div>
       <div class="note" id="recoveryStatusLine" role="status" aria-live="polite" style="margin-top:8px;"></div>
       <div id="quarantineCard" class="hidden">
@@ -1704,7 +1675,7 @@
     </div>
     <div class="recovery-choice">
       <div class="label">Export before recovery</div>
-      <div class="note" style="margin-top:6px;">The readable export excludes API keys. The raw emergency export preserves exact original strings and may contain private API keys.</div>
+      <div class="note" style="margin-top:6px;">The readable export contains validated app data. The raw emergency export preserves exact original strings and may contain private personal logs.</div>
       <div class="row mt10">
         <button class="btn ghost small" id="recoveryPartialExportBtn">Export readable data</button>
         <button class="btn ghost small" id="recoveryRawExportBtn">Export raw originals</button>
@@ -1737,26 +1708,6 @@
       <button class="btn" id="trainingPlanReviewConfirmBtn" disabled>Review highlighted exercises</button>
       <button class="btn ghost" id="trainingPlanReviewCancelBtn">Cancel</button>
     </div>
-  </div>
-</div>
-
-<div id="coachOverlay" class="hidden" role="dialog" aria-modal="true" aria-labelledby="coachTitle" tabindex="-1" data-initial-focus="coachInput" style="position:fixed; inset:0; z-index:56; background:var(--bg); display:flex; flex-direction:column; padding:16px 14px 12px;">
-  <div style="max-width:720px; margin:0 auto; width:100%; display:flex; flex-direction:column; flex:1; min-height:0;">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex:0 0 auto;">
-      <div id="coachTitle" style="font-family:'Oswald',sans-serif; font-weight:700; font-size:20px; text-transform:uppercase;">AI Coach</div>
-      <button class="xbtn" id="coachCloseBtn" aria-label="Close AI Coach">✕ Close</button>
-    </div>
-    <div id="coachAccessNote" class="card hidden" role="status" aria-live="polite" style="font-size:13px; line-height:1.6; margin-bottom:10px;">
-      <b>BlackPyre Coach needs an AI API key.</b><br>
-      Add one in <b>Settings → Food database &amp; AI</b>. <b>Create a plan with AI</b> still works without a key.
-    </div>
-    <div id="coachMsgs" style="flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; padding-bottom:8px;"></div>
-    <div class="ctyping hidden" id="coachTyping">Coach is thinking…</div>
-    <div class="row" style="flex:0 0 auto; align-items:flex-end;">
-      <textarea id="coachInput" aria-label="Message to AI Coach" placeholder="Ask your coach anything…" rows="1"></textarea>
-      <button class="btn" id="coachSendBtn" style="flex:0 0 auto; padding:12px 18px;">Send</button>
-    </div>
-    <div class="note" style="text-align:center; margin:6px 0 0;">Runs on your own API key · your data goes only to your chosen AI provider · a chat costs about a cent</div>
   </div>
 </div>
 
@@ -1852,7 +1803,7 @@
     <div class="card"><div id="liftChart"></div></div>
     <div class="card">
       <div class="row" style="align-items:flex-end;">
-        <div style="flex:1;"><div class="label">Goal for this lift (lb, est. 1RM)</div><input type="number" id="liftGoalInput" aria-label="Estimated one rep max goal in pounds" inputmode="numeric" placeholder="e.g. 315"></div>
+        <div style="flex:1;"><div class="label" id="liftGoalLabel">Goal for this lift (lb, est. 1RM)</div><input type="number" id="liftGoalInput" aria-label="Estimated one rep max goal in pounds" inputmode="decimal" placeholder="e.g. 315"></div>
         <button class="xbtn" id="liftGoalSave" style="flex:0 0 auto;">Set goal</button>
       </div>
       <div class="note" id="liftGoalNote"></div>

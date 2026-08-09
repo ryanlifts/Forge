@@ -70,6 +70,22 @@ check("legacy settings without a calculator weight use the latest weigh-in", Num
 check("saved accent (steel) preserved", B.window.document.documentElement.style.getPropertyValue("--ember")==="#4D9DE0");
 check("weight page trend + goal line render", B.window.document.getElementById("chartLabel").textContent==="Trend · 225 → 175" && B.window.document.getElementById("chart").innerHTML.includes("GOAL 175"));
 
+// measurement-system presentation preserves canonical history
+const Metric = boot(
+  Object.assign({},EXISTING_CFG,{unitSystem:"metric",calcInputs:{sex:"m",age:42,ft:5,inches:11,lb:220.462262,act:1.55,goal:-500}}),
+  {food:{},workouts:[],weights:[{date:"2026-07-02",time:"08:00",lbs:220.462262}],measure:[],meta:{lastBackup:null,logsSince:0}}
+);
+const dMetric=Metric.window.document;
+check("metric Settings toggle and calculator fields render", dMetric.getElementById("unitMetricBtn").getAttribute("aria-pressed")==="true" && dMetric.getElementById("cCm").value==="180.3" && Number(dMetric.getElementById("cWt").value)===100);
+check("metric weight history renders kilograms without changing storage", dMetric.getElementById("wtList").textContent.includes("100 kg") && Metric.window.eval(`data.weights[0].lbs`)===220.462262);
+dMetric.getElementById("wtVal").value="95";
+dMetric.getElementById("addWtBtn").dispatchEvent(new Metric.window.Event("click",{bubbles:true}));
+check("metric weigh-in input saves canonical pounds", Math.abs(Metric.window.eval(`data.weights.find(w=>w.date===todayStr()).lbs`)-209.439149)<0.0001);
+dMetric.getElementById("unitImperialBtn").dispatchEvent(new Metric.window.Event("click",{bubbles:true}));
+check("switching to Imperial changes presentation without rewriting history", Metric.window.eval(`cfg.unitSystem`)==="imperial" && dMetric.getElementById("wtList").textContent.includes("209.4 lb") && Math.abs(Metric.window.eval(`data.weights.find(w=>w.date===todayStr()).lbs`)-209.439149)<0.0001);
+const customFirst=[...dMetric.getElementById("addExSel").children][0];
+check("Add custom exercise is at the top without becoming the default selection", customFirst.label==="Custom" && customFirst.querySelector("option").textContent.includes("Add custom exercise") && dMetric.getElementById("addExSel").value!=="__CUSTOM__");
+
 // backup / restore round-trip
 B.window.eval(`cfg.anthropicKey="sk-test-A"; cfg.aiProvider="anthropic"; saveCfg();
 window.__dl=null; download=(n,c)=>{window.__dl=c;}; doBackup("exportDataBtn");`);
@@ -77,12 +93,11 @@ check("export excludes API keys", !B.window.eval("window.__dl").includes("sk-tes
 B.window.eval(`
   const b = JSON.parse(window.__dl);
   delete b.cfg.calTarget; delete b.cfg.proTarget; b.cfg.calLo=1500; b.cfg.calHi=1700; b.cfg.proLo=160; b.cfg.proHi=180;
-  const keepAI={}; ["anthropicKey","openaiKey","aiProvider","aiModelAnth","aiModelOai"].forEach(k=>{ if(b.cfg[k]===undefined && cfg[k]!==undefined) keepAI[k]=cfg[k]; });
   migrateTargets(b.cfg);
-  cfg = Object.assign({}, DEFAULT_CFG, b.cfg, keepAI); migrateCfg(); saveCfg();
+  cfg = Object.assign({}, DEFAULT_CFG, b.cfg); migrateCfg(); saveCfg();
 `);
 check("old-range backup restores + migrates", B.window.eval("cfg.calTarget")===1600);
-check("restore preserves AI key + provider", B.window.eval("cfg.anthropicKey")==="sk-test-A" && B.window.eval("cfg.aiProvider")==="anthropic");
+check("restore cannot revive retired direct-AI credentials", B.window.eval("cfg.anthropicKey")===undefined && B.window.eval("cfg.aiProvider")===undefined);
 
 // ================= v45: schemaVersion & protected migrations =================
 const V1_CFG = Object.assign({}, EXISTING_CFG, {schemaVersion:1});
@@ -195,7 +210,7 @@ const rangeCfg = Object.assign({},EXISTING_CFG,{calLo:1500,calHi:1700,proLo:160,
 delete rangeCfg.calTarget; delete rangeCfg.proTarget;
 let restoreResult = R45.window.eval(`restoreBackupEnvelope({cfg:${JSON.stringify(rangeCfg)}})`);
 check("range-era backup restores through shared pipeline", restoreResult.ok && R45.window.eval("cfg.calTarget")===1600 && R45.window.eval("cfg.proTarget")===170);
-check("restore preserves absent device AI fields", R45.window.eval("cfg.anthropicKey")==="sk-device" && R45.window.eval("cfg.aiProvider")==="anthropic");
+check("restore scrubs retired direct-AI fields", R45.window.eval("cfg.anthropicKey")===undefined && R45.window.eval("cfg.aiProvider")===undefined);
 check("v60 restore preserves an absent food-handoff preference", R45.window.eval("cfg.foodHandoffOn")===false);
 check("cfg-only partial restore leaves data and program bytes untouched", R45.window.localStorage.getItem("forge:data")===beforeRangeData && R45.window.localStorage.getItem("forge:program")===beforeRangeProgram);
 const cfgBeforeDataOnly = R45.window.localStorage.getItem("forge:cfg");
@@ -401,7 +416,7 @@ const backupCandidate=BackupRecovery.window.eval(`prepareRecoveryBackupEnvelope(
 check("partial recovery backup uses backup/readable/default sources exactly", backupCandidate.ok && /Use backup logs/.test(backupCandidate.summary) && /Keep readable training program/.test(backupCandidate.summary) && /Reset settings/.test(backupCandidate.summary));
 const backupRecoveryResult=BackupRecovery.window.eval(`performRecoveryCandidate(prepareRecoveryBackupEnvelope({data:${JSON.stringify(recoveryBackupData)}}),{})`);
 check("partial recovery backup restores data and keeps readable program", backupRecoveryResult.ok && BackupRecovery.window.eval(`data.food["2026-07-14"][0].name`)==="Backup food" && BackupRecovery.window.eval("program.name")==="Readable Live Program");
-check("recovery backup preserves AI fields from validated LKG when live cfg is unreadable", BackupRecovery.window.eval("cfg.anthropicKey")==="sk-lkg" && BackupRecovery.window.eval("cfg.aiProvider")==="anthropic");
+check("recovery backup scrubs retired direct-AI fields from validated LKG", BackupRecovery.window.eval("cfg.anthropicKey")===undefined && BackupRecovery.window.eval("cfg.aiProvider")===undefined);
 let RangeRecovery=bootRaw({cfg:"{bad",data:liveDifferentData,program:RAW_PROGRAM,lkg:recoveryLkgRaw});
 const recoveryRangeCfg=Object.assign({},EXISTING_CFG,{calLo:1400,calHi:1600,proLo:150,proHi:170}); delete recoveryRangeCfg.calTarget; delete recoveryRangeCfg.proTarget;
 const rangeRecoveryCandidate=RangeRecovery.window.eval(`prepareRecoveryBackupEnvelope({cfg:${JSON.stringify(recoveryRangeCfg)}})`);
@@ -516,7 +531,7 @@ let PartialKeys46=bootRaw({cfg:JSON.stringify(Object.assign({},V1_CFG,{anthropic
 PartialKeys46.window.eval(`window.__partialKeys=null; window.confirm=()=>true; download=(n,c)=>{window.__partialKeys={n,c};}; doBackup("recoveryPartialExportBtn");`);
 const partialKeysText=PartialKeys46.window.eval("window.__partialKeys.c");
 check("readable partial export still strips both API keys", !partialKeysText.includes("sk-secret-a") && !partialKeysText.includes("sk-secret-o"));
-check("device-only LKG may retain API keys while normal exports do not", JSON.parse(recoveryLkgRaw).strings.cfg.includes("sk-lkg") && !normalBackupText.includes("sk-lkg"));
+check("validated LKG and normal exports both exclude retired API keys", !JSON.parse(recoveryLkgRaw).strings.cfg.includes("sk-lkg") && !normalBackupText.includes("sk-lkg"));
 const cleanBefore=fiveBytes(RecoverLkg);
 RecoverLkg.window.confirm=()=>false;
 RecoverLkg.window.document.getElementById("deleteQuarantineBtn").dispatchEvent(new RecoverLkg.window.Event("click",{bubbles:true}));
@@ -1586,23 +1601,19 @@ const DistinctRecurring = boot(
 check("usual foods do not merge unrelated products merely because they share a vague phrase",
   DistinctRecurring.window.eval(`usualFor("lunch")`)===null);
 
-// ================= v68: default ChatGPT handoff provider =================
+// ================= copy/paste AI handoff only =================
 const H68Cfg = Object.assign({},V3_CFG);
-delete H68Cfg.aiProvider;
 delete H68Cfg.foodHandoffOn;
 const H68 = boot(H68Cfg,EMPTY_DATA);
 const dH68 = H68.window.document;
-check("v68 missing AI provider defaults to ChatGPT handoff",
-  H68.window.eval("cfg.aiProvider")==="handoff"
-  && H68.window.eval("aiProvider()")==="handoff"
-  && dH68.getElementById("sAiProvider").value==="handoff");
-check("v68 default provider and Quick Log defaults are aligned",
+check("AI Quick Log defaults to copy/paste handoff",
   H68.window.eval("foodHandoffEnabled()")===true
   && !dH68.getElementById("aiHandoffControls").classList.contains("hidden"));
 const H68Claude = boot(Object.assign({},V3_CFG,{aiProvider:"anthropic",anthropicKey:"sk-test"}),EMPTY_DATA);
-check("v68 explicit Claude provider remains unchanged",
-  H68Claude.window.eval("cfg.aiProvider")==="anthropic"
-  && H68Claude.window.document.getElementById("sAiProvider").value==="anthropic");
+check("legacy provider settings and credentials are removed on boot",
+  H68Claude.window.eval("cfg.aiProvider")===undefined
+  && H68Claude.window.eval("cfg.anthropicKey")===undefined
+  && !H68Claude.window.localStorage.getItem("forge:cfg").includes("sk-test"));
 
 // ================= v60: default-on ChatGPT food handoff =================
 const H60 = boot(V3_CFG, EMPTY_DATA);
@@ -1615,9 +1626,9 @@ check("v60 disabling food handoff persists false and hides the no-key card", H60
 clickH60("foodHandoffToggleBtn");
 check("v60 food handoff can be restored from Settings", H60.window.eval("cfg.foodHandoffOn")===true && !dH60.getElementById("aiFoodCard").classList.contains("hidden") && dH60.getElementById("foodHandoffToggleBtn").getAttribute("aria-pressed")==="true");
 const H60Api = boot(Object.assign({},V3_CFG,{aiProvider:"anthropic",anthropicKey:"sk-test",foodHandoffOn:true}),EMPTY_DATA);
-check("v60 a configured live API key keeps the live food flow", H60Api.window.document.getElementById("aiHandoffControls").classList.contains("hidden") && !H60Api.window.document.getElementById("aiFoodGoBtn").classList.contains("hidden"));
+check("legacy live-AI settings cannot replace the copy/paste food flow", !H60Api.window.document.getElementById("aiHandoffControls").classList.contains("hidden") && H60Api.window.eval("cfg.anthropicKey")===undefined);
 const H60Off = boot(Object.assign({},V3_CFG,{aiProvider:"handoff",foodHandoffOn:false}),EMPTY_DATA);
-check("v60 disabling food handoff also hides it in handoff provider mode", H60Off.window.document.getElementById("aiFoodCard").classList.contains("hidden"));
+check("disabling food handoff hides it after retired provider settings are scrubbed", H60Off.window.document.getElementById("aiFoodCard").classList.contains("hidden") && H60Off.window.eval("cfg.aiProvider")===undefined);
 check("v60 keeps current primary schemaVersion 3", H60.window.eval("SCHEMA_VERSION")===3);
 
 // ================= v61: local food suggestions =================
@@ -1709,6 +1720,7 @@ check("training weight and rep inputs use 16px text to prevent mobile focus zoom
 dH.getElementById("hfPasteText").value = 'Here! {\u201Cfoods\u201D:[{\u201Cname\u201D:\u201CRice\u201D,\u201Ccal\u201D:260,\u201Cpro\u201D:5,\u201Ccarb\u201D:57,\u201Cfat\u201D:1}]}';
 clickH("hfReviewBtn"); await wait(30);
 check("curly-quote paste reaches review card", dH.querySelectorAll("#aiFoodConfirm .list-item").length===1);
+check("AI review uses a clearly labeled remove-item control instead of a floating red X", [...dH.querySelectorAll("#aiFoodConfirm button")].some(button=>button.textContent==="Remove item"));
 check("review flow centers the first item instead of clipping it above the viewport", /list-item/.test(H.window.eval("window.__aiScroll && window.__aiScroll.className")||"") && H.window.eval("window.__aiScroll && window.__aiScroll.block")==="center");
 const hfLogBtn = dH.querySelector("#aiFoodConfirm .ai-confirm-log");
 check("review log action stays visible while reviewing", !!hfLogBtn);
@@ -2036,7 +2048,7 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+(?:-\d+)?"/.test(sw));
-check("native service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v95"'));
+check("native service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v99"'));
 
 const nativePrep76 = fs.readFileSync(
   path.join(__dirname,"..","tools","prepare-native.sh"),
@@ -2614,8 +2626,7 @@ check("v56 offline barcode lookup skips network and opens manual entry", O56.win
 dO56.getElementById("scanBtn").dispatchEvent(new O56.window.Event("click",{bubbles:true}));
 await wait(5);
 check("v56 offline scanner fast-fails without loading its external library", O56.window.__netCalls.length===0 && /needs a connection/.test(dO56.getElementById("scanErr").textContent) && ![...dO56.querySelectorAll('script[src]')].some(x=>/html5-qrcode/.test(x.src)));
-await O56.window.eval(`anthropicCall([],"",10).catch(e=>{window.__offlineAI=e.message;})`);
-check("v56 direct-provider AI fast-fails offline and points to handoff", O56.window.__netCalls.length===0 && /offline/.test(O56.window.__offlineAI) && /handoff/.test(O56.window.__offlineAI));
+check("offline AI handoff remains local and makes no network request", O56.window.__netCalls.length===0 && O56.window.eval("foodHandoffEnabled()")===true);
 
 // ================= v53: mobile set-row alignment =================
 check("mobile set controls stay together after checkmark removal",
@@ -2634,7 +2645,7 @@ const hasAccessibleName57 = el=>{
   }
   return el.tagName==="BUTTON" && !!el.textContent.trim();
 };
-const A57=boot(Object.assign({},V3_CFG,{anthropicKey:"sk-test",aiProvider:"anthropic"}),V2_DATA,null,TEST_PROGRAM);
+const A57=boot(V3_CFG,V2_DATA,null,TEST_PROGRAM);
 const dA57=A57.window.document;
 A57.window.eval(`renderSessionInputs(); renderRecents(); renderMyFoods(); openBuilder(false); renderResults([{name:"Accessible chicken",brand:"Suite",cal100:165,pro100:31,carb100:0,fat100:3.6}]);`);
 await wait(40);
@@ -2659,12 +2670,6 @@ faqOpen57.focus(); faqOpen57.click(); await wait(40);
 check("v57 opening Help moves focus into its dialog", dA57.activeElement===dA57.getElementById("faqCloseBtn"));
 dA57.getElementById("faqCloseBtn").click(); await wait(40);
 check("v57 closing Help returns focus to its opener", dA57.activeElement===faqOpen57);
-const coachOpen57=dA57.getElementById("coachOpenBtn");
-coachOpen57.classList.remove("hidden"); coachOpen57.focus(); coachOpen57.click(); await wait(40);
-check("v57 opening Coach focuses its message field", dA57.activeElement===dA57.getElementById("coachInput"));
-dA57.getElementById("coachCloseBtn").click(); await wait(40);
-check("v57 closing Coach returns focus to its opener", dA57.activeElement===coachOpen57);
-
 const result57=dA57.querySelector("#results .result");
 check("v57 food search results are named native buttons", result57 && result57.tagName==="BUTTON" && hasAccessibleName57(result57));
 result57.click();
@@ -8617,100 +8622,36 @@ check(
 );
 
 const AIReview = boot(
-  Object.assign(
-    {},
-    V3_CFG,
-    {
-      anthropicKey:"sk-test",
-      aiProvider:"anthropic"
-    }
-  ),
+  V3_CFG,
   V2_DATA,
   null,
   TEST_PROGRAM
 );
 
-const dAIReview =
-  AIReview.window.document;
-
-const extractedPublicPlan =
-  AIReview.window.eval(`
-    extractAIPayloads(
-      ${JSON.stringify(
-        "```json\n"
-        +JSON.stringify(
-          TRAINING_PLAN_REVIEW_FIXTURE
-        )
-        +"\n```"
-      )}
-    ).program
-  `);
+const dAIReview = AIReview.window.document;
+const extractedPublicPlan = AIReview.window.eval(`
+  extractTrainingPlanDocumentFromText(
+    ${JSON.stringify(JSON.stringify(TRAINING_PLAN_REVIEW_FIXTURE))}
+  )
+`);
 
 check(
-  "AI payload extraction recognizes the public training-plan wrapper",
-  extractedPublicPlan.format
-     ==="blackpyre-training-plan"
+  "AI paste recognizes the public training-plan wrapper",
+  extractedPublicPlan.format==="blackpyre-training-plan"
   && extractedPublicPlan.version===1
 );
 
-check(
-  "Coach instructions teach the public format and forbid invented exercise IDs",
-  AIReview.window.eval(`
-    coachSystem().includes(
-      '"format":"blackpyre-training-plan"'
-    )
-    && coachSystem().includes(
-      "Do not invent exerciseId"
-    )
-    && coachSystem().includes(
-      "unknown exercise names require review"
-    )
-  `)
-);
-
 AIReview.window.eval(`
-  addCoachBubble(
-    "ai",
-    "I built a reviewed training plan.",
-    {
-      program:
-        ${JSON.stringify(TRAINING_PLAN_REVIEW_FIXTURE)}
-    }
-  );
+  openTrainingPlanReview(
+    ${JSON.stringify(TRAINING_PLAN_REVIEW_FIXTURE)},
+    {source:"AI paste"}
+  )
 `);
 
-const coachProgramButton =
-  [
-    ...dAIReview.querySelectorAll(
-      "#coachMsgs button.act"
-    )
-  ].find(
-    button=>
-      /Review program/.test(button.textContent)
-  );
-
 check(
-  "Coach program proposal exposes a review action",
-  !!coachProgramButton
-);
-
-if (coachProgramButton){
-  coachProgramButton.dispatchEvent(
-    new AIReview.window.Event(
-      "click",
-      {bubbles:true}
-    )
-  );
-}
-
-check(
-  "Coach program action opens review instead of replacing immediately",
-  !!coachProgramButton
-  && !dAIReview
-       .getElementById("trainingPlanReviewOverlay")
-       .classList.contains("hidden")
-  && AIReview.window.eval("program.name")
-     ===TEST_PROGRAM.name
+  "pasted AI program opens review instead of replacing immediately",
+  !dAIReview.getElementById("trainingPlanReviewOverlay").classList.contains("hidden")
+  && AIReview.window.eval("program.name")===TEST_PROGRAM.name
 );
 
 const allReviewControls =
@@ -8777,7 +8718,7 @@ check(
       .getElementById("programManagerIntro")
       .textContent
   )
-  && /BlackPyre Coach/.test(
+  && /use any AI/.test(
        dGuidance77
          .getElementById("programManagerIntro")
          .textContent
@@ -9008,70 +8949,18 @@ check(
 );
 
 check(
-  "v77 external AI helper and BlackPyre Coach share the importer format contract",
-  Guidance77.window.eval(`
-    coachSystem().includes(
-      blackpyreTrainingPlanFormatInstructions()
-    )
-  `)
+  "v77 external AI helper teaches the importer format contract",
+  guidancePrompt77.includes(
+    Guidance77.window.eval("blackpyreTrainingPlanFormatInstructions()")
+  )
 );
-
-const CoachNoKey77 = boot(
-  Object.assign(
-    {},
-    V3_CFG,
-    {
-      aiProvider:"handoff",
-      anthropicKey:"",
-      openaiKey:""
-    }
-  ),
-  V2_DATA,
-  null,
-  TEST_PROGRAM
-);
-
-const dCoachNoKey77 =
-  CoachNoKey77.window.document;
-
-dCoachNoKey77
-  .getElementById("coachPlanBtn")
-  .click();
 
 check(
-  "v77 BlackPyre Coach opens a clear no-key path",
-  !dCoachNoKey77
-     .getElementById("coachOverlay")
-     .classList.contains("hidden")
-  && !dCoachNoKey77
-        .getElementById("coachAccessNote")
-        .classList.contains("hidden")
-  && /needs an AI API key/.test(
-       dCoachNoKey77
-         .getElementById("coachAccessNote")
-         .textContent
-     )
-  && /Settings → Food database & AI/.test(
-       dCoachNoKey77
-         .getElementById("coachAccessNote")
-         .textContent
-     )
-  && /Create a plan with AI/.test(
-       dCoachNoKey77
-         .getElementById("coachAccessNote")
-         .textContent
-     )
-  && dCoachNoKey77
-       .getElementById("coachInput")
-       .disabled
-  && dCoachNoKey77
-       .getElementById("coachSendBtn")
-       .disabled
+  "v77 direct AI provider controls are absent while copy/paste program creation remains available",
+  !dGuidance77.getElementById("coachPlanBtn")
+  && !dGuidance77.getElementById("coachOverlay")
+  && !!dGuidance77.getElementById("createAIPlanBtn")
 );
-
-dCoachNoKey77
-  .getElementById("coachCloseBtn")
-  .click();
 
 check(
   "v77 load guide uses the actual native navigation and confirmation flow",

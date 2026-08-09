@@ -20,7 +20,7 @@ const nativePrep=fs.readFileSync(path.join(__dirname,"..","tools","prepare-nativ
 check("native preparation packages Phase 1 source before Capacitor sync",
   nativePrep.includes("index.html")
   && nativePrep.includes("data-faq.js")
-  && /cp -R scripts vendor www\//.test(nativePrep)
+  && /cp -R scripts vendor assets www\//.test(nativePrep)
   && nativePrep.indexOf("data-faq.js")<nativePrep.indexOf("npx cap sync ios")
   && nativePrep.indexOf("cp -R scripts")<nativePrep.indexOf("npx cap sync ios")
 );

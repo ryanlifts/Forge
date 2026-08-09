@@ -22,7 +22,7 @@ function setCalculatorActivityLabels(selectId,isTeen){
 let setupStep = 0;
 const SETUP_STEPS = 8;
 const setupChoice = {
-  trainAction:null, cw:null, gw:null, calc:null, applied:false,
+  trainAction:null, unitSystem:"imperial", cw:null, gw:null, calc:null, applied:false,
   split:{mode:"rec",p:40,c:30,f:30}, schedMode:"same", schedDays:null,
   measureOn:false, waterOn:false
 };
@@ -74,6 +74,7 @@ function closeInformationalBrandStory(){
 }
 function openSetup(){
   setupStep = 0;
+  setupChoice.unitSystem = currentUnitSystem();
   setupChoice.measureOn = !!cfg.measureOn;
   setupChoice.waterOn = !!cfg.waterOn;
   setupChoice.schedMode = cfg.calSchedMode || "same";
@@ -107,15 +108,22 @@ document.getElementById("setupNext").addEventListener("click", ()=>{
 });
 function captureSetupStep(){
   if (setupStep===0){
-    const cw=document.getElementById("suWt"), gw=document.getElementById("suGoalWt");
-    if(cw) setupChoice.cw=Number(cw.value)||null;
-    if(gw) setupChoice.gw=Number(gw.value)||null;
+    const cw=document.getElementById("suWt"), gw=document.getElementById("suGoalWt"), units=document.getElementById("suUnits");
+    const system=normalizedUnitSystem(units ? units.value : setupChoice.unitSystem);
+    setupChoice.unitSystem=system;
+    if(cw) setupChoice.cw=cw.value===""?null:poundsFromUnit(cw.value,system);
+    if(gw) setupChoice.gw=gw.value===""?null:poundsFromUnit(gw.value,system);
   }
   if (setupStep===1){
-    const ids=["suSex","suAge","suFt","suIn","suAct","suGoal"];
+    const metric=isMetricSystem(setupChoice.unitSystem);
+    const ids=metric?["suSex","suAge","suCm","suAct","suGoal"]:["suSex","suAge","suFt","suIn","suAct","suGoal"];
     if(ids.every(id=>document.getElementById(id))){
+      const totalInches=metric
+        ? inchesFromUnit(document.getElementById("suCm").value,"metric")
+        : totalInchesFromFeetInches(document.getElementById("suFt").value,document.getElementById("suIn").value);
+      const height=feetInchesFromTotalInches(totalInches);
       setupChoice.calcInputs={sex:document.getElementById("suSex").value,age:Number(document.getElementById("suAge").value)||null,
-        ft:Number(document.getElementById("suFt").value)||null,inches:Number(document.getElementById("suIn").value)||0,
+        ft:height.ft,inches:height.inches,
         act:Number(document.getElementById("suAct").value),goal:Number(document.getElementById("suGoal").value)};
     }
   }
@@ -128,8 +136,10 @@ function validateSetupStep(){
   captureSetupStep();
   if (setupStep===0){
     const cw=setupChoice.cw, gw=setupChoice.gw;
-    if (!cw || cw<50 || cw>700){ flashSave("Enter your current weight", true); return false; }
-    if (!gw || gw<50 || gw>700){ flashSave("Enter a goal weight", true); return false; }
+    const range=isMetricSystem(setupChoice.unitSystem)?"23 to 318 kg":"50 to 700 lb";
+    if (!cw || cw<50 || cw>700){ flashSave("Enter a current weight from "+range, true); return false; }
+    if (!gw || gw<50 || gw>700){ flashSave("Enter a goal weight from "+range, true); return false; }
+    cfg.unitSystem=normalizedUnitSystem(setupChoice.unitSystem);
     cfg.startWt=cw; cfg.goalWt=gw;
     const dt=todayStr();
     if (!data.weights.some(w=>w.date===dt)) data.weights.push({date:dt,time:currentTimeValue(),lbs:cw});
@@ -137,7 +147,7 @@ function validateSetupStep(){
   }
   if (setupStep===1){
     const x=setupChoice.calcInputs||{};
-    const safe=safeMacroCalculation(x.sex,x.age,x.ft,x.inches,cfg.startWt,x.act,x.goal);
+    const safe=safeMacroCalculation(x.sex,x.age,x.ft,x.inches,cfg.startWt,x.act,x.goal,setupChoice.unitSystem);
     if(!safe.ok){ setupChoice.calc=null; flashSave(safe.message, true); return false; }
     setupChoice.calc=safe.value;
     cfg.calcInputs={sex:x.sex,age:x.age,ft:x.ft,inches:x.inches,lb:cfg.startWt,act:x.act,goal:x.goal};
@@ -211,7 +221,7 @@ function renderSetupSplit(){
     document.getElementById("suSpF").addEventListener("change",()=>rebalance("f"));
   }
   const g=setupSplitGrams(), s=setupChoice.split;
-  const label=s.mode==="rec"?(setupChoice.calc.isTeen?"Youth starting split · 20% protein / 55% carbs / 25% fat":"0.9g/lb protein · 25% fat · carbs from the rest"):s.p+"% / "+s.c+"% / "+s.f+"%";
+  const label=s.mode==="rec"?(setupChoice.calc.isTeen?"Youth starting split · 20% protein / 55% carbs / 25% fat":(isMetricSystem(setupChoice.unitSystem)?"2.0g/kg protein":"0.9g/lb protein")+" · 25% fat · carbs from the rest"):s.p+"% / "+s.c+"% / "+s.f+"%";
   document.getElementById("suSplitGrams").innerHTML=label+' → <b class="ember-text">'+g.pro+'g P</b> · <b>'+g.carb+'g C</b> · <b>'+g.fat+'g F</b>';
   const warn=document.getElementById("suSplitWarn");
   if(!setupChoice.calc.isTeen&&g.pro<cfg.startWt*0.7){ warn.textContent="This split gives only "+g.pro+"g protein. For muscle retention, choose a higher-protein split."; warn.classList.remove("hidden"); }
@@ -241,21 +251,43 @@ function renderSetupStep(){
   document.getElementById("setupOverlay").scrollTop=0;
 
   if(setupStep===0){
-    body.innerHTML='<div class="card"><div class="label">Step 1 · Bodyweight goal</div><div class="row" style="margin:10px 0 12px;">'
-      +'<div><div class="label">Current weight (lb)</div><input type="number" id="suWt" inputmode="decimal" placeholder="e.g. 225"></div>'
-      +'<div><div class="label">Goal weight (lb)</div><input type="number" id="suGoalWt" inputmode="decimal" placeholder="e.g. 175"></div></div>'
+    const system=normalizedUnitSystem(setupChoice.unitSystem), unit=unitWeightLabel(system), metric=isMetricSystem(system);
+    body.innerHTML='<div class="card"><div class="label">Step 1 · Units &amp; bodyweight goal</div>'
+      +'<div class="label" style="margin-top:10px;">Measurement system</div><select id="suUnits" aria-label="Measurement system" style="margin:6px 0 10px;"><option value="imperial">Imperial · lb, ft/in</option><option value="metric">Metric · kg, cm</option></select>'
+      +'<div class="row" style="margin:0 0 12px;">'
+      +'<div><div class="label">Current weight ('+unit+')</div><input type="number" id="suWt" inputmode="decimal" placeholder="e.g. '+(metric?'102':'225')+'"></div>'
+      +'<div><div class="label">Goal weight ('+unit+')</div><input type="number" id="suGoalWt" inputmode="decimal" placeholder="e.g. '+(metric?'79.5':'175')+'"></div></div>'
       +'<div class="note">Enter your current weight once. BlackPyre saves it as your first weigh-in and starting baseline.</div></div>';
-    document.getElementById("suWt").value=setupChoice.cw||""; document.getElementById("suGoalWt").value=setupChoice.gw||"";
+    const unitSelect=document.getElementById("suUnits"); unitSelect.value=system;
+    document.getElementById("suWt").value=setupChoice.cw?poundsToUnit(setupChoice.cw,system,1):"";
+    document.getElementById("suGoalWt").value=setupChoice.gw?poundsToUnit(setupChoice.gw,system,1):"";
+    unitSelect.addEventListener("change",()=>{
+      const oldSystem=system;
+      const cw=document.getElementById("suWt").value, gw=document.getElementById("suGoalWt").value;
+      setupChoice.cw=cw===""?null:poundsFromUnit(cw,oldSystem);
+      setupChoice.gw=gw===""?null:poundsFromUnit(gw,oldSystem);
+      setupChoice.unitSystem=normalizedUnitSystem(unitSelect.value);
+      renderSetupStep();
+    });
   }
   if(setupStep===1){
     const ci=setupChoice.calcInputs||cfg.calcInputs||{};
+    const metric=isMetricSystem(setupChoice.unitSystem);
+    const totalInches=ci.ft?totalInchesFromFeetInches(ci.ft,ci.inches||0):null;
+    const heightFields=metric
+      ? '<div><div class="label">Height (cm)</div><input type="number" id="suCm" inputmode="decimal" min="122" max="244" placeholder="cm"></div>'
+      : '<div><div class="label">Height (ft)</div><input type="number" id="suFt" inputmode="numeric" min="4" max="8" placeholder="ft"></div><div><div class="label">Height (in)</div><input type="number" id="suIn" inputmode="decimal" min="0" max="11.99" placeholder="in"></div>';
+    const goalOptions=SUPPORTED_GOAL_ADJUSTMENTS.map(value=>'<option value="'+value+'">'+goalRateLabel(value,setupChoice.unitSystem)+'</option>').join("");
     body.innerHTML='<div class="card"><div class="label">Step 2 · Calorie calculator</div><div class="row" style="margin:10px 0 10px;">'
       +'<div><div class="label">Sex</div><select id="suSex"><option value="m">Male</option><option value="f">Female</option></select></div><div><div class="label">Age</div><input type="number" id="suAge" inputmode="numeric" min="13" max="100" placeholder="years"></div></div>'
-      +'<div class="row" style="margin-bottom:10px;"><div><div class="label">Height (ft)</div><input type="number" id="suFt" inputmode="numeric" min="4" max="8" placeholder="ft"></div><div><div class="label">Height (in)</div><input type="number" id="suIn" inputmode="numeric" min="0" max="11" placeholder="in"></div></div>'
+      +'<div class="row" style="margin-bottom:10px;">'+heightFields+'</div>'
       +'<div class="label">Activity level</div><select id="suAct" style="margin-bottom:10px;"><option value="1.2">Sedentary (desk job, little exercise)</option><option value="1.375">Light (1–3 workouts/week)</option><option value="1.55">Moderate (3–5 workouts/week)</option><option value="1.725">Very active (6–7 workouts/week or physical job)</option><option value="1.9">Athlete (2-a-days or heavy labor + training)</option></select>'
-      +'<div class="label">Goal</div><select id="suGoal" style="margin-bottom:10px;"><option value="-1000">Lose 2 lb/week (aggressive)</option><option value="-500">Lose 1 lb/week</option><option value="-250">Lose 0.5 lb/week</option><option value="0">Maintain</option><option value="250">Gain 0.5 lb/week (lean bulk)</option></select>'
+      +'<div class="label">Goal</div><select id="suGoal" style="margin-bottom:10px;">'+goalOptions+'</select>'
       +'<div class="note hidden" id="suTeenModeNote" style="margin-bottom:10px;color:var(--warn);">Ages 13–17 use a youth-specific equation and youth starting macro split. Teen activity means total daily movement, not workouts alone. Review weight-change goals with a parent or guardian and pediatrician or registered dietitian.</div><div id="suCalcPreview" style="font-size:13px;line-height:1.8;margin-top:8px;"></div><div class="note">Supports ages 13 and up. Ages 13–17 use youth-specific estimates. Results are estimates, not medical advice; consult a physician or registered dietitian before making diet or weight-change decisions, especially if you are under 18 or have a medical condition. This calculator is not designed for pregnancy or breastfeeding.</div></div>';
-    document.getElementById("suSex").value=ci.sex||"m"; document.getElementById("suAge").value=ci.age||""; document.getElementById("suFt").value=ci.ft||""; document.getElementById("suIn").value=ci.inches||""; document.getElementById("suAct").value=String(ci.act||1.55); document.getElementById("suGoal").value=String(ci.goal!=null?ci.goal:-500);
+    document.getElementById("suSex").value=ci.sex||"m"; document.getElementById("suAge").value=ci.age||"";
+    if(metric) document.getElementById("suCm").value=totalInches?inchesToUnit(totalInches,"metric",1):"";
+    else { document.getElementById("suFt").value=ci.ft||""; document.getElementById("suIn").value=ci.inches||""; }
+    document.getElementById("suAct").value=String(ci.act||1.55); document.getElementById("suGoal").value=String(ci.goal!=null?ci.goal:-500);
     const syncTeenMode=()=>{ const age=Number(document.getElementById("suAge").value), teen=age>=13&&age<18; document.getElementById("suGoal").disabled=false; document.getElementById("suTeenModeNote").classList.toggle("hidden",!teen); setCalculatorActivityLabels("suAct",teen); };
     document.getElementById("suAge").addEventListener("input",syncTeenMode); syncTeenMode();
     if(setupChoice.calc) document.getElementById("suCalcPreview").innerHTML=setupChoice.calc.isTeen
@@ -444,18 +476,18 @@ function calcTeenMacros(sex, age, ft, inches, lb, activity, goalAdj){
   const target=Math.round(estimate+Number(goalAdj));
   return {bmr:null,tdee:estimate,cal:target,pro:Math.round(target*0.20/4),fat:Math.round(target*0.25/9),carb:Math.round(target*0.55/4),isTeen:true,formula:"DRI-2023",activityCategory:category};
 }
-function validateMacroCalculatorInputs(sex, age, ft, inches, lb, activity, goalAdj){
+function validateMacroCalculatorInputs(sex, age, ft, inches, lb, activity, goalAdj, system){
   const heightIn=Number(ft)*12+Number(inches);
   if (sex!=="m" && sex!=="f") return {ok:false, field:"sex", message:"Choose the sex used for the calorie estimate."};
   if (!Number.isInteger(age) || age<NUTRITION_CALCULATOR_LIMITS.minAge || age>NUTRITION_CALCULATOR_LIMITS.maxAge) return {ok:false, field:"age", message:"The calculator supports ages 13–100. It is not designed for children under 13."};
-  if (!Number.isFinite(heightIn) || heightIn<NUTRITION_CALCULATOR_LIMITS.minHeightIn || heightIn>NUTRITION_CALCULATOR_LIMITS.maxHeightIn || Number(inches)<0 || Number(inches)>11) return {ok:false, field:"height", message:"Enter a height from 4 ft 0 in to 8 ft 0 in."};
-  if (!Number.isFinite(lb) || lb<NUTRITION_CALCULATOR_LIMITS.minWeightLb || lb>NUTRITION_CALCULATOR_LIMITS.maxWeightLb) return {ok:false, field:"weight", message:"Enter a weight from 50 to 700 lb."};
+  if (!Number.isFinite(heightIn) || heightIn<NUTRITION_CALCULATOR_LIMITS.minHeightIn || heightIn>NUTRITION_CALCULATOR_LIMITS.maxHeightIn || Number(inches)<0 || Number(inches)>=12) return {ok:false, field:"height", message:isMetricSystem(system)?"Enter a height from 122 to 244 cm.":"Enter a height from 4 ft 0 in to 8 ft 0 in."};
+  if (!Number.isFinite(lb) || lb<NUTRITION_CALCULATOR_LIMITS.minWeightLb || lb>NUTRITION_CALCULATOR_LIMITS.maxWeightLb) return {ok:false, field:"weight", message:isMetricSystem(system)?"Enter a weight from 23 to 318 kg.":"Enter a weight from 50 to 700 lb."};
   if (!SUPPORTED_ACTIVITY_LEVELS.includes(Number(activity))) return {ok:false, field:"activity", message:"Choose a supported activity level."};
   if (!SUPPORTED_GOAL_ADJUSTMENTS.includes(Number(goalAdj))) return {ok:false, field:"goal", message:"Choose a supported weight goal."};
   return {ok:true};
 }
-function safeMacroCalculation(sex, age, ft, inches, lb, activity, goalAdj){
-  const inputs=validateMacroCalculatorInputs(sex,age,ft,inches,lb,activity,goalAdj);
+function safeMacroCalculation(sex, age, ft, inches, lb, activity, goalAdj, system){
+  const inputs=validateMacroCalculatorInputs(sex,age,ft,inches,lb,activity,goalAdj,system);
   if(!inputs.ok) return inputs;
   if(Number(age)<18){
     const value=calcTeenMacros(sex,age,ft,inches,lb,activity,goalAdj);
@@ -481,10 +513,10 @@ function renderMainCalculatorAgeMode(){
   setCalculatorActivityLabels("cAct",teen);
 }
 function showCalculatorValidationError(result){
-  ["cSex","cAge","cFt","cIn","cWt","cAct","cGoal"].forEach(id=>document.getElementById(id).removeAttribute("aria-invalid"));
+  ["cSex","cAge","cFt","cIn","cCm","cWt","cAct","cGoal"].forEach(id=>{ const el=document.getElementById(id); if(el) el.removeAttribute("aria-invalid"); });
   setInlineValidation("calcValidationError",result&&result.message);
-  const ids={sex:["cSex"],age:["cAge"],height:["cFt","cIn"],weight:["cWt"],activity:["cAct"],goal:["cGoal"]};
-  (ids[result&&result.field]||[]).forEach(id=>document.getElementById(id).setAttribute("aria-invalid","true"));
+  const ids={sex:["cSex"],age:["cAge"],height:isMetricSystem()?["cCm"]:["cFt","cIn"],weight:["cWt"],activity:["cAct"],goal:["cGoal"]};
+  (ids[result&&result.field]||[]).forEach(id=>{ const el=document.getElementById(id); if(el) el.setAttribute("aria-invalid","true"); });
 }
 let lastCalc = null;
 let splitState = { mode:"rec", p:40, c:30, f:30 }; // mode: rec | preset | custom
@@ -534,15 +566,16 @@ function renderSplit(){
   const g = splitGrams();
   if (!g) return;
   const label = splitState.mode==="rec"
-    ? (lastCalc.isTeen ? "Youth starting split · 20% protein / 55% carbs / 25% fat" : "0.9g/lb protein · 25% fat · carbs from the rest")
+    ? (lastCalc.isTeen ? "Youth starting split · 20% protein / 55% carbs / 25% fat" : (isMetricSystem()?"2.0g/kg protein":"0.9g/lb protein")+" · 25% fat · carbs from the rest")
     : splitState.p+"% / "+splitState.c+"% / "+splitState.f+"%";
   document.getElementById("splitGrams").innerHTML =
     label+' → <b class="ember-text">'+g.pro+'g P</b> · <b>'+g.carb+'g C</b> · <b>'+g.fat+'g F</b>';
   // protein floor sanity check
-  const wt = Number(document.getElementById("cWt").value) || cfg.startWt;
+  const wt = poundsFromUnit(document.getElementById("cWt").value,currentUnitSystem()) || cfg.startWt;
   const warn = document.getElementById("splitWarn");
   if (!lastCalc.isTeen&&g.pro < wt*0.7){
-    warn.textContent = "This split gives only "+g.pro+"g protein ("+(Math.round(g.pro/wt*100)/100)+" g/lb). For muscle retention while losing weight, research supports a higher protein share.";
+    const ratio=isMetricSystem()?g.pro/(wt*LB_TO_KG):g.pro/wt;
+    warn.textContent = "This split gives only "+g.pro+"g protein ("+(Math.round(ratio*100)/100)+" g/"+unitWeightLabel()+"). For muscle retention while losing weight, research supports a higher protein share.";
     warn.classList.remove("hidden");
   } else {
     warn.classList.add("hidden");
@@ -571,12 +604,14 @@ document.getElementById("spF").addEventListener("input", ()=>{
 document.getElementById("calcMacrosBtn").addEventListener("click", ()=>{
   const sex = document.getElementById("cSex").value;
   const age = Number(document.getElementById("cAge").value);
-  const ft = Number(document.getElementById("cFt").value);
-  const inches = Number(document.getElementById("cIn").value||0);
-  const lb = Number(document.getElementById("cWt").value);
+  const totalInches=isMetricSystem()
+    ? inchesFromUnit(document.getElementById("cCm").value,"metric")
+    : totalInchesFromFeetInches(document.getElementById("cFt").value,document.getElementById("cIn").value||0);
+  const height=feetInchesFromTotalInches(totalInches), ft=height.ft, inches=height.inches;
+  const lb = poundsFromUnit(document.getElementById("cWt").value,currentUnitSystem());
   const act = Number(document.getElementById("cAct").value);
   const goal = Number(document.getElementById("cGoal").value);
-  const safe=safeMacroCalculation(sex,age,ft,inches,lb,act,goal);
+  const safe=safeMacroCalculation(sex,age,ft,inches,lb,act,goal,currentUnitSystem());
   if(!safe.ok){
     lastCalc=null;
     document.getElementById("calcOut").classList.add("hidden");
@@ -596,7 +631,7 @@ document.getElementById("calcMacrosBtn").addEventListener("click", ()=>{
   const safetyNote=document.getElementById("calcSafetyNote");
   const safetyMessage=lastCalc.isTeen
     ? "Ages 13–17 should review nutrition and weight goals with a parent or guardian and pediatrician or registered dietitian."
-    : goal===-1000 ? "A 2 lb/week goal is aggressive. CDC guidance favors gradual, steady loss; individual needs vary." : "";
+    : goal===-1000 ? "A "+(isMetricSystem()?"1 kg/week":"2 lb/week")+" goal is aggressive. CDC guidance favors gradual, steady loss; individual needs vary." : "";
   safetyNote.classList.toggle("hidden",!safetyMessage);
   safetyNote.textContent=safetyMessage;
   renderSplit();
@@ -608,13 +643,21 @@ document.getElementById("applyMacrosBtn").addEventListener("click", ()=>{
   cfg.calTarget = lastCalc.cal;
   cfg.proTarget = g.pro;
   cfg.carbGoal = g.carb; cfg.fatGoal = g.fat;
-  cfg.lastTargetWt = Number(document.getElementById("cWt").value) || cfg.lastTargetWt || cfg.startWt;
+  cfg.lastTargetWt = poundsFromUnit(document.getElementById("cWt").value,currentUnitSystem()) || cfg.lastTargetWt || cfg.startWt;
   cfg.splitState = Object.assign({}, splitState);
   delete cfg.adjustPromptedAt;
   saveCfg(); renderAll(); flashSave("Targets applied ✓");
   ackBtn("applyMacrosBtn", "✓ Targets applied");
 });
-["cSex","cAge","cFt","cIn","cWt","cAct","cGoal"].forEach(id=>document.getElementById(id).addEventListener("input",()=>{ showCalculatorValidationError(null); if(id==="cAge") renderMainCalculatorAgeMode(); }));
+function bindCalculatorValidationFields(){
+  ["cSex","cAge","cFt","cIn","cCm","cWt","cAct","cGoal"].forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el || el.dataset.validationBound==="1") return;
+    el.dataset.validationBound="1";
+    el.addEventListener("input",()=>{ showCalculatorValidationError(null); if(id==="cAge") renderMainCalculatorAgeMode(); });
+  });
+}
+bindCalculatorValidationFields();
 
 // ---- weight-change adjustment prompt ----
 function checkWeightAdjust(newWt){
@@ -624,9 +667,10 @@ function checkWeightAdjust(newWt){
   const snooze = cfg.adjustPromptedAt;
   if (snooze!=null && Math.abs(newWt - snooze) < 2.5) return; // they said "not yet" — wait for more change
   const dir = newWt < anchor ? "down" : "up";
+  const movedLabel=formatBodyWeight(moved,currentUnitSystem(),1);
   document.getElementById("adjustText").innerHTML =
-    "You're <b class=\"ember-text\">"+Math.round(moved*10)/10+" lb "+dir+"</b> since your targets were set ("
-    +anchor+" → "+newWt+" lb). Your calorie needs have changed with your weight — want to recalculate?";
+    "You're <b class=\"ember-text\">"+movedLabel+" "+dir+"</b> since your targets were set ("
+    +formatBodyWeight(anchor,currentUnitSystem(),1)+" → "+formatBodyWeight(newWt,currentUnitSystem(),1)+"). Your calorie needs have changed with your weight — want to recalculate?";
   document.getElementById("adjustOverlay").classList.remove("hidden");
   document.getElementById("adjustOverlay").dataset.wt = newWt;
 }
@@ -644,12 +688,12 @@ document.getElementById("adjustYesBtn").addEventListener("click", ()=>{
   if (ci){
     document.getElementById("cSex").value = ci.sex;
     document.getElementById("cAge").value = ci.age;
-    document.getElementById("cFt").value = ci.ft;
-    document.getElementById("cIn").value = ci.inches;
+    if(isMetricSystem()) document.getElementById("cCm").value=inchesToUnit(totalInchesFromFeetInches(ci.ft,ci.inches),"metric",1);
+    else { document.getElementById("cFt").value = ci.ft; document.getElementById("cIn").value = ci.inches; }
     document.getElementById("cAct").value = ci.act;
     document.getElementById("cGoal").value = ci.goal;
   }
-  document.getElementById("cWt").value = wt;
+  document.getElementById("cWt").value = poundsToUnit(wt,currentUnitSystem(),1);
   if (ci){
     // inputs are complete — run the calculation immediately
     document.getElementById("calcMacrosBtn").dispatchEvent(new Event("click", {bubbles:true}));
@@ -665,11 +709,75 @@ function renderAutoProgressionSetting(){
   const on = cfg.autoProgressionOn !== false;
   btn.textContent = "Automatic progression: "+(on ? "On" : "Off");
   btn.setAttribute("aria-pressed", String(on));
+  const note=document.getElementById("autoProgressionNote");
+  if(note){
+    const step=trainingStepDisplay();
+    note.textContent="When enabled, BlackPyre may preload the next weight after every programmed set reaches its target. Standard exercises add "+step+" "+unitWeightLabel()+"; assisted exercises reduce assistance by "+step+" "+unitWeightLabel()+". Turn it off to carry the last logged weights forward unchanged.";
+  }
 }
+function renderGoalRateOptions(select){
+  if(!select) return;
+  const value=select.value || String(cfg.calcInputs&&cfg.calcInputs.goal!=null?cfg.calcInputs.goal:-500);
+  select.innerHTML=SUPPORTED_GOAL_ADJUSTMENTS.map(adjustment=>'<option value="'+adjustment+'">'+goalRateLabel(adjustment,currentUnitSystem())+'</option>').join("");
+  select.value=SUPPORTED_GOAL_ADJUSTMENTS.includes(Number(value))?String(value):"-500";
+}
+function renderCalculatorUnitFields(){
+  const wrap=document.getElementById("calculatorBodyFields");
+  if(!wrap) return;
+  const ci=cfg.calcInputs||{};
+  const total=ci.ft?totalInchesFromFeetInches(ci.ft,ci.inches||0):null;
+  const sorted=data.weights.slice().sort((a,b)=>a.date.localeCompare(b.date));
+  const savedCalcWt=Number(ci.lb);
+  const fallbackCalcWt=sorted.length?sorted[sorted.length-1].lbs:Number(cfg.startWt)||null;
+  const canonicalWeight=Number.isFinite(savedCalcWt)&&savedCalcWt>=NUTRITION_CALCULATOR_LIMITS.minWeightLb&&savedCalcWt<=NUTRITION_CALCULATOR_LIMITS.maxWeightLb?savedCalcWt:fallbackCalcWt;
+  if(isMetricSystem()){
+    wrap.innerHTML='<div><div class="label">Height (cm)</div><input type="number" id="cCm" aria-label="Height in centimeters" inputmode="decimal" min="122" max="244" step="any" placeholder="cm"></div>'
+      +'<div><div class="label">Weight (kg)</div><input type="number" id="cWt" aria-label="Body weight in kilograms for calorie calculation" inputmode="decimal" min="23" max="318" step="any" placeholder="kg"></div>'
+      +'<div class="hidden"><input id="cFt" tabindex="-1"><input id="cIn" tabindex="-1"></div>';
+    document.getElementById("cCm").value=total?inchesToUnit(total,"metric",1):"";
+  }else{
+    wrap.innerHTML='<div><div class="label">Height (ft)</div><input type="number" id="cFt" aria-label="Height feet" inputmode="numeric" min="4" max="8" placeholder="ft"></div>'
+      +'<div><div class="label">Height (in)</div><input type="number" id="cIn" aria-label="Height inches" inputmode="decimal" min="0" max="11.99" step="any" placeholder="in"></div>'
+      +'<div><div class="label">Weight (lb)</div><input type="number" id="cWt" aria-label="Body weight in pounds for calorie calculation" inputmode="decimal" min="50" max="700" step="any" placeholder="lb"></div>'
+      +'<div class="hidden"><input id="cCm" tabindex="-1"></div>';
+    document.getElementById("cFt").value=ci.ft||"";
+    document.getElementById("cIn").value=ci.inches||"";
+  }
+  document.getElementById("cWt").value=canonicalWeight?poundsToUnit(canonicalWeight,currentUnitSystem(),1):"";
+  bindCalculatorValidationFields();
+}
+function renderUnitSystemSetting(){
+  const metric=isMetricSystem(), unit=unitWeightLabel();
+  const imperial=document.getElementById("unitImperialBtn"), metricBtn=document.getElementById("unitMetricBtn");
+  imperial.setAttribute("aria-pressed",String(!metric));
+  metricBtn.setAttribute("aria-pressed",String(metric));
+  imperial.style.borderColor=!metric?"var(--ember)":"";
+  metricBtn.style.borderColor=metric?"var(--ember)":"";
+  document.getElementById("sStartWtLabel").textContent="Start weight ("+unit+")";
+  document.getElementById("sGoalWtLabel").textContent="Goal weight ("+unit+")";
+  document.getElementById("sStartWt").setAttribute("aria-label","Starting body weight in "+(metric?"kilograms":"pounds"));
+  document.getElementById("sGoalWt").setAttribute("aria-label","Goal body weight in "+(metric?"kilograms":"pounds"));
+  const basis=document.getElementById("adultProteinBasis"); if(basis) basis.textContent=metric?"~2.0 g per kg":"~0.9 g per lb";
+  renderGoalRateOptions(document.getElementById("cGoal"));
+  renderCalculatorUnitFields();
+}
+function setUnitSystem(system){
+  const next=normalizedUnitSystem(system);
+  if(next===currentUnitSystem()) return;
+  cfg.unitSystem=next;
+  saveCfg();
+  lastCalc=null;
+  document.getElementById("calcOut").classList.add("hidden");
+  renderAll();
+  flashSave("Measurements now display in "+(next==="metric"?"metric units":"Imperial units")+" ✓");
+}
+document.getElementById("unitImperialBtn").addEventListener("click",()=>setUnitSystem("imperial"));
+document.getElementById("unitMetricBtn").addEventListener("click",()=>setUnitSystem("metric"));
 function renderSettings(){
   const shown = v=>Number(v)>0 ? v : "";
-  document.getElementById("sStartWt").value = shown(cfg.startWt);
-  document.getElementById("sGoalWt").value = shown(cfg.goalWt);
+  renderUnitSystemSetting();
+  document.getElementById("sStartWt").value = shown(poundsToUnit(cfg.startWt,currentUnitSystem(),1));
+  document.getElementById("sGoalWt").value = shown(poundsToUnit(cfg.goalWt,currentUnitSystem(),1));
   document.getElementById("sCalTarget").value = shown(cfg.calTarget);
   document.getElementById("sProTarget").value = shown(cfg.proTarget);
   document.getElementById("sCarb").value = shown(cfg.carbGoal);
@@ -678,18 +786,9 @@ function renderSettings(){
   if (ci){
     document.getElementById("cSex").value = ci.sex || "m";
     document.getElementById("cAge").value = ci.age || "";
-    document.getElementById("cFt").value = ci.ft || "";
-    document.getElementById("cIn").value = ci.inches || "";
     document.getElementById("cAct").value = String(ci.act || 1.55);
     document.getElementById("cGoal").value = String(ci.goal!=null ? ci.goal : -500);
   }
-  const sorted = data.weights.slice().sort((a,b)=>a.date.localeCompare(b.date));
-  const savedCalcWt=Number(ci&&ci.lb);
-  const fallbackCalcWt=sorted.length ? sorted[sorted.length-1].lbs : shown(cfg.startWt);
-  document.getElementById("cWt").value = Number.isFinite(savedCalcWt)
-    && savedCalcWt>=NUTRITION_CALCULATOR_LIMITS.minWeightLb
-    && savedCalcWt<=NUTRITION_CALCULATOR_LIMITS.maxWeightLb
-      ? savedCalcWt : fallbackCalcWt;
   if (cfg.splitState) splitState = Object.assign({}, cfg.splitState);
   renderMainCalculatorAgeMode();
   renderSched();
@@ -721,15 +820,15 @@ document.getElementById("saveSettingsBtn").addEventListener("click", ()=>{
   const g = id=>Number(document.getElementById(id).value);
   let schedSaveMsg = null;
   const draft = Object.assign({}, cfg, {
-    startWt: g("sStartWt")||cfg.startWt, goalWt: g("sGoalWt")||cfg.goalWt,
+    startWt: poundsFromUnit(g("sStartWt"),currentUnitSystem())||cfg.startWt, goalWt: poundsFromUnit(g("sGoalWt"),currentUnitSystem())||cfg.goalWt,
     calTarget: g("sCalTarget")||cfg.calTarget,
     proTarget: g("sProTarget")||cfg.proTarget,
     carbGoal: g("sCarb")||cfg.carbGoal, fatGoal: g("sFat")||cfg.fatGoal,
   });
   const calSafety=calorieTargetSafety(draft.calTarget);
   if(!calSafety.ok){ rejectSettings(calSafety.message,["sCalTarget"]); return; }
-  if(draft.startWt && (draft.startWt<50 || draft.startWt>700)){ rejectSettings("Starting weight must be between 50 and 700 lb.",["sStartWt"]); return; }
-  if(draft.goalWt && (draft.goalWt<50 || draft.goalWt>700)){ rejectSettings("Goal weight must be between 50 and 700 lb.",["sGoalWt"]); return; }
+  if(draft.startWt && (draft.startWt<50 || draft.startWt>700)){ rejectSettings(isMetricSystem()?"Starting weight must be between 23 and 318 kg.":"Starting weight must be between 50 and 700 lb.",["sStartWt"]); return; }
+  if(draft.goalWt && (draft.goalWt<50 || draft.goalWt>700)){ rejectSettings(isMetricSystem()?"Goal weight must be between 23 and 318 kg.":"Goal weight must be between 50 and 700 lb.",["sGoalWt"]); return; }
   if(![draft.proTarget,draft.carbGoal,draft.fatGoal].every(v=>Number.isFinite(Number(v)) && Number(v)>0)){ rejectSettings("Enter valid protein, carbohydrate, and fat targets.",["sProTarget","sCarb","sFat"]); return; }
   const schedMode = document.getElementById("sCalSched").value;
   if (schedMode==="custom"){
@@ -913,10 +1012,7 @@ function doBackup(btnId,shareAfterSave){
       data:JSON.parse(protectedSnapshotStrings.data),
       program:JSON.parse(protectedSnapshotStrings.program)
     } : {cfg:cfg, data:data, program:program};
-    const cfgPartial = Object.assign({}, snap.cfg);
-    delete cfgPartial.anthropicKey;
-    delete cfgPartial.openaiKey;
-    delete cfgPartial.usdaKey;
+    const cfgPartial = scrubRetiredCredentials(Object.assign({}, snap.cfg));
     const filename = "blackpyre-PARTIAL-"+todayStr()+".json";
     const text = JSON.stringify({cfg:cfgPartial,program:snap.program,data:snap.data},null,2);
     const capability = nativeJsonExportCapability();
@@ -935,10 +1031,7 @@ function doBackup(btnId,shareAfterSave){
       .catch(error=>reportBackupFailure(btnId,error));
   }
 
-  const cfgSafe = Object.assign({},cfg);
-  delete cfgSafe.anthropicKey;
-  delete cfgSafe.openaiKey;
-  delete cfgSafe.usdaKey;
+  const cfgSafe = scrubRetiredCredentials(Object.assign({},cfg));
 
   const backupData = JSON.parse(JSON.stringify(data));
   backupData.meta = Object.assign({},backupData.meta||{}, {
@@ -982,7 +1075,7 @@ document.getElementById("backupSnoozeBtn").addEventListener("click",()=>snoozeOf
 function exportRawRecoveryOriginals(){
   const payload = makeRawRecoveryEnvelope();
   if (!payload.ok){ flashSave("Raw recovery export unavailable", true); return false; }
-  const privacyOk = confirm("This emergency file preserves exact saved strings and may contain private API keys. Store it securely and do not share it. Export raw originals?");
+  const privacyOk = confirm("This emergency file preserves exact saved strings and may contain private personal data. Store it securely and do not share it. Export raw originals?");
   if (!privacyOk) return false;
   download("blackpyre-RAW-RECOVERY-"+todayStr()+".json", JSON.stringify(payload.envelope, null, 2));
   rawRecoveryExportConfirmed = confirm("Confirm only after the raw recovery file has been saved somewhere safe. Did you save it?");
@@ -992,7 +1085,7 @@ function exportRawRecoveryOriginals(){
 function exportStorageDiagnostic(){
   const payload = makeStorageDiagnosticEnvelope();
   if (!payload.ok){ flashSave(payload.reason || "Diagnostic export unavailable", true); return false; }
-  const ok = confirm("This emergency diagnostic preserves exact local storage and may contain private API keys and personal logs. Store it securely and do not post it publicly. Export now?");
+  const ok = confirm("This emergency diagnostic preserves exact local storage and may contain private personal logs. Store it securely and do not post it publicly. Export now?");
   if (!ok) return false;
   download("blackpyre-STORAGE-DIAGNOSTIC-"+todayStr()+".json", JSON.stringify(payload.envelope,null,2));
   flashSave("Recovery diagnostic exported ✓");
@@ -1005,7 +1098,7 @@ function exportStoredQuarantine(){
   try { raw = localStorage.getItem(QUARANTINE_KEY); }
   catch(e){ flashSave("Recovery copy could not be read", true); return false; }
   if (raw===null){ flashSave("No recovery copy is stored", true); return false; }
-  const ok = confirm("This recovery file may contain private API keys because it preserves the original saved strings exactly. Store it securely. Export it now?");
+  const ok = confirm("This recovery file may contain private personal data because it preserves the original saved strings exactly. Store it securely. Export it now?");
   if (!ok) return false;
   download("blackpyre-RAW-RECOVERY-"+todayStr()+".json", raw);
   flashSave("Recovery copy exported ✓");
@@ -1141,7 +1234,7 @@ function restoreBackupEnvelope(b){
     if (present.cfg){
       incomingCfg = cloneJSON(b.cfg);
       if (isPlainObject(incomingCfg)){
-        AI_CFG_FIELDS.forEach(k=>{ if (!hasOwn(incomingCfg,k) && cfg[k]!==undefined) incomingCfg[k] = cfg[k]; });
+        DEVICE_LOCAL_CFG_FIELDS.forEach(k=>{ if (!hasOwn(incomingCfg,k) && cfg[k]!==undefined) incomingCfg[k] = cfg[k]; });
       }
     } else incomingCfg = cloneJSON(cfg);
 
@@ -1213,8 +1306,8 @@ document.getElementById("importDataFile").addEventListener("change", (e)=>{
 
 // ---- quick weigh-in on Home ----
 document.getElementById("dashWtBtn").addEventListener("click", ()=>{
-  const v = Number(document.getElementById("dashWtInput").value);
-  if(!v || v<50 || v>700){ flashSave("Enter a weight", true); return; }
+  const v = poundsFromUnit(document.getElementById("dashWtInput").value,currentUnitSystem());
+  if(!v || v<50 || v>700){ flashSave("Enter a weight from "+(isMetricSystem()?"23 to 318 kg":"50 to 700 lb"), true); return; }
   const dt = todayStr();
   data.weights = data.weights.filter(w=>w.date!==dt);
   data.weights.push({date:dt, time:currentTimeValue(), lbs:v});
@@ -1224,7 +1317,7 @@ document.getElementById("dashWtBtn").addEventListener("click", ()=>{
     const cutting = cfg.goalWt < cfg.startWt;
     if ((cutting && v > cfg.startWt) || (!cutting && v < cfg.startWt)){
       cfg.startWt = v; saveCfg();
-      flashSave("Starting line set at "+v+" — the journey begins today");
+      flashSave("Starting line set at "+formatBodyWeight(v,currentUnitSystem(),1)+" — the journey begins today");
     }
   }
   save(); renderWeight(); renderDash(); renderTDEE(); renderProjection(); renderWeek();

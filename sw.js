@@ -2,7 +2,7 @@
 // NOTE: sw.js deliberately does NOT appear in SHELL. The browser fetches the service
 // worker itself through its own update mechanism (byte-compare on navigation); precaching
 // it would freeze updates and break the cache-bump release ritual. Do not "fix" this.
-const CACHE = "blackpyre-v95";
+const CACHE = "blackpyre-v99";
 const SHELL = [
   "./",
   "./index.html",
@@ -18,6 +18,11 @@ const SHELL = [
   "./scripts/05-ai.js",
   "./scripts/06-settings.js",
   "./scripts/07-boot.js",
+  "./assets/fonts/fonts.css",
+  "./assets/fonts/Oswald-Variable.ttf",
+  "./assets/fonts/IBMPlexMono-Regular.ttf",
+  "./assets/fonts/IBMPlexMono-Medium.ttf",
+  "./assets/fonts/IBMPlexMono-SemiBold.ttf",
   "./vendor/html5-qrcode.min.js",
   "./manifest.json",
   "./icon-192.png",
@@ -48,19 +53,17 @@ self.addEventListener("fetch", (e) => {
     return; // let it hit the network normally
   }
 
-  // Fonts + app shell: cache-first with network fallback + backfill
+  // App shell: cache-first with network fallback + same-origin backfill
   e.respondWith(
     caches.match(e.request).then((cached) => {
       if (cached) return cached;
       return fetch(e.request)
         .then((res) => {
-          // cache successful same-origin and font responses
+          // cache successful same-origin responses
           if (
             res &&
             (res.status === 200 || res.type === "opaque") &&
-            (url.startsWith(self.location.origin) ||
-              url.includes("fonts.googleapis.com") ||
-              url.includes("fonts.gstatic.com"))
+            url.startsWith(self.location.origin)
           ) {
             const copy = res.clone();
             caches.open(CACHE).then((c) => c.put(e.request, copy));

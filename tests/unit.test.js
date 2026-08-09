@@ -78,6 +78,26 @@ r = E(`prefillRows({name:"Assisted Wide Grip Pull Ups",scheme:"3×8"}, [{w:100,r
 check("assisted exercises progress by reducing assistance", r.auto===true && r.autoDelta===-5 && r.rows.every(x=>x.w===95 && x.r===8));
 r = E(`prefillRows({name:"Assisted Pull-Up",scheme:"3×5"}, [{w:5,r:5},{w:5,r:5},{w:5,r:5}])`);
 check("assisted progression never suggests zero assistance as a saved load", r.auto===false && r.rows.every(x=>x.w===5));
+
+// ---------- measurement systems ----------
+check("existing installs default to Imperial units", E(`currentUnitSystem()`)==="imperial");
+check("100 kg converts to the canonical pound value", Math.abs(E(`poundsFromUnit(100,"metric")`)-220.462262)<0.0001);
+check("canonical pounds display as 100 kg", E(`poundsToUnit(220.462262,"metric",1)`)===100);
+check("weight conversion round-trips without rewriting the canonical value", Math.abs(E(`poundsFromUnit(poundsToUnit(225,"metric",8),"metric")`)-225)<0.000001);
+check("70 inches displays as 177.8 centimeters", E(`inchesToUnit(70,"metric",1)`)===177.8);
+check("metric goal-rate wording is available", E(`goalRateLabel(-500,"metric")`)==="Lose 0.5 kg/week");
+check("180 centimeters converts to a valid calculator height", E(`validateMacroCalculatorInputs("m",30,5,10.87,180,1.55,-500,"metric").ok`)===true);
+const metricNutrition=E(`(()=>{const height=feetInchesFromTotalInches(inchesFromUnit(180,"metric"));return safeMacroCalculation("m",30,height.ft,height.inches,poundsFromUnit(100,"metric"),1.55,-500,"metric");})()`);
+check("100 kg and 180 cm produce coherent adult calorie targets",metricNutrition.ok&&metricNutrition.value.tdee===3069&&metricNutrition.value.cal===2569);
+check("metric adult macros match the same canonical person",metricNutrition.value.pro===198&&metricNutrition.value.fat===71&&metricNutrition.value.carb===285);
+check("rounded metric macros remain within four kcal of their calorie target",Math.abs(metricNutrition.value.pro*4+metricNutrition.value.carb*4+metricNutrition.value.fat*9-metricNutrition.value.cal)<=4);
+const metricYouth=E(`(()=>{const height=feetInchesFromTotalInches(inchesFromUnit(165,"metric"));return safeMacroCalculation("f",15,height.ft,height.inches,poundsFromUnit(60,"metric"),1.55,0,"metric");})()`);
+check("metric youth calculation keeps the 20/55/25 starting split",metricYouth.ok&&metricYouth.value.isTeen&&Math.abs(metricYouth.value.pro*4/metricYouth.value.cal-.20)<.003&&Math.abs(metricYouth.value.carb*4/metricYouth.value.cal-.55)<.003&&Math.abs(metricYouth.value.fat*9/metricYouth.value.cal-.25)<.003);
+E(`cfg.unitSystem="metric"; cfg.autoProgressionOn=true`);
+r = E(`prefillRows({name:"Bench Press",scheme:"3×5"}, [{w:100,r:5},{w:100,r:5},{w:100,r:5}])`);
+check("metric automatic progression adds 2.5 displayed kilograms", r.auto===true && E(`poundsToUnit(${r.rows[0].w},"metric",1)`)===47.9);
+check("metric workout rows format canonical loads in kilograms", E(`formatWorkoutRow({w:220.462262,r:5})`)==="100×5");
+E(`cfg.unitSystem="imperial"`);
 check("barcode scan box is square for either barcode orientation", E(`JSON.stringify(barcodeScanBox(400,300))`)==='{"width":270,"height":270}');
 
 // ---------- workout completion integrity (v51 exercise-level engine) ----------
