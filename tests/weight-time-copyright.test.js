@@ -26,7 +26,7 @@ check("README carries the proprietary notice beneath its title",
   /^# Forge\n\n© 2026 Ryan Allen Wilsey\. All rights reserved\. Proprietary — see LICENSE\./.test(readme));
 check("Settings ends with the muted copyright notice",
   /id="appCopyright"[^>]*>© 2026 Ryan Allen Wilsey\. All rights reserved\.<\/div>/.test(index));
-check("service worker uses the v100 release cache",/const CACHE = "blackpyre-v100";/.test(sw));
+check("service worker uses the v101 release cache",/const CACHE = "blackpyre-v101";/.test(sw));
 check("Weight entry includes an accessible time-of-day control",
   /type="time" id="wtTime" aria-label="Weigh-in time"/.test(index));
 check("Weight date and time share a contained two-column row",

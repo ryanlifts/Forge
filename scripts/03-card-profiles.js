@@ -158,6 +158,7 @@
     const customDefaults={
       lift:{profile:"strengthSets",options:{weightPolicy:"required",weightLabel:"Weight"},source:"custom-default"},
       reps:{profile:"repetitionSets",options:{weightPolicy:"optional",weightLabel:"Weight"},source:"custom-default"},
+      duration:{profile:"durationActivity",options:{timeOnly:true},source:"custom-default"},
       timeDist:{profile:"steadyTimeDistance",options:{},source:"custom-default"},
       carry:{profile:"loadedDistance",options:{countLabel:"Trips / sets",loadLabel:"Load"},source:"custom-default"},
       rounds:{profile:"conditioningRounds",options:{},source:"custom-default"},
@@ -1092,10 +1093,11 @@
         case "durationActivity":
           return [
             {key:"hours",label:"Hours",type:"number",inputMode:"numeric"},
-            {key:"minutes",label:"Minutes (required)",type:"number",inputMode:"numeric",required:true},
+            {key:"minutes",label:opts.timeOnly ? "Minutes" : "Minutes (required)",type:"number",inputMode:"numeric",required:!opts.timeOnly},
             {key:"seconds",label:"Seconds",type:"number",inputMode:"numeric"},
+          ].concat(opts.timeOnly ? [] : [
             {key:"note",label:"Notes (optional)",type:"text"}
-          ];
+          ]);
         case "timedIntervals":
           return [
             {key:"intervals",label:"Intervals (required)",type:"number",inputMode:"numeric",required:true},

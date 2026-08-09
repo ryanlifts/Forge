@@ -193,6 +193,7 @@ function populateUnifiedExercisePicker(sel,options){
 const EXERCISE_SHAPE_LABELS = {
   lift:"Weight × reps",
   reps:"Reps (weight optional)",
+  duration:"Time",
   timeDist:"Time / distance",
   carry:"Weight + distance",
   rounds:"Rounds / intervals",
@@ -10077,7 +10078,7 @@ function makePlanSessionState(ex,lastVal){
     || BP_WORKOUT_PROFILES.blank(profile);
 
   const legacyMode=
-    ["timeDist","carry","rounds","text"].includes(shape)
+    ["duration","timeDist","carry","rounds","text"].includes(shape)
       ? shape
       : "future";
 
@@ -10109,7 +10110,7 @@ function makeSavedSessionState(exName,val){
       ? modelEntry.shape
       : exerciseShapeForName(cleanName);
   const legacyMode=
-    ["timeDist","carry","rounds","text"].includes(shape)
+    ["duration","timeDist","carry","rounds","text"].includes(shape)
       ? shape
       : "future";
 
@@ -10209,7 +10210,7 @@ function loadWorkoutValueIntoEditableState(st,exName,val){
       ? modelEntry.shape
       : exerciseShapeForName(cleanName);
   const legacyMode=
-    ["timeDist","carry","rounds","text"].includes(shape)
+    ["duration","timeDist","carry","rounds","text"].includes(shape)
       ? shape
       : "future";
 

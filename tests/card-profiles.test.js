@@ -449,6 +449,36 @@ check(
     && yogaSaved.value.note==="mobility and breathing"
 );
 
+const customTimeResolution=engine.resolve({
+  id:"u:pickup-basketball",
+  name:"Pickup Basketball",
+  shape:"duration"
+});
+const customTimeFields=engine.fields(
+  customTimeResolution.profile,
+  customTimeResolution.options
+);
+check(
+  "Custom Time exercises use duration-only tracking",
+  customTimeResolution.profile==="durationActivity"
+    && customTimeResolution.options.timeOnly===true
+    && customTimeFields.map(field=>field.key).join(",")==="hours,minutes,seconds"
+    && !customTimeFields.some(field=>field.required)
+);
+const customTimeSaved=engine.validate("durationActivity",{
+  hours:"1",
+  minutes:"15",
+  seconds:"0",
+  note:""
+});
+check(
+  "Custom Time duration saves in the existing duration contract",
+  customTimeSaved.ok
+    && customTimeSaved.value.t==="durationActivity"
+    && customTimeSaved.value.secs===4500
+    && !Object.prototype.hasOwnProperty.call(customTimeSaved.value,"note")
+);
+
 const therapyDraft=engine.prefill("activityNotes",{
   durationSeconds:1200,
   notes:"completed prescribed knee work"

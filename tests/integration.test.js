@@ -92,6 +92,24 @@ check("Add custom exercise reveals its name and tracking options",
   !dMetric.getElementById("addExCustom").classList.contains("hidden")
   && !dMetric.getElementById("addExCustomShape").classList.contains("hidden"));
 
+check("custom exercise tracking offers a plainly labeled Time option",
+  Metric.window.eval(`EXERCISE_SHAPES.includes("duration")`)
+  && [...dMetric.getElementById("addExCustomShape").options]
+    .some(option=>option.value==="duration" && option.textContent==="Time"));
+
+check("custom Time exercise creates a duration-only workout profile",
+  Metric.window.eval(`(()=>{
+    const created=createUserExercise("Pickup Basketball","duration");
+    if(!created.ok) return false;
+    const entry=data.myExercises[created.entry.id];
+    const resolved=BP_WORKOUT_PROFILES.resolve(entry,{});
+    const fields=BP_WORKOUT_PROFILES.fields(resolved.profile,resolved.options);
+    return entry.shape==="duration"
+      && resolved.profile==="durationActivity"
+      && resolved.options.timeOnly===true
+      && fields.map(field=>field.key).join(",")==="hours,minutes,seconds";
+  })()`));
+
 // backup / restore round-trip
 B.window.eval(`cfg.anthropicKey="sk-test-A"; cfg.aiProvider="anthropic"; saveCfg();
 window.__dl=null; download=(n,c)=>{window.__dl=c;}; doBackup("exportDataBtn");`);
@@ -2062,7 +2080,7 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+(?:-\d+)?"/.test(sw));
-check("native service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v100"'));
+check("native service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v101"'));
 
 const nativePrep76 = fs.readFileSync(
   path.join(__dirname,"..","tools","prepare-native.sh"),
@@ -5768,9 +5786,9 @@ const customShape76 =
   dT76Custom.getElementById("addExCustomShape");
 
 check(
-  "v76 Type my own exposes an explicit six-shape tracking selector",
+  "v76 Type my own exposes an explicit seven-shape tracking selector",
   !!customShape76
-  && customShape76.options.length===6
+  && customShape76.options.length===7
   && !customShape76.classList.contains("hidden")
 );
 
@@ -6739,11 +6757,11 @@ const builderAddCustom76 =
     .find(b=>/Add/.test(b.textContent));
 
 check(
-  "v76 Program Builder custom row includes the same six-shape selector",
+  "v76 Program Builder custom row includes the same seven-shape selector",
   !!builderSelectCustom76
   && !!builderNameCustom76
   && !!builderShapeCustom76
-  && builderShapeCustom76.options.length===6
+  && builderShapeCustom76.options.length===7
 );
 
 builderSelectCustom76.value="__CUSTOM__";
