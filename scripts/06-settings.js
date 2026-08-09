@@ -1003,6 +1003,25 @@ function snoozeOffsiteBackupReminder(days,nowMs){
   showBackupStatus("Backup reminder postponed for "+count+" days.");
   return true;
 }
+let nativeBackupSavedReturnFocus=null;
+function hideNativeBackupSaved(){
+  const overlay=document.getElementById("nativeBackupSavedOverlay");
+  if (!overlay || overlay.classList.contains("hidden")) return;
+  overlay.classList.add("hidden");
+  if (typeof unlockScroll==="function") unlockScroll();
+  const target=nativeBackupSavedReturnFocus;
+  nativeBackupSavedReturnFocus=null;
+  if (target && typeof target.focus==="function") target.focus();
+}
+function showNativeBackupSaved(){
+  const overlay=document.getElementById("nativeBackupSavedOverlay");
+  const elsewhere=document.getElementById("nativeBackupElsewhereBtn");
+  if (!overlay || !elsewhere) return;
+  nativeBackupSavedReturnFocus=document.activeElement;
+  overlay.classList.remove("hidden");
+  if (typeof lockScroll==="function") lockScroll();
+  elsewhere.focus();
+}
 function doBackup(btnId,shareAfterSave){
   if (protectedMode){
     const ok = confirm("This export contains only what BlackPyre could read — it may be incomplete and is NOT a normal backup. Your original data remains preserved on this device. Export anyway?");
@@ -1056,7 +1075,12 @@ function doBackup(btnId,shareAfterSave){
   return writeNativeJson(capability,filename,text)
     .then(file=>{
       recordCompletedLocalBackup(!!shareAfterSave);
-      if (!shareAfterSave){ ackBtn(btnId,"✓ Saved to BlackPyre folder"); return true; }
+      if (!shareAfterSave){
+        ackBtn(btnId,"✓ Backup saved");
+        flashSave("Backup saved inside BlackPyre. This copy is deleted if BlackPyre is uninstalled.");
+        showNativeBackupSaved();
+        return true;
+      }
       return shareNativeJson(capability,file,"BlackPyre backup")
         .then(result=>{
           recordCompletedBackupShare(result);
@@ -1072,6 +1096,11 @@ document.getElementById("exportDataBtn").addEventListener("click",()=>doBackup("
 document.getElementById("shareDataBtn").addEventListener("click",()=>doBackup("shareDataBtn",true));
 document.getElementById("backupNowBtn").addEventListener("click",()=>doBackup("backupNowBtn",true));
 document.getElementById("backupSnoozeBtn").addEventListener("click",()=>snoozeOffsiteBackupReminder(OFFSITE_SHARE_SNOOZE_DAYS));
+document.getElementById("nativeBackupDoneBtn").addEventListener("click",hideNativeBackupSaved);
+document.getElementById("nativeBackupElsewhereBtn").addEventListener("click",()=>{
+  hideNativeBackupSaved();
+  doBackup("shareDataBtn",true);
+});
 function exportRawRecoveryOriginals(){
   const payload = makeRawRecoveryEnvelope();
   if (!payload.ok){ flashSave("Raw recovery export unavailable", true); return false; }

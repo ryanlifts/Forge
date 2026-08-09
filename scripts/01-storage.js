@@ -2866,6 +2866,7 @@ function activateView(viewName, targetId, shouldRender){
   if (restDock) restDock.classList.toggle("hidden", viewName!=="work");
   document.body.classList.toggle("rest-dock-visible", viewName==="work");
   if (viewName!=="work" && typeof setRestOptionsOpen==="function") setRestOptionsOpen(false);
+  if (viewName!=="food" && typeof hideFoodAddedConfirmation==="function") hideFoodAddedConfirmation();
   if (shouldRender!==false && typeof renderAll==="function") renderAll();
   positionView(targetId);
   return true;

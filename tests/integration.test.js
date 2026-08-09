@@ -16,7 +16,8 @@ check("fresh boot completes", dA.getElementById("setupOverlay").classList.contai
 // every referenced ID exists; no duplicates (wizard su* IDs are rendered dynamically)
 const jsSrc = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m=>m[1]).join("\n");
 const refs = [...new Set([...jsSrc.matchAll(/getElementById\("([^"]+)"\)/g)].map(m=>m[1]))];
-const missing = refs.filter(id=>!id.startsWith("su") && !dA.getElementById(id));
+const dynamicIds = new Set(["barcodeCorrectionReview","barcodeCorrectionServing","barcodeCorrectionNutrition","barcodeCorrectionSource","barcodeConfirmBtn","barcodeCorrectionBtn","addExCustomShape"]);
+const missing = refs.filter(id=>!id.startsWith("su") && !dynamicIds.has(id) && !dA.getElementById(id));
 check("no missing element IDs ("+refs.length+" referenced)", missing.length===0 || (console.log("   missing:",missing),false));
 const ids = [...dA.querySelectorAll("[id]")].map(e=>e.id);
 check("no duplicate IDs ("+ids.length+" elements)", ids.filter((id,i)=>ids.indexOf(id)!==i).length===0);
@@ -85,6 +86,11 @@ dMetric.getElementById("unitImperialBtn").dispatchEvent(new Metric.window.Event(
 check("switching to Imperial changes presentation without rewriting history", Metric.window.eval(`cfg.unitSystem`)==="imperial" && dMetric.getElementById("wtList").textContent.includes("209.4 lb") && Math.abs(Metric.window.eval(`data.weights.find(w=>w.date===todayStr()).lbs`)-209.439149)<0.0001);
 const customFirst=[...dMetric.getElementById("addExSel").children][0];
 check("Add custom exercise is at the top without becoming the default selection", customFirst.label==="Custom" && customFirst.querySelector("option").textContent.includes("Add custom exercise") && dMetric.getElementById("addExSel").value!=="__CUSTOM__");
+dMetric.getElementById("addExSel").value="__CUSTOM__";
+dMetric.getElementById("addExSel").dispatchEvent(new Metric.window.Event("change",{bubbles:true}));
+check("Add custom exercise reveals its name and tracking options",
+  !dMetric.getElementById("addExCustom").classList.contains("hidden")
+  && !dMetric.getElementById("addExCustomShape").classList.contains("hidden"));
 
 // backup / restore round-trip
 B.window.eval(`cfg.anthropicKey="sk-test-A"; cfg.aiProvider="anthropic"; saveCfg();
@@ -717,7 +723,7 @@ check(
   "v90 online barcode review shows explicit correct and incorrect choices",
   !!dAddOnlyBarcode90
     .getElementById("barcodeConfirmBtn")
-  && /Looks correct/.test(
+  && /NUTRITION MATCHES PACKAGE/.test(
        dAddOnlyBarcode90
          .getElementById(
            "barcodeConfirmBtn"
@@ -728,7 +734,7 @@ check(
     .getElementById(
       "barcodeCorrectionBtn"
     )
-  && /Correct barcode data/.test(
+  && /NUTRITION NEEDS EDITING/.test(
        dAddOnlyBarcode90
          .getElementById(
            "barcodeCorrectionBtn"
@@ -1272,8 +1278,16 @@ check("v90 logging from search preserves position and offers explicit follow-up 
   F51.window.eval("window.__f51")===null
   && F51.window.eval("data.food[todayStr()].length")===4
   && !dF51.getElementById("foodAddConfirmationPanel").classList.contains("hidden")
-  && dF51.getElementById("foodAddUndoBtn").textContent==="Undo"
-  && dF51.getElementById("foodAddViewBtn").textContent==="View entry");
+  && dF51.getElementById("foodAddUndoBtn").textContent==="UNDO"
+  && dF51.getElementById("foodAddViewBtn").textContent==="VIEW ENTRY");
+check("food-added follow-up is limited to 30 seconds",
+  F51.window.eval("FOOD_ADD_CONFIRMATION_MS")===30000);
+F51.window.eval(`showFoodAddedConfirmation(todayStr(),data.food[todayStr()][0])`);
+dF51.querySelector('.tab[data-view="dash"]').dispatchEvent(new F51.window.Event("click",{bubbles:true}));
+check("food-added follow-up closes when leaving Food",
+  dF51.getElementById("foodAddConfirmationPanel").classList.contains("hidden")
+  && F51.window.eval("foodAddConfirmationTimer")===null);
+
 check("v51 handoff behavior untouched by food changes", !!dF51.getElementById("hfPasteBtn"));
 
 
@@ -2048,7 +2062,7 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+(?:-\d+)?"/.test(sw));
-check("native service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v99"'));
+check("native service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v100"'));
 
 const nativePrep76 = fs.readFileSync(
   path.join(__dirname,"..","tools","prepare-native.sh"),
@@ -3721,11 +3735,11 @@ const nativeBackupDataCardCopy = reminderLogic.window.eval(`({
   note:document.getElementById("shareDataBtn").nextElementSibling.textContent
 })`);
 check("native Data card clearly separates one-tap device backup from share or save elsewhere",
-  nativeBackupDataCardCopy.local==="BACK UP ON THIS DEVICE"
-  && nativeBackupDataCardCopy.share==="SHARE OR SAVE ELSEWHERE…"
+  nativeBackupDataCardCopy.local==="SAVE BACKUP"
+  && nativeBackupDataCardCopy.share==="SAVE BACKUP ELSEWHERE…"
   && /Files → On My iPhone → BlackPyre/.test(nativeBackupDataCardCopy.note)
   && /without opening a picker/.test(nativeBackupDataCardCopy.note)
-  && /deleted|lost|erased|replaced/.test(nativeBackupDataCardCopy.note));
+  && /delet|uninstall/.test(nativeBackupDataCardCopy.note));
 const approvedBackupReminderCopy = reminderLogic.window.eval(`({
   title:document.querySelector("#backupCard .label").textContent,
   titleStyle:document.querySelector("#backupCard .label").getAttribute("style"),
@@ -3791,7 +3805,8 @@ check("native backup writes a verified JSON file without opening the share sheet
   nativeBackupOk===true
   && !!nativeBackupName
   && NativeBackupShares.length===0
-  && NativeBackup.window.document.getElementById("exportDataBtn").textContent==="✓ Saved to BlackPyre folder"
+  && NativeBackup.window.document.getElementById("exportDataBtn").textContent==="✓ Backup saved"
+  && !NativeBackup.window.document.getElementById("nativeBackupSavedOverlay").classList.contains("hidden")
   && NativeBackup.window.document.getElementById("exportDataBtn").classList.contains("acked"));
 check("v81 native backup strips every API credential including legacy USDA keys",
   !nativeBackupText.includes("native-secret-a")
@@ -3808,6 +3823,16 @@ check("native backup records local completion only after verified file creation"
   `)
   && nativeBackupPayload.data.meta.lastBackup!==null
   && nativeBackupPayload.data.meta.logsSince===0);
+
+check("native local-backup confirmation plainly warns about uninstall and offers an external copy",
+  /Deleting BlackPyre also deletes this folder/.test(NativeBackup.window.document.getElementById("nativeBackupSavedMessage").textContent)
+  && NativeBackup.window.document.getElementById("nativeBackupElsewhereBtn").textContent==="SAVE A COPY ELSEWHERE"
+  && NativeBackup.window.document.getElementById("nativeBackupDoneBtn").textContent==="DONE");
+NativeBackup.window.document.getElementById("nativeBackupDoneBtn")
+  .dispatchEvent(new NativeBackup.window.Event("click",{bubbles:true}));
+check("native local-backup confirmation can be dismissed without affecting the saved file",
+  NativeBackup.window.document.getElementById("nativeBackupSavedOverlay").classList.contains("hidden")
+  && NativeBackupFiles.has(nativeBackupName));
 
 const nativeSharePromise = NativeBackup.window.eval(`doBackup("shareDataBtn",true)`);
 await wait(5);

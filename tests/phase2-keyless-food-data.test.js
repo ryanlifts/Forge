@@ -189,7 +189,7 @@ check(
     .contains("hidden")
   && !!readyCorrectionButtonV90
   && readyCorrectionButtonV90
-    .textContent==="Correct barcode data"
+    .textContent==="NUTRITION NEEDS EDITING"
 );
 
 check(
@@ -203,11 +203,11 @@ check(
       "barcodeCorrectionTitle"
     )
     .textContent
-    .includes("Verify barcode nutrition")
+    .includes("VERIFY BARCODE NUTRITION")
   && readyCorrectionPanelV90
     .style
     .border
-    .includes("var(--amber)")
+    .includes("var(--ember)")
   && readyCorrectionPanelV90
     .nextSibling===
       readyCorrectionDocumentV90
@@ -411,7 +411,7 @@ check("normal backups exclude a legacy USDA credential",
   !backupText.includes("should-never-export") &&
   !Object.prototype.hasOwnProperty.call(JSON.parse(backupText).cfg,"usdaKey"));
 
-check("service worker cache is bumped for the current release",/blackpyre-v99/.test(fs.readFileSync(path.join(root,"sw.js"),"utf8")));
+check("service worker cache is bumped for the current release",/blackpyre-v100/.test(fs.readFileSync(path.join(root,"sw.js"),"utf8")));
 
 summary("PHASE 2 KEYLESS FOOD DATA");
 })().catch(error=>{
