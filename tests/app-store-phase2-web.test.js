@@ -27,7 +27,7 @@ async function run(){
     ["privacy.html","privacy-ios.html","support.html","third-party-notices.html","THIRD-PARTY-NOTICES.txt"].every(file=>fs.existsSync(path.join(root,file)))
     && /id="eraseAllDataBtn"/.test(index)&&/Open Database License/.test(index)&&/privacy\.html/.test(index));
   check("service worker precaches the public release pages",
-    /blackpyre-v107/.test(sw)&&/privacy\.html/.test(sw)&&/privacy-ios\.html/.test(sw)&&/support\.html/.test(sw)&&/third-party-notices\.html/.test(sw));
+    /blackpyre-v108/.test(sw)&&/privacy\.html/.test(sw)&&/privacy-ios\.html/.test(sw)&&/support\.html/.test(sw)&&/third-party-notices\.html/.test(sw));
   check("web and iOS privacy policies are explicitly product-specific",
     /Web App Privacy Policy/.test(webPrivacy)&&!/iPhone|Native Vault|iOS App Privacy Policy/.test(webPrivacy)
     &&/iOS App Privacy Policy/.test(iosPrivacy)&&!/browser\/PWA|Web App Privacy Policy/.test(iosPrivacy));
