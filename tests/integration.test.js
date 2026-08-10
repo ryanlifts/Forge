@@ -1744,6 +1744,7 @@ const dH = H.window.document;
 H.window.HTMLElement.prototype.scrollIntoView = function(opts){ H.window.__aiScroll={id:this.id, className:this.className, block:opts&&opts.block}; };
 const clickH = id=>dH.getElementById(id).dispatchEvent(new H.window.Event("click",{bubbles:true}));
 H.window.eval(`currentMeal="dinner"; renderMealSeg();`);
+dH.getElementById("aiPhotoCaption").value = "Local restaurant";
 clickH("hfPasteBtn"); await wait(30);
 check("paste box always visible (iOS clipboard-proof)", !dH.getElementById("hfPasteBox").classList.contains("hidden"));
 check("handoff textarea uses 16px text to prevent mobile focus zoom", H.window.getComputedStyle(dH.getElementById("hfPasteText")).fontSize==="16px");
@@ -1760,7 +1761,14 @@ check("nothing logged before confirm", H.window.eval("(data.food[todayStr()]||[]
 hfLogBtn.dispatchEvent(new H.window.Event("click",{bubbles:true})); await wait(30);
 check("handoff confirmation logs the reviewed food", H.window.eval("(data.food[todayStr()]||[]).length")===1);
 check("handoff logging clears raw reply and resets the review", dH.getElementById("hfPasteText").value==="" && dH.getElementById("aiFoodConfirm").classList.contains("hidden"));
+check("handoff logging clears the optional where/what context", dH.getElementById("aiPhotoCaption").value==="");
 check("handoff logging returns to the top ready for another", /ready for another/i.test(dH.getElementById("aiFoodStatus").textContent) && H.window.eval("window.__aiScroll && window.__aiScroll.id")==="aiFoodCard");
+
+const waterHistoryData=Object.assign({},EMPTY_DATA,{water:{[dstr(-2)]:5,[dstr(-1)]:7,[dstr(0)]:3},measure:[{date:dstr(-1),waist:36,chest:42,arm:15}]});
+const WaterHistory=boot(Object.assign({},EXISTING_CFG,{waterOn:true,measureOn:true}),waterHistoryData);
+const dWaterHistory=WaterHistory.window.document;
+check("water is persisted and displayed as dated trackable history", WaterHistory.window.eval("data.water[todayStr()]===3") && dWaterHistory.querySelectorAll("#waterHistory .list-item").length===3 && /7 glasses/.test(dWaterHistory.getElementById("waterHistory").textContent));
+check("body measurements remain dated trackable history", WaterHistory.window.eval("data.measure.length===1 && data.measure[0].date==="+JSON.stringify(dstr(-1))) && dWaterHistory.querySelectorAll("#mList .list-item").length===1);
 
 // ================= easter egg =================
 const G = boot(EXISTING_CFG, EMPTY_DATA);
@@ -2081,7 +2089,7 @@ const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("native app disables double-tap and pinch zoom while preserving one-finger panning", html.includes("user-scalable=no") && html.includes("maximum-scale=1.0") && /html, body\s*\{\s*touch-action:pan-x pan-y;\s*\}/.test(html));
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+(?:-\d+)?"/.test(sw));
-check("native service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v104"'));
+check("native service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v105"'));
 
 const nativePrep76 = fs.readFileSync(
   path.join(__dirname,"..","tools","prepare-native.sh"),

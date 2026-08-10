@@ -13,7 +13,7 @@ const FAQ = [
 
   {q:"How do I log and track my weight?", a:"Record today’s weight from <b>Home</b>, or use the <b>Weight</b> tab to enter today or a past date. Try to weigh under similar conditions and pay more attention to the trend over time than to one reading."},
 
-  {q:"Can I use accessibility features?", a:"Yes. BlackPyre provides labeled controls, keyboard support where appropriate, screen-reader-friendly dialogs and navigation, visible focus, and zoom support."},
+  {q:"Can I use accessibility features?", a:"Yes. BlackPyre provides labeled controls, keyboard support where appropriate, screen-reader-friendly dialogs and navigation, visible focus, and legible mobile text."},
 
 
   {sec:"Food logging"},

@@ -7,6 +7,16 @@ function renderWater(){
   if (!cfg.waterOn) return;
   if (!data.water) data.water = {};
   document.getElementById("waterCount").textContent = data.water[todayStr()] || 0;
+  const history=document.getElementById("waterHistory");
+  const dates=Object.keys(data.water)
+    .filter(date=>/^\d{4}-\d{2}-\d{2}$/.test(date) && Number(data.water[date])>0)
+    .sort((a,b)=>b.localeCompare(a))
+    .slice(0,7);
+  history.innerHTML=dates.length
+    ? '<div class="label">Recent water</div>'+dates.map(date=>
+        '<div class="list-item"><span style="color:var(--dim);">'+fmtDate(date)+'</span><b>'+Number(data.water[date])+' glass'+(Number(data.water[date])===1?'':'es')+'</b></div>'
+      ).join("")
+    : '<div class="note">Your dated water history will appear here.</div>';
 }
 document.getElementById("waterToggleBtn").addEventListener("click", ()=>{
   cfg.waterOn = !cfg.waterOn;
@@ -846,6 +856,7 @@ function showFoodConfirm(foods){
       Object.assign({}, f),
       {allowDuplicate:true}
     ));
+    document.getElementById("aiPhotoCaption").value="";
     el.classList.add("hidden");
     hfCloseParseBox();
     aiFoodStatus("Logged "+loggedCount+" ✓ — ready for another.");
