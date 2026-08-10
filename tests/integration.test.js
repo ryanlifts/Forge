@@ -2135,7 +2135,7 @@ C62.window.eval(`reviewFoodSuggestion(foodSuggestionCandidates().find(c=>c.food.
 check("v62 a catalog suggestion opens its exact listed serving for review", dC62.getElementById("qtyUnit").value==="serving" && Number(dC62.getElementById("qtyAmount").value)===1 && /4 oz cooked \(113g\)/.test(dC62.getElementById("qtyUnit").selectedOptions[0].textContent));
 check("v62 review shows the USDA per-100g values and correctly scaled serving", /USDA reference · SR28/.test(dC62.getElementById("selName").textContent) && /165 kcal/.test(dC62.getElementById("selPer100").textContent) && dC62.getElementById("calcCal").textContent==="186" && dC62.getElementById("calcPro").textContent==="35");
 check("v62 reviewing a broad-catalog suggestion never auto-logs it", C62.window.eval(`(data.food[todayStr()]||[]).length`)===beforeReview62);
-check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v106"'); })());
+check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v107"'); })());
 check("v62 keeps primary schemaVersion 3", C62.window.eval("SCHEMA_VERSION")===3);
 
 // ================= ChatGPT handoff paste flow =================
@@ -2145,6 +2145,7 @@ const dH = H.window.document;
 H.window.HTMLElement.prototype.scrollIntoView = function(opts){ H.window.__aiScroll={id:this.id, className:this.className, block:opts&&opts.block}; };
 const clickH = id=>dH.getElementById(id).dispatchEvent(new H.window.Event("click",{bubbles:true}));
 H.window.eval(`currentMeal="dinner"; renderMealSeg();`);
+dH.getElementById("aiPhotoCaption").value = "Local restaurant";
 clickH("hfPasteBtn"); await wait(30);
 check("paste box always visible (iOS clipboard-proof)", !dH.getElementById("hfPasteBox").classList.contains("hidden"));
 check("handoff textarea uses 16px text to prevent mobile focus zoom", H.window.getComputedStyle(dH.getElementById("hfPasteText")).fontSize==="16px");
@@ -2161,10 +2162,17 @@ check("nothing logged before confirm", H.window.eval("(data.food[todayStr()]||[]
 hfLogBtn.dispatchEvent(new H.window.Event("click",{bubbles:true})); await wait(30);
 check("handoff confirmation logs the reviewed food", H.window.eval("(data.food[todayStr()]||[]).length")===1);
 check("handoff logging clears raw reply and resets the review", dH.getElementById("hfPasteText").value==="" && dH.getElementById("aiFoodConfirm").classList.contains("hidden"));
+check("handoff logging clears the optional where/what context", dH.getElementById("aiPhotoCaption").value==="");
 check("handoff logging returns to the top ready for another", /ready for another/i.test(dH.getElementById("aiFoodStatus").textContent) && H.window.eval("window.__aiScroll && window.__aiScroll.id")==="aiFoodCard");
 
+const waterHistoryData=Object.assign({},EMPTY_DATA,{water:{[dstr(-2)]:5,[dstr(-1)]:7,[dstr(0)]:3},measure:[{date:dstr(-1),waist:36,chest:42,arm:15}]});
+const WaterHistory=boot(Object.assign({},EXISTING_CFG,{waterOn:true,measureOn:true}),waterHistoryData);
+const dWaterHistory=WaterHistory.window.document;
+check("water is persisted and displayed as dated trackable history", WaterHistory.window.eval("data.water[todayStr()]===3") && dWaterHistory.querySelectorAll("#waterHistory .list-item").length===3 && /7 glasses/.test(dWaterHistory.getElementById("waterHistory").textContent));
+check("body measurements remain dated trackable history", WaterHistory.window.eval("data.measure.length===1 && data.measure[0].date==="+JSON.stringify(dstr(-1))) && dWaterHistory.querySelectorAll("#mList .list-item").length===1);
+
 // ================= easter egg =================
-releaseTestWindows([H]);
+releaseTestWindows([H,WaterHistory]);
 const G = boot(EXISTING_CFG, EMPTY_DATA);
 const dG = G.window.document;
 const title = dG.getElementById("bpTitle");
@@ -2588,8 +2596,8 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache key matches the BlackPyre web v82 release",
-  /const CACHE = "blackpyre-v106";/.test(sw));
-check("Phase 1 service-worker cache remains refreshed", sw.includes('const CACHE = "blackpyre-v106"') && !sw.includes('blackpyre-phase1-nutrition-safety-1'));
+  /const CACHE = "blackpyre-v107";/.test(sw));
+check("Phase 1 service-worker cache remains refreshed", sw.includes('const CACHE = "blackpyre-v107"') && !sw.includes('blackpyre-phase1-nutrition-safety-1'));
 
 await wait(0);
 releaseTestWindows([
@@ -7979,7 +7987,7 @@ check(
   V78ServiceWorker.includes('"./data-exercise-card-profiles.js"')
   && V78ServiceWorker.includes('"./scripts/03-card-profiles.js"')
   && V78ServiceWorker.includes(
-    'const CACHE = "blackpyre-v106"'
+    'const CACHE = "blackpyre-v107"'
   )
 );
 
