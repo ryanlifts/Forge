@@ -13,9 +13,9 @@ function renderWater(){
     .sort((a,b)=>b.localeCompare(a))
     .slice(0,7);
   history.innerHTML=dates.length
-    ? '<div class="label">Recent water</div>'+dates.map(date=>
-        '<div class="list-item"><span style="color:var(--dim);">'+fmtDate(date)+'</span><b>'+Number(data.water[date])+' glass'+(Number(data.water[date])===1?'':'es')+'</b></div>'
-      ).join("")
+    ? '<details><summary class="label" style="cursor:pointer; margin-bottom:0;">Recent water history</summary><div style="margin-top:8px;">'+dates.map(date=>
+        '<div class="list-item" style="justify-content:space-between; gap:20px;"><span style="flex:1; color:var(--dim);">'+fmtDate(date)+'</span><span style="flex:0 0 auto; color:var(--dim); white-space:nowrap;">'+Number(data.water[date])+' glass'+(Number(data.water[date])===1?'':'es')+'</span></div>'
+      ).join("")+'</div></details>'
     : '<div class="note">Your dated water history will appear here.</div>';
 }
 document.getElementById("waterToggleBtn").addEventListener("click", ()=>{

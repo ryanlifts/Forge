@@ -1767,7 +1767,7 @@ check("handoff logging returns to the top ready for another", /ready for another
 const waterHistoryData=Object.assign({},EMPTY_DATA,{water:{[dstr(-2)]:5,[dstr(-1)]:7,[dstr(0)]:3},measure:[{date:dstr(-1),waist:36,chest:42,arm:15}]});
 const WaterHistory=boot(Object.assign({},EXISTING_CFG,{waterOn:true,measureOn:true}),waterHistoryData);
 const dWaterHistory=WaterHistory.window.document;
-check("water is persisted and displayed as dated trackable history", WaterHistory.window.eval("data.water[todayStr()]===3") && dWaterHistory.querySelectorAll("#waterHistory .list-item").length===3 && /7 glasses/.test(dWaterHistory.getElementById("waterHistory").textContent));
+check("water is persisted as dated history in a closed dropdown", WaterHistory.window.eval("data.water[todayStr()]===3") && dWaterHistory.querySelectorAll("#waterHistory .list-item").length===3 && /7 glasses/.test(dWaterHistory.getElementById("waterHistory").textContent) && !dWaterHistory.querySelector("#waterHistory details").open);
 check("body measurements remain dated trackable history", WaterHistory.window.eval("data.measure.length===1 && data.measure[0].date==="+JSON.stringify(dstr(-1))) && dWaterHistory.querySelectorAll("#mList .list-item").length===1);
 
 // ================= easter egg =================
@@ -2089,7 +2089,7 @@ const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("native app disables double-tap and pinch zoom while preserving one-finger panning", html.includes("user-scalable=no") && html.includes("maximum-scale=1.0") && /html, body\s*\{\s*touch-action:pan-x pan-y;\s*\}/.test(html));
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+(?:-\d+)?"/.test(sw));
-check("native service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v105"'));
+check("native service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v106"'));
 
 const nativePrep76 = fs.readFileSync(
   path.join(__dirname,"..","tools","prepare-native.sh"),
