@@ -2089,7 +2089,7 @@ const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("native app disables double-tap and pinch zoom while preserving one-finger panning", html.includes("user-scalable=no") && html.includes("maximum-scale=1.0") && /html, body\s*\{\s*touch-action:pan-x pan-y;\s*\}/.test(html));
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+(?:-\d+)?"/.test(sw));
-check("native service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v106"'));
+check("native service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v107"'));
 
 const nativePrep76 = fs.readFileSync(
   path.join(__dirname,"..","tools","prepare-native.sh"),
