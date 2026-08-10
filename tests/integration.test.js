@@ -1764,10 +1764,10 @@ check("handoff logging clears raw reply and resets the review", dH.getElementByI
 check("handoff logging clears the optional where/what context", dH.getElementById("aiPhotoCaption").value==="");
 check("handoff logging returns to the top ready for another", /ready for another/i.test(dH.getElementById("aiFoodStatus").textContent) && H.window.eval("window.__aiScroll && window.__aiScroll.id")==="aiFoodCard");
 
-const waterHistoryData=Object.assign({},EMPTY_DATA,{water:{[dstr(-2)]:5,[dstr(-1)]:7,[dstr(0)]:3},measure:[{date:dstr(-1),waist:36,chest:42,arm:15}]});
+const waterHistoryData=Object.assign({},EMPTY_DATA,{water:{[dstr(-2)]:1,[dstr(-1)]:7,[dstr(0)]:3},measure:[{date:dstr(-1),waist:36,chest:42,arm:15}]});
 const WaterHistory=boot(Object.assign({},EXISTING_CFG,{waterOn:true,measureOn:true}),waterHistoryData);
 const dWaterHistory=WaterHistory.window.document;
-check("water is persisted as dated history in a closed dropdown", WaterHistory.window.eval("data.water[todayStr()]===3") && dWaterHistory.querySelectorAll("#waterHistory .list-item").length===3 && /7 glasses/.test(dWaterHistory.getElementById("waterHistory").textContent) && !dWaterHistory.querySelector("#waterHistory details").open);
+check("water history uses uppercase singular and plural labels in a closed dropdown", WaterHistory.window.eval("data.water[todayStr()]===3") && dWaterHistory.querySelectorAll("#waterHistory .list-item").length===3 && /1 GLASS/.test(dWaterHistory.getElementById("waterHistory").textContent) && /7 GLASSES/.test(dWaterHistory.getElementById("waterHistory").textContent) && !dWaterHistory.querySelector("#waterHistory details").open);
 check("body measurements remain dated trackable history", WaterHistory.window.eval("data.measure.length===1 && data.measure[0].date==="+JSON.stringify(dstr(-1))) && dWaterHistory.querySelectorAll("#mList .list-item").length===1);
 
 // ================= easter egg =================
