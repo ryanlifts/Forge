@@ -299,16 +299,17 @@ const stepRule=
       );
 
 check(
-  "rapid weight step taps disable double-tap zoom without disabling page pinch zoom",
+  "rapid weight step taps disable double-tap zoom",
   stepRule.includes(
     "touch-action:manipulation"
   )
-  && !html.includes(
-    "user-scalable=no"
-  )
-  && !html.includes(
-    "maximum-scale=1"
-  )
+);
+
+check(
+  "app disables double-tap and pinch zoom while preserving one-finger panning",
+  html.includes("user-scalable=no")
+  && html.includes("maximum-scale=1.0")
+  && /html, body\s*\{\s*touch-action:pan-x pan-y;\s*\}/.test(html)
 );
 
 const noteStart=
