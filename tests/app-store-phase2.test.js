@@ -17,6 +17,9 @@ const sha256=relative=>crypto.createHash("sha256").update(fs.readFileSync(path.j
 
 async function run(){
   const privacy=read("ios/App/App/PrivacyInfo.xcprivacy");
+  const privacyPage=read("privacy.html");
+  const index=read("index.html");
+  const ai=read("scripts/05-ai.js");
   const project=read("ios/App/App.xcodeproj/project.pbxproj");
   const bridge=read("ios/App/App/BlackPyreBridgeViewController.swift");
   check("app-level privacy manifest is bundled and declares the in-container file timestamp reason",
@@ -52,14 +55,23 @@ async function run(){
     /search\.openfoodfacts\.org\/search/.test(source)
     && !/cgi\/search\.pl/.test(source));
   check("offline copy correctly says AI handoffs remain available",
-    /AI copy\/paste handoffs/.test(read("index.html"))
-    && !/connected AI features need a connection/.test(read("index.html")));
+    /AI copy\/paste handoffs/.test(index)
+    && !/connected AI features need a connection/.test(index));
   check("privacy, support, deletion, attribution, and notices are present",
     ["privacy.html","support.html","third-party-notices.html","THIRD-PARTY-NOTICES.txt",
      "BLACKPYRE-DATA-FLOW-MAP.md","BLACKPYRE-APP-PRIVACY-DRAFT.md","OPEN-FOOD-FACTS-INTEGRATION.md"].every(exists)
-    && /id="eraseAllDataBtn"/.test(read("index.html"))
-    && /Open Database License/.test(read("index.html"))
-    && /privacy\.html/.test(read("index.html")));
+    && /id="eraseAllDataBtn"/.test(index)
+    && /Open Database License/.test(index)
+    && /privacy-ios\.html/.test(index));
+  check("native privacy is iOS-specific and links to the dedicated public policy",
+    /iOS App Privacy Policy/.test(privacyPage)
+    &&!/browser\/PWA|Web App Privacy Policy/.test(privacyPage)
+    &&/https:\/\/ryanlifts\.github\.io\/Forge\/privacy-ios\.html/.test(index));
+  check("AI Quick Log copies the exact JSON-only code-block instruction",
+    /Return ONLY the JSON in a single code block\. Do not include any explanation, commentary, or text before or after the JSON\./.test(ai));
+  check("every named X Close control has the custom-color treatment",
+    ["myFoodsCloseBtn","recentsCloseBtn","myExercisesCloseBtn","brandStoryCloseBtn","faqCloseBtn","liftCloseBtn"].every(id=>index.includes("#"+id))
+    &&/#faqCloseBtn[\s\S]*border:2px solid var\(--ember\)/.test(index));
 
   const parityFiles=[
     "index.html","data-faq.js","sw.js","privacy.html","support.html",

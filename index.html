@@ -323,6 +323,24 @@
   .xbtn { border:1px solid var(--border); background:transparent; color:var(--text); border-radius:8px;
     padding:8px 10px; min-height:44px; font-family:inherit; font-size:11px; cursor:pointer; }
   .xbtn:active { border-color:var(--ember); }
+  #myFoodsCloseBtn,
+  #recentsCloseBtn,
+  #programManageCloseBtn,
+  #trainingPlanReviewCloseBtn,
+  #myExercisesCloseBtn,
+  #brandStoryCloseBtn,
+  #faqCloseBtn,
+  #liftCloseBtn {
+    border:2px solid var(--ember);
+    background:rgba(var(--ember-rgb),.09);
+    color:var(--ember);
+    font-family:'Oswald',sans-serif;
+    font-size:12px;
+    font-weight:600;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    box-shadow:0 0 0 1px rgba(var(--ember-rgb),.12);
+  }
   .btn.small, .chip, .faq-q, .seg button { min-height:44px; }
   .del { min-width:44px; min-height:44px; }
   .x-tools { display:flex; gap:6px; align-items:center; }
@@ -1436,7 +1454,7 @@
           <div><div class="label">Date</div><input type="date" id="wtDate" aria-label="Weigh-in date"></div>
           <div><div class="label">Time</div><input type="time" id="wtTime" aria-label="Weigh-in time"></div>
         </div>
-        <div class="label" id="wtValLabel">Weight (lb)</div><input type="number" id="wtVal" aria-label="Body weight in pounds" placeholder="e.g. 221.4" inputmode="decimal" step="any" style="margin-bottom:12px;">
+        <div class="label" id="wtValLabel">Weight (lb)</div><input type="number" id="wtVal" aria-label="Body weight in pounds" placeholder="e.g. 180" inputmode="decimal" step="any" style="margin-bottom:12px;">
         <button class="btn" id="addWtBtn" style="width:100%;">Record</button>
       </div>
       <div class="note">Weigh same time of day · trust the weekly trend, not the daily number</div>
@@ -1670,7 +1688,7 @@
     <div class="card">
       <div class="label">Privacy &amp; support</div>
       <div class="note" style="margin:6px 0 10px;">Review how BlackPyre handles local data and online food lookups, or get help.</div>
-      <a class="btn ghost small accent-outline" href="https://ryanlifts.github.io/Forge/privacy.html" target="_blank" rel="noopener" style="display:block; width:100%; text-align:center; text-decoration:none;">PRIVACY POLICY</a>
+      <a class="btn ghost small accent-outline" href="https://ryanlifts.github.io/Forge/privacy-ios.html" target="_blank" rel="noopener" style="display:block; width:100%; text-align:center; text-decoration:none;">PRIVACY POLICY</a>
       <div style="height:10px;"></div>
       <a class="btn ghost small" href="https://ryanlifts.github.io/Forge/support.html" target="_blank" rel="noopener" style="display:block; width:100%; text-align:center; text-decoration:none;">SUPPORT</a>
       <div style="height:10px;"></div>

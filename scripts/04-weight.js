@@ -39,7 +39,7 @@ document.getElementById("addWtBtn").addEventListener("click", ()=>{
 function renderWeight(){
   const metric=isMetricSystem(), unit=unitWeightLabel();
   document.getElementById("wtValLabel").textContent="Weight ("+unit+")";
-  document.getElementById("wtVal").placeholder=metric?"e.g. 100.4":"e.g. 221.4";
+  document.getElementById("wtVal").placeholder=metric?"e.g. 82":"e.g. 180";
   document.getElementById("wtVal").setAttribute("aria-label","Body weight in "+(metric?"kilograms":"pounds"));
   const goals = Number(cfg.startWt)>0 && Number(cfg.goalWt)>0;
   document.getElementById("chartLabel").textContent = goals ? ("Trend · "+(isMetricSystem()?(formatBodyWeight(cfg.startWt,currentUnitSystem(),1)+" → "+formatBodyWeight(cfg.goalWt,currentUnitSystem(),1)):(cfg.startWt+" → "+cfg.goalWt))) : "Trend";
