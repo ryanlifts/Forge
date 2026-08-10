@@ -1290,9 +1290,10 @@ function handoffFoodPrompt(){
   return "Act as a nutrition estimator. "
     + (desc ? "The meal: " + desc + ". " : "Identify the foods in the attached meal photo. ")
     + (cap ? "Context: " + cap + ". " : "")
-    + "Estimate realistic portions and reply with ONLY this JSON, no prose, no code fences: "
+    + "Estimate realistic portions using this JSON schema: "
     + '{"foods":[{"name":"...","cal":0,"pro":0,"carb":0,"fat":0}]} '
-    + "— one entry per distinct food, calories in kcal, protein/carbs/fat in grams.";
+    + "— one entry per distinct food, calories in kcal, protein/carbs/fat in grams. "
+    + "Return ONLY the JSON in a single code block. Do not include any explanation, commentary, or text before or after the JSON.";
 }
 document.getElementById("hfCopyFoodBtn").addEventListener("click", ()=>{
   const txt = handoffFoodPrompt();

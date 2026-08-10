@@ -1162,7 +1162,7 @@ let pendingBarcode = null;
 
 function openCustomForm(code, prefill, reviewWarning){
   if (
-    ["search","label","manual","cleared"]
+    ["search","manual","cleared"]
       .includes(activeFoodEntryMode)
   ){
     return;
