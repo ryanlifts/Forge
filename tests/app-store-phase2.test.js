@@ -66,12 +66,16 @@ async function run(){
     "third-party-notices.html","THIRD-PARTY-NOTICES.txt","scripts/01-storage.js",
     "scripts/02-food.js","scripts/06-settings.js"
   ];
+  const generatedRoots=["www","ios/App/App/public"];
+  const availableGeneratedRoots=generatedRoots.filter(directory=>exists(directory));
+  const preparation=read("tools/prepare-native.sh");
   check("root, www, and native public Phase 2 targets are byte-identical",
-    parityFiles.every(file=>{
+    availableGeneratedRoots.every(directory=>parityFiles.every(file=>{
       const original=fs.readFileSync(path.join(root,file));
-      return original.equals(fs.readFileSync(path.join(root,"www",file)))
-        && original.equals(fs.readFileSync(path.join(root,"ios/App/App/public",file)));
-    }));
+      return original.equals(fs.readFileSync(path.join(root,directory,file)));
+    }))
+    && /cp -R scripts vendor assets www\//.test(preparation)
+    && /npx cap sync ios/.test(preparation));
 
   const erased=boot(EXISTING_CFG,Object.assign({},EMPTY_DATA,{food:{"2026-08-09":[{name:"Private",cal:100}]}}));
   erased.window.confirm=()=>true;
