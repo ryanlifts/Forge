@@ -1615,6 +1615,124 @@ let lkgWarningShown = false;
 let lkgStatus = {state:"checking", message:"Checking automatic recovery protection…"};
 let saveTimer;
 
+const PRIMARY_WRITE_GUARD_DEFS = Object.freeze({
+  data:Object.freeze({key:DATA_KEY,label:"logged data"}),
+  cfg:Object.freeze({key:CFG_KEY,label:"saved settings"}),
+  program:Object.freeze({key:PROG_KEY,label:"training program"})
+});
+let primaryWriteGuardReady = false;
+let primaryWriteGuardRaw = {data:null,cfg:null,program:null};
+
+function refreshPrimaryWriteGuardBaselines(){
+  try {
+    primaryWriteGuardRaw = {
+      data:localStorage.getItem(DATA_KEY),
+      cfg:localStorage.getItem(CFG_KEY),
+      program:localStorage.getItem(PROG_KEY)
+    };
+    primaryWriteGuardReady = true;
+    return true;
+  } catch(e){
+    primaryWriteGuardReady = false;
+    return false;
+  }
+}
+function updatePrimaryWriteGuardBaseline(key, raw){
+  if (!primaryWriteGuardReady) return;
+  if (key===DATA_KEY) primaryWriteGuardRaw.data = raw;
+  else if (key===CFG_KEY) primaryWriteGuardRaw.cfg = raw;
+  else if (key===PROG_KEY) primaryWriteGuardRaw.program = raw;
+}
+function currentPrimaryWriteGuardRead(){
+  const read = readStorageStrings();
+  if (!read.ok) return {ok:false,read:read};
+  return {
+    ok:true,
+    read:read,
+    current:{
+      data:read.originals.data,
+      cfg:read.originals.cfg,
+      program:read.originals.program
+    }
+  };
+}
+function protectedSnapshotFromCurrentPrimary(read){
+  const fallback = {
+    data:JSON.stringify(data),
+    cfg:JSON.stringify(cfg),
+    program:JSON.stringify(program)
+  };
+  if (!read || !read.ok) return fallback;
+  const prepared = prepareState(
+    read.originals.cfg,
+    read.originals.data,
+    read.originals.program,
+    {originalStrings:read.originals}
+  );
+  if (!prepared.ok) return fallback;
+  return {
+    data:prepared.finalStrings.data,
+    cfg:prepared.finalStrings.cfg,
+    program:prepared.finalStrings.program
+  };
+}
+function enterPrimaryWriteGuardProtection(reason, diagnostic, snapshot){
+  protectedMode = true;
+  protectedModeKind = "stale-primary";
+  protectedModeReason = reason;
+  protectedModeDiagnostic = diagnostic;
+  protectedSnapshotStrings = snapshot || {
+    data:JSON.stringify(data),
+    cfg:JSON.stringify(cfg),
+    program:JSON.stringify(program)
+  };
+  restoreProtectedSnapshot();
+  if (typeof showProtectedBanner==="function") showProtectedBanner();
+  blockProtectedWrite();
+  return true;
+}
+function blockStalePrimaryWrite(){
+  if (!primaryWriteGuardReady){
+    const reason =
+      "BlackPyre could not verify the saved-state version loaded by this copy. Saving is paused so this copy cannot overwrite existing data.";
+    return enterPrimaryWriteGuardProtection(
+      reason,
+      makeDiagnostic("storage-read","state","write-guard-unavailable",reason),
+      null
+    );
+  }
+
+  const current = currentPrimaryWriteGuardRead();
+  if (!current.ok){
+    const reason =
+      "BlackPyre could not re-check browser storage before saving. Saving is paused so existing data cannot be overwritten.";
+    return enterPrimaryWriteGuardProtection(
+      reason,
+      makeDiagnostic("storage-read","state","write-guard-read-failed",reason),
+      null
+    );
+  }
+
+  const conflicts = ["data","cfg","program"].filter(
+    slot=>current.current[slot]!==primaryWriteGuardRaw[slot]
+  );
+
+  if (!conflicts.length) return false;
+
+  const slot = conflicts[0];
+  const def = PRIMARY_WRITE_GUARD_DEFS[slot];
+  const reason =
+    "BlackPyre detected newer "+def.label+
+    " from another open copy. This copy was stopped before it could overwrite that saved data.";
+
+  return enterPrimaryWriteGuardProtection(
+    reason,
+    makeDiagnostic("stale-primary",slot,"concurrent-primary-change",reason),
+    protectedSnapshotFromCurrentPrimary(current.read)
+  );
+}
+
+
 function protectUnexpectedPrimaryLoss(incident){
   // Rebuild the protected view from persisted readable parts and the best validated snapshot.
   // A save attempt may already have changed memory, so never present that unsaved mutation as recovered data.
@@ -1679,6 +1797,7 @@ if (_bootPrepared.ok){
 let data = _bootState.data;
 let cfg = _bootState.cfg;
 let program = _bootState.program;
+refreshPrimaryWriteGuardBaselines();
 if (protectedMode){
   protectedSnapshotStrings = {
     data:JSON.stringify(data), cfg:JSON.stringify(cfg), program:JSON.stringify(program)
@@ -1729,6 +1848,7 @@ function applyPreparedState(prepared){
   data = prepared.state.data;
   cfg = prepared.state.cfg;
   program = prepared.state.program;
+  refreshPrimaryWriteGuardBaselines();
 }
 function restoreProtectedSnapshot(){
   if (!protectedMode || !protectedSnapshotStrings) return;
@@ -1770,34 +1890,37 @@ function blockUnexpectedPrimaryLossBeforeWrite(){
   return true;
 }
 function save(){
-  if (blockProtectedWrite() || blockUnexpectedPrimaryLossBeforeWrite()) return false;
+  if (blockProtectedWrite() || blockUnexpectedPrimaryLossBeforeWrite() || blockStalePrimaryWrite()) return false;
   let raw;
   try { raw = JSON.stringify(data); }
   catch(e){ flashSave("Save failed", true); return false; }
   const written = writePrimaryString(DATA_KEY, raw);
   if (!written.ok){ flashSave("Save failed", true); return false; }
+  updatePrimaryWriteGuardBaseline(DATA_KEY, raw);
   const snapshot = refreshLastKnownGood("data-save");
   if (snapshot.ok){ markEstablishedInstall(); flashSave("Saved ✓"); }
   return true;
 }
 function saveCfg(){
-  if (blockProtectedWrite() || blockUnexpectedPrimaryLossBeforeWrite()) return false;
+  if (blockProtectedWrite() || blockUnexpectedPrimaryLossBeforeWrite() || blockStalePrimaryWrite()) return false;
   let raw;
   try { scrubRetiredCredentials(cfg); raw = JSON.stringify(cfg); }
   catch(e){ flashSave("Save failed", true); return false; }
   const written = writePrimaryString(CFG_KEY, raw);
   if (!written.ok){ flashSave("Save failed", true); return false; }
+  updatePrimaryWriteGuardBaseline(CFG_KEY, raw);
   const snapshot = refreshLastKnownGood("settings-save");
   if (snapshot.ok) markEstablishedInstall();
   return true;
 }
 function saveProgram(){
-  if (blockProtectedWrite() || blockUnexpectedPrimaryLossBeforeWrite()) return false;
+  if (blockProtectedWrite() || blockUnexpectedPrimaryLossBeforeWrite() || blockStalePrimaryWrite()) return false;
   let raw;
   try { raw = JSON.stringify(program); }
   catch(e){ flashSave("Save failed", true); return false; }
   const written = writePrimaryString(PROG_KEY, raw);
   if (!written.ok){ flashSave("Save failed", true); return false; }
+  updatePrimaryWriteGuardBaseline(PROG_KEY, raw);
   const snapshot = refreshLastKnownGood("program-save");
   if (snapshot.ok) markEstablishedInstall();
   return true;

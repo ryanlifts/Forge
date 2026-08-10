@@ -61,7 +61,7 @@ check("youth calculation assets remain current and the FAQ release cache is acti
     +fs.readFileSync("scripts/01-storage.js","utf8")
     +fs.readFileSync("scripts/06-settings.js","utf8")
   )
-  && /blackpyre-v109/.test(sw)
+  && /blackpyre-v110-runtime-1/.test(sw)
   && !/blackpyre-v78-native-parity-7|blackpyre-phase1-nutrition-safety-[12]/.test(sw));
 
 setv("cAge",42); setv("cFt",5); setv("cIn",11); setv("cWt",190); setv("cAct",1.55); setv("cGoal",-500);

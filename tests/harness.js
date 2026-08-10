@@ -14,7 +14,8 @@ function assembleHTML(){
   // only local repo files are inlined — external URLs pass through untouched
   html = html.replace(/<script\b[^>]*\bsrc="([^"]+)"[^>]*>\s*<\/script>/g, (m, src)=>{
     if (/^https?:/.test(src)) return m;
-    const p = path.join(ROOT, src);
+    const localSrc = src.split(/[?#]/)[0];
+    const p = path.join(ROOT, localSrc);
     return fs.existsSync(p) ? "<script>\n" + fs.readFileSync(p, "utf8") + "\n</script>" : m;
   });
   html = html.replace(/<link\b[^>]*>/g, (m)=>{

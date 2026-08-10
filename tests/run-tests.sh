@@ -13,6 +13,7 @@ node tests/phase2-keyless-food-data.test.js
 node tests/phase2-label-scanner.test.js
 node tests/phase2-web-label-scanner.test.js
 node tests/app-store-phase2-web.test.js
+node tests/web-runtime-history-safety.test.js
 node tests/unit.test.js
 node tests/integration.test.js
 node tests/v84-ui-polish.test.js

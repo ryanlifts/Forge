@@ -173,6 +173,9 @@ function showProtectedBanner(){
   if (protectedModeKind==="newer"){
     text.textContent = "This saved data came from a newer BlackPyre version. This older copy will not change it. Close and reopen the app — or use the update notice — to load the current version. Do not uninstall the app.";
     recoveryBtn.classList.add("hidden");
+  } else if (protectedModeKind==="stale-primary"){
+    text.textContent = "BlackPyre detected newer saved data from another open copy. This copy was stopped before it could overwrite that data. Close and reopen BlackPyre to continue. Do not clear browser or website data.";
+    recoveryBtn.classList.add("hidden");
   } else if (protectedModeDiagnostic && protectedModeDiagnostic.stage==="storage-read"){
     text.textContent = "BlackPyre could not safely read browser storage. No recovery write is allowed because the app cannot prove what it would preserve. Do not uninstall the app.";
     recoveryBtn.classList.add("hidden");
