@@ -687,7 +687,7 @@ const faq = fs.readFileSync(
 
 check(
   "current consolidated native FAQ is valid",
-  (faq.match(/\{q:"/g) || []).length === 26
+  (faq.match(/\{q:"/g) || []).length === 27
 
   && /How do I set my calorie and macro targets\?/.test(faq)
   && /Can teenagers use the calorie and macro calculator\?/.test(faq)
@@ -714,12 +714,13 @@ check(
 
   && /Where is my data stored\? Is it private\?/.test(faq)
   && /How do I back up or move BlackPyre to another device\?/.test(faq)
+  && /How do I erase everything from BlackPyre\?/.test(faq)
   && /Protected mode/.test(faq)
   && /What works without an internet connection\?/.test(faq)
 
   && /Disclaimer & terms of use/.test(faq)
 
-  && !/(Open Food Facts|USDA|Apple|iPhone|iPad|Android|Safari|Chrome|Google|ChatGPT|OpenAI|Claude|Anthropic|Starry|Chipotle)/i.test(faq)
+  && !/(USDA|Apple|iPhone|iPad|Android|Safari|Chrome|Google|ChatGPT|OpenAI|Claude|Anthropic|Starry|Chipotle)/i.test(faq)
 );
 
 const sw = fs.readFileSync(
@@ -730,7 +731,7 @@ const sw = fs.readFileSync(
 check(
   "manual food-slider candidate uses the current cache",
   sw.includes(
-    'const CACHE = "blackpyre-v103"'
+    'const CACHE = "blackpyre-v104"'
   )
 );
 

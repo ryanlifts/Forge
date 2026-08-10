@@ -906,7 +906,7 @@
     <div class="motto">Burn away the old. Forge what comes next.</div>
     <div id="saveState" class="note hdr-save" role="status" aria-live="polite"></div>
   </div>
-  <div id="offlineBanner" class="hidden" role="status" aria-live="polite"><b>Offline.</b> Logging, workouts, weights, saved foods, backups, and recovery still work. Online food/barcode lookups and connected AI features need a connection.</div>
+  <div id="offlineBanner" class="hidden" role="status" aria-live="polite"><b>Offline.</b> Logging, workouts, weights, saved foods, AI copy/paste handoffs, backups, and recovery still work. Only new online food searches and unknown barcode lookups need a connection.</div>
   <div id="journey" class="hidden">
     <div class="jy-top">
       <span class="label" style="margin:0;">Your Journey</span>
@@ -1794,7 +1794,7 @@
       <div class="disclosure-body">
     <div class="card">
       <div class="label" style="margin-bottom:10px;">Food search sources</div>
-      <div class="note">My Foods and built-in staples work offline. Packaged-food search and barcode lookup use <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener" style="color:var(--ember);">Open Food Facts</a> when connected, and results identify their source. If a product is missing or the service is unavailable, use manual entry to copy the nutrition label; BlackPyre remembers saved barcodes on this device. The optional 120-food suggestion catalog is bundled USDA reference data and also works offline.</div>
+      <div class="note">My Foods and built-in staples work offline. Packaged-food search and barcode lookup use <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener" style="color:var(--ember);">Open Food Facts</a> when connected, and results identify their source. Open Food Facts database content is available under the <a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank" rel="noopener" style="color:var(--ember);">Open Database License</a>. If a product is missing or the service is unavailable, use manual entry to copy the nutrition label; BlackPyre remembers saved barcodes on this device. The optional 120-food suggestion catalog is bundled USDA reference data and also works offline.</div>
     </div>
 
     <div class="card">
@@ -1848,8 +1848,22 @@
       <input type="file" id="importDataFile" aria-label="BlackPyre backup file to restore" accept=".json,application/json" class="hidden">
       <div class="note">BlackPyre’s live data and recovery snapshots stay in this browser/PWA’s site storage and can be lost if that storage or the installed PWA is removed. Downloaded backup files are separate, but a copy kept only on this device can still be lost if the device is lost, erased, or replaced.</div>
     </div>
+    <div class="card" style="border-color:var(--warn);">
+      <div class="label" style="color:var(--warn);">Erase all BlackPyre data</div>
+      <div class="note" style="margin:6px 0 10px;">Permanently removes settings, logs, foods, programs, workout drafts, and recovery snapshots from this browser or installed web app. Backup copies saved elsewhere are not affected. Protected mode blocks this action.</div>
+      <button class="btn ghost small" id="eraseAllDataBtn" style="width:100%; border-color:var(--warn);">ERASE ALL BLACKPYRE DATA</button>
+    </div>
       </div>
     </details>
+    <div class="card">
+      <div class="label">Privacy &amp; support</div>
+      <div class="note" style="margin:6px 0 10px;">Review how BlackPyre handles local data and online food lookups, or get help.</div>
+      <a class="btn ghost small accent-outline" href="./privacy.html" target="_blank" rel="noopener" style="display:block; width:100%; text-align:center; text-decoration:none;">PRIVACY POLICY</a>
+      <div style="height:10px;"></div>
+      <a class="btn ghost small" href="./support.html" target="_blank" rel="noopener" style="display:block; width:100%; text-align:center; text-decoration:none;">SUPPORT</a>
+      <div style="height:10px;"></div>
+      <a class="btn ghost small" href="./third-party-notices.html" target="_blank" rel="noopener" style="display:block; width:100%; text-align:center; text-decoration:none;">THIRD-PARTY NOTICES</a>
+    </div>
     <div class="note" id="appCopyright" style="text-align:center; margin:18px 8px 0; line-height:1.6;">© 2026 Ryan Allen Wilsey. All rights reserved.</div>
   </div>
 </div>

@@ -2,7 +2,7 @@
 // NOTE: sw.js deliberately does NOT appear in SHELL. The browser fetches the service
 // worker itself through its own update mechanism (byte-compare on navigation); precaching
 // it would freeze updates and break the cache-bump release ritual. Do not "fix" this.
-const CACHE = "blackpyre-v103";
+const CACHE = "blackpyre-v104";
 const SHELL = [
   "./",
   "./index.html",
@@ -25,6 +25,9 @@ const SHELL = [
   "./icon-192.png",
   "./icon-512.png",
   "./apple-touch-icon.png",
+  "./privacy.html",
+  "./support.html",
+  "./third-party-notices.html",
 ];
 
 self.addEventListener("install", (e) => {

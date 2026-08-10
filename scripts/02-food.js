@@ -426,7 +426,7 @@ function mapOFFProduct(p){
   };
 }
 
-// --- OFF search: modern endpoint first, legacy fallback ---
+// --- OFF search: Search-a-licious only; no retired legacy endpoint fallback ---
 function fetchWithTimeout(url, ms){
   return new Promise((resolve, reject)=>{
     const t = setTimeout(()=>reject(new Error("timeout")), ms);
@@ -435,20 +435,10 @@ function fetchWithTimeout(url, ms){
 }
 async function searchOFF(q){
   const fields = "code,product_name,brands,nutriments,serving_size,serving_quantity,nutrition_data_per";
-  // 1) modern search API
-  try {
-    const res = await fetchWithTimeout("https://search.openfoodfacts.org/search?q="+encodeURIComponent(q)+"&page_size=15&fields="+fields, 8000);
-    if (!res.ok) throw new Error("Open Food Facts search unavailable");
-    const json = await res.json();
-    const hits = (json.hits||[]).map(mapOFFProduct).filter(Boolean);
-    if (hits.length) return hits;
-  } catch(e){ /* fall through */ }
-  // 2) legacy search API
-  const res2 = await fetchWithTimeout("https://world.openfoodfacts.org/cgi/search.pl?search_terms="+encodeURIComponent(q)
-    +"&search_simple=1&action=process&json=1&page_size=15&sort_by=unique_scans_n&fields="+fields, 10000);
-  if (!res2.ok) throw new Error("Open Food Facts search unavailable");
-  const json2 = await res2.json();
-  return (json2.products||[]).map(mapOFFProduct).filter(Boolean);
+  const res = await fetchWithTimeout("https://search.openfoodfacts.org/search?q="+encodeURIComponent(q)+"&page_size=15&fields="+fields, 8000);
+  if (!res.ok) throw new Error("Open Food Facts search unavailable");
+  const json = await res.json();
+  return (json.hits||[]).map(mapOFFProduct).filter(Boolean);
 }
 
 function foodSourceLabel(food){

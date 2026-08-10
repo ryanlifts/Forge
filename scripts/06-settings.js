@@ -948,10 +948,57 @@ document.getElementById("exportDataBtn").addEventListener("click", ()=>doBackup(
 document.getElementById("shareDataBtn").addEventListener("click", ()=>doBackup("shareDataBtn",true));
 document.getElementById("backupNowBtn").addEventListener("click", ()=>doBackup("backupNowBtn",false));
 document.getElementById("backupLaterBtn").addEventListener("click", remindBackupLater);
+function reloadAfterFullErase(){ location.reload(); }
+async function eraseAllBlackPyreData(){
+  if (protectedMode){
+    flashSave("Erase blocked — resolve Protected mode recovery first",true);
+    if (typeof openRecoveryPanel==="function" && recoveryWritesAllowed()) openRecoveryPanel();
+    return false;
+  }
+  const first=confirm(
+    "Erase ALL BlackPyre data from this browser or installed web app?\n\n"+
+    "This permanently removes settings, logs, saved foods, programs, workout drafts, and recovery snapshots. Backup copies saved elsewhere are not affected."
+  );
+  if (!first) return false;
+  const second=confirm(
+    "FINAL CONFIRMATION\n\nThis cannot be undone. Have you saved any backup you want to keep somewhere outside this browser or installed web app?"
+  );
+  if (!second) return false;
+
+  const btn=document.getElementById("eraseAllDataBtn");
+  if (btn){ btn.disabled=true; btn.textContent="ERASING…"; }
+  const captured=captureBlackPyreStorageForErase();
+  if (!captured.ok){
+    if (btn){ btn.disabled=false; btn.textContent="ERASE ALL BLACKPYRE DATA"; }
+    flashSave("Erase failed — existing data was left in place",true);
+    return false;
+  }
+  const snapshot=captured.strings;
+  try {
+    const erased=commitBlackPyreStorageErase(snapshot);
+    if (!erased.ok) throw erased.error||new Error("Browser storage did not verify empty.");
+    try {
+      if (typeof caches!=="undefined" && caches && typeof caches.keys==="function"){
+        const names=await caches.keys();
+        await Promise.all(names.filter(name=>/^blackpyre-/.test(name)).map(name=>caches.delete(name)));
+      }
+    } catch(error){}
+    if (btn) btn.textContent="DATA ERASED";
+    setTimeout(reloadAfterFullErase,50);
+    return true;
+  } catch(error){
+    restoreBlackPyreStorageAfterErase(snapshot);
+    if (btn){ btn.disabled=false; btn.textContent="ERASE ALL BLACKPYRE DATA"; }
+    console.error("BlackPyre erase failed:",error);
+    flashSave("Erase failed — existing browser data was preserved",true);
+    return false;
+  }
+}
+document.getElementById("eraseAllDataBtn").addEventListener("click",eraseAllBlackPyreData);
 function exportRawRecoveryOriginals(){
   const payload = makeRawRecoveryEnvelope();
   if (!payload.ok){ flashSave("Raw recovery export unavailable", true); return false; }
-  const privacyOk = confirm("This emergency file preserves exact saved strings and may contain private API keys. Store it securely and do not share it. Export raw originals?");
+  const privacyOk = confirm("This emergency file preserves exact saved strings and may contain private personal data. Store it securely and do not share it. Export raw originals?");
   if (!privacyOk) return false;
   download("blackpyre-RAW-RECOVERY-"+todayStr()+".json", JSON.stringify(payload.envelope, null, 2));
   rawRecoveryExportConfirmed = confirm("Confirm only after the raw recovery file has been saved somewhere safe. Did you save it?");
@@ -961,7 +1008,7 @@ function exportRawRecoveryOriginals(){
 function exportStorageDiagnostic(){
   const payload = makeStorageDiagnosticEnvelope();
   if (!payload.ok){ flashSave(payload.reason || "Diagnostic export unavailable", true); return false; }
-  const ok = confirm("This emergency diagnostic preserves exact local storage and may contain private API keys and personal logs. Store it securely and do not post it publicly. Export now?");
+  const ok = confirm("This emergency diagnostic preserves exact local storage and may contain private personal data and logs. Store it securely and do not post it publicly. Export now?");
   if (!ok) return false;
   download("blackpyre-STORAGE-DIAGNOSTIC-"+todayStr()+".json", JSON.stringify(payload.envelope,null,2));
   flashSave("Recovery diagnostic exported ✓");
@@ -974,7 +1021,7 @@ function exportStoredQuarantine(){
   try { raw = localStorage.getItem(QUARANTINE_KEY); }
   catch(e){ flashSave("Recovery copy could not be read", true); return false; }
   if (raw===null){ flashSave("No recovery copy is stored", true); return false; }
-  const ok = confirm("This recovery file may contain private API keys because it preserves the original saved strings exactly. Store it securely. Export it now?");
+  const ok = confirm("This recovery file may contain private personal data because it preserves the original saved strings exactly. Store it securely. Export it now?");
   if (!ok) return false;
   download("blackpyre-RAW-RECOVERY-"+todayStr()+".json", raw);
   flashSave("Recovery copy exported ✓");

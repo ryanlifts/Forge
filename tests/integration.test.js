@@ -2135,7 +2135,7 @@ C62.window.eval(`reviewFoodSuggestion(foodSuggestionCandidates().find(c=>c.food.
 check("v62 a catalog suggestion opens its exact listed serving for review", dC62.getElementById("qtyUnit").value==="serving" && Number(dC62.getElementById("qtyAmount").value)===1 && /4 oz cooked \(113g\)/.test(dC62.getElementById("qtyUnit").selectedOptions[0].textContent));
 check("v62 review shows the USDA per-100g values and correctly scaled serving", /USDA reference · SR28/.test(dC62.getElementById("selName").textContent) && /165 kcal/.test(dC62.getElementById("selPer100").textContent) && dC62.getElementById("calcCal").textContent==="186" && dC62.getElementById("calcPro").textContent==="35");
 check("v62 reviewing a broad-catalog suggestion never auto-logs it", C62.window.eval(`(data.food[todayStr()]||[]).length`)===beforeReview62);
-check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v103"'); })());
+check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v104"'); })());
 check("v62 keeps primary schemaVersion 3", C62.window.eval("SCHEMA_VERSION")===3);
 
 // ================= ChatGPT handoff paste flow =================
@@ -2483,18 +2483,19 @@ const currentFaqContract = P.window.eval(`(()=>{
     "What can the optional AI tools do, and what information is sent?",
     "Where is my data stored? Is it private?",
     "How do I back up or move BlackPyre to another device?",
+    "How do I erase everything from BlackPyre?",
     "What is Protected mode, and what if my data disappears?",
     "What works without an internet connection?",
     "Disclaimer & terms of use"
   ];
   const faqText=JSON.stringify(FAQ).toLowerCase();
   const banned=[
-    "open food facts","usda","apple","iphone","ipad","android",
+    "usda","apple","iphone","ipad","android",
     "safari","chrome","google","chatgpt","openai","claude",
     "anthropic","starry","chipotle","paddleocr"
   ];
 
-  return questions.length===26
+  return questions.length===27
     && JSON.stringify(questions.map(item=>item.q))===JSON.stringify(expectedQuestions)
     && JSON.stringify(sections)===JSON.stringify([
       "Getting started",
@@ -2528,9 +2529,12 @@ const currentFaqContract = P.window.eval(`(()=>{
     && has("What can the optional AI tools do, and what information is sent?","BlackPyre never contacts an AI service")
     && has("What can the optional AI tools do, and what information is sent?","Selected photos stay in memory only")
     && has("Where is my data stored? Is it private?","browser/PWA site storage on this device")
-    && has("Where is my data stored? Is it private?","no user account or central BlackPyre database")
+    && has("Where is my data stored? Is it private?","no user account")
+    && has("Where is my data stored? Is it private?","BlackPyre server")
     && has("How do I back up or move BlackPyre to another device?","Save backup")
     && !has("How do I back up or move BlackPyre to another device?","API key")
+    && has("How do I erase everything from BlackPyre?","asks twice")
+    && has("How do I erase everything from BlackPyre?","Protected mode")
     && has("What is Protected mode, and what if my data disappears?","pauses normal saving")
     && has("What is Protected mode, and what if my data disappears?","Do not remove the installed web app or clear its site data")
     && has("What works without an internet connection?","Saved barcodes")
@@ -2584,8 +2588,8 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache key matches the BlackPyre web v82 release",
-  /const CACHE = "blackpyre-v103";/.test(sw));
-check("Phase 1 service-worker cache remains refreshed", sw.includes('const CACHE = "blackpyre-v103"') && !sw.includes('blackpyre-phase1-nutrition-safety-1'));
+  /const CACHE = "blackpyre-v104";/.test(sw));
+check("Phase 1 service-worker cache remains refreshed", sw.includes('const CACHE = "blackpyre-v104"') && !sw.includes('blackpyre-phase1-nutrition-safety-1'));
 
 await wait(0);
 releaseTestWindows([
@@ -7975,7 +7979,7 @@ check(
   V78ServiceWorker.includes('"./data-exercise-card-profiles.js"')
   && V78ServiceWorker.includes('"./scripts/03-card-profiles.js"')
   && V78ServiceWorker.includes(
-    'const CACHE = "blackpyre-v103"'
+    'const CACHE = "blackpyre-v104"'
   )
 );
 
