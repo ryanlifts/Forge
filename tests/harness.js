@@ -241,12 +241,22 @@ function makeNativeFilesystem(options){
       return {};
     }
   };
+  const BlackPyreData = {
+    async protectFile(args){
+      calls.push({method:"protectFile",args:Object.assign({},args)});
+      return {protected:true};
+    },
+    async eraseNativeFiles(){
+      calls.push({method:"eraseNativeFiles",args:{}});
+      return {erased:true};
+    }
+  };
   function install(w){
     w.Capacitor = {
       getPlatform:()=>opts.platform || "ios",
       isNativePlatform:()=>opts.native!==false,
-      isPluginAvailable:name=>name==="Filesystem" && opts.available!==false,
-      Plugins:{Filesystem:Filesystem}
+      isPluginAvailable:name=>(name==="Filesystem" || name==="BlackPyreData") && opts.available!==false,
+      Plugins:{Filesystem:Filesystem,BlackPyreData:BlackPyreData}
     };
   }
   return {

@@ -19,6 +19,10 @@ cp \
   data-foods.js \
   data-quotes.js \
   data-suggestions.js \
+  privacy.html \
+  support.html \
+  third-party-notices.html \
+  THIRD-PARTY-NOTICES.txt \
   www/
 
 cp -R scripts vendor assets www/

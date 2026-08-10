@@ -928,6 +928,7 @@ async function writeNativeJson(capability,filename,text){
     directory:"DOCUMENTS",
     encoding:"utf8"
   });
+  await protectNativeManagedFile(filename,"DOCUMENTS");
   const verified = await capability.fs.readFile({
     path:filename,
     directory:"DOCUMENTS",
@@ -1101,6 +1102,57 @@ document.getElementById("nativeBackupElsewhereBtn").addEventListener("click",()=
   hideNativeBackupSaved();
   doBackup("shareDataBtn",true);
 });
+function reloadAfterFullErase(){ location.reload(); }
+async function eraseAllBlackPyreData(){
+  if (protectedMode){
+    flashSave("Erase blocked — resolve Protected mode recovery first",true);
+    if (typeof openRecoveryPanel==="function" && recoveryWritesAllowed()) openRecoveryPanel();
+    return false;
+  }
+  const first=confirm(
+    "Erase ALL BlackPyre data on this device?\n\n"+
+    "This permanently removes settings, logs, saved foods, programs, workout drafts, recovery snapshots, Native Vault files, and backups kept inside BlackPyre. Copies saved elsewhere are not affected."
+  );
+  if (!first) return false;
+  const second=confirm(
+    "FINAL CONFIRMATION\n\nThis cannot be undone. Have you saved any backup you want to keep somewhere outside BlackPyre?"
+  );
+  if (!second) return false;
+
+  const btn=document.getElementById("eraseAllDataBtn");
+  if (btn){ btn.disabled=true; btn.textContent="ERASING…"; }
+  const captured=captureBlackPyreStorageForErase();
+  if (!captured.ok){
+    if (btn){ btn.disabled=false; btn.textContent="ERASE ALL BLACKPYRE DATA"; }
+    flashSave("Erase failed — existing data was left in place",true);
+    return false;
+  }
+  const snapshot=captured.strings;
+
+  try {
+    if (typeof waitForNativeVaultIdle==="function") await waitForNativeVaultIdle();
+    if (typeof cancelRestNotification==="function") await cancelRestNotification();
+    await eraseBlackPyreNativeFiles();
+    const erased=commitBlackPyreStorageErase(snapshot);
+    if (!erased.ok) throw erased.error||new Error("Browser storage did not verify empty.");
+    try {
+      if (typeof caches!=="undefined" && caches && typeof caches.keys==="function"){
+        const names=await caches.keys();
+        await Promise.all(names.filter(name=>/^blackpyre-/.test(name)).map(name=>caches.delete(name)));
+      }
+    } catch(error){}
+    if (btn) btn.textContent="DATA ERASED";
+    setTimeout(reloadAfterFullErase,50);
+    return true;
+  } catch(error){
+    restoreBlackPyreStorageAfterErase(snapshot);
+    if (btn){ btn.disabled=false; btn.textContent="ERASE ALL BLACKPYRE DATA"; }
+    console.error("BlackPyre erase failed:",error);
+    flashSave("Erase failed — existing browser data was preserved",true);
+    return false;
+  }
+}
+document.getElementById("eraseAllDataBtn").addEventListener("click",eraseAllBlackPyreData);
 function exportRawRecoveryOriginals(){
   const payload = makeRawRecoveryEnvelope();
   if (!payload.ok){ flashSave("Raw recovery export unavailable", true); return false; }

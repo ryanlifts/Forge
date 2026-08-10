@@ -1,0 +1,43 @@
+BlackPyre Third-Party Notices
+Copyright (c) 2026 Ryan Allen Wilsey. All rights reserved.
+
+Open Food Facts
+----------------
+Packaged-food data is provided by Open Food Facts:
+https://world.openfoodfacts.org
+
+The Open Food Facts database is available under the Open Database License
+(ODbL) 1.0. Attribution and share-alike terms apply:
+https://opendatacommons.org/licenses/odbl/1-0/
+
+Product data can be incomplete or inaccurate. BlackPyre tells users to verify
+the package label and keeps user corrections local.
+
+html5-qrcode 2.3.8
+------------------
+Copyright Minhaz.
+Licensed under the Apache License, Version 2.0.
+The complete license is bundled as vendor/html5-qrcode.LICENSE.txt.
+
+Capacitor and Capacitor plugins
+-------------------------------
+Capacitor CLI, Capacitor Core, Capacitor iOS, Filesystem, Local Notifications,
+and Share are copyright (c) 2017-present Drifty Co. / Ionic and are licensed
+under the MIT License. Complete license text is included in each installed
+package and available from https://github.com/ionic-team/capacitor.
+
+IONFilesystemLib
+----------------
+Copyright (c) 2025 Ionic.
+Licensed under the MIT License.
+Source: https://github.com/ionic-team/ion-ios-filesystem
+
+Oswald
+------
+Licensed under the SIL Open Font License, Version 1.1.
+The complete license is bundled as assets/fonts/OFL-Oswald.txt.
+
+IBM Plex Mono
+-------------
+Licensed under the SIL Open Font License, Version 1.1.
+The complete license is bundled as assets/fonts/OFL-IBMPlexMono.txt.

@@ -286,6 +286,12 @@ One release, gated and reviewed as usual.
 
 ### Phase 2 — Privacy artifacts and iOS package hardening
 
+**Status: COMPLETE — August 9, 2026.** Native build 2 and web cache v104 passed their
+full permanent gauntlets. The final signed Release archive passed Xcode store validation
+and independent signature verification. Privacy/support/notices pages, local erasure,
+Open Food Facts correction and attribution, native backup exclusion, release artifacts,
+and dependency hardening are implemented. Phase 2a is next.
+
 Ordered. Items 1–2 are upload blockers; do them first.
 
 1. **`PrivacyInfo.xcprivacy` (upload blocker).** No app-level manifest exists; the build

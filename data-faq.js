@@ -59,9 +59,11 @@ const FAQ = [
 
   {sec:"Your data & recovery"},
 
-  {q:"Where is my data stored? Is it private?", a:"Your settings, logs, program, saved foods, and recovery data are stored on this device. BlackPyre has no user account or central BlackPyre database that can read your personal log. Online food searches send only the search or barcode request to the online food service. BlackPyre never transmits your logs, prompts, reports, or photos to an AI service; you control any copy, paste, or share handoff."},
+  {q:"Where is my data stored? Is it private?", a:"Your settings, logs, program, saved foods, and recovery data are stored on this device. BlackPyre has no user account, advertising, analytics SDK, or BlackPyre server that can read your personal log. Online packaged-food searches send only the search words or barcode to <b>Open Food Facts</b>; that service also receives ordinary network information such as your IP address. BlackPyre never transmits your logs, prompts, reports, or photos to an AI service; you control any copy, paste, or share handoff. Open <b>Settings → Privacy &amp; support</b> for the full policy."},
 
   {q:"How do I back up or move BlackPyre to another device?", a:"Open <b>Settings → Data &amp; recovery</b>. <b>Save backup</b> quickly saves a verified file inside <b>Files → On My iPhone → BlackPyre</b>. That folder and its backups are deleted if BlackPyre is uninstalled. <b>Save backup elsewhere</b> lets you keep a second copy in iCloud Drive, another folder, AirDrop, or another app. On another device, install BlackPyre and restore that backup."},
+
+  {q:"How do I erase everything from BlackPyre?", a:"Open <b>Settings → Data &amp; recovery → Erase all BlackPyre data</b>. BlackPyre asks twice before permanently removing settings, logs, saved foods, programs, workout drafts, recovery snapshots, Native Vault files, and backups kept inside the app. Copies you saved somewhere else are not affected and must be deleted from those locations separately. Protected mode blocks destructive reset until recovery is resolved."},
 
   {q:"What is Protected mode, and what if my data disappears?", a:"If BlackPyre cannot safely read established saved data, it pauses normal saving instead of replacing it with empty information. <b>Do not uninstall the app or clear its data.</b> Open recovery and choose a validated recovery snapshot or one of your own backups. BlackPyre preserves the original saved information while recovery is being handled."},
 

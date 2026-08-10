@@ -2080,7 +2080,7 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+(?:-\d+)?"/.test(sw));
-check("native service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v101"'));
+check("native service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v102"'));
 
 const nativePrep76 = fs.readFileSync(
   path.join(__dirname,"..","tools","prepare-native.sh"),
@@ -3784,7 +3784,7 @@ const NativeBackup = boot(
     w.Capacitor = {
       getPlatform:()=>"ios",
       isNativePlatform:()=>true,
-      isPluginAvailable:name=>name==="Filesystem" || name==="Share",
+      isPluginAvailable:name=>name==="Filesystem" || name==="Share" || name==="BlackPyreData",
       Plugins:{
         Filesystem:{
           writeFile:async options=>{
@@ -3798,6 +3798,10 @@ const NativeBackup = boot(
             NativeBackupShares.push(options);
             return new Promise(resolve=>{ resolveNativeBackupShare=resolve; });
           }
+        },
+        BlackPyreData:{
+          protectFile:async()=>({protected:true}),
+          eraseNativeFiles:async()=>({erased:true})
         }
       }
     };
@@ -3884,7 +3888,7 @@ const NativeShareCancel = boot(
     w.Capacitor = {
       getPlatform:()=>"ios",
       isNativePlatform:()=>true,
-      isPluginAvailable:name=>name==="Filesystem" || name==="Share",
+      isPluginAvailable:name=>name==="Filesystem" || name==="Share" || name==="BlackPyreData",
       Plugins:{
         Filesystem:{
           writeFile:async options=>{
@@ -3893,7 +3897,11 @@ const NativeShareCancel = boot(
           },
           readFile:async options=>({data:NativeCancelFiles.get(options.path)})
         },
-        Share:{share:async()=>{ throw new Error("Share canceled"); }}
+        Share:{share:async()=>{ throw new Error("Share canceled"); }},
+        BlackPyreData:{
+          protectFile:async()=>({protected:true}),
+          eraseNativeFiles:async()=>({erased:true})
+        }
       }
     };
   }
@@ -3942,13 +3950,17 @@ const NativeBackupFailure = boot(
     w.Capacitor = {
       getPlatform:()=>"ios",
       isNativePlatform:()=>true,
-      isPluginAvailable:name=>name==="Filesystem" || name==="Share",
+      isPluginAvailable:name=>name==="Filesystem" || name==="Share" || name==="BlackPyreData",
       Plugins:{
         Filesystem:{
           writeFile:async()=>{ throw new Error("disk denied"); },
           readFile:async()=>({data:""})
         },
-        Share:{share:async()=>({})}
+        Share:{share:async()=>({})},
+        BlackPyreData:{
+          protectFile:async()=>({protected:true}),
+          eraseNativeFiles:async()=>({erased:true})
+        }
       }
     };
   }

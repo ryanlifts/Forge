@@ -9,6 +9,42 @@ const SCHEMA_VERSION = 3, RECOVERY_FORMAT_VERSION = 1;
 const REST_TIMER_FORMAT_VERSION = 1;
 const DEVICE_LOCAL_CFG_FIELDS = ["foodHandoffOn"];
 
+function blackPyreStorageKeys(){
+  const keys=[];
+  for (let i=0;i<localStorage.length;i++){
+    const key=localStorage.key(i);
+    if (typeof key==="string" && (/^(?:forge:|blackpyre:|ryan-cut:)/.test(key))) keys.push(key);
+  }
+  return keys;
+}
+function captureBlackPyreStorageForErase(){
+  const strings={};
+  try {
+    blackPyreStorageKeys().forEach(key=>{ strings[key]=localStorage.getItem(key); });
+    return {ok:true,strings:strings};
+  } catch(error){ return {ok:false,error:error,strings:{}}; }
+}
+function restoreBlackPyreStorageAfterErase(strings){
+  try {
+    Object.keys(strings||{}).forEach(key=>{
+      const value=strings[key];
+      if (value===null) localStorage.removeItem(key);
+      else localStorage.setItem(key,value);
+    });
+    return {ok:Object.keys(strings||{}).every(key=>localStorage.getItem(key)===strings[key])};
+  } catch(error){ return {ok:false,error:error}; }
+}
+function commitBlackPyreStorageErase(strings){
+  try {
+    Object.keys(strings||{}).forEach(key=>localStorage.removeItem(key));
+    if (Object.keys(strings||{}).some(key=>localStorage.getItem(key)!==null)) throw new Error("Browser storage did not verify empty.");
+    return {ok:true};
+  } catch(error){
+    restoreBlackPyreStorageAfterErase(strings);
+    return {ok:false,error:error};
+  }
+}
+
 // Nutrition guidance is for self-directed adult use. The lower bound follows
 // NIDDK guidance that eating under 1,200 kcal/day is not advised; the upper
 // bound is a supported-input sanity limit, not a clinical recommendation.
@@ -1322,6 +1358,38 @@ function nativeVaultCapability(){
     && typeof fs.writeFile==="function" && typeof fs.readFile==="function" && typeof fs.deleteFile==="function");
   return {available:available,native:native,platform:platform,fs:fs};
 }
+function nativeDataProtectionCapability(){
+  const c = typeof window!=="undefined" ? window.Capacitor : null;
+  let platform=null, native=false, available=false, plugin=null;
+  try { platform = c && typeof c.getPlatform==="function" ? c.getPlatform() : null; } catch(e){}
+  try { native = !!(c && typeof c.isNativePlatform==="function" && c.isNativePlatform()); } catch(e){}
+  try { available = !!(c && typeof c.isPluginAvailable==="function" && c.isPluginAvailable("BlackPyreData")); } catch(e){}
+  try { plugin = c && c.Plugins ? c.Plugins.BlackPyreData : null; } catch(e){}
+  return {
+    native:native,
+    platform:platform,
+    available:!!(native && available && plugin
+      && typeof plugin.protectFile==="function"
+      && typeof plugin.eraseNativeFiles==="function"),
+    plugin:plugin
+  };
+}
+async function protectNativeManagedFile(path,directory){
+  const capability=nativeDataProtectionCapability();
+  if (!capability.native) return {ok:true,skipped:true};
+  if (!capability.available) throw new Error("Native backup protection is unavailable.");
+  const result=await capability.plugin.protectFile({path:path,directory:directory});
+  if (!result || result.protected!==true) throw new Error("Native backup exclusion could not be verified.");
+  return {ok:true,protected:true};
+}
+async function eraseBlackPyreNativeFiles(){
+  const capability=nativeDataProtectionCapability();
+  if (!capability.native) return {ok:true,skipped:true};
+  if (!capability.available) throw new Error("Native data erasure is unavailable.");
+  const result=await capability.plugin.eraseNativeFiles();
+  if (!result || result.erased!==true) throw new Error("Native files could not be erased completely.");
+  return {ok:true,erased:true};
+}
 function isNativeVaultMissingError(error){
   const code = String(error && error.code || "").toLowerCase();
   const msg = String(error && error.message || error || "").toLowerCase();
@@ -1404,6 +1472,7 @@ async function restorePreviousNativeVault(fs,previousRaw){
   if (current.ok && current.raw===previousRaw) return true;
   try {
     await fs.writeFile({path:NATIVE_VAULT_PATH,data:previousRaw,directory:NATIVE_VAULT_DIRECTORY,encoding:NATIVE_VAULT_ENCODING});
+    await protectNativeManagedFile(NATIVE_VAULT_PATH,NATIVE_VAULT_DIRECTORY);
   } catch(error){ return false; }
   const verified=await readNativeVaultFile(fs,NATIVE_VAULT_PATH);
   return !!(verified.ok && verified.raw===previousRaw);
@@ -1448,6 +1517,8 @@ async function refreshNativeVaultNow(source){
     return {ok:false,retainedPrevious:true,newer:true};
   }
   if (sameNativeVaultPayload(existing,candidate)){
+    try { await protectNativeManagedFile(NATIVE_VAULT_PATH,NATIVE_VAULT_DIRECTORY); }
+    catch(error){ return nativeVaultFailure(capability,source,nativeVaultErrorText(error),existing,existing.ok); }
     updateNativeVaultDiagnostic({state:"ready",available:true,native:true,platform:capability.platform,verified:true,
       retainedPrevious:false,lastSource:source||null,lastAttemptAt:attemptedAt,lastVerifiedAt:existing.record.savedAt||null,lastError:null});
     return {ok:true,unchanged:true};
@@ -1484,6 +1555,12 @@ async function refreshNativeVaultNow(source){
     const retained=await restorePreviousNativeVault(capability.fs,existingRead.ok?existingRead.raw:null);
     await deleteNativeVaultFileQuiet(capability.fs,NATIVE_VAULT_CANDIDATE_PATH);
     return nativeVaultFailure(capability,source,"Native vault final read-back did not match.",existing,retained);
+  }
+  try { await protectNativeManagedFile(NATIVE_VAULT_PATH,NATIVE_VAULT_DIRECTORY); }
+  catch(error){
+    const retained=await restorePreviousNativeVault(capability.fs,existingRead.ok?existingRead.raw:null);
+    await deleteNativeVaultFileQuiet(capability.fs,NATIVE_VAULT_CANDIDATE_PATH);
+    return nativeVaultFailure(capability,source,"Native vault backup exclusion failed: "+nativeVaultErrorText(error),existing,retained);
   }
   await deleteNativeVaultFileQuiet(capability.fs,NATIVE_VAULT_CANDIDATE_PATH);
   updateNativeVaultDiagnostic({state:"ready",available:true,native:true,platform:capability.platform,verified:true,
@@ -1629,6 +1706,7 @@ async function writeVerifiedNativeRestoreQuarantineRaw(fs,raw){
   }
   try {
     await fs.writeFile({path:NATIVE_RESTORE_QUARANTINE_PATH,data:raw,directory:NATIVE_VAULT_DIRECTORY,encoding:NATIVE_VAULT_ENCODING});
+    await protectNativeManagedFile(NATIVE_RESTORE_QUARANTINE_PATH,NATIVE_VAULT_DIRECTORY);
   } catch(error){
     return {ok:false,code:"quarantine-write",reason:"Native restore quarantine write failed: "+nativeVaultErrorText(error),error:error};
   }
