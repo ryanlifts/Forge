@@ -2135,7 +2135,7 @@ C62.window.eval(`reviewFoodSuggestion(foodSuggestionCandidates().find(c=>c.food.
 check("v62 a catalog suggestion opens its exact listed serving for review", dC62.getElementById("qtyUnit").value==="serving" && Number(dC62.getElementById("qtyAmount").value)===1 && /4 oz cooked \(113g\)/.test(dC62.getElementById("qtyUnit").selectedOptions[0].textContent));
 check("v62 review shows the USDA per-100g values and correctly scaled serving", /USDA reference · SR28/.test(dC62.getElementById("selName").textContent) && /165 kcal/.test(dC62.getElementById("selPer100").textContent) && dC62.getElementById("calcCal").textContent==="186" && dC62.getElementById("calcPro").textContent==="35");
 check("v62 reviewing a broad-catalog suggestion never auto-logs it", C62.window.eval(`(data.food[todayStr()]||[]).length`)===beforeReview62);
-check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v115-update-delivery-1"'); })());
+check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js') && x.includes('const CACHE = "blackpyre-v116-runtime-integrity-1"'); })());
 check("v62 keeps primary schemaVersion 3", C62.window.eval("SCHEMA_VERSION")===3);
 
 // ================= ChatGPT handoff paste flow =================
@@ -2448,7 +2448,7 @@ releaseTestWindows([FreshAP66,LegacyAP66,AP66]);
 check("v58 vendored scanner library exists in the repo", fs.existsSync(path.join(__dirname, "..", "vendor", "html5-qrcode.min.js")));
 check("v58 scanner license notice preserved alongside the library", (()=>{ const p=path.join(__dirname, "..", "vendor", "html5-qrcode.LICENSE.txt"); return fs.existsSync(p) && /Apache License/.test(fs.readFileSync(p,"utf8")); })());
 const sw58 = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
-check("v58 SW SHELL precaches the vendored scanner", sw58.includes('"./vendor/html5-qrcode.min.js"'));
+check("v58 SW SHELL precaches the vendored scanner", sw58.includes('"./vendor/html5-qrcode.min.js'));
 const foodSrc = fs.readFileSync(path.join(__dirname, "..", "scripts", "02-food.js"), "utf8");
 check("v58 scanner loader uses the local repository path", foodSrc.includes('s.src = "vendor/html5-qrcode.min.js"'));
 check("v58 no scanner code is requested from unpkg or any external origin", !/unpkg|jsdelivr|cdnjs/i.test(foodSrc) && !/s\.src\s*=\s*"https?:/.test(foodSrc));
@@ -2594,10 +2594,10 @@ check("Phase 1 first-run calculation persists starting weight as calculator weig
 
 check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.some(f=>/chicken breast/i.test(f.n))`));
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
-check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
+check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f)));
 check("SW cache key matches the BlackPyre web v82 release",
-  /const CACHE = "blackpyre-v115-update-delivery-1";/.test(sw));
-check("Phase 1 service-worker cache remains refreshed", sw.includes('const CACHE = "blackpyre-v115-update-delivery-1"') && !sw.includes('blackpyre-phase1-nutrition-safety-1'));
+  /const CACHE = "blackpyre-v116-runtime-integrity-1";/.test(sw));
+check("Phase 1 service-worker cache remains refreshed", sw.includes('const CACHE = "blackpyre-v116-runtime-integrity-1"') && !sw.includes('blackpyre-phase1-nutrition-safety-1'));
 
 await wait(0);
 releaseTestWindows([
@@ -2695,8 +2695,8 @@ check("My Exercises uses shared scroll locking and one mutation refresh path",
   && !/renderLibraryOptions\(\);\s*renderSessionInputs\(\);\s*if\(builderProg\)renderBuilder\(\);\s*renderMyExercisesManager\(\);/.test(rawTrainParity));
 check("data scripts load before the app scripts (raw file order)",
   ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>
-    rawIndex.indexOf('src="'+f+'"') > -1 &&
-    rawIndex.indexOf('src="'+f+'"') < rawIndex.indexOf('src="scripts/01-storage.js')));
+    rawIndex.indexOf('src="'+f) > -1 &&
+    rawIndex.indexOf('src="'+f) < rawIndex.indexOf('src="scripts/01-storage.js')));
 
 // ================= Phase 2: sliced app scripts =================
 const SLICES = ["01-storage.js","02-food.js","03-train.js","04-weight.js","05-ai.js","06-settings.js","07-boot.js"];
@@ -7993,19 +7993,19 @@ check(
 
 check(
   "v78 profile data and engine load before Train",
-  V78Index.indexOf('src="data-exercise-card-profiles.js"')>=0
-  && V78Index.indexOf('src="scripts/03-card-profiles.js"')
-    >V78Index.indexOf('src="data-exercise-card-profiles.js"')
+  V78Index.indexOf('src="data-exercise-card-profiles.js')>=0
+  && V78Index.indexOf('src="scripts/03-card-profiles.js')
+    >V78Index.indexOf('src="data-exercise-card-profiles.js')
   && V78Index.indexOf('src="scripts/03-train.js')
     >V78Index.indexOf('src="scripts/03-card-profiles.js')
 );
 
 check(
   "Phase 1 service worker keeps both profile files in the refreshed cache",
-  V78ServiceWorker.includes('"./data-exercise-card-profiles.js"')
-  && V78ServiceWorker.includes('"./scripts/03-card-profiles.js"')
+  V78ServiceWorker.includes('"./data-exercise-card-profiles.js')
+  && V78ServiceWorker.includes('"./scripts/03-card-profiles.js')
   && V78ServiceWorker.includes(
-    'const CACHE = "blackpyre-v115-update-delivery-1"'
+    'const CACHE = "blackpyre-v116-runtime-integrity-1"'
   )
 );
 

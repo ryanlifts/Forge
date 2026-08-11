@@ -1372,7 +1372,18 @@ function restoreBackupEnvelope(b){
     }
     applyPreparedState(prepared);
     refreshLastKnownGood("restore");
-    renderDayOptions(); renderSessionInputs(); renderAll();
+
+    try { renderDayOptions(); }
+    catch(error){
+      console.error("BlackPyre post-restore day render failed",error);
+    }
+
+    try { renderSessionInputs(); }
+    catch(error){
+      console.error("BlackPyre post-restore session render failed",error);
+    }
+
+    renderAll();
     flashSave("Backup restored ✓");
     ackBtn("importDataBtn", "✓ Restored");
     return {ok:true};

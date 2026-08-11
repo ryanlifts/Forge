@@ -110,6 +110,28 @@ function markBrandOnboardingCompleted(){
   } catch(e){ return false; }
 }
 function cloneJSON(v){ return JSON.parse(JSON.stringify(v)); }
+/* BLACKPYRE_V116_DURATION_FORMATTER_REPAIR
+ * Shared duration formatter for legacy/time-based saved workout values.
+ * A missing display helper must never abort History or PR rendering.
+ */
+function formatDuration(value){
+  const number=Number(value);
+  if(!Number.isFinite(number) || number<0) return "";
+  const total=Math.round(number);
+  const hours=Math.floor(total/3600);
+  const minutes=Math.floor((total%3600)/60);
+  const seconds=total%60;
+  if(hours){
+    return hours+"h"
+      +(minutes?" "+minutes+"m":"")
+      +(seconds?" "+seconds+"s":"");
+  }
+  if(minutes){
+    return minutes+"m"
+      +(seconds?" "+seconds+"s":"");
+  }
+  return seconds+"s";
+}
 
 // ================== nutrition safety contract ==================
 // One shared source of truth for every calculator, saved target, schedule, and
@@ -2383,3 +2405,51 @@ primaryTabs.forEach((btn,index)=>{
     primaryTabs[next].click();
   });
 });
+
+
+/* BLACKPYRE_V116_RUNTIME_DIAGNOSTIC */
+const BLACKPYRE_WEB_RUNTIME_VERSION = "web-v116-runtime-integrity-1";
+const __blackpyreBaseStorageDiagnostic = makeStorageDiagnosticEnvelope;
+makeStorageDiagnosticEnvelope = function(){
+  const payload = __blackpyreBaseStorageDiagnostic();
+  if (!payload || !payload.ok || !payload.envelope) return payload;
+
+  let persistedWorkoutCount = null;
+  try {
+    const primary =
+      typeof currentPrimaryDataStatus==="function"
+        ? currentPrimaryDataStatus()
+        : null;
+    persistedWorkoutCount =
+      primary && primary.ok
+        ? primary.workouts
+        : null;
+  } catch(error){}
+
+  payload.envelope.runtimeVersion =
+    BLACKPYRE_WEB_RUNTIME_VERSION;
+
+  payload.envelope.runtimeWorkoutCount =
+    Array.isArray(data&&data.workouts)
+      ? data.workouts.length
+      : null;
+
+  payload.envelope.persistedWorkoutCount =
+    persistedWorkoutCount;
+
+  try {
+    payload.envelope.serviceWorkerController =
+      typeof navigator!=="undefined"
+      && navigator.serviceWorker
+      && navigator.serviceWorker.controller
+        ? String(
+            navigator.serviceWorker.controller.scriptURL
+            || ""
+          )
+        : null;
+  } catch(error){
+    payload.envelope.serviceWorkerController = null;
+  }
+
+  return payload;
+};

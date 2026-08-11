@@ -64,13 +64,62 @@ function renderNextWorkout(){
   btn.textContent = "Start next: "+(nd.id?nd.id+" · ":"")+nd.title;
   btn.classList.remove("hidden");
 }
-function renderAll(){ renderDash(); renderFood(); renderWork(); renderWeight(); renderSettings(); renderMeals(); renderPRs(); renderTDEE(); renderNextWorkout(); renderWeek(); renderProjection(); renderMeasureToggle(); renderMeasure(); renderWater(); renderAccentRow(); renderPlateUnits(); renderBackup();
-  const st = computeStreak();
-  const sl = document.getElementById("streakLine");
-  if (st>=2){ sl.textContent = ""+st+"-day logging streak — keep the chain alive"; sl.classList.remove("hidden"); }
-  else sl.classList.add("hidden");
-  document.getElementById("waterToggleBtn").textContent = cfg.waterOn ? "Disable water tracking" : "Enable water tracking";
-  renderAIGates();
+function renderAllPart(label,fn){
+  try {
+    fn();
+    return true;
+  } catch(error){
+    console.error("BlackPyre render failed: "+label,error);
+    return false;
+  }
+}
+function renderAll(){
+  if(typeof refreshRicherPersistedDataForDisplay==="function"){
+    try { refreshRicherPersistedDataForDisplay(); }
+    catch(error){
+      console.error("BlackPyre persisted-data refresh failed",error);
+    }
+  }
+
+  // History goes first. Unrelated screen failures cannot make valid saved
+  // workout history look empty.
+  renderAllPart("training history",renderWork);
+  renderAllPart("dashboard",renderDash);
+  renderAllPart("food",renderFood);
+  renderAllPart("weight",renderWeight);
+  renderAllPart("settings",renderSettings);
+  renderAllPart("meals",renderMeals);
+  renderAllPart("personal records",renderPRs);
+  renderAllPart("adaptive TDEE",renderTDEE);
+  renderAllPart("next workout",renderNextWorkout);
+  renderAllPart("week",renderWeek);
+  renderAllPart("projection",renderProjection);
+  renderAllPart("measurement toggle",renderMeasureToggle);
+  renderAllPart("measurements",renderMeasure);
+  renderAllPart("water",renderWater);
+  renderAllPart("accent",renderAccentRow);
+  renderAllPart("plate units",renderPlateUnits);
+  renderAllPart("backup",renderBackup);
+
+  renderAllPart("streak",()=>{
+    const st = computeStreak();
+    const sl = document.getElementById("streakLine");
+    if (st>=2){
+      sl.textContent = ""+st+"-day logging streak — keep the chain alive";
+      sl.classList.remove("hidden");
+    } else {
+      sl.classList.add("hidden");
+    }
+  });
+
+  renderAllPart("water toggle",()=>{
+    document.getElementById("waterToggleBtn").textContent =
+      cfg.waterOn
+        ? "Disable water tracking"
+        : "Enable water tracking";
+  });
+
+  renderAllPart("AI gates",renderAIGates);
 }
 
 
@@ -348,7 +397,7 @@ if ("serviceWorker" in navigator) {
   });
 
   window.addEventListener("load", ()=>{
-    navigator.serviceWorker.register("sw.js?v=web-v115-update-delivery-1",{updateViaCache:"none"})
+    navigator.serviceWorker.register("sw.js?v=web-v116-runtime-integrity-1",{updateViaCache:"none"})
       .then((registration)=>{
         pwaRegistration = registration;
         if (hadController && registration.waiting && !updateReloaded) showUpdateToast();

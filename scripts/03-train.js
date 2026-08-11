@@ -13839,19 +13839,34 @@ let workHistoryVisibleCount = WORK_HISTORY_PAGE_SIZE;
 
 function renderWork(){
   if(typeof refreshRicherPersistedDataForDisplay==="function"){
-    try { refreshRicherPersistedDataForDisplay(); } catch(e){}
+    try { refreshRicherPersistedDataForDisplay(); }
+    catch(error){
+      console.error("BlackPyre persisted workout refresh failed",error);
+    }
   }
-  renderWorkoutDraftCard();
-  renderPRs();
-  renderProgramIdentity();
 
   const el = document.getElementById("workHistory");
   const countEl = document.getElementById("workHistoryCount");
+  const workoutCount =
+    Array.isArray(data&&data.workouts)
+      ? data.workouts.length
+      : 0;
 
   if (countEl){
     countEl.textContent =
-      data.workouts.length+" session"+(data.workouts.length===1?"":"s");
+      workoutCount+" session"+(workoutCount===1?"":"s");
   }
+
+  [
+    ["workout draft",renderWorkoutDraftCard],
+    ["personal records",renderPRs],
+    ["program identity",renderProgramIdentity]
+  ].forEach(item=>{
+    try { item[1](); }
+    catch(error){
+      console.error("BlackPyre "+item[0]+" render failed",error);
+    }
+  });
 
   if(data.workouts.length===0){
     workHistoryVisibleCount = WORK_HISTORY_PAGE_SIZE;
