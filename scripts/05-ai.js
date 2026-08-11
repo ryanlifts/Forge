@@ -6,7 +6,15 @@ function renderWater(){
   card.classList.toggle("hidden", !cfg.waterOn);
   if (!cfg.waterOn) return;
   if (!data.water) data.water = {};
-  document.getElementById("waterCount").textContent = data.water[todayStr()] || 0;
+  const waterToday=Number(data.water[todayStr()]||0);
+  const waterCount=document.getElementById("waterCount");
+  waterCount.textContent=waterToday;
+  const waterUnit=document.getElementById("waterUnit")||waterCount.nextElementSibling;
+  if(waterUnit){
+    waterUnit.id="waterUnit";
+    waterUnit.textContent=waterToday===1?"GLASS TODAY":"GLASSES TODAY";
+    waterUnit.style.textTransform="uppercase";
+  }
   const history=document.getElementById("waterHistory");
   const dates=Object.keys(data.water)
     .filter(date=>/^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(Number(data.water[date])) && Number(data.water[date])>=0)
