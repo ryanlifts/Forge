@@ -1166,11 +1166,89 @@ function getStoredLkgStatuses(){
     {key:LKG_PREVIOUS_KEY, tier:"previous"},
     {key:LKG_OLDER_KEY, tier:"older"}
   ];
+  return defs.map(d=>{
+    let raw;
+    try {
+      raw=localStorage.getItem(d.key);
+    } catch(e){
+      return {
+        key:d.key,
+        tier:d.tier,
+        ok:false,
+        code:"storage-read",
+        reason:"Browser storage would not allow BlackPyre to read this recovery snapshot."
+      };
+    }
+    try {
+      return Object.assign({key:d.key,tier:d.tier},inspectLkgRaw(raw));
+    } catch(e){
+      return {
+        key:d.key,
+        tier:d.tier,
+        ok:false,
+        code:"inspect",
+        reason:"This recovery snapshot could not be validated safely."
+      };
+    }
+  });
+}
+
+function currentPrimaryDataStatus(){
   try {
-    return defs.map(d=>Object.assign({key:d.key,tier:d.tier}, inspectLkgRaw(localStorage.getItem(d.key))));
+    const raw = localStorage.getItem(DATA_KEY);
+    if (raw===null){
+      return {ok:false,code:"missing",reason:"Current saved data is unavailable."};
+    }
+    const parsed=JSON.parse(raw);
+    validateDataShape(parsed);
+    const normalized=cloneJSON(parsed);
+    normalizeDataState(normalized);
+    const foodEntries=Object.keys(normalized.food||{}).reduce(
+      (total,date)=>total+(Array.isArray(normalized.food[date])?normalized.food[date].length:0),
+      0
+    );
+    return {
+      ok:true,
+      raw:raw,
+      data:normalized,
+      workouts:Array.isArray(normalized.workouts)?normalized.workouts.length:0,
+      weights:Array.isArray(normalized.weights)?normalized.weights.length:0,
+      foodEntries:foodEntries
+    };
   } catch(e){
-    return [{ok:false,code:"storage-read",reason:"Browser storage would not allow BlackPyre to read its recovery snapshots."}];
+    return {
+      ok:false,
+      code:"invalid",
+      reason:"Current saved data could not be validated safely."
+    };
   }
+}
+
+function refreshRicherPersistedDataForDisplay(){
+  const primary=currentPrimaryDataStatus();
+  if(!primary.ok) return primary;
+
+  const runtimeWorkouts=Array.isArray(data&&data.workouts)?data.workouts.length:0;
+  if(primary.workouts<=runtimeWorkouts){
+    return {ok:true,adopted:false,workouts:runtimeWorkouts};
+  }
+
+  const runtimeDraft=data&&data.activeWorkoutDraft;
+  const persistedDraft=primary.data&&primary.data.activeWorkoutDraft;
+  if(runtimeDraft&&!persistedDraft){
+    return {
+      ok:true,
+      adopted:false,
+      code:"active-draft",
+      workouts:runtimeWorkouts
+    };
+  }
+
+  data=cloneJSON(primary.data);
+  if(typeof refreshPrimaryWriteGuardBaselines==="function"){
+    refreshPrimaryWriteGuardBaselines();
+  }
+  return {ok:true,adopted:true,workouts:primary.workouts};
 }
 function snapshotDataScore(status){
   return status && status.ok && status.prepared ? dataContentScore(status.prepared.state.data) : 0;

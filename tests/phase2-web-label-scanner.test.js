@@ -68,7 +68,7 @@ check(
 
 check(
   "v85 no-label-scanner cache is active",
-  /blackpyre-v112-water-card-1/.test(sw)
+  /blackpyre-v113-recovery-history-1/.test(sw)
 );
 
 check(

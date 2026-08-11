@@ -16,6 +16,7 @@ node tests/app-store-phase2-web.test.js
 node tests/web-runtime-history-safety.test.js
 node tests/v111-recovery-water.test.js
 node tests/v112-water-card.test.js
+node tests/v113-recovery-history-visibility.test.js
 node tests/unit.test.js
 node tests/integration.test.js
 node tests/v84-ui-polish.test.js

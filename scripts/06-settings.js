@@ -1073,45 +1073,86 @@ function renderRecoveryStatus(){
   const statuses=getStoredLkgStatuses();
   const valid=statuses.filter(status=>status.ok);
   const count=valid.length;
+  const primary=typeof currentPrimaryDataStatus==="function"
+    ? currentPrimaryDataStatus()
+    : null;
   const restoreBtn=document.getElementById("restoreSnapshotBtn");
   const snapshotMeta=document.getElementById("snapshotMetaLine");
   const snapshotSelect=document.getElementById("snapshotRecoverySelect");
+
   if(snapshotSelect){
     const selected=snapshotSelect.value;
     snapshotSelect.innerHTML="";
+
+    if(count===0){
+      const placeholder=document.createElement("option");
+      placeholder.value="";
+      placeholder.textContent="No validated snapshots — current saved data checked below";
+      placeholder.selected=true;
+      snapshotSelect.appendChild(placeholder);
+    }
+
     statuses.forEach(status=>{
       const option=document.createElement("option");
       option.value=status.ok?status.key:"";
       option.disabled=!status.ok;
       option.textContent=status.ok
         ? snapshotTierLabel(status.tier)+" — "+snapshotWorkoutCount(status)+" workout"+(snapshotWorkoutCount(status)===1?"":"s")+" — "+(status.record.savedAt?new Date(status.record.savedAt).toLocaleString():"date unavailable")
-        : snapshotTierLabel(status.tier)+" — unavailable";
+        : snapshotTierLabel(status.tier)+" — unavailable"+(status.reason?" · "+status.reason:"");
       snapshotSelect.appendChild(option);
     });
-    if(selected&&valid.some(status=>status.key===selected)) snapshotSelect.value=selected;
+
+    if(selected&&valid.some(status=>status.key===selected)){
+      snapshotSelect.value=selected;
+    }else if(valid.length){
+      snapshotSelect.value=valid[0].key;
+    }
   }
+
   if(restoreBtn) restoreBtn.disabled=count===0;
-  if(snapshotMeta) snapshotMeta.textContent=count
-    ? count+" validated recovery snapshot"+(count===1?"":"s")+" stored on this device. Compare the workout counts and date before restoring."
-    : "No validated recovery snapshot is available yet.";
+
+  if(snapshotMeta){
+    const primaryText=primary&&primary.ok
+      ? "Current saved data: "+primary.workouts+" workout"+(primary.workouts===1?"":"s")
+        +" · "+primary.weights+" weigh-in"+(primary.weights===1?"":"s")
+        +" · "+primary.foodEntries+" food entr"+(primary.foodEntries===1?"y":"ies")+". "
+      : "";
+
+    snapshotMeta.textContent=primaryText+(
+      count
+        ? count+" validated recovery snapshot"+(count===1?"":"s")+" stored on this device. Compare the workout counts and date before restoring."
+        : "No validated recovery snapshot is available. Current saved data is left untouched."
+    );
+  }
+
   if (line){
     if (protectedMode) line.textContent = "Automatic recovery is paused while BlackPyre protects the original saved data.";
     else if (lkgStatus.state==="ready") line.textContent = "Automatic recovery protection: ready"+(lkgStatus.savedAt ? " · snapshot "+new Date(lkgStatus.savedAt).toLocaleString() : "")+(lkgStatus.retained ? " · populated snapshot retained" : "")+".";
     else if (lkgStatus.state==="newer") line.textContent = "Automatic recovery protection: a newer-version snapshot is present and was left untouched.";
     else line.textContent = "Automatic recovery protection: unavailable. "+(lkgStatus.message||"");
   }
+
   if (!card) return;
   const q = getStoredQuarantineStatus();
   const dataDetails = document.getElementById("settingsDataDetails");
-  if (q.missing){ card.classList.add("hidden"); if (dataDetails && protectedMode) dataDetails.open = true; return; }
+
+  if (q.missing){
+    card.classList.add("hidden");
+    if (dataDetails && protectedMode) dataDetails.open = true;
+    return;
+  }
+
   card.classList.remove("hidden");
   if (dataDetails) dataDetails.open = true;
+
   const text = document.getElementById("quarantineStatusText");
   if (q.newer) text.textContent = "A recovery copy from a newer BlackPyre is stored. This version will not alter or delete it.";
   else if (q.ok) text.textContent = "Original pre-recovery data is preserved from "+(q.record.quarantinedAt ? new Date(q.record.quarantinedAt).toLocaleString() : "an earlier recovery")+". Delete it only after you are certain the recovered app is correct.";
   else text.textContent = "A recovery record exists but this version cannot fully inspect it. Export it before considering removal.";
+
   document.getElementById("deleteQuarantineBtn").disabled = !!q.newer || q.code==="storage-read";
 }
+
 document.getElementById("exportQuarantineBtn").addEventListener("click", exportStoredQuarantine);
 document.getElementById("deleteQuarantineBtn").addEventListener("click", ()=>{
   const q = getStoredQuarantineStatus();

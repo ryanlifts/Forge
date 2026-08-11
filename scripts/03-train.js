@@ -13838,6 +13838,9 @@ const WORK_HISTORY_PAGE_SIZE = 25;
 let workHistoryVisibleCount = WORK_HISTORY_PAGE_SIZE;
 
 function renderWork(){
+  if(typeof refreshRicherPersistedDataForDisplay==="function"){
+    try { refreshRicherPersistedDataForDisplay(); } catch(e){}
+  }
   renderWorkoutDraftCard();
   renderPRs();
   renderProgramIdentity();
@@ -13868,10 +13871,13 @@ function renderWork(){
     const title = s.title || (dayObj?dayObj.title:s.day) || "Workout";
     const names = Object.keys(s.sets||{});
 
-    const values = names.map(ex=>
-      '<div>'+esc(ex)+': <span style="color:var(--text)">'
-      +esc(formatSets(s.sets[ex]))+'</span></div>'
-    ).join("");
+    const values = names.map(ex=>{
+      let formatted;
+      try { formatted=formatSets(s.sets[ex]); }
+      catch(error){ formatted="Saved entry"; }
+      return '<div>'+esc(ex)+': <span style="color:var(--text)">'
+        +esc(formatted)+'</span></div>';
+    }).join("");
 
     return '<details class="workSession" data-i="'+s.idx+'" style="border-bottom:1px solid var(--border);">'
       +'<summary style="padding:13px 16px; cursor:pointer; list-style:none; display:flex; justify-content:space-between; align-items:center; gap:12px;">'
