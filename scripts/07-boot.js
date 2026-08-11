@@ -318,13 +318,50 @@ document.getElementById("updateReloadBtn").addEventListener("click", applyUpdate
 document.getElementById("updateDismissBtn").addEventListener("click", dismissUpdateToast);
 
 if ("serviceWorker" in navigator) {
-  // capture BEFORE register: no controller means first install, and first install must not toast
+  // Capture BEFORE register: no controller means first install, and first install must not toast.
   const hadController = !!navigator.serviceWorker.controller;
-  // listener attached BEFORE register(), per spec
+  let pwaRegistration = null;
+  let updateCheckInFlight = false;
+
+  function requestServiceWorkerUpdate(registration){
+    if (!registration || updateCheckInFlight) return Promise.resolve();
+    updateCheckInFlight = true;
+    return registration.update()
+      .catch(()=>{})
+      .finally(()=>{ updateCheckInFlight = false; });
+  }
+
+  function checkPwaUpdate(){
+    if (pwaRegistration) return requestServiceWorkerUpdate(pwaRegistration);
+    return navigator.serviceWorker.getRegistration()
+      .then((registration)=>{
+        if (!registration) return;
+        pwaRegistration = registration;
+        return requestServiceWorkerUpdate(registration);
+      })
+      .catch(()=>{});
+  }
+
+  // Listener attached BEFORE register(), per spec.
   navigator.serviceWorker.addEventListener("controllerchange", ()=>{
     if (hadController && !updateReloaded) showUpdateToast();
   });
+
   window.addEventListener("load", ()=>{
-    navigator.serviceWorker.register("sw.js").catch(()=>{});
+    navigator.serviceWorker.register("sw.js?v=web-v115-update-delivery-1",{updateViaCache:"none"})
+      .then((registration)=>{
+        pwaRegistration = registration;
+        if (hadController && registration.waiting && !updateReloaded) showUpdateToast();
+        return requestServiceWorkerUpdate(registration);
+      })
+      .catch(()=>{});
+  });
+
+  // iOS PWAs may remain alive between launches. Recheck whenever the app becomes active
+  // instead of relying only on a browser navigation to notice a newer worker.
+  window.addEventListener("pageshow", checkPwaUpdate);
+  window.addEventListener("focus", checkPwaUpdate);
+  document.addEventListener("visibilitychange", ()=>{
+    if (document.visibilityState==="visible") checkPwaUpdate();
   });
 }

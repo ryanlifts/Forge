@@ -18,6 +18,7 @@ node tests/v111-recovery-water.test.js
 node tests/v112-water-card.test.js
 node tests/v113-recovery-history-visibility.test.js
 node tests/v114-recovery-snapshot-summary.test.js
+node tests/v115-update-delivery.test.js
 node tests/unit.test.js
 node tests/integration.test.js
 node tests/v84-ui-polish.test.js

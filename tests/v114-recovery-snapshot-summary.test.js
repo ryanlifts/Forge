@@ -150,12 +150,12 @@ check(
 
 check(
   "v114 runtime family and cache are version-busted",
-  /blackpyre-v114-recovery-summary-1/.test(rawSw)
-  &&/scripts\/01-storage\.js\?v=web-v114-recovery-summary-1/.test(rawIndex)
-  &&/scripts\/03-train\.js\?v=web-v114-recovery-summary-1/.test(rawIndex)
-  &&/scripts\/05-ai\.js\?v=web-v114-recovery-summary-1/.test(rawIndex)
-  &&/scripts\/06-settings\.js\?v=web-v114-recovery-summary-1/.test(rawIndex)
-  &&/scripts\/07-boot\.js\?v=web-v114-recovery-summary-1/.test(rawIndex)
+  /blackpyre-v115-update-delivery-1/.test(rawSw)
+  &&/scripts\/01-storage\.js\?v=web-v115-update-delivery-1/.test(rawIndex)
+  &&/scripts\/03-train\.js\?v=web-v115-update-delivery-1/.test(rawIndex)
+  &&/scripts\/05-ai\.js\?v=web-v115-update-delivery-1/.test(rawIndex)
+  &&/scripts\/06-settings\.js\?v=web-v115-update-delivery-1/.test(rawIndex)
+  &&/scripts\/07-boot\.js\?v=web-v115-update-delivery-1/.test(rawIndex)
 );
 
 check(

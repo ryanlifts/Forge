@@ -2,7 +2,7 @@
 // NOTE: sw.js deliberately does NOT appear in SHELL. The browser fetches the service
 // worker itself through its own update mechanism (byte-compare on navigation); precaching
 // it would freeze updates and break the cache-bump release ritual. Do not "fix" this.
-const CACHE = "blackpyre-v114-recovery-summary-1";
+const CACHE = "blackpyre-v115-update-delivery-1";
 const SHELL = [
   "./",
   "./index.html",
@@ -12,14 +12,14 @@ const SHELL = [
   "./data-faq.js",
   "./data-exercises.js",
   "./data-exercise-card-profiles.js",
-  "./scripts/01-storage.js?v=web-v114-recovery-summary-1",
+  "./scripts/01-storage.js?v=web-v115-update-delivery-1",
   "./scripts/02-food.js",
   "./scripts/03-card-profiles.js",
-  "./scripts/03-train.js?v=web-v114-recovery-summary-1",
+  "./scripts/03-train.js?v=web-v115-update-delivery-1",
   "./scripts/04-weight.js",
-  "./scripts/05-ai.js?v=web-v114-recovery-summary-1",
-  "./scripts/06-settings.js?v=web-v114-recovery-summary-1",
-  "./scripts/07-boot.js?v=web-v114-recovery-summary-1",
+  "./scripts/05-ai.js?v=web-v115-update-delivery-1",
+  "./scripts/06-settings.js?v=web-v115-update-delivery-1",
+  "./scripts/07-boot.js?v=web-v115-update-delivery-1",
   "./vendor/html5-qrcode.min.js",
   "./manifest.json",
   "./icon-192.png",
@@ -54,7 +54,22 @@ self.addEventListener("fetch", (e) => {
     return; // let it hit the network normally
   }
 
-  // Fonts + app shell: cache-first with network fallback + backfill
+  // Navigations are network-first while online so an installed PWA cannot remain pinned
+  // to an old cached index.html. Offline, fall back to the requested cached page and then
+  // the current cached app shell.
+  if (e.request.mode === "navigate") {
+    e.respondWith(
+      fetch(e.request,{cache:"no-store"})
+        .catch(() =>
+          caches.match(e.request).then((cached) =>
+            cached || caches.match("./index.html")
+          )
+        )
+    );
+    return;
+  }
+
+  // Static assets: cache-first with network fallback + backfill.
   e.respondWith(
     caches.match(e.request).then((cached) => {
       if (cached) return cached;

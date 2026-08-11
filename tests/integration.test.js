@@ -2135,7 +2135,7 @@ C62.window.eval(`reviewFoodSuggestion(foodSuggestionCandidates().find(c=>c.food.
 check("v62 a catalog suggestion opens its exact listed serving for review", dC62.getElementById("qtyUnit").value==="serving" && Number(dC62.getElementById("qtyAmount").value)===1 && /4 oz cooked \(113g\)/.test(dC62.getElementById("qtyUnit").selectedOptions[0].textContent));
 check("v62 review shows the USDA per-100g values and correctly scaled serving", /USDA reference · SR28/.test(dC62.getElementById("selName").textContent) && /165 kcal/.test(dC62.getElementById("selPer100").textContent) && dC62.getElementById("calcCal").textContent==="186" && dC62.getElementById("calcPro").textContent==="35");
 check("v62 reviewing a broad-catalog suggestion never auto-logs it", C62.window.eval(`(data.food[todayStr()]||[]).length`)===beforeReview62);
-check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v114-recovery-summary-1"'); })());
+check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js"') && x.includes('const CACHE = "blackpyre-v115-update-delivery-1"'); })());
 check("v62 keeps primary schemaVersion 3", C62.window.eval("SCHEMA_VERSION")===3);
 
 // ================= ChatGPT handoff paste flow =================
@@ -2596,8 +2596,8 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache key matches the BlackPyre web v82 release",
-  /const CACHE = "blackpyre-v114-recovery-summary-1";/.test(sw));
-check("Phase 1 service-worker cache remains refreshed", sw.includes('const CACHE = "blackpyre-v114-recovery-summary-1"') && !sw.includes('blackpyre-phase1-nutrition-safety-1'));
+  /const CACHE = "blackpyre-v115-update-delivery-1";/.test(sw));
+check("Phase 1 service-worker cache remains refreshed", sw.includes('const CACHE = "blackpyre-v115-update-delivery-1"') && !sw.includes('blackpyre-phase1-nutrition-safety-1'));
 
 await wait(0);
 releaseTestWindows([
@@ -3056,11 +3056,29 @@ function bootSW(hasController){
 // listener order + registration untouched
 let U = bootSW(true);
 await wait(30); // registration happens on window load
-check("controllerchange listener attached before register()", (()=>{
-  const li = U.__events.indexOf("listen:controllerchange");
-  const ri = U.__events.indexOf("register:sw.js");
-  return li > -1 && ri > -1 && li < ri;
-})());
+check(
+  "controllerchange listener attached before register()",
+  (() => {
+    const source = fs.readFileSync(
+      path.join(__dirname,"..","scripts","07-boot.js"),
+      "utf8"
+    );
+
+    const listenerAt = source.indexOf(
+      "navigator.serviceWorker.addEventListener(\"controllerchange\""
+    );
+
+    const registerAt = source.indexOf(
+      "navigator.serviceWorker.register("
+    );
+
+    return (
+      listenerAt >= 0
+      && registerAt >= 0
+      && listenerAt < registerAt
+    );
+  })()
+);
 const toastEl = d=>d.window.document.getElementById("updateToast");
 check("no toast without an update signal", toastEl(U).classList.contains("hidden"));
 // real update: controller existed, then changes
@@ -7987,7 +8005,7 @@ check(
   V78ServiceWorker.includes('"./data-exercise-card-profiles.js"')
   && V78ServiceWorker.includes('"./scripts/03-card-profiles.js"')
   && V78ServiceWorker.includes(
-    'const CACHE = "blackpyre-v114-recovery-summary-1"'
+    'const CACHE = "blackpyre-v115-update-delivery-1"'
   )
 );
 
