@@ -9,12 +9,12 @@ function renderWater(){
   document.getElementById("waterCount").textContent = data.water[todayStr()] || 0;
   const history=document.getElementById("waterHistory");
   const dates=Object.keys(data.water)
-    .filter(date=>/^\d{4}-\d{2}-\d{2}$/.test(date) && Number(data.water[date])>0)
+    .filter(date=>/^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(Number(data.water[date])) && Number(data.water[date])>=0)
     .sort((a,b)=>b.localeCompare(a))
     .slice(0,7);
   history.innerHTML=dates.length
     ? '<details><summary class="label" style="cursor:pointer; margin-bottom:0;">Recent water history</summary><div style="margin-top:8px;">'+dates.map(date=>
-        '<div class="list-item" style="justify-content:space-between; gap:20px;"><span style="flex:1; color:var(--dim);">'+fmtDate(date)+'</span><span style="flex:0 0 auto; color:var(--dim); white-space:nowrap;">'+Number(data.water[date])+' '+(Number(data.water[date])===1?'GLASS':'GLASSES')+'</span></div>'
+        '<div class="list-item" style="justify-content:space-between; gap:20px;"><span style="flex:1; color:var(--dim);">'+fmtDate(date)+'</span><span class="water-history-value" style="flex:0 0 auto; color:var(--dim); white-space:nowrap;">'+Number(data.water[date])+' '+(Number(data.water[date])===1?'GLASS':'GLASSES')+'</span></div>'
       ).join("")+'</div></details>'
     : '<div class="note">Your dated water history will appear here.</div>';
 }

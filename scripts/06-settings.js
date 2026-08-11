@@ -1027,41 +1027,72 @@ function exportStoredQuarantine(){
   flashSave("Recovery copy exported ✓");
   return true;
 }
-function restoreBestSnapshotFromSettings(options){
-  if (protectedMode){
-    if (typeof openRecoveryPanel==="function" && recoveryWritesAllowed()) openRecoveryPanel();
-    else flashSave("Snapshot restore is available through Protected mode recovery", true);
+function snapshotWorkoutCount(status){
+  return status&&status.ok&&status.prepared&&Array.isArray(status.prepared.state.data.workouts)?status.prepared.state.data.workouts.length:0;
+}
+function snapshotTierLabel(tier){
+  return tier==="current"?"Current recovery":tier==="previous"?"Previous recovery":tier==="older"?"Older recovery":"Recovery snapshot";
+}
+function restoreSnapshotFromSettingsKey(key,options){
+  if(protectedMode){
+    if(typeof openRecoveryPanel==="function"&&recoveryWritesAllowed()) openRecoveryPanel();
+    else flashSave("Snapshot restore is available through Protected mode recovery",true);
     return {ok:false,code:"protected"};
   }
-  const candidate = buildLkgRecoveryCandidate();
-  if (!candidate.ok){ flashSave(candidate.reason || "No validated recovery snapshot is available", true); return candidate; }
-  if (!(options&&options.confirmed)){
-    const ok = confirm("Restore the best validated recovery snapshot? BlackPyre will preserve the exact current state in a recovery copy before replacing anything.\n\n"+candidate.summary);
-    if (!ok) return {ok:false,code:"cancelled"};
+  const candidate=buildLkgRecoveryCandidateForKey(key);
+  if(!candidate.ok){ flashSave(candidate.reason||"That recovery snapshot is unavailable",true); return candidate; }
+  const status=getStoredLkgStatuses().find(item=>item.key===key);
+  if(!(options&&options.confirmed)){
+    const count=snapshotWorkoutCount(status);
+    const ok=confirm("Restore "+snapshotTierLabel(status&&status.tier)+"?\n\n"+count+" workout"+(count===1?"":"s")+" in this snapshot.\n\n"+candidate.summary+"\n\nBlackPyre will preserve the exact current state in a recovery copy before replacing anything.");
+    if(!ok) return {ok:false,code:"cancelled"};
   }
-  const result = performRecoveryCandidate(candidate,Object.assign({allowNormalRestore:true},options||{}));
-  if (result.code==="quarantine-conflict"){
-    const replace = confirm("A different recovery copy is already stored. Replace it with the exact current state before restoring this snapshot?");
-    if (replace) return restoreBestSnapshotFromSettings({confirmed:true,replaceExistingQuarantine:true});
+  const result=performRecoveryCandidate(candidate,Object.assign({allowNormalRestore:true},options||{}));
+  if(result.code==="quarantine-conflict"&&!(options&&options.replaceExistingQuarantine)){
+    const replace=confirm("A different recovery copy is already stored. Replace it with the exact current state before restoring this selected snapshot?");
+    if(replace) return restoreSnapshotFromSettingsKey(key,{confirmed:true,replaceExistingQuarantine:true});
   }
-  if (result.ok){
-    flashSave("Recovery snapshot restored ✓");
-    ackBtn("restoreSnapshotBtn","✓ Restored");
-    renderBackup();
-  } else if (result.code!=="cancelled") flashSave(result.reason || "Snapshot restore could not be completed", true);
+  if(result.ok){ flashSave("Recovery snapshot restored ✓"); ackBtn("restoreSnapshotBtn","✓ Restored"); renderBackup(); }
+  else if(result.code!=="cancelled") flashSave(result.reason||"Snapshot restore could not be completed",true);
   return result;
 }
-document.getElementById("restoreSnapshotBtn").addEventListener("click", ()=>restoreBestSnapshotFromSettings());
+function restoreBestSnapshotFromSettings(options){
+  const best=getBestStoredLkgStatus();
+  if(!best.ok) return {ok:false,code:best.code||"missing",reason:best.reason||"No validated recovery snapshot is available"};
+  return restoreSnapshotFromSettingsKey(best.key,options);
+}
+function restoreSelectedSnapshotFromSettings(){
+  const select=document.getElementById("snapshotRecoverySelect");
+  if(!select||!select.value){ flashSave("Choose a recovery snapshot first",true); return {ok:false,code:"missing"}; }
+  return restoreSnapshotFromSettingsKey(select.value);
+}
+document.getElementById("restoreSnapshotBtn").addEventListener("click",restoreSelectedSnapshotFromSettings);
 function renderRecoveryStatus(){
   const line = document.getElementById("recoveryStatusLine");
   const card = document.getElementById("quarantineCard");
-  const best = getBestStoredLkgStatus();
-  const count = validSnapshotCount();
-  const restoreBtn = document.getElementById("restoreSnapshotBtn");
-  const snapshotMeta = document.getElementById("snapshotMetaLine");
-  if (restoreBtn) restoreBtn.disabled = !best.ok;
-  if (snapshotMeta) snapshotMeta.textContent = best.ok
-    ? count+" validated recovery snapshot"+(count===1?"":"s")+" stored on this device. Best snapshot: "+(best.record.savedAt ? new Date(best.record.savedAt).toLocaleString() : "date unavailable")+"."
+  const statuses=getStoredLkgStatuses();
+  const valid=statuses.filter(status=>status.ok);
+  const count=valid.length;
+  const restoreBtn=document.getElementById("restoreSnapshotBtn");
+  const snapshotMeta=document.getElementById("snapshotMetaLine");
+  const snapshotSelect=document.getElementById("snapshotRecoverySelect");
+  if(snapshotSelect){
+    const selected=snapshotSelect.value;
+    snapshotSelect.innerHTML="";
+    statuses.forEach(status=>{
+      const option=document.createElement("option");
+      option.value=status.ok?status.key:"";
+      option.disabled=!status.ok;
+      option.textContent=status.ok
+        ? snapshotTierLabel(status.tier)+" — "+snapshotWorkoutCount(status)+" workout"+(snapshotWorkoutCount(status)===1?"":"s")+" — "+(status.record.savedAt?new Date(status.record.savedAt).toLocaleString():"date unavailable")
+        : snapshotTierLabel(status.tier)+" — unavailable";
+      snapshotSelect.appendChild(option);
+    });
+    if(selected&&valid.some(status=>status.key===selected)) snapshotSelect.value=selected;
+  }
+  if(restoreBtn) restoreBtn.disabled=count===0;
+  if(snapshotMeta) snapshotMeta.textContent=count
+    ? count+" validated recovery snapshot"+(count===1?"":"s")+" stored on this device. Compare the workout counts and date before restoring."
     : "No validated recovery snapshot is available yet.";
   if (line){
     if (protectedMode) line.textContent = "Automatic recovery is paused while BlackPyre protects the original saved data.";

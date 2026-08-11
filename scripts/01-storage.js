@@ -1407,6 +1407,18 @@ function buildReadableRecoveryCandidate(){
   if (!prepared.ok) return {ok:false, code:"prepare", reason:prepared.reason};
   return {ok:true, source:"readable", raws:raws, prepared:prepared, parts:parts, summary:recoverySummary(parts)};
 }
+function buildLkgRecoveryCandidateForKey(key){
+  const lkg=getStoredLkgStatuses().find(status=>status.key===key);
+  if(!lkg||!lkg.ok) return {ok:false,code:lkg&&lkg.code?lkg.code:"missing",reason:lkg&&lkg.reason?lkg.reason:"That recovery snapshot is unavailable or did not validate."};
+  const read=readStorageStrings();
+  if(!read.ok) return {ok:false,code:"storage-read",reason:read.reason};
+  const raws={cfg:lkg.record.strings.cfg,data:lkg.record.strings.data,program:lkg.record.strings.program};
+  const prepared=prepareState(raws.cfg,raws.data,raws.program,{originalStrings:read.originals});
+  if(!prepared.ok) return {ok:false,code:"prepare",reason:prepared.reason};
+  return {ok:true,source:"lkg",raws:raws,prepared:prepared,lkg:lkg.record,lkgKey:lkg.key,lkgTier:lkg.tier,
+    summary:"Restore settings, logs, and training program from the "+(lkg.tier||"selected")+" recovery snapshot saved "+(lkg.record.savedAt?new Date(lkg.record.savedAt).toLocaleString():"at an unknown time")+"."};
+}
+
 function buildLkgRecoveryCandidate(){
   const lkg = getBestStoredLkgStatus();
   if (!lkg.ok) return {ok:false, code:lkg.code, reason:lkg.reason || "No validated last-known-good snapshot is available."};
