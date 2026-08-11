@@ -23,7 +23,7 @@ R.window.eval(`data.workouts=[${[0,1,2].map(i=>'('+JSON.stringify({date:'2026-08
 const counts=R.window.eval(`Object.fromEntries(getStoredLkgStatuses().filter(s=>s.ok).map(s=>[s.tier,s.prepared.state.data.workouts.length]))`);
 check("v111 snapshot generations expose 0 current, 4 previous, 3 older workouts",counts.current===0&&counts.previous===4&&counts.older===3);
 const options=[...R.window.document.getElementById("snapshotRecoverySelect").options].map(o=>o.textContent);
-check("v111 Settings shows Current Previous Older with workout counts",options.some(x=>/Current recovery — 0 workouts/.test(x))&&options.some(x=>/Previous recovery — 4 workouts/.test(x))&&options.some(x=>/Older recovery — 3 workouts/.test(x)));
+check("v111 Settings still exposes Current Previous Older without crowding the dropdown with workout counts",options.some(x=>/^Current recovery — /.test(x))&&options.some(x=>/^Previous recovery — /.test(x))&&options.some(x=>/^Older recovery — /.test(x))&&options.every(x=>!/workout/i.test(x)));
 const before=R.window.localStorage.getItem("forge:data");
 const result=R.window.eval(`restoreSnapshotFromSettingsKey(LKG_PREVIOUS_KEY,{confirmed:true})`);
 check("v111 explicitly selected Previous snapshot restores four workouts",result.ok&&R.window.eval("data.workouts.length")===4);

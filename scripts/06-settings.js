@@ -1033,6 +1033,53 @@ function snapshotWorkoutCount(status){
 function snapshotTierLabel(tier){
   return tier==="current"?"Current recovery":tier==="previous"?"Previous recovery":tier==="older"?"Older recovery":"Recovery snapshot";
 }
+function snapshotSavedLabel(status){
+  if(!status||!status.ok||!status.record||!status.record.savedAt) return "date unavailable";
+  const when=new Date(status.record.savedAt);
+  return Number.isFinite(when.getTime())?when.toLocaleString():"date unavailable";
+}
+function snapshotContentSummary(status){
+  if(!status||!status.ok||!status.prepared) return "Contains: unavailable";
+  const state=status.prepared.state||{};
+  const savedData=state.data||{};
+  const parts=[];
+  const workouts=Array.isArray(savedData.workouts)?savedData.workouts.length:0;
+  const weights=Array.isArray(savedData.weights)?savedData.weights.length:0;
+  const measurements=Array.isArray(savedData.measure)?savedData.measure.length:0;
+  const foodEntries=Object.keys(savedData.food||{}).reduce((total,date)=>{
+    const entries=savedData.food[date];
+    return total+(Array.isArray(entries)?entries.length:0);
+  },0);
+  const hasFood=
+    foodEntries>0
+    || Object.keys(savedData.myFoods||{}).length>0
+    || (Array.isArray(savedData.meals)&&savedData.meals.length>0)
+    || (Array.isArray(savedData.recents)&&savedData.recents.length>0);
+  const hasWater=Object.keys(savedData.water||{}).length>0;
+  const hasTrainingOther=
+    !!savedData.activeWorkoutDraft
+    || Object.keys(savedData.myExercises||{}).length>0;
+  const hasProgram=
+    !!(state.program&&Array.isArray(state.program.days)&&state.program.days.length);
+  const hasSettings=!!(state.cfg&&typeof state.cfg==="object");
+
+  if(workouts) parts.push(workouts+" workout"+(workouts===1?"":"s"));
+  else if(hasTrainingOther) parts.push("training");
+  if(weights) parts.push(weights+" weigh-in"+(weights===1?"":"s"));
+  if(hasFood) parts.push("food");
+  if(hasWater) parts.push("water");
+  if(measurements) parts.push("measurements");
+  if(hasProgram) parts.push("program");
+  if(hasSettings) parts.push("settings");
+
+  return "Contains: "+(parts.length?parts.join(" · "):"saved BlackPyre state");
+}
+function currentSavedDataSummary(primary){
+  if(!primary||!primary.ok) return "";
+  return "Current saved data: "+primary.workouts+" workout"+(primary.workouts===1?"":"s")
+    +" · "+primary.weights+" weigh-in"+(primary.weights===1?"":"s")
+    +" · "+primary.foodEntries+" food entr"+(primary.foodEntries===1?"y":"ies")+".";
+}
 function restoreSnapshotFromSettingsKey(key,options){
   if(protectedMode){
     if(typeof openRecoveryPanel==="function"&&recoveryWritesAllowed()) openRecoveryPanel();
@@ -1043,8 +1090,12 @@ function restoreSnapshotFromSettingsKey(key,options){
   if(!candidate.ok){ flashSave(candidate.reason||"That recovery snapshot is unavailable",true); return candidate; }
   const status=getStoredLkgStatuses().find(item=>item.key===key);
   if(!(options&&options.confirmed)){
-    const count=snapshotWorkoutCount(status);
-    const ok=confirm("Restore "+snapshotTierLabel(status&&status.tier)+"?\n\n"+count+" workout"+(count===1?"":"s")+" in this snapshot.\n\n"+candidate.summary+"\n\nBlackPyre will preserve the exact current state in a recovery copy before replacing anything.");
+    const ok=confirm(
+      "Restore "+snapshotTierLabel(status&&status.tier)+"?\n\n"
+      +snapshotContentSummary(status)+".\n\n"
+      +"This restores the full saved BlackPyre state from this snapshot — training, food, weight, water, measurements, program, and settings.\n\n"
+      +"BlackPyre will preserve the exact current state in a recovery copy before replacing anything."
+    );
     if(!ok) return {ok:false,code:"cancelled"};
   }
   const result=performRecoveryCandidate(candidate,Object.assign({allowNormalRestore:true},options||{}));
@@ -1087,7 +1138,7 @@ function renderRecoveryStatus(){
     if(count===0){
       const placeholder=document.createElement("option");
       placeholder.value="";
-      placeholder.textContent="No validated snapshots — current saved data checked below";
+      placeholder.textContent="No validated recovery snapshots";
       placeholder.selected=true;
       snapshotSelect.appendChild(placeholder);
     }
@@ -1097,8 +1148,8 @@ function renderRecoveryStatus(){
       option.value=status.ok?status.key:"";
       option.disabled=!status.ok;
       option.textContent=status.ok
-        ? snapshotTierLabel(status.tier)+" — "+snapshotWorkoutCount(status)+" workout"+(snapshotWorkoutCount(status)===1?"":"s")+" — "+(status.record.savedAt?new Date(status.record.savedAt).toLocaleString():"date unavailable")
-        : snapshotTierLabel(status.tier)+" — unavailable"+(status.reason?" · "+status.reason:"");
+        ? snapshotTierLabel(status.tier)+" — "+snapshotSavedLabel(status)
+        : snapshotTierLabel(status.tier)+" — unavailable";
       snapshotSelect.appendChild(option);
     });
 
@@ -1107,22 +1158,25 @@ function renderRecoveryStatus(){
     }else if(valid.length){
       snapshotSelect.value=valid[0].key;
     }
+
+    snapshotSelect.onchange=()=>renderRecoveryStatus();
   }
 
   if(restoreBtn) restoreBtn.disabled=count===0;
 
   if(snapshotMeta){
-    const primaryText=primary&&primary.ok
-      ? "Current saved data: "+primary.workouts+" workout"+(primary.workouts===1?"":"s")
-        +" · "+primary.weights+" weigh-in"+(primary.weights===1?"":"s")
-        +" · "+primary.foodEntries+" food entr"+(primary.foodEntries===1?"y":"ies")+". "
-      : "";
+    const selectedStatus=snapshotSelect&&snapshotSelect.value
+      ? statuses.find(status=>status.ok&&status.key===snapshotSelect.value)
+      : null;
 
-    snapshotMeta.textContent=primaryText+(
-      count
-        ? count+" validated recovery snapshot"+(count===1?"":"s")+" stored on this device. Compare the workout counts and date before restoring."
-        : "No validated recovery snapshot is available. Current saved data is left untouched."
-    );
+    if(selectedStatus){
+      snapshotMeta.textContent=snapshotContentSummary(selectedStatus)+".";
+    }else{
+      const currentText=currentSavedDataSummary(primary);
+      snapshotMeta.textContent=currentText
+        ? currentText+" No validated recovery snapshot is available. Current saved data is left untouched."
+        : "No validated recovery snapshot is available. Current saved data is left untouched.";
+    }
   }
 
   if (line){

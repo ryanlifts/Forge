@@ -119,23 +119,23 @@ const recoveryText=R.window.document.getElementById("snapshotMetaLine").textCont
 const recoveryOptions=[...R.window.document.getElementById("snapshotRecoverySelect").options].map(o=>o.textContent);
 
 check(
-  "v113 Settings always shows current saved data counts",
-  /Current saved data: 10 workouts · 4 weigh-ins · 4 food entries/.test(recoveryText)
+  "v113 Settings still exposes the selected healthy recovery content",
+  /Contains: 10 workouts · 4 weigh-ins · food · program · settings/.test(recoveryText)
 );
 
 check(
   "v113 Settings still exposes healthy snapshot generations when another generation fails",
-  recoveryOptions.some(x=>/Current recovery — 10 workouts/.test(x))
-  &&recoveryOptions.some(x=>/Older recovery — 10 workouts/.test(x))
-  &&recoveryOptions.some(x=>/Previous recovery — unavailable/.test(x))
+  recoveryOptions.some(x=>/^Current recovery — /.test(x)&&!/workout/.test(x))
+  &&recoveryOptions.some(x=>/^Older recovery — /.test(x)&&!/workout/.test(x))
+  &&recoveryOptions.some(x=>/^Previous recovery — unavailable$/.test(x))
 );
 
 check(
   "v113 full critical runtime family and cache are version-busted",
-  /blackpyre-v113-recovery-history-1/.test(rawSw)
-  &&/scripts\/01-storage\.js\?v=web-v113-recovery-history-1/.test(rawIndex)
-  &&/scripts\/03-train\.js\?v=web-v113-recovery-history-1/.test(rawIndex)
-  &&/scripts\/06-settings\.js\?v=web-v113-recovery-history-1/.test(rawIndex)
+  /blackpyre-v114-recovery-summary-1/.test(rawSw)
+  &&/scripts\/01-storage\.js\?v=web-v114-recovery-summary-1/.test(rawIndex)
+  &&/scripts\/03-train\.js\?v=web-v114-recovery-summary-1/.test(rawIndex)
+  &&/scripts\/06-settings\.js\?v=web-v114-recovery-summary-1/.test(rawIndex)
 );
 
 check(
