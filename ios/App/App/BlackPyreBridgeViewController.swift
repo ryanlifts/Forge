@@ -5,6 +5,29 @@ import Capacitor
 @objc(BlackPyreBridgeViewController)
 final class BlackPyreBridgeViewController: CAPBridgeViewController {
     private let blackPyreDataPlugin = BlackPyreDataPlugin()
+    private var contentSizeObserver: NSObjectProtocol?
+
+    deinit {
+        if let contentSizeObserver {
+            NotificationCenter.default.removeObserver(contentSizeObserver)
+        }
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        contentSizeObserver = NotificationCenter.default.addObserver(
+            forName: UIContentSizeCategory.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.applyDynamicTypeScale()
+        }
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        applyDynamicTypeScale()
+    }
 
     override func webViewConfiguration(for instanceConfiguration: InstanceConfiguration) -> WKWebViewConfiguration {
         let configuration = super.webViewConfiguration(for: instanceConfiguration)
@@ -14,11 +37,89 @@ final class BlackPyreBridgeViewController: CAPBridgeViewController {
         } else {
             configuration.applicationNameForUserAgent = identifier
         }
+        let dynamicType = dynamicTypeParameters()
+        configuration.userContentController.addUserScript(WKUserScript(
+            source: dynamicTypeScript(scale: dynamicType.scale, category: dynamicType.category),
+            injectionTime: .atDocumentEnd,
+            forMainFrameOnly: true
+        ))
         return configuration
     }
 
     override func capacitorDidLoad() {
         bridge?.registerPluginInstance(blackPyreDataPlugin)
+        applyDynamicTypeScale()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.applyDynamicTypeScale()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            self?.applyDynamicTypeScale()
+        }
+    }
+
+    private func applyDynamicTypeScale() {
+        let dynamicType = dynamicTypeParameters()
+        webView?.evaluateJavaScript(dynamicTypeScript(
+            scale: dynamicType.scale,
+            category: dynamicType.category
+        ))
+    }
+
+    private func dynamicTypeParameters() -> (scale: CGFloat, category: String) {
+        let baseSize: CGFloat = 17
+        let scaledSize = UIFontMetrics(forTextStyle: .body).scaledValue(
+            for: baseSize,
+            compatibleWith: traitCollection
+        )
+        let rawScale = scaledSize / baseSize
+        let pageScale = min(max(1 + ((rawScale - 1) * 0.45), 0.9), 1.6)
+        let category = UIApplication.shared.preferredContentSizeCategory.rawValue
+        return (pageScale, category)
+    }
+
+    private func dynamicTypeScript(scale: CGFloat, category: String) -> String {
+        """
+        (() => {
+          const scale = \(scale);
+          const category = '\(category)';
+          const excluded = 'script,style,svg,path,img,#brandLaunchOverlay *, .brand-story-header *, .hdr *';
+          const apply = root => {
+            const nodes = [];
+            if (root instanceof Element) nodes.push(root);
+            if (root === document && document.body) {
+              nodes.push(...document.body.querySelectorAll('*'));
+            } else if (root.querySelectorAll) {
+              nodes.push(...root.querySelectorAll('*'));
+            }
+            for (const element of nodes) {
+              if (element.matches(excluded)) continue;
+              let base = Number(element.dataset.bpBaseFontSize || 0);
+              if (!base) {
+                base = parseFloat(getComputedStyle(element).fontSize);
+                if (!Number.isFinite(base) || base < 8) continue;
+                element.dataset.bpBaseFontSize = String(base);
+              }
+              const controlScale = element.matches('input,select,textarea')
+                ? Math.min(scale, 1.25)
+                : scale;
+              element.style.setProperty('font-size', `${base * controlScale}px`, 'important');
+            }
+          };
+          window.__bpDynamicTypeScale = scale;
+          document.documentElement.dataset.bpDynamicType = category;
+          apply(document);
+          if (!window.__bpDynamicTypeObserver) {
+            window.__bpDynamicTypeObserver = new MutationObserver(records => {
+              for (const record of records) {
+                for (const node of record.addedNodes) {
+                  if (node instanceof Element) apply(node);
+                }
+              }
+            });
+            window.__bpDynamicTypeObserver.observe(document.body, { childList: true, subtree: true });
+          }
+        })();
+        """
     }
 }
 

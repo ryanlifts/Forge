@@ -15,6 +15,7 @@ node tests/phase4-native-update-safety.test.js
 node tests/native-release-decisions.test.js
 node tests/app-store-phase2.test.js
 node tests/phase2a-health-data.test.js
+node tests/phase3-release-qa.test.js
 node tests/unit.test.js
 node tests/integration.test.js
 node tests/card-profiles.test.js
