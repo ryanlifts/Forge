@@ -14,6 +14,7 @@ const read=relative=>fs.readFileSync(path.join(root,relative),"utf8");
 
 function makeHealthPlugins(options){
   const opts=options||{};
+  const control={denied:opts.denied||null,noData:opts.noData||null,writeGranted:opts.writeGranted!==false};
   const writes=[];
   const workoutWrites=[];
   const cache={raw:opts.initialRaw===undefined?null:opts.initialRaw};
@@ -23,25 +24,30 @@ function makeHealthPlugins(options){
   };
   const HealthPlugin={
     async isHealthAvailable(){ return {available:true}; },
+    async checkHealthPermissions(){ return {permissions:{WRITE_WORKOUTS:control.writeGranted}}; },
     async requestHealthPermissions(){ return {permissions:{WRITE_WORKOUTS:true}}; },
     async queryAggregated(args){
-      if(opts.denied===args.dataType) throw new Error("Authorization denied");
-      if(opts.noData===args.dataType) return {aggregatedData:[]};
-      const values={"active-calories":612,"steps":8431,"sleep":438};
+      if(control.denied===args.dataType) throw new Error("Authorization denied");
+      if(control.noData===args.dataType) return {aggregatedData:[]};
+      const values={"active-calories":612,"steps":8431,"sleep":438*60,"resting-heart-rate":57,hrv:44};
       return {aggregatedData:[{startDate:Date.now(),endDate:Date.now(),value:values[args.dataType]}]};
     },
     async queryLatestSample(args){
-      if(opts.denied===args.dataType) throw new Error("Authorization denied");
-      if(opts.noData===args.dataType) return {timestamp:Date.now(),unit:""};
+      if(control.denied===args.dataType) throw new Error("Authorization denied");
+      if(control.noData===args.dataType) return {timestamp:Date.now(),unit:""};
       const values={weight:100.4,"resting-heart-rate":57,hrv:44};
       return {value:values[args.dataType],timestamp:Date.now(),unit:"",metadata:{sourceName:"Test Health Source"}};
     },
     async queryWorkouts(){
-      if(opts.denied==="workouts") throw new Error("Authorization denied");
-      if(opts.noData==="workouts") return {workouts:[]};
+      if(control.denied==="workouts") throw new Error("Authorization denied");
+      if(control.noData==="workouts") return {workouts:[]};
       return {workouts:[{id:"health-workout-id",startDate:"2026-08-12T15:00:00.000Z",endDate:"2026-08-12T15:42:00.000Z",duration:2520,sourceName:"Test Watch",heartRate:[{bpm:120},{bpm:140},{bpm:166}]}]};
     },
-    async saveWorkout(args){ workoutWrites.push(args); return {success:true,id:"written-health-id"}; },
+    async saveWorkout(args){
+      workoutWrites.push(args);
+      if(!control.writeGranted) throw new Error("Authorization denied");
+      return {success:true,id:"written-health-id"};
+    },
     async openAppleHealthSettings(){ return {}; }
   };
   function install(window){
@@ -51,7 +57,7 @@ function makeHealthPlugins(options){
       Plugins:{BlackPyreData,HealthPlugin}
     };
   }
-  return {install,writes,workoutWrites,cache};
+  return {install,writes,workoutWrites,cache,control};
 }
 
 async function run(){
@@ -99,6 +105,7 @@ async function run(){
     &&cache.daily[app.window.eval("todayStr()")].heartRateVariabilityMs===44
     &&cache.workoutHeartRate["health-workout-id"].averageBpm===142
     &&cache.workoutHeartRate["health-workout-id"].maximumBpm===166);
+  check("HealthKit sleep seconds are converted to contract minutes",cache.daily[app.window.eval("todayStr()")].sleepMinutes===438);
   check("persisted workout health data is aggregate-only",
     !/heartRate\s*\"?:\s*\[|route\s*\"?:\s*\[|samples\s*\"?:\s*\[/.test(all.cache.raw)
     &&Object.keys(cache.workoutHeartRate["health-workout-id"]).sort().join(",")==="averageBpm,durationSeconds,endAt,maximumBpm,sourceName,startAt");
@@ -154,10 +161,68 @@ async function run(){
     &&deniedCache.permissions.workoutHeartRate==="available");
   denialApp.window.close();
 
+  const denialCases=[
+    ["bodyWeight","weight"],
+    ["activeEnergy","active-calories"],
+    ["steps","steps"],
+    ["sleep","sleep"],
+    ["restingHeartRate","resting-heart-rate"],
+    ["heartRateVariability","hrv"],
+    ["workoutHeartRate","workouts"]
+  ];
+  let independentDenials=true;
+  for(const [permissionKey,dataType] of denialCases){
+    const mock=makeHealthPlugins({denied:dataType});
+    const deniedApp=boot(Object.assign({},EXISTING_CFG),EMPTY_DATA,w=>mock.install(w));
+    await wait(10);
+    await deniedApp.window.eval("connectAppleHealth()");
+    const record=JSON.parse(mock.cache.raw);
+    independentDenials=independentDenials&&record.permissions[permissionKey]==="denied"
+      &&denialCases.filter(row=>row[0]!==permissionKey).every(row=>record.permissions[row[0]]==="available");
+    deniedApp.window.close();
+  }
+  check("each read denial degrades independently while every other read remains available",independentDenials);
+
+  let independentNoData=true;
+  for(const [permissionKey,dataType] of denialCases){
+    const mock=makeHealthPlugins({noData:dataType});
+    const noDataApp=boot(Object.assign({},EXISTING_CFG),EMPTY_DATA,w=>mock.install(w));
+    await wait(10);
+    await noDataApp.window.eval("connectAppleHealth()");
+    const record=JSON.parse(mock.cache.raw);
+    independentNoData=independentNoData&&record.permissions[permissionKey]==="no-data"
+      &&denialCases.filter(row=>row[0]!==permissionKey).every(row=>record.permissions[row[0]]==="available");
+    noDataApp.window.close();
+  }
+  check("each absent read degrades independently while every other read remains available",independentNoData);
+
+  const revoked=makeHealthPlugins();
+  const revokedApp=boot(Object.assign({},EXISTING_CFG),EMPTY_DATA,w=>revoked.install(w));
+  await wait(10);
+  await revokedApp.window.eval("connectAppleHealth()");
+  revoked.control.denied="steps";
+  revoked.control.writeGranted=false;
+  await revokedApp.window.eval("syncAppleHealth({request:false})");
+  const revokedCache=JSON.parse(revoked.cache.raw);
+  const revokedToday=revokedCache.daily[revokedApp.window.eval("todayStr()")];
+  check("mid-life read revocation removes the stale value without affecting other signals",
+    revokedCache.permissions.steps==="denied"
+    &&revokedToday.steps===undefined
+    &&revokedToday.activeEnergyKcal===612
+    &&revokedToday.sleepMinutes===438);
+  check("mid-life workout-write revocation is detected independently",
+    revokedCache.permissions.workoutWrite==="denied"
+    &&revokedCache.permissions.workoutHeartRate==="available");
+  revokedApp.window.close();
+
   check("source guidance and privacy disclosures are shipped",
     /Check the Health app and the original device's app/.test(read("index.html"))
     &&/never included in BlackPyre backup or recovery files/.test(read("privacy.html"))
     &&/Active energy is displayed separately/.test(read("privacy.html")));
+  check("Health access control gives the real Apple Health app path instead of opening ordinary app settings",
+    /Apple Health app → tap your profile picture → Privacy → Apps → BlackPyre/.test(read("index.html"))
+    &&/showAppleHealthAccessInstructions/.test(healthSource)
+    &&! /plugin\.openAppleHealthSettings/.test(healthSource));
   check("Health cache cannot be stored in browser primary namespaces",
     !/localStorage\.(?:setItem|getItem)\([^\n]*HEALTH_CACHE/.test(healthSource)
     &&!/HEALTH_CACHE_KEY/.test(read("scripts/01-storage.js")));

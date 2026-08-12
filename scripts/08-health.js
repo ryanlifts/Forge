@@ -10,6 +10,14 @@ const HEALTH_PERMISSION_KEYS = [
   "bodyWeight","activeEnergy","steps","sleep","restingHeartRate",
   "heartRateVariability","workoutHeartRate","workoutWrite"
 ];
+const HEALTH_DAILY_FIELDS = {
+  bodyWeight:"bodyWeightKg",
+  activeEnergy:"activeEnergyKcal",
+  steps:"steps",
+  sleep:"sleepMinutes",
+  restingHeartRate:"restingHeartRateBpm",
+  heartRateVariability:"heartRateVariabilityMs"
+};
 const HEALTH_READ_PERMISSIONS = [
   "READ_WEIGHT","READ_ACTIVE_CALORIES","READ_STEPS","READ_SLEEP",
   "READ_RESTING_HEART_RATE","READ_HRV","READ_WORKOUTS","READ_HEART_RATE"
@@ -126,6 +134,7 @@ function healthPlatformCapability(){
     native:native,
     available:!!(native && available && plugin
       && typeof plugin.isHealthAvailable==="function"
+      && typeof plugin.checkHealthPermissions==="function"
       && typeof plugin.requestHealthPermissions==="function"
       && typeof plugin.queryAggregated==="function"
       && typeof plugin.queryLatestSample==="function"
@@ -178,6 +187,22 @@ function healthDayRecord(day){
   if(!isPlainObject(healthCache.daily[day])) healthCache.daily[day]={};
   return healthCache.daily[day];
 }
+function clearCachedHealthSignal(permissionKey){
+  const field=HEALTH_DAILY_FIELDS[permissionKey];
+  if(field){
+    Object.keys(healthCache.daily).forEach(day=>{
+      const record=healthCache.daily[day];
+      if(isPlainObject(record)){
+        delete record[field];
+        if(!Object.keys(record).length) delete healthCache.daily[day];
+      }
+    });
+  }
+  if(permissionKey==="workoutHeartRate") healthCache.workoutHeartRate={};
+}
+function clearAllCachedHealthReads(){
+  HEALTH_PERMISSION_KEYS.filter(key=>key!=="workoutWrite").forEach(clearCachedHealthSignal);
+}
 function sumAggregatedValues(result){
   const rows=result && Array.isArray(result.aggregatedData) ? result.aggregatedData : [];
   const values=rows.map(row=>Number(row&&row.value)).filter(Number.isFinite);
@@ -201,21 +226,25 @@ async function queryDailyAggregate(plugin,permissionKey,dataType,day,valueKey,mo
     });
     const value=mode==="latest" ? latestAggregatedValue(result) : sumAggregatedValues(result);
     if(value===null){
+      clearCachedHealthSignal(permissionKey);
       healthCache.permissions[permissionKey]="no-data";
       return;
     }
     const record=healthDayRecord(day);
-    record[valueKey]=valueKey==="steps" ? Math.max(0,Math.round(value)) : Math.max(0,Math.round(value*10)/10);
+    const normalized=dataType==="sleep" ? value/60 : value;
+    record[valueKey]=valueKey==="steps" ? Math.max(0,Math.round(normalized)) : Math.max(0,Math.round(normalized*10)/10);
     healthCache.permissions[permissionKey]="available";
   } catch(error){
+    clearCachedHealthSignal(permissionKey);
     healthCache.permissions[permissionKey]=healthQueryState(error);
   }
 }
-async function queryLatestHealthValue(plugin,permissionKey,dataType,valueKey,minValue){
+async function queryLatestHealthValue(plugin,permissionKey,dataType,valueKey,minValue,maxAgeDays){
   try {
     const result=await plugin.queryLatestSample({dataType:dataType});
     const value=Number(result&&result.value);
     if(!Number.isFinite(value) || value<minValue){
+      clearCachedHealthSignal(permissionKey);
       healthCache.permissions[permissionKey]="no-data";
       return;
     }
@@ -223,6 +252,11 @@ async function queryLatestHealthValue(plugin,permissionKey,dataType,valueKey,min
     const observedAt=Number.isFinite(observed)
       ? new Date(observed>100000000000 ? observed : observed*1000).toISOString()
       : new Date().toISOString();
+    if(Number.isFinite(maxAgeDays) && Date.now()-Date.parse(observedAt)>maxAgeDays*86400000){
+      clearCachedHealthSignal(permissionKey);
+      healthCache.permissions[permissionKey]="no-data";
+      return;
+    }
     const day=localDayFromTimestamp(observedAt);
     const record=healthDayRecord(day);
     if(valueKey==="bodyWeightKg"){
@@ -236,6 +270,7 @@ async function queryLatestHealthValue(plugin,permissionKey,dataType,valueKey,min
     }
     healthCache.permissions[permissionKey]="available";
   } catch(error){
+    clearCachedHealthSignal(permissionKey);
     healthCache.permissions[permissionKey]=healthQueryState(error);
   }
 }
@@ -273,9 +308,22 @@ async function queryWorkoutHeartRate(plugin){
       healthCache.workoutHeartRate[id]=aggregate;
       found++;
     });
+    if(!found) clearCachedHealthSignal("workoutHeartRate");
     healthCache.permissions.workoutHeartRate=found ? "available" : "no-data";
   } catch(error){
+    clearCachedHealthSignal("workoutHeartRate");
     healthCache.permissions.workoutHeartRate=healthQueryState(error);
+  }
+}
+async function refreshWorkoutWritePermission(plugin){
+  try {
+    const result=await plugin.checkHealthPermissions({permissions:["WRITE_WORKOUTS"]});
+    const granted=!!(result&&result.permissions&&result.permissions.WRITE_WORKOUTS===true);
+    healthCache.permissions.workoutWrite=granted
+      ? (healthCache.permissions.workoutWrite==="written" ? "written" : "available")
+      : "denied";
+  } catch(error){
+    healthCache.permissions.workoutWrite=healthQueryState(error);
   }
 }
 async function syncAppleHealth(options){
@@ -283,6 +331,7 @@ async function syncAppleHealth(options){
   if(healthSyncing) return false;
   const capability=healthPlatformCapability();
   if(!capability.available){
+    clearAllCachedHealthReads();
     HEALTH_PERMISSION_KEYS.forEach(key=>healthCache.permissions[key]="unavailable");
     renderHealth();
     return false;
@@ -292,6 +341,7 @@ async function syncAppleHealth(options){
   try {
     const availability=await capability.plugin.isHealthAvailable();
     if(!availability || availability.available!==true){
+      clearAllCachedHealthReads();
       HEALTH_PERMISSION_KEYS.forEach(key=>healthCache.permissions[key]="unavailable");
       return false;
     }
@@ -302,21 +352,22 @@ async function syncAppleHealth(options){
         if(permissions.WRITE_WORKOUTS===false) healthCache.permissions.workoutWrite="denied";
       } catch(error){
         const state=healthQueryState(error);
+        clearAllCachedHealthReads();
         HEALTH_PERMISSION_KEYS.forEach(key=>healthCache.permissions[key]=state);
         return false;
       }
     }
     const day=todayStr();
     await Promise.all([
-      queryLatestHealthValue(capability.plugin,"bodyWeight","weight","bodyWeightKg",1),
+      queryLatestHealthValue(capability.plugin,"bodyWeight","weight","bodyWeightKg",1,14),
       queryDailyAggregate(capability.plugin,"activeEnergy","active-calories",day,"activeEnergyKcal","sum"),
       queryDailyAggregate(capability.plugin,"steps","steps",day,"steps","sum"),
       queryDailyAggregate(capability.plugin,"sleep","sleep",day,"sleepMinutes","sum"),
-      queryLatestHealthValue(capability.plugin,"restingHeartRate","resting-heart-rate","restingHeartRateBpm",1),
-      queryLatestHealthValue(capability.plugin,"heartRateVariability","hrv","heartRateVariabilityMs",1),
-      queryWorkoutHeartRate(capability.plugin)
+      queryDailyAggregate(capability.plugin,"restingHeartRate","resting-heart-rate",day,"restingHeartRateBpm","latest"),
+      queryDailyAggregate(capability.plugin,"heartRateVariability","hrv",day,"heartRateVariabilityMs","latest"),
+      queryWorkoutHeartRate(capability.plugin),
+      refreshWorkoutWritePermission(capability.plugin)
     ]);
-    if(healthCache.permissions.workoutWrite==="unknown") healthCache.permissions.workoutWrite="available";
     healthCache.updatedAt=new Date().toISOString();
     await persistHealthCache();
     return true;
@@ -505,11 +556,15 @@ async function connectAppleHealth(){
   const ok=await syncAppleHealth({request:true});
   flashSave(ok?"Apple Health connected ✓":"Apple Health connected — some signals are not available",!ok);
 }
-async function openAppleHealthSettings(){
-  const capability=healthPlatformCapability();
-  if(capability.available&&typeof capability.plugin.openAppleHealthSettings==="function"){
-    try { await capability.plugin.openAppleHealthSettings(); } catch(e){}
-  }
+function showAppleHealthAccessInstructions(){
+  const instructions=document.getElementById("healthAccessInstructions");
+  const button=document.getElementById("healthManageBtn");
+  if(!instructions||!button) return;
+  const show=instructions.classList.contains("hidden");
+  instructions.classList.toggle("hidden",!show);
+  button.setAttribute("aria-expanded",show?"true":"false");
+  button.textContent=show?"HIDE ACCESS INSTRUCTIONS":"HOW TO MANAGE HEALTH ACCESS";
+  if(show&&typeof instructions.scrollIntoView==="function") instructions.scrollIntoView({block:"nearest"});
 }
 function setAppleHealthWorkoutSharing(){
   cfg.healthWorkoutWriteOn=cfg.healthWorkoutWriteOn===false;
@@ -521,7 +576,7 @@ function setAppleHealthWorkoutSharing(){
 document.getElementById("healthConnectBtn").addEventListener("click",connectAppleHealth);
 document.getElementById("healthSyncBtn").addEventListener("click",()=>syncAppleHealth({request:false}));
 document.getElementById("healthSummarySyncBtn").addEventListener("click",()=>syncAppleHealth({request:false}));
-document.getElementById("healthManageBtn").addEventListener("click",openAppleHealthSettings);
+document.getElementById("healthManageBtn").addEventListener("click",showAppleHealthAccessInstructions);
 document.getElementById("healthWorkoutWriteBtn").addEventListener("click",setAppleHealthWorkoutSharing);
 
 loadHealthCache().then(()=>{

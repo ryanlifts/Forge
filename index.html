@@ -1647,7 +1647,8 @@
           <div class="note" id="healthSettingsStatus" role="status" aria-live="polite" style="margin-bottom:10px;">Apple Health is not connected.</div>
           <button class="btn" id="healthConnectBtn" style="width:100%;">CONNECT APPLE HEALTH</button>
           <button class="btn ghost small mt10 hidden" id="healthSyncBtn" style="width:100%;">SYNC APPLE HEALTH</button>
-          <button class="btn ghost small mt10 hidden" id="healthManageBtn" style="width:100%;">MANAGE ACCESS IN SETTINGS</button>
+          <button class="btn ghost small mt10 hidden" id="healthManageBtn" aria-expanded="false" aria-controls="healthAccessInstructions" style="width:100%;">HOW TO MANAGE HEALTH ACCESS</button>
+          <div class="note hidden" id="healthAccessInstructions" style="margin-top:10px;">Open the Apple Health app → tap your profile picture → Privacy → Apps → BlackPyre. Turn each Read or Write category on or off, then return here and tap Sync Apple Health.</div>
           <button class="btn ghost small mt10 hidden" id="healthWorkoutWriteBtn" aria-pressed="true" style="width:100%;">WORKOUT SHARING: ON</button>
           <div class="note" style="margin-top:10px;">Active energy is shown beside BlackPyre's estimate from your food and weight trend; it never changes that estimate or your targets. Completed sessions are shared only when BlackPyre recorded a real start, end, and duration. Missing data stays “Not available” and manual entry always remains available.</div>
           <div class="note" id="healthSourceHint" style="margin-top:8px;">If a device or app is not writing a signal into Apple Health, BlackPyre cannot see it. Check the Health app and the original device's app.</div>
