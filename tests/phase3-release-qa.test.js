@@ -35,6 +35,8 @@ check("native target remains iPhone only",/TARGETED_DEVICE_FAMILY = 1;/.test(pro
 check("native target remains portrait only",/<key>UISupportedInterfaceOrientations<\/key>[\s\S]*?<string>UIInterfaceOrientationPortrait<\/string>/.test(plist));
 check("safe-area insets protect the app chrome",/safe-area-inset-top/.test(index) && /safe-area-inset-bottom/.test(index));
 check("focus-visible treatment remains present",/:focus-visible/.test(index));
+check("My Foods opens without summoning the keyboard",/id="myFoodsOverlay"[^>]*data-initial-focus="self"/.test(index));
+check("Recent Foods opens without summoning the keyboard",/id="recentsOverlay"[^>]*data-initial-focus="self"/.test(index));
 check("Reduce Motion disables transitions and celebration animation",/@media \(prefers-reduced-motion: reduce\)[^{]*\{[^}]*\* \{ transition:none !important; \}[^}]*\.cel-title \{ animation:none; \}/.test(index));
 check("native bridge observes Dynamic Type changes",/UIContentSizeCategory\.didChangeNotification/.test(bridge));
 check("native bridge derives scaling from Apple UIFontMetrics and the active view traits",/UIFontMetrics\(forTextStyle: \.body\)\.scaledValue/.test(bridge) && /compatibleWith: traitCollection/.test(bridge));
