@@ -12175,6 +12175,123 @@ document.getElementById("logWorkoutBtn").addEventListener("click", ()=>{
     Object.keys(sets).length+" exercises recorded"+(streak>1?"  \u00b7  \ud83d\udd25 "+streak+"-day streak":""));
 });
 
+function authoritativeWorkoutHistoryState(){
+  let raw=null;
+
+  try {
+    raw=localStorage.getItem(DATA_KEY);
+  } catch(e){
+    raw=null;
+  }
+
+  if(typeof raw==="string"){
+    try {
+      const persisted=JSON.parse(raw);
+
+      if(
+        isPlainObject(persisted)
+        && Array.isArray(persisted.workouts)
+      ){
+        const records=[];
+        let malformedCount=0;
+
+        persisted.workouts.forEach((record,index)=>{
+          try {
+            validateWorkoutRecord(
+              record,
+              "Saved workout "+(index+1)
+            );
+
+            const copy=cloneJSON(record);
+            copy.__historyIndex=index;
+            records.push(copy);
+          } catch(e){
+            malformedCount++;
+          }
+        });
+
+        if(
+          malformedCount===0
+          && !protectedMode
+        ){
+          const clean=records.map(record=>{
+            const copy=cloneJSON(record);
+            delete copy.__historyIndex;
+            return copy;
+          });
+
+          try {
+            if(
+              JSON.stringify(data.workouts)
+              !==JSON.stringify(clean)
+            ){
+              data.workouts=clean;
+            }
+          } catch(e){}
+        }
+
+        return {
+          records:records,
+          malformedCount:malformedCount,
+          authoritative:true,
+          readOnly:
+            malformedCount>0
+            || protectedMode
+        };
+      }
+    } catch(e){}
+  }
+
+  const fallback=[];
+  let malformedCount=0;
+
+  (
+    Array.isArray(data.workouts)
+      ? data.workouts
+      : []
+  ).forEach((record,index)=>{
+    try {
+      validateWorkoutRecord(
+        record,
+        "Workout "+(index+1)
+      );
+
+      const copy=cloneJSON(record);
+      copy.__historyIndex=index;
+      fallback.push(copy);
+    } catch(e){
+      malformedCount++;
+    }
+  });
+
+  return {
+    records:fallback,
+    malformedCount:malformedCount,
+    authoritative:false,
+    readOnly:true
+  };
+}
+
+function reconcileAuthoritativeWorkoutHistory(){
+  const before=
+    Array.isArray(data.workouts)
+      ? JSON.stringify(data.workouts)
+      : "";
+
+  const state=
+    authoritativeWorkoutHistoryState();
+
+  const after=
+    Array.isArray(data.workouts)
+      ? JSON.stringify(data.workouts)
+      : "";
+
+  return {
+    changed:before!==after,
+    state:state
+  };
+}
+
 const WORK_HISTORY_PAGE_SIZE = 25;
 let workHistoryVisibleCount = WORK_HISTORY_PAGE_SIZE;
 
@@ -12185,21 +12302,35 @@ function renderWork(){
 
   const el = document.getElementById("workHistory");
   const countEl = document.getElementById("workHistoryCount");
+  const historyState =
+    authoritativeWorkoutHistoryState();
+  const historyRows =
+    historyState.records;
 
   if (countEl){
     countEl.textContent =
-      data.workouts.length+" session"+(data.workouts.length===1?"":"s");
+      historyRows.length+" session"+(historyRows.length===1?"":"s");
   }
 
-  if(data.workouts.length===0){
+  if(historyRows.length===0){
     workHistoryVisibleCount = WORK_HISTORY_PAGE_SIZE;
     el.innerHTML =
-      '<div style="padding:18px; font-size:13px; color:var(--dim);">No sessions yet.</div>';
+      historyState.malformedCount>0
+        ? '<div style="padding:18px; font-size:13px; color:var(--dim);">No displayable sessions. '+historyState.malformedCount+' saved session'+(historyState.malformedCount===1?'':'s')+' could not be displayed safely and '+(historyState.malformedCount===1?'was':'were')+' left untouched.</div>'
+        : '<div style="padding:18px; font-size:13px; color:var(--dim);">No sessions yet.</div>';
     return;
   }
 
-  const sorted = data.workouts
-    .map((s,idx)=>Object.assign({},s,{idx:idx}))
+  const sorted = historyRows
+    .map((s,idx)=>Object.assign(
+      {},
+      s,
+      {
+        idx:Number.isInteger(s.__historyIndex)
+          ? s.__historyIndex
+          : idx
+      }
+    ))
     .sort((a,b)=>b.date.localeCompare(a.date) || b.idx-a.idx);
 
   const visible = sorted.slice(0,workHistoryVisibleCount);
@@ -12209,10 +12340,14 @@ function renderWork(){
     const title = s.title || (dayObj?dayObj.title:s.day) || "Workout";
     const names = Object.keys(s.sets||{});
 
-    const values = names.map(ex=>
-      '<div>'+esc(ex)+': <span style="color:var(--text)">'
-      +esc(formatSets(s.sets[ex]))+'</span></div>'
-    ).join("");
+    const values = names.map(ex=>{
+      try {
+        return '<div>'+esc(ex)+': <span style="color:var(--text)">'
+          +esc(formatSets(s.sets[ex]))+'</span></div>';
+      } catch(e){
+        return '<div>'+esc(ex)+': <span style="color:var(--dim)">Saved value unavailable</span></div>';
+      }
+    }).join("");
 
     return '<details class="workSession" data-i="'+s.idx+'" style="border-bottom:1px solid var(--border);">'
       +'<summary style="padding:13px 16px; cursor:pointer; list-style:none; display:flex; justify-content:space-between; align-items:center; gap:12px;">'
@@ -12236,7 +12371,12 @@ function renderWork(){
   const remaining = sorted.length-visible.length;
   const nextCount = Math.min(WORK_HISTORY_PAGE_SIZE,remaining);
 
-  el.innerHTML = body
+  const malformedNotice =
+    historyState.malformedCount>0
+      ? '<div style="padding:10px 16px; color:var(--warn); font-size:11px; line-height:1.5;">'+historyState.malformedCount+' saved session'+(historyState.malformedCount===1?'':'s')+' could not be displayed safely and '+(historyState.malformedCount===1?'was':'were')+' left untouched.</div>'
+      : '';
+
+  el.innerHTML = malformedNotice+body
     +(remaining>0
       ? '<div style="padding:12px 16px; text-align:center;">'
         +'<button class="btn ghost small" id="workHistoryMore">Load '

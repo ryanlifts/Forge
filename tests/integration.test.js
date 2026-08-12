@@ -2778,7 +2778,10 @@ const MissingData63=bootRaw({cfg:RAW_V3_CFG,program:RAW_PROGRAM,lkg:V63_POP_LKG}
 check("v63 missing logs on an established install enters protected mode", MissingData63.window.eval(`protectedMode && protectedModeDiagnostic.stage==="missing-primary" && protectedModeDiagnostic.part==="data"`));
 check("v63 missing-log protected view loads the validated snapshot", MissingData63.window.eval(`data.weights.length===1 && data.food["2026-07-20"].length===1`));
 check("v63 missing logs are never silently recreated or allowed to replace LKG", MissingData63.window.localStorage.getItem("forge:data")===null && MissingData63.window.localStorage.getItem("forge:lkg")===V63_POP_LKG && callsFor(MissingData63,"forge:lkg").length===0);
-check("v63 missing-primary recovery disables the destructive readable reset", MissingData63.window.document.getElementById("recoverReadableBtn").disabled===true && MissingData63.window.document.getElementById("recoverLkgBtn").disabled===false);
+check("v63 missing-primary recovery disables destructive readable reset and requires explicit snapshot selection",
+  MissingData63.window.document.getElementById("recoverReadableBtn").disabled===true
+  && MissingData63.window.document.getElementById("recoverySnapshotSelect").value===""
+  && MissingData63.window.document.getElementById("recoverLkgBtn").disabled===true);
 
 const MissingCfg63=bootRaw({data:JSON.stringify(V63_POPULATED_DATA),program:RAW_PROGRAM,lkg:V63_POP_LKG});
 check("v63 missing settings on an established install enters protected mode", MissingCfg63.window.eval(`protectedMode && protectedModeDiagnostic.stage==="missing-primary" && protectedModeDiagnostic.part==="cfg"`));

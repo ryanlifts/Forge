@@ -77,6 +77,26 @@ function renderAll(){ renderDash(); renderFood(); renderWork(); renderWeight(); 
 }
 
 
+function reconcileHistoryAfterResume(){
+  if(typeof renderWork==="function"){
+    renderWork();
+  }
+}
+
+window.addEventListener(
+  "pageshow",
+  reconcileHistoryAfterResume
+);
+
+document.addEventListener(
+  "visibilitychange",
+  ()=>{
+    if(document.visibilityState==="visible"){
+      reconcileHistoryAfterResume();
+    }
+  }
+);
+
 // Select an existing numeric value on tap/focus so the next keystroke replaces it.
 // Delegation covers fields created later by dynamic renders; date/text/select/textarea are excluded.
 function selectNumericOnFocus(e){
@@ -193,8 +213,11 @@ function setRecoveryActionStatus(message, bad){
   el.textContent = message || "";
   el.style.color = bad===false ? "var(--ok)" : "var(--warn)";
 }
+let selectedProtectedRecoveryKey="";
+
 function openRecoveryPanel(){
   if (!protectedMode || !recoveryWritesAllowed()) return false;
+  selectedProtectedRecoveryKey="";
   renderRecoveryPanel();
   document.getElementById("recoveryOverlay").classList.remove("hidden");
   lockScroll();
@@ -205,32 +228,118 @@ function closeRecoveryPanel(){
   unlockScroll();
 }
 function renderRecoveryPanel(){
-  const overlay = document.getElementById("recoveryOverlay");
-  if (!protectedMode || !recoveryWritesAllowed()){
+  const overlay =
+    document.getElementById(
+      "recoveryOverlay"
+    );
+
+  if(
+    !protectedMode
+    || !recoveryWritesAllowed()
+  ){
     overlay.classList.add("hidden");
     return;
   }
-  document.getElementById("recoveryIssueText").textContent = protectedModeReason || "BlackPyre could not safely use part of the saved state.";
-  document.getElementById("recoveryAffectedText").textContent = diagnosticAreaText()+" Do not uninstall until recovery is complete.";
 
-  const lkg = buildLkgRecoveryCandidate();
-  const lkgBtn = document.getElementById("recoverLkgBtn");
-  lkgBtn.disabled = !lkg.ok;
-  document.getElementById("recoveryLkgText").textContent = lkg.ok
-    ? lkg.summary
-    : (lkg.code==="newer" ? "A newer-version snapshot exists and this copy will not use or overwrite it." : "No validated last-known-good snapshot is available on this device.");
+  document.getElementById(
+    "recoveryIssueText"
+  ).textContent =
+    protectedModeReason
+    || "BlackPyre could not safely use part of the saved state.";
 
-  const readable = buildReadableRecoveryCandidate();
-  const readableBtn = document.getElementById("recoverReadableBtn");
-  const missingPrimary = protectedModeDiagnostic && protectedModeDiagnostic.stage==="missing-primary";
-  readableBtn.disabled = !readable.ok || missingPrimary;
-  document.getElementById("recoveryReadableText").textContent = missingPrimary
-    ? "Resetting an unexpectedly missing primary area is disabled. Restore a validated snapshot or your own backup instead."
-    : (readable.ok ? readable.summary+". No malformed JSON or damaged records will be guessed."
-      : "BlackPyre could not build a validated readable-state candidate.");
+  document.getElementById(
+    "recoveryAffectedText"
+  ).textContent =
+    diagnosticAreaText()
+    +" Do not uninstall until recovery is complete.";
+
+  const selection =
+    populateRecoverySnapshotSelect(
+      "recoverySnapshotSelect",
+      "recoverySnapshotDetails",
+      selectedProtectedRecoveryKey
+    );
+
+  const validCount =
+    selection.statuses.filter(
+      status=>status.ok
+    ).length;
+
+  const lkgBtn =
+    document.getElementById(
+      "recoverLkgBtn"
+    );
+
+  lkgBtn.disabled =
+    !(
+      selection.selected
+      && selection.selected.ok
+    );
+
+  document.getElementById(
+    "recoveryLkgText"
+  ).textContent =
+    (
+      validCount
+        ? "Choose Current, Previous, or Older. Select one to inspect what it contains."
+        : "No validated recovery snapshots are available."
+    )
+    +" "
+    +currentSavedDataSummary();
+
+  const readable =
+    buildReadableRecoveryCandidate();
+
+  const readableBtn =
+    document.getElementById(
+      "recoverReadableBtn"
+    );
+
+  const missingPrimary =
+    protectedModeDiagnostic
+    && protectedModeDiagnostic.stage
+       ==="missing-primary";
+
+  readableBtn.disabled =
+    !readable.ok
+    || missingPrimary;
+
+  document.getElementById(
+    "recoveryReadableText"
+  ).textContent =
+    missingPrimary
+      ? "Resetting an unexpectedly missing primary area is disabled. Restore a validated snapshot or your own backup instead."
+      : (
+          readable.ok
+            ? readable.summary+". No malformed JSON or damaged records will be guessed."
+            : "BlackPyre could not build a validated readable-state candidate."
+        );
 }
+
 function confirmRecoveryCandidate(candidate){
-  return confirm("Review this recovery:\n\n"+candidate.summary+"\n\nBlackPyre will preserve the exact current originals before changing primary storage. Continue?");
+  let review =
+    candidate.summary
+    || "Use this validated recovery choice.";
+
+  if(candidate.lkgKey){
+    const status =
+      getStoredLkgStatusByKey(
+        candidate.lkgKey
+      );
+
+    if(status.ok){
+      review =
+        recoverySnapshotLabel(status)
+        +"\n"
+        +recoverySnapshotContents(status);
+    }
+  }
+
+  return confirm(
+    "Restore the FULL saved state represented by this recovery?\n\n"
+    +review
+    +"\n\nBlackPyre will preserve the exact current state before replacing primary storage. Continue?"
+  );
 }
 function handleRecoveryResult(candidate, options){
   const result = performRecoveryCandidate(candidate, options||{});
@@ -261,7 +370,39 @@ function runRecoveryCandidate(candidate){
 
 document.getElementById("protectedRecoveryBtn").addEventListener("click", openRecoveryPanel);
 document.getElementById("recoveryCloseBtn").addEventListener("click", closeRecoveryPanel);
-document.getElementById("recoverLkgBtn").addEventListener("click", ()=>runRecoveryCandidate(buildLkgRecoveryCandidate()));
+document.getElementById(
+  "recoverySnapshotSelect"
+).addEventListener(
+  "change",
+  event=>{
+    selectedProtectedRecoveryKey=
+      event.target.value;
+
+    renderRecoveryPanel();
+  }
+);
+
+document.getElementById(
+  "recoverLkgBtn"
+).addEventListener(
+  "click",
+  ()=>{
+    if(!selectedProtectedRecoveryKey){
+      setRecoveryActionStatus(
+        "Choose a recovery snapshot first.",
+        true
+      );
+
+      return;
+    }
+
+    runRecoveryCandidate(
+      buildSelectedLkgRecoveryCandidate(
+        selectedProtectedRecoveryKey
+      )
+    );
+  }
+);
 document.getElementById("recoverReadableBtn").addEventListener("click", ()=>runRecoveryCandidate(buildReadableRecoveryCandidate()));
 document.getElementById("recoveryBackupBtn").addEventListener("click", ()=>document.getElementById("recoveryBackupFile").click());
 document.getElementById("recoveryBackupFile").addEventListener("change", e=>{

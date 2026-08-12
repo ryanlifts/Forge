@@ -1185,42 +1185,438 @@ function exportStoredQuarantine(){
   flashSave("Recovery copy exported ✓");
   return true;
 }
-function restoreBestSnapshotFromSettings(options){
-  if (protectedMode){
-    if (typeof openRecoveryPanel==="function" && recoveryWritesAllowed()) openRecoveryPanel();
-    else flashSave("Snapshot restore is available through Protected mode recovery", true);
-    return {ok:false,code:"protected"};
+function recoveryTierTitle(tier){
+  if (tier==="current") return "Current recovery";
+  if (tier==="previous") return "Previous recovery";
+  if (tier==="older") return "Older recovery";
+  return "Recovery";
+}
+
+function recoverySnapshotLabel(status){
+  const title=recoveryTierTitle(status && status.tier);
+
+  if(
+    status
+    && status.ok
+    && status.record
+    && status.record.savedAt
+  ){
+    return title+" — "+new Date(status.record.savedAt).toLocaleString();
   }
-  const candidate = buildLkgRecoveryCandidate();
-  if (!candidate.ok){ flashSave(candidate.reason || "No validated recovery snapshot is available", true); return candidate; }
-  if (!(options&&options.confirmed)){
-    const ok = confirm("Restore the best validated recovery snapshot? BlackPyre will preserve the exact current state in a recovery copy before replacing anything.\n\n"+candidate.summary);
-    if (!ok) return {ok:false,code:"cancelled"};
+
+  return title+" — unavailable";
+}
+
+function recoveryHasContent(value){
+  if (Array.isArray(value)) return value.length>0;
+  if (isPlainObject(value)) return Object.keys(value).length>0;
+
+  return value!==null
+    && value!==undefined
+    && value!=="";
+}
+
+function recoverySnapshotContents(status){
+  if(
+    !status
+    || !status.ok
+    || !status.prepared
+  ){
+    return "This recovery snapshot is unavailable.";
   }
-  const result = performRecoveryCandidate(candidate,Object.assign({allowNormalRestore:true},options||{}));
-  if (result.code==="quarantine-conflict"){
-    const replace = confirm("A different recovery copy is already stored. Replace it with the exact current state before restoring this snapshot?");
-    if (replace) return restoreBestSnapshotFromSettings({confirmed:true,replaceExistingQuarantine:true});
+
+  const state=status.prepared.state;
+  const d=state.data || {};
+  const parts=[];
+
+  const workouts=
+    Array.isArray(d.workouts)
+      ? d.workouts.length
+      : 0;
+
+  if(workouts){
+    parts.push(
+      workouts+" workout"+(workouts===1?"":"s")
+    );
   }
-  if (result.ok){
+
+  if(d.activeWorkoutDraft){
+    parts.push("workout draft");
+  }
+
+  const weights=
+    Array.isArray(d.weights)
+      ? d.weights.length
+      : 0;
+
+  if(weights){
+    parts.push(
+      weights+" weigh-in"+(weights===1?"":"s")
+    );
+  }
+
+  const foodEntries=
+    isPlainObject(d.food)
+      ? Object.values(d.food).reduce(
+          (sum,list)=>
+            sum+(Array.isArray(list)?list.length:0),
+          0
+        )
+      : 0;
+
+  if(foodEntries) parts.push("food");
+
+  if(
+    isPlainObject(d.water)
+    && Object.keys(d.water).length
+  ){
+    parts.push("water");
+  }
+
+  if(
+    Array.isArray(d.measure)
+    && d.measure.length
+  ){
+    parts.push("measurements");
+  }
+
+  if(
+    isPlainObject(d.myFoods)
+    && Object.keys(d.myFoods).length
+  ){
+    parts.push("My Foods");
+  }
+
+  if(
+    isPlainObject(d.myExercises)
+    && Object.keys(d.myExercises).length
+  ){
+    parts.push("custom exercises");
+  }
+
+  if(
+    isPlainObject(d.personalRecords)
+    && Object.keys(d.personalRecords).length
+  ){
+    parts.push("personal records");
+  }
+
+  const known=new Set([
+    "food",
+    "workouts",
+    "weights",
+    "recents",
+    "myExercises",
+    "activeWorkoutDraft",
+    "water",
+    "measure",
+    "myFoods",
+    "meals",
+    "finished",
+    "foodCounts",
+    "mealCounts",
+    "meta",
+    "personalRecords"
+  ]);
+
+  if(
+    Object.keys(d).some(
+      key=>
+        !known.has(key)
+        && recoveryHasContent(d[key])
+    )
+  ){
+    parts.push("other saved data");
+  }
+
+  if(state.program) parts.push("program");
+  if(state.cfg) parts.push("settings");
+
+  return "Contains: "
+    +(parts.length ? parts.join(" · ") : "saved state");
+}
+
+function currentSavedDataSummary(){
+  const read=readStorageStrings();
+
+  if(!read.ok){
+    return "Current saved data: unavailable for inspection.";
+  }
+
+  const prepared=prepareState(
+    read.inputs.cfg,
+    read.inputs.data,
+    read.inputs.program,
+    {
+      originalStrings:read.originals
+    }
+  );
+
+  if(!prepared.ok){
+    return "Current saved data: present, but not fully validated.";
+  }
+
+  const contents=
+    recoverySnapshotContents({
+      ok:true,
+      prepared:prepared
+    }).replace(
+      /^Contains:\s*/,
+      ""
+    );
+
+  return "Current saved data: "+contents+".";
+}
+
+function populateRecoverySnapshotSelect(
+  selectId,
+  detailsId,
+  selectedKey
+){
+  const select=document.getElementById(selectId);
+  const details=document.getElementById(detailsId);
+  const statuses=getStoredLkgStatuses();
+
+  if(!select){
+    return {
+      statuses:statuses,
+      selected:null
+    };
+  }
+
+  select.innerHTML="";
+
+  const placeholder=document.createElement("option");
+  placeholder.value="";
+  placeholder.textContent="Choose recovery snapshot";
+  select.appendChild(placeholder);
+
+  statuses.forEach(status=>{
+    const option=document.createElement("option");
+    option.value=status.key || "";
+    option.textContent=recoverySnapshotLabel(status);
+    select.appendChild(option);
+  });
+
+  if(
+    selectedKey
+    && statuses.some(
+      status=>status.key===selectedKey
+    )
+  ){
+    select.value=selectedKey;
+  } else {
+    select.value="";
+  }
+
+  const selected=
+    statuses.find(
+      status=>status.key===select.value
+    ) || null;
+
+  if(details){
+    details.classList.toggle(
+      "hidden",
+      !selected
+    );
+
+    details.textContent=
+      selected
+        ? recoverySnapshotContents(selected)
+        : "";
+  }
+
+  return {
+    statuses:statuses,
+    selected:selected
+  };
+}
+
+let selectedSettingsRecoveryKey="";
+
+function restoreSelectedSnapshotFromSettings(options){
+  if(protectedMode){
+    if(
+      typeof openRecoveryPanel==="function"
+      && recoveryWritesAllowed()
+    ){
+      openRecoveryPanel();
+    } else {
+      flashSave(
+        "Snapshot restore is available through Protected mode recovery",
+        true
+      );
+    }
+
+    return {
+      ok:false,
+      code:"protected"
+    };
+  }
+
+  const select=
+    document.getElementById(
+      "settingsRecoverySnapshotSelect"
+    );
+
+  const key=
+    selectedSettingsRecoveryKey
+    || (select ? select.value : "");
+
+  if(!key){
+    flashSave(
+      "Choose a recovery snapshot first",
+      true
+    );
+
+    return {
+      ok:false,
+      code:"selection"
+    };
+  }
+
+  const candidate=
+    buildSelectedLkgRecoveryCandidate(key);
+
+  if(!candidate.ok){
+    flashSave(
+      candidate.reason
+        || "That recovery snapshot is unavailable",
+      true
+    );
+
+    return candidate;
+  }
+
+  if(!(options && options.confirmed)){
+    const status=
+      getStoredLkgStatusByKey(key);
+
+    const ok=confirm(
+      "Restore the FULL saved state from "
+      +recoverySnapshotLabel(status)
+      +"?\n\n"
+      +recoverySnapshotContents(status)
+      +"\n\nBlackPyre will preserve the exact current state in a recovery copy before replacing it. Continue?"
+    );
+
+    if(!ok){
+      return {
+        ok:false,
+        code:"cancelled"
+      };
+    }
+  }
+
+  const result=
+    performRecoveryCandidate(
+      candidate,
+      Object.assign(
+        {
+          allowNormalRestore:true
+        },
+        options || {}
+      )
+    );
+
+  if(result.code==="quarantine-conflict"){
+    const replace=confirm(
+      "A different recovery copy is already stored. Replace it with the exact current state before restoring this selected snapshot?"
+    );
+
+    if(replace){
+      return restoreSelectedSnapshotFromSettings(
+        Object.assign(
+          {},
+          options || {},
+          {
+            confirmed:true,
+            replaceExistingQuarantine:true
+          }
+        )
+      );
+    }
+  }
+
+  if(result.ok){
     flashSave("Recovery snapshot restored ✓");
     ackBtn("restoreSnapshotBtn","✓ Restored");
+    selectedSettingsRecoveryKey="";
     renderBackup();
-  } else if (result.code!=="cancelled") flashSave(result.reason || "Snapshot restore could not be completed", true);
+  } else if(result.code!=="cancelled"){
+    flashSave(
+      result.reason
+        || "Snapshot restore could not be completed",
+      true
+    );
+  }
+
   return result;
 }
-document.getElementById("restoreSnapshotBtn").addEventListener("click", ()=>restoreBestSnapshotFromSettings());
+
+document.getElementById(
+  "restoreSnapshotBtn"
+).addEventListener(
+  "click",
+  ()=>restoreSelectedSnapshotFromSettings()
+);
+
+document.getElementById(
+  "settingsRecoverySnapshotSelect"
+).addEventListener(
+  "change",
+  event=>{
+    selectedSettingsRecoveryKey=
+      event.target.value;
+
+    renderRecoveryStatus();
+  }
+);
 function renderRecoveryStatus(){
   const line = document.getElementById("recoveryStatusLine");
   const card = document.getElementById("quarantineCard");
-  const best = getBestStoredLkgStatus();
-  const count = validSnapshotCount();
-  const restoreBtn = document.getElementById("restoreSnapshotBtn");
-  const snapshotMeta = document.getElementById("snapshotMetaLine");
-  if (restoreBtn) restoreBtn.disabled = !best.ok;
-  if (snapshotMeta) snapshotMeta.textContent = best.ok
-    ? count+" validated recovery snapshot"+(count===1?"":"s")+" stored on this device. Best snapshot: "+(best.record.savedAt ? new Date(best.record.savedAt).toLocaleString() : "date unavailable")+"."
-    : "No validated recovery snapshot is available yet.";
+
+  const selection =
+    populateRecoverySnapshotSelect(
+      "settingsRecoverySnapshotSelect",
+      "settingsRecoverySnapshotDetails",
+      selectedSettingsRecoveryKey
+    );
+
+  const count=
+    selection.statuses.filter(
+      status=>status.ok
+    ).length;
+
+  const restoreBtn=
+    document.getElementById(
+      "restoreSnapshotBtn"
+    );
+
+  const snapshotMeta=
+    document.getElementById(
+      "snapshotMetaLine"
+    );
+
+  if(restoreBtn){
+    restoreBtn.disabled=
+      !(
+        selection.selected
+        && selection.selected.ok
+      );
+  }
+
+  if(snapshotMeta){
+    snapshotMeta.textContent=
+      (
+        count
+          ? count+" validated recovery snapshot"+(count===1?"":"s")+" available. Choose one to inspect."
+          : "No validated recovery snapshots are available."
+      )
+      +" "
+      +currentSavedDataSummary();
+  }
+
   if (line){
     if (protectedMode) line.textContent = "Automatic recovery is paused while BlackPyre protects the original saved data.";
     else if (lkgStatus.state==="ready") line.textContent = "Automatic recovery protection: ready"+(lkgStatus.savedAt ? " · snapshot "+new Date(lkgStatus.savedAt).toLocaleString() : "")+(lkgStatus.retained ? " · populated snapshot retained" : "")+".";

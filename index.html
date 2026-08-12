@@ -860,7 +860,7 @@
     </div>
     <div class="card hidden" id="waterCard">
       <div style="display:flex; justify-content:space-between; align-items:center;">
-        <div><div class="label">Water</div><div style="font-family:'Oswald',sans-serif; font-weight:700; font-size:22px;"><span id="waterCount">0</span> <small style="font-size:12px; color:var(--dim);">glasses today</small></div></div>
+        <div><div class="label">Water</div><div style="font-family:'Oswald',sans-serif; font-weight:700; font-size:22px;"><span id="waterCount">0</span> <small id="waterUnitToday" style="font-size:12px; color:var(--dim);">GLASSES TODAY</small></div></div>
         <div class="row" style="flex:0 0 auto;">
           <button class="step" id="waterMinus" aria-label="Decrease water count" style="width:44px; height:44px;">−</button>
           <button class="step" id="waterPlus" aria-label="Increase water count" style="width:44px; height:44px; border-color:var(--ember);">＋</button>
@@ -1662,7 +1662,12 @@
       <div style="height:10px;"></div>
       <button class="btn ghost small" id="importDataBtn">Restore from backup</button>
       <div style="height:10px;"></div>
-      <button class="btn ghost small" id="restoreSnapshotBtn">Restore recovery snapshot</button>
+      <select id="settingsRecoverySnapshotSelect" aria-label="Choose recovery snapshot">
+        <option value="">Choose recovery snapshot</option>
+      </select>
+      <div class="note hidden" id="settingsRecoverySnapshotDetails" style="margin-top:8px;"></div>
+      <div style="height:10px;"></div>
+      <button class="btn ghost small" id="restoreSnapshotBtn" disabled>Restore selected snapshot</button>
       <div class="note" id="snapshotMetaLine" style="margin-top:8px;"></div>
       <div style="height:10px;"></div>
       <button class="btn ghost small" id="exportDiagnosticBtn">Export recovery diagnostic</button>
@@ -1726,9 +1731,13 @@
       <div class="note" id="recoveryAffectedText" style="margin-top:6px;"></div>
     </div>
     <div class="recovery-choice" id="recoveryLkgCard">
-      <div class="label">Restore last known good</div>
-      <div class="note" id="recoveryLkgText" style="margin-top:6px;"></div>
-      <button class="btn ghost small" id="recoverLkgBtn">Restore snapshot</button>
+      <div class="label">Recovery snapshots</div>
+      <select id="recoverySnapshotSelect" aria-label="Choose recovery snapshot">
+        <option value="">Choose recovery snapshot</option>
+      </select>
+      <div class="note hidden" id="recoverySnapshotDetails" style="margin-top:8px;"></div>
+      <div class="note" id="recoveryLkgText" style="margin-top:8px;"></div>
+      <button class="btn ghost small" id="recoverLkgBtn" disabled>Restore selected snapshot</button>
     </div>
     <div class="recovery-choice" id="recoveryReadableCard">
       <div class="label">Keep everything readable</div>

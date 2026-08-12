@@ -1109,17 +1109,43 @@ function getStoredQuarantineStatus(){
   try { return inspectQuarantineRaw(localStorage.getItem(QUARANTINE_KEY)); }
   catch(e){ return {ok:false, code:"storage-read", reason:"Browser storage would not allow BlackPyre to read quarantine."}; }
 }
-function getStoredLkgStatuses(){
-  const defs = [
-    {key:LKG_KEY, tier:"current"},
-    {key:LKG_PREVIOUS_KEY, tier:"previous"},
-    {key:LKG_OLDER_KEY, tier:"older"}
-  ];
-  try {
-    return defs.map(d=>Object.assign({key:d.key,tier:d.tier}, inspectLkgRaw(localStorage.getItem(d.key))));
-  } catch(e){
-    return [{ok:false,code:"storage-read",reason:"Browser storage would not allow BlackPyre to read its recovery snapshots."}];
+const LKG_SNAPSHOT_DEFS = [
+  {key:LKG_KEY,tier:"current"},
+  {key:LKG_PREVIOUS_KEY,tier:"previous"},
+  {key:LKG_OLDER_KEY,tier:"older"}
+];
+
+function getStoredLkgStatusByKey(key){
+  const def=LKG_SNAPSHOT_DEFS.find(d=>d.key===key);
+  if(!def){
+    return {
+      ok:false,
+      code:"snapshot-key",
+      reason:"The selected recovery snapshot is not recognized."
+    };
   }
+
+  try {
+    return Object.assign(
+      {key:def.key,tier:def.tier},
+      inspectLkgRaw(localStorage.getItem(def.key))
+    );
+  } catch(e){
+    return {
+      key:def.key,
+      tier:def.tier,
+      ok:false,
+      code:"storage-read",
+      reason:
+        "Browser storage would not allow BlackPyre to read this recovery snapshot."
+    };
+  }
+}
+
+function getStoredLkgStatuses(){
+  return LKG_SNAPSHOT_DEFS.map(
+    d=>getStoredLkgStatusByKey(d.key)
+  );
 }
 function snapshotDataScore(status){
   return status && status.ok && status.prepared ? dataContentScore(status.prepared.state.data) : 0;
@@ -2225,18 +2251,102 @@ function buildReadableRecoveryCandidate(){
   if (!prepared.ok) return {ok:false, code:"prepare", reason:prepared.reason};
   return {ok:true, source:"readable", raws:raws, prepared:prepared, parts:parts, summary:recoverySummary(parts)};
 }
+function buildSelectedLkgRecoveryCandidate(key){
+  const lkg=getStoredLkgStatusByKey(key);
+
+  if(!lkg.ok){
+    return {
+      ok:false,
+      code:lkg.code,
+      lkgKey:key,
+      lkgTier:lkg.tier||null,
+      reason:
+        lkg.reason ||
+        "The selected recovery snapshot is not valid."
+    };
+  }
+
+  const read=readStorageStrings();
+  if(!read.ok){
+    return {
+      ok:false,
+      code:"storage-read",
+      reason:read.reason
+    };
+  }
+
+  const raws={
+    cfg:lkg.record.strings.cfg,
+    data:lkg.record.strings.data,
+    program:lkg.record.strings.program
+  };
+
+  const prepared=prepareState(
+    raws.cfg,
+    raws.data,
+    raws.program,
+    {originalStrings:read.originals}
+  );
+
+  if(!prepared.ok){
+    return {
+      ok:false,
+      code:"prepare",
+      reason:prepared.reason
+    };
+  }
+
+  return {
+    ok:true,
+    source:"lkg",
+    raws:raws,
+    prepared:prepared,
+    lkg:lkg.record,
+    lkgKey:lkg.key,
+    lkgTier:lkg.tier,
+    summary:
+      "Restore settings, logs, and training program from "+
+      (
+        lkg.record.savedAt
+          ? new Date(lkg.record.savedAt).toLocaleString()
+          : "the selected snapshot"
+      )+
+      "."
+  };
+}
+
 function buildLkgRecoveryCandidate(){
-  const lkg = getBestStoredLkgStatus();
-  if (!lkg.ok) return {ok:false, code:lkg.code, reason:lkg.reason || "No validated last-known-good snapshot is available."};
-  const read = readStorageStrings();
-  if (!read.ok) return {ok:false, code:"storage-read", reason:read.reason};
-  const raws = {cfg:lkg.record.strings.cfg,data:lkg.record.strings.data,program:lkg.record.strings.program};
-  const prepared = prepareState(raws.cfg,raws.data,raws.program,{originalStrings:read.originals});
-  if (!prepared.ok) return {ok:false, code:"prepare", reason:prepared.reason};
-  const count = validSnapshotCount();
-  return {ok:true, source:"lkg", raws:raws, prepared:prepared, lkg:lkg.record, lkgKey:lkg.key,
-    summary:"Restore settings, logs, and training program from "+(lkg.record.savedAt ? new Date(lkg.record.savedAt).toLocaleString() : "the validated snapshot")+
-      (count>1 ? " (best of "+count+" validated snapshots)." : ".")};
+  const lkg=getBestStoredLkgStatus();
+
+  if(!lkg.ok){
+    return {
+      ok:false,
+      code:lkg.code,
+      reason:
+        lkg.reason ||
+        "No validated last-known-good snapshot is available."
+    };
+  }
+
+  const candidate=buildSelectedLkgRecoveryCandidate(lkg.key);
+  if(!candidate.ok) return candidate;
+
+  const count=validSnapshotCount();
+
+  candidate.summary=
+    "Restore settings, logs, and training program from "+
+    (
+      lkg.record.savedAt
+        ? new Date(lkg.record.savedAt).toLocaleString()
+        : "the validated snapshot"
+    )+
+    (
+      count>1
+        ? " (best of "+count+" validated snapshots)."
+        : "."
+    );
+
+  return candidate;
 }
 function bestValidatedDeviceCfg(parts, lkg){
   if (parts && parts.cfg && parts.cfg.usable) return cloneJSON(parts.cfg.value);
@@ -2433,6 +2543,110 @@ let lkgWarningShown = false;
 let lkgStatus = {state:"checking", message:"Checking automatic recovery protection…"};
 let saveTimer;
 
+const PRIMARY_WRITE_GUARD_KEYS = {
+  data:DATA_KEY,
+  cfg:CFG_KEY,
+  program:PROG_KEY
+};
+let primaryWriteBaselines = {};
+let primaryWriteBaselinesReady = false;
+
+function capturePrimaryWriteBaselines(){
+  const read=readStorageStrings();
+  if(!read.ok){
+    primaryWriteBaselinesReady=false;
+    return false;
+  }
+  primaryWriteBaselines={
+    data:read.originals.data,
+    cfg:read.originals.cfg,
+    program:read.originals.program
+  };
+  primaryWriteBaselinesReady=true;
+  return true;
+}
+
+function noteOwnPrimaryWrite(part,raw){
+  primaryWriteBaselines[part]=raw;
+}
+
+function blockStalePrimaryWrite(part){
+  const key=PRIMARY_WRITE_GUARD_KEYS[part];
+  if(!key) return false;
+
+  if(!primaryWriteBaselinesReady && !capturePrimaryWriteBaselines()){
+    flashSave("Not saved — saved data could not be verified",true);
+    return true;
+  }
+
+  let current;
+  try {
+    current=localStorage.getItem(key);
+  } catch(e){
+    flashSave("Not saved — saved data could not be verified",true);
+    return true;
+  }
+
+  if(current===primaryWriteBaselines[part]) return false;
+
+  const read=readStorageStrings();
+  if(!read.ok){
+    flashSave("Not saved — newer saved data detected",true);
+    return true;
+  }
+
+  const prepared=prepareState(
+    read.inputs.cfg,
+    read.inputs.data,
+    read.inputs.program,
+    {originalStrings:read.originals}
+  );
+
+  if(!prepared.ok){
+    if(prepared.state){
+      data=prepared.state.data;
+      cfg=prepared.state.cfg;
+      program=prepared.state.program;
+    }
+
+    protectedMode=true;
+    protectedModeKind=prepared.kind || "failure";
+    protectedModeReason=
+      "Saved BlackPyre data changed and could not be safely replaced.";
+    protectedModeDiagnostic=
+      prepared.diagnostic ||
+      makeDiagnostic(
+        "stale-primary",
+        part,
+        "stale-primary-invalid",
+        protectedModeReason
+      );
+
+    try {
+      protectedSnapshotStrings={
+        data:JSON.stringify(data),
+        cfg:JSON.stringify(cfg),
+        program:JSON.stringify(program)
+      };
+    } catch(e){}
+
+    if(typeof showProtectedBanner==="function") showProtectedBanner();
+    if(typeof renderRecoveryPanel==="function") renderRecoveryPanel();
+
+    flashSave("Not saved — protected newer data",true);
+    return true;
+  }
+
+  applyPreparedState(prepared);
+
+  if(typeof renderDayOptions==="function") renderDayOptions();
+  if(typeof renderSessionInputs==="function") renderSessionInputs();
+  if(typeof renderAll==="function") renderAll();
+
+  flashSave("Not saved — newer saved data reloaded",true);
+  return true;
+}
+
 function protectUnexpectedPrimaryLoss(incident){
   // Rebuild the protected view from persisted readable parts and the best validated snapshot.
   // A save attempt may already have changed memory, so never present that unsaved mutation as recovered data.
@@ -2543,6 +2757,7 @@ if (_bootNeedsNativeRecovery){
 let data = _bootState.data;
 let cfg = _bootState.cfg;
 let program = _bootState.program;
+capturePrimaryWriteBaselines();
 
 if (_bootNeedsNativeRecovery){
   protectedSnapshotStrings = {
@@ -2625,6 +2840,7 @@ function applyPreparedState(prepared){
   data = prepared.state.data;
   cfg = prepared.state.cfg;
   program = prepared.state.program;
+  capturePrimaryWriteBaselines();
 }
 function restoreProtectedSnapshot(){
   if (!protectedMode || !protectedSnapshotStrings) return;
@@ -2666,34 +2882,37 @@ function blockUnexpectedPrimaryLossBeforeWrite(){
   return true;
 }
 function save(){
-  if (blockProtectedWrite() || blockUnexpectedPrimaryLossBeforeWrite()) return false;
+  if (blockProtectedWrite() || blockUnexpectedPrimaryLossBeforeWrite() || blockStalePrimaryWrite("data")) return false;
   let raw;
   try { raw = JSON.stringify(data); }
   catch(e){ flashSave("Save failed", true); return false; }
   const written = writePrimaryString(DATA_KEY, raw);
   if (!written.ok){ flashSave("Save failed", true); return false; }
+  noteOwnPrimaryWrite("data",raw);
   const snapshot = refreshLastKnownGood("data-save");
   if (snapshot.ok){ markEstablishedInstall(); scheduleNativeVaultRefresh("data-save"); flashSave("Saved ✓"); }
   return true;
 }
 function saveCfg(){
-  if (blockProtectedWrite() || blockUnexpectedPrimaryLossBeforeWrite()) return false;
+  if (blockProtectedWrite() || blockUnexpectedPrimaryLossBeforeWrite() || blockStalePrimaryWrite("cfg")) return false;
   let raw;
   try { scrubRetiredCredentials(cfg); raw = JSON.stringify(cfg); }
   catch(e){ flashSave("Save failed", true); return false; }
   const written = writePrimaryString(CFG_KEY, raw);
   if (!written.ok){ flashSave("Save failed", true); return false; }
+  noteOwnPrimaryWrite("cfg",raw);
   const snapshot = refreshLastKnownGood("settings-save");
   if (snapshot.ok){ markEstablishedInstall(); scheduleNativeVaultRefresh("settings-save"); }
   return true;
 }
 function saveProgram(){
-  if (blockProtectedWrite() || blockUnexpectedPrimaryLossBeforeWrite()) return false;
+  if (blockProtectedWrite() || blockUnexpectedPrimaryLossBeforeWrite() || blockStalePrimaryWrite("program")) return false;
   let raw;
   try { raw = JSON.stringify(program); }
   catch(e){ flashSave("Save failed", true); return false; }
   const written = writePrimaryString(PROG_KEY, raw);
   if (!written.ok){ flashSave("Save failed", true); return false; }
+  noteOwnPrimaryWrite("program",raw);
   const snapshot = refreshLastKnownGood("program-save");
   if (snapshot.ok){ markEstablishedInstall(); scheduleNativeVaultRefresh("program-save"); }
   return true;
