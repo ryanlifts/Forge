@@ -28,14 +28,20 @@ final class BlackPyreDataPlugin: CAPPlugin, CAPBridgedPlugin {
     let jsName = "BlackPyreData"
     let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "protectFile", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "readHealthCache", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "writeHealthCache", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "eraseNativeFiles", returnType: CAPPluginReturnPromise)
     ]
 
     private static let libraryNames: Set<String> = [
         "blackpyre-native-vault.json",
         "blackpyre-native-vault.candidate.json",
-        "blackpyre-native-restore-quarantine.json"
+        "blackpyre-native-restore-quarantine.json",
+        "blackpyre-health-cache.json"
     ]
+
+    private static let healthCacheName = "blackpyre-health-cache.json"
+    private static let healthCacheLimit = 2_000_000
 
     override func load() {
         Self.protectManagedFiles()
@@ -114,6 +120,63 @@ final class BlackPyreDataPlugin: CAPPlugin, CAPBridgedPlugin {
             return
         }
         call.resolve(["protected": true])
+    }
+
+    @objc func readHealthCache(_ call: CAPPluginCall) {
+        guard let url = Self.managedURL(path: Self.healthCacheName, directory: "LIBRARY") else {
+            call.reject("BlackPyre could not resolve the health cache path.")
+            return
+        }
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            call.resolve(["raw": NSNull(), "protected": true])
+            return
+        }
+        guard Self.excludeFromBackup(url) else {
+            call.reject("BlackPyre could not verify health cache backup exclusion.")
+            return
+        }
+        do {
+            let data = try Data(contentsOf: url)
+            guard data.count <= Self.healthCacheLimit,
+                  let raw = String(data: data, encoding: .utf8) else {
+                call.reject("BlackPyre health cache is unreadable.")
+                return
+            }
+            call.resolve(["raw": raw, "protected": true])
+        } catch {
+            call.reject("BlackPyre could not read the health cache.")
+        }
+    }
+
+    @objc func writeHealthCache(_ call: CAPPluginCall) {
+        guard let raw = call.getString("raw"),
+              let data = raw.data(using: .utf8),
+              data.count <= Self.healthCacheLimit,
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let dictionary = object as? [String: Any],
+              dictionary["healthFormatVersion"] as? Int == 1,
+              dictionary["cacheKey"] as? String == "blackpyre:health-cache",
+              let url = Self.managedURL(path: Self.healthCacheName, directory: "LIBRARY") else {
+            call.reject("BlackPyre refused an invalid health cache record.")
+            return
+        }
+        do {
+            try data.write(to: url, options: .atomic)
+            guard Self.excludeFromBackup(url) else {
+                try? FileManager.default.removeItem(at: url)
+                call.reject("BlackPyre could not exclude the health cache from device backup.")
+                return
+            }
+            let verified = try Data(contentsOf: url)
+            guard verified == data else {
+                try? FileManager.default.removeItem(at: url)
+                call.reject("BlackPyre health cache verification failed.")
+                return
+            }
+            call.resolve(["written": true, "protected": true])
+        } catch {
+            call.reject("BlackPyre could not write the health cache.")
+        }
     }
 
     @objc func eraseNativeFiles(_ call: CAPPluginCall) {

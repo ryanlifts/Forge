@@ -1432,6 +1432,7 @@ function removeUnsavedExtraExercise(name){
 }
 
 let activeSessionType = null;
+let workoutSessionStartedAt = null;
 function sessionDraftHasMeaningfulWork(){
   if (
     typeof editingWorkoutIdx!=="undefined"
@@ -1479,6 +1480,7 @@ function clearSessionDraftFields(){
   document.getElementById("wNotes").value = "";
   document.getElementById("cardioMin").value = "";
   document.getElementById("cardioDetail").value = "";
+  workoutSessionStartedAt = null;
 }
 wDaySel.addEventListener("change", ()=>{
   const nextType = wDaySel.value;
@@ -10478,6 +10480,7 @@ function initSessionState(){
   sessionSwaps = {};
   const v = wDaySel.value;
   activeSessionType = v;
+  workoutSessionStartedAt = null;
   if (v==="__CARDIO__") return;
 
   const last = (v!=="__FREE__") ? lastSessionFor(v) : null;
@@ -11188,6 +11191,11 @@ function buildWorkoutDraft(){
       sessionState
     );
 
+  const previousDraft=data.activeWorkoutDraft;
+  const previousStartedAt=previousDraft&&sameDraftSession(previousDraft,{date:document.getElementById("wDate").value||todayStr(),day:wDaySel.value})
+    && validHealthIso(previousDraft.startedAt) ? previousDraft.startedAt : null;
+  workoutSessionStartedAt=previousStartedAt||workoutSessionStartedAt||new Date().toISOString();
+
   const draft={
     date:
       document
@@ -11205,6 +11213,7 @@ function buildWorkoutDraft(){
         .getElementById("wNotes")
         .value
         .trim(),
+    startedAt:workoutSessionStartedAt,
     updatedAt:new Date().toISOString()
   };
 
@@ -11254,6 +11263,7 @@ function resumeWorkoutDraft(){
 
   document.getElementById("wDate").value = d.date || todayStr();
   document.getElementById("wNotes").value = d.notes || "";
+  workoutSessionStartedAt=validHealthIso(d.startedAt) ? d.startedAt : null;
 
   const hasDay = [...wDaySel.options].some(o=>o.value===d.day);
   wDaySel.value = hasDay ? d.day : "__FREE__";
@@ -11342,6 +11352,7 @@ function discardWorkoutDraft(ask, resetSession){
   }
   const wasLoaded = workoutDraftLoaded;
   workoutDraftLoaded = false;
+  workoutSessionStartedAt = null;
   if (resetSession!==false && wasLoaded){
     extraExercises=[];
     clearSessionDraftFields();
@@ -11365,6 +11376,7 @@ function resetTrainingUiAfterRestore(){
   sessionState = {};
   sessionSwaps = {};
   activeSessionType = null;
+  workoutSessionStartedAt = null;
 
   if (typeof editingWorkoutIdx!=="undefined"){
     editingWorkoutIdx = null;
@@ -12020,6 +12032,34 @@ document.getElementById("addExBtn").addEventListener("click", ()=>{
   renderSessionInputs();
 });
 
+function completedWorkoutTiming(date,explicitDurationSeconds){
+  if(date!==todayStr()) return null;
+  const endedAt=new Date();
+  let startedAt=null;
+  const explicit=Number(explicitDurationSeconds);
+  if(Number.isFinite(explicit)&&explicit>0){
+    startedAt=new Date(endedAt.getTime()-explicit*1000);
+  }else if(typeof validHealthIso==="function"&&validHealthIso(workoutSessionStartedAt)){
+    startedAt=new Date(workoutSessionStartedAt);
+  }
+  if(!startedAt||!Number.isFinite(startedAt.getTime())||startedAt>=endedAt) return null;
+  const durationSeconds=Math.round((endedAt-startedAt)/1000);
+  if(durationSeconds<60||durationSeconds>12*3600) return null;
+  return {startedAt:startedAt.toISOString(),endedAt:endedAt.toISOString(),durationSeconds:durationSeconds};
+}
+function newLoggedWorkoutRecord(base,timing){
+  const id=typeof newBlackPyreWorkoutId==="function" ? newBlackPyreWorkoutId() : "bpw-"+Date.now()+"-"+Math.random().toString(36).slice(2,12);
+  const record=Object.assign({},base,{id:id});
+  if(timing) Object.assign(record,timing);
+  return record;
+}
+function sendEligibleWorkoutToAppleHealth(record){
+  if(typeof writeWorkoutToAppleHealth!=="function") return;
+  writeWorkoutToAppleHealth(record).then(result=>{
+    if(result&&result.ok) flashSave("Session logged and shared with Apple Health ✓");
+  }).catch(()=>{});
+}
+
 document.getElementById("logWorkoutBtn").addEventListener("click", ()=>{
   const v = wDaySel.value;
   const date = document.getElementById("wDate").value;
@@ -12036,17 +12076,30 @@ document.getElementById("logWorkoutBtn").addEventListener("click", ()=>{
       return;
     }
     const sets = {}; sets[type] = min+" min"+(detail?" \u00b7 "+detail:"");
-    const cObj = {date:date, day:"CARDIO", title:"Cardio", sets:sets, notes:notes};
+    const cObj = newLoggedWorkoutRecord(
+      {date:date, day:"CARDIO", title:"Cardio", sets:sets, notes:notes},
+      completedWorkoutTiming(date,Number(min)*60)
+    );
     const wasCardioEdit = editingWorkoutIdx!=null;
-    if (wasCardioEdit){ data.workouts[editingWorkoutIdx] = cObj; }
+    const beforeCardioLogData=cloneJSON(data);
+    if (wasCardioEdit){
+      const original=data.workouts[editingWorkoutIdx];
+      data.workouts[editingWorkoutIdx] = Object.assign({},original,cObj,{id:original.id||cObj.id});
+    }
     else { data.workouts.push(cObj); bumpLog(); }
     document.getElementById("cardioMin").value=""; document.getElementById("cardioDetail").value="";
-    save(); renderWork(); renderDash(); renderBackup();
+    if(!save()){
+      data=beforeCardioLogData;
+      showWorkoutError("The cardio session could not be saved.",null);
+      return;
+    }
+    renderWork(); renderDash(); renderBackup();
     if (wasCardioEdit){
       endWorkoutEdit();
       ackBtn("logWorkoutBtn", "\u2713 Session updated");
       flashSave("Session updated \u2713");
     } else {
+      sendEligibleWorkoutToAppleHealth(cObj);
       showCelebration("Cardio Banked", null, type+" \u00b7 "+min+" min");
     }
     return;
@@ -12144,11 +12197,16 @@ document.getElementById("logWorkoutBtn").addEventListener("click", ()=>{
   const day = program.days.find(p=>p.id===v);
   const wasEdit = editingWorkoutIdx!=null;
   const beforeLogData = cloneJSON(data);
+  let loggedWorkout=null;
   if (wasEdit){
     const orig = data.workouts[editingWorkoutIdx];
-    data.workouts[editingWorkoutIdx] = {date:date, day:orig.day, title:orig.title, sets:sets, notes:notes};
+    data.workouts[editingWorkoutIdx] = Object.assign({},orig,{date:date, day:orig.day, title:orig.title, sets:sets, notes:notes});
   } else {
-    data.workouts.push({date:date, day:v, title: v==="__FREE__" ? "Freestyle" : (day?day.title:v), sets:sets, notes:notes});
+    loggedWorkout=newLoggedWorkoutRecord(
+      {date:date, day:v, title: v==="__FREE__" ? "Freestyle" : (day?day.title:v), sets:sets, notes:notes},
+      completedWorkoutTiming(date,null)
+    );
+    data.workouts.push(loggedWorkout);
     data.activeWorkoutDraft = null;
     bumpLog();
   }
@@ -12170,6 +12228,8 @@ document.getElementById("logWorkoutBtn").addEventListener("click", ()=>{
     flashSave("Session updated \u2713"+(prLines.length?" \u00b7 PR!":""));
     return;
   }
+  sendEligibleWorkoutToAppleHealth(loggedWorkout);
+  workoutSessionStartedAt=null;
   const streak = computeStreak();
   showCelebration(prLines.length ? "PR FORGED" : "Session Forged", prLines,
     Object.keys(sets).length+" exercises recorded"+(streak>1?"  \u00b7  \ud83d\udd25 "+streak+"-day streak":""));
@@ -12339,6 +12399,9 @@ function renderWork(){
     const dayObj = program.days.find(p=>p.id===s.day);
     const title = s.title || (dayObj?dayObj.title:s.day) || "Workout";
     const names = Object.keys(s.sets||{});
+    const heartRate=typeof healthHeartRateForWorkoutRecord==="function"
+      ? healthHeartRateForWorkoutRecord(s)
+      : null;
 
     const values = names.map(ex=>{
       try {
@@ -12360,6 +12423,7 @@ function renderWork(){
       +'<div style="padding:0 16px 14px; font-size:12px;">'
       +'<div style="color:var(--dim); line-height:1.7;">'
       +values
+      +(heartRate?'<div style="color:var(--ok); margin-top:5px;">Apple Health intensity: '+esc(heartRate.averageBpm)+' bpm average · '+esc(heartRate.maximumBpm)+' bpm max</div>':'')
       +(s.notes?'<div style="color:var(--ember); margin-top:5px;">Note: '+esc(s.notes)+'</div>':'')
       +'</div>'
       +'<div style="display:flex; justify-content:flex-end; gap:6px; margin-top:10px;">'

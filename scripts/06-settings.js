@@ -1111,7 +1111,7 @@ async function eraseAllBlackPyreData(){
   }
   const first=confirm(
     "Erase ALL BlackPyre data on this device?\n\n"+
-    "This permanently removes settings, logs, saved foods, programs, workout drafts, recovery snapshots, Native Vault files, and backups kept inside BlackPyre. Copies saved elsewhere are not affected."
+    "This permanently removes settings, logs, saved foods, programs, workout drafts, recovery snapshots, the device-only Apple Health cache, Native Vault files, and backups kept inside BlackPyre. Copies saved elsewhere and data in Apple Health are not affected."
   );
   if (!first) return false;
   const second=confirm(

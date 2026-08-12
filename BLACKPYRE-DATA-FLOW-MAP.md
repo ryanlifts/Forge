@@ -15,6 +15,8 @@ advertising SDK, BlackPyre server, or direct AI-provider connection.
 | Exercise name | YouTube external website/app | Exercise name in a search URL | User taps Video | External browser/app; YouTube/Google terms apply |
 | Static link label | Research, legal, privacy, support, or licensing website | Requested URL and ordinary network metadata | User taps an external link | External website policy applies |
 | Rest timer | iOS Local Notifications | Timer completion time and BlackPyre reminder text | User starts a rest timer and grants notification permission | Managed locally by iOS; canceled when timer ends or all data is erased |
+| Apple Health | Device-only Health cache | Daily weight/latest value, active energy, steps, sleep, resting heart rate, HRV; workout HR average/max | User connects or syncs Apple Health | Aggregate-only native Library file; excluded from iOS/iCloud backup; never in normal backups, LKG, quarantine, diagnostics, or Native Vault |
+| Completed BlackPyre workout | Apple Health | Activity type, actual start, actual end, and actual duration | User has allowed workout sharing and logs an eligible completed session | Stored by Apple Health; BlackPyre keeps only device-local write status and returned workout ID |
 | Selected photo/text | iOS share sheet, clipboard, or user-selected AI app | Only content the user explicitly selects | User starts an AI copy/paste handoff | BlackPyre does not contact an AI service; selected photo/raw reply is cleared after the handoff/review |
 | Backup file | BlackPyre restore pipeline | User-selected BlackPyre JSON | User chooses Restore and confirms validated summary | Validated before commit; original state preserved until successful replacement |
 | Damaged local storage | Local quarantine / Native Vault | Exact original strings and diagnostics | Protected mode recovery | Device only; excluded from automatic backup; never sent automatically |
@@ -37,3 +39,12 @@ URLResourceKey.isExcludedFromBackup value. Explicit user sharing remains possibl
 Erase All removes BlackPyre local storage, managed native files, pending rest
 notifications, and BlackPyre cache storage after two confirmations. Protected mode
 blocks the operation.
+
+## Apple Health boundaries
+
+- Health access is optional and separately scoped by data type.
+- BlackPyre stores daily aggregates and workout heart-rate average/max only.
+- Raw samples, routes, beat-by-beat heart rate, and step timelines are discarded.
+- Active energy remains separate from logged-trend TDEE and never changes targets.
+- The device-only Health cache is excluded from iOS/iCloud backup and from every BlackPyre export and recovery artifact.
+- Health data is never sent to a BlackPyre server, advertising service, or analytics service.

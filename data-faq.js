@@ -56,6 +56,8 @@ const FAQ = [
 
   {q:"What can the optional AI tools do, and what information is sent?", a:"Optional AI tools can help estimate foods, discuss your progress, or create training programs through copy/paste handoffs. BlackPyre never contacts an AI service. You choose what to copy, share, or paste into your own AI app. Selected photos stay in memory only for the handoff and raw replies are cleared after review. Review every result before saving it. AI food estimates are estimates."},
 
+  {q:"How does Apple Health work with BlackPyre?", a:"In the native iPhone app, Apple Health access is optional. You choose whether BlackPyre can read weight, active energy, steps, sleep, resting heart rate, HRV, and workout heart rate, and whether completed workouts can be written back. Each signal works independently. BlackPyre keeps only daily totals/latest values and workout heart-rate averages and maxima in a device-only cache. Health data is never included in BlackPyre backups, recovery files, or iCloud device backup. Active energy is shown separately and never changes your logged-trend TDEE or targets. If data is missing, check the Health app and the original watch, scale, or app expected to write it."},
+
 
   {sec:"Your data & recovery"},
 

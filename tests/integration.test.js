@@ -2089,7 +2089,7 @@ const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("native app disables double-tap and pinch zoom while preserving one-finger panning", html.includes("user-scalable=no") && html.includes("maximum-scale=1.0") && /html, body\s*\{\s*touch-action:pan-x pan-y;\s*\}/.test(html));
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+(?:-\d+)?"/.test(sw));
-check("native service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v107"'));
+check("native service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v108"'));
 
 const nativePrep76 = fs.readFileSync(
   path.join(__dirname,"..","tools","prepare-native.sh"),
@@ -2123,14 +2123,14 @@ check("data scripts load before the app scripts (raw file order)",
     rawIndex.indexOf('src="'+f+'"') < rawIndex.indexOf('src="scripts/01-storage.js"')));
 
 // ================= Phase 2: sliced app scripts =================
-const SLICES = ["01-storage.js","02-food.js","03-train.js","04-weight.js","05-ai.js","06-settings.js","07-boot.js"];
-check("all 7 slices exist on disk", SLICES.every(f=>fs.existsSync(path.join(__dirname, "..", "scripts", f))));
-check("index.html loads the 7 slices in ascending order", (()=>{
+const SLICES = ["01-storage.js","02-food.js","03-train.js","04-weight.js","05-ai.js","06-settings.js","08-health.js","07-boot.js"];
+check("all 8 slices exist on disk", SLICES.every(f=>fs.existsSync(path.join(__dirname, "..", "scripts", f))));
+check("index.html loads the 8 slices in approved dependency order", (()=>{
   const pos = SLICES.map(f=>rawIndex.indexOf('src="scripts/'+f+'"'));
   return pos.every(p=>p>-1) && pos.every((p,i)=>i===0 || p>pos[i-1]);
 })());
 check("no inline app script remains in index.html", !/<script>(?!\s*<)/.test(rawIndex.replace(/<script src="[^"]*"><\/script>/g,"")));
-check("SW precaches all 7 slices", SLICES.every(f=>sw.includes('"./scripts/'+f+'"')));
+check("SW precaches all 8 slices", SLICES.every(f=>sw.includes('"./scripts/'+f+'"')));
 
 // ================= Phase 2 corrections: strict mode, exact order, migration identity =================
 const LOCAL_SCRIPTS = [
@@ -2147,6 +2147,7 @@ const LOCAL_SCRIPTS = [
   "scripts/04-weight.js",
   "scripts/05-ai.js",
   "scripts/06-settings.js",
+  "scripts/08-health.js",
   "scripts/07-boot.js"
 ];
 check("every local classic script begins with the strict-mode directive",
@@ -2155,7 +2156,7 @@ check("every local classic script begins with the strict-mode directive",
 const APPROVED_ORDER = LOCAL_SCRIPTS; // data files, then slices 01..07 — this order is load-bearing
 const scriptTags = [...rawIndex.matchAll(/<script\b[^>]*\bsrc="([^"]+)"[^>]*><\/script>/g)];
 check(
-  "exactly the 14 approved scripts, each exactly once, in the approved order",
+  "exactly the 15 approved scripts, each exactly once, in the approved order",
   scriptTags.length===APPROVED_ORDER.length
     && scriptTags.every(
       (tag,index)=>tag[1]===APPROVED_ORDER[index]
@@ -2175,7 +2176,7 @@ check("no local script tag uses async, defer, or type=module",
 const SLICE_OPENERS = {
   "01-storage.js":"storage keys & defaults", "02-food.js":"bars", "03-train.js":"TRAIN",
   "04-weight.js":"WEIGHT", "05-ai.js":"V23: WATER",
-  "06-settings.js":"FIRST-RUN SETUP WIZARD", "07-boot.js":"DASH" };
+  "06-settings.js":"FIRST-RUN SETUP WIZARD", "08-health.js":"APPLE HEALTH", "07-boot.js":"DASH" };
 check("every slice opens with strict mode then its expected section marker",
   SLICES.every(f=>{
     const lines = fs.readFileSync(path.join(__dirname, "..", "scripts", f), "utf8").split("\n");

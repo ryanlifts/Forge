@@ -818,6 +818,11 @@
   .recovery-choice .btn { margin-top:10px; }
   .recovery-warning { border-color:var(--warn); background:rgba(251,146,60,.08); }
   #quarantineCard { border:1px solid var(--warn); border-radius:12px; padding:12px; margin-top:12px; background:rgba(251,146,60,.08); }
+  .health-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:10px; }
+  .health-metric { border:1px solid var(--border); border-radius:12px; padding:10px; min-width:0; }
+  .health-metric strong { display:block; margin-top:4px; color:var(--text); font-family:'Oswald',sans-serif; font-size:18px; text-transform:uppercase; }
+  .health-status-warning { color:var(--warn); }
+  @media (max-width:390px) { .health-grid { grid-template-columns:minmax(0,1fr); } }
 </style>
 </head>
 <body>
@@ -867,6 +872,17 @@
         </div>
       </div>
       <div id="waterHistory" style="margin-top:12px;"></div>
+    </div>
+    <div class="card hidden" id="healthSummaryCard">
+      <div class="row" style="align-items:center;">
+        <div style="flex:1;">
+          <div class="label">Apple Health</div>
+          <div class="note" id="healthSummaryUpdated" style="margin-top:4px;"></div>
+        </div>
+        <button class="xbtn" id="healthSummarySyncBtn" style="flex:0 0 auto;">SYNC</button>
+      </div>
+      <div class="health-grid" id="healthSummaryBody"></div>
+      <div class="note" id="healthTdeeComparison" style="margin-top:10px;"></div>
     </div>
     <div class="card hidden" id="weekCard">
       <div class="label">This week</div>
@@ -1457,6 +1473,7 @@
           <div><div class="label">Time</div><input type="time" id="wtTime" aria-label="Weigh-in time"></div>
         </div>
         <div class="label" id="wtValLabel">Weight (lb)</div><input type="number" id="wtVal" aria-label="Body weight in pounds" placeholder="e.g. 180" inputmode="decimal" step="any" style="margin-bottom:12px;">
+        <div class="note hidden" id="healthWeightSuggestion" style="margin:-4px 0 12px;"></div>
         <button class="btn" id="addWtBtn" style="width:100%;">Record</button>
       </div>
       <div class="note">Weigh same time of day · trust the weekly trend, not the daily number</div>
@@ -1618,6 +1635,22 @@
           <div class="label">Automatic progression</div>
           <button class="btn ghost small" id="autoProgressionToggleBtn" aria-pressed="false" style="width:100%; margin:8px 0 6px;">Automatic progression: Off</button>
           <div class="note" id="autoProgressionNote">When enabled, BlackPyre may preload the next weight after every programmed set reaches its target. Standard exercises add 5 lb; assisted exercises reduce assistance by 5 lb. Turn it off to carry the last logged weights forward unchanged.</div>
+        </div>
+      </div>
+    </details>
+    <details class="disclosure" id="settingsHealthDetails">
+      <summary><div><div class="disclosure-title">Apple Health</div><div class="disclosure-sub">Optional weight, activity, recovery, and workout sharing</div></div></summary>
+      <div class="disclosure-body">
+        <div class="card">
+          <div class="label">Health data on this iPhone</div>
+          <div class="note" style="margin:7px 0 10px;">BlackPyre can read the Apple Health data you choose: weight, active energy, steps, sleep, resting heart rate, HRV, and workout heart rate. Each signal works independently. BlackPyre stores only daily totals and workout averages/maxima in a device-only cache that is excluded from backups and iCloud.</div>
+          <div class="note" id="healthSettingsStatus" role="status" aria-live="polite" style="margin-bottom:10px;">Apple Health is not connected.</div>
+          <button class="btn" id="healthConnectBtn" style="width:100%;">CONNECT APPLE HEALTH</button>
+          <button class="btn ghost small mt10 hidden" id="healthSyncBtn" style="width:100%;">SYNC APPLE HEALTH</button>
+          <button class="btn ghost small mt10 hidden" id="healthManageBtn" style="width:100%;">MANAGE ACCESS IN SETTINGS</button>
+          <button class="btn ghost small mt10 hidden" id="healthWorkoutWriteBtn" aria-pressed="true" style="width:100%;">WORKOUT SHARING: ON</button>
+          <div class="note" style="margin-top:10px;">Active energy is shown beside BlackPyre's estimate from your food and weight trend; it never changes that estimate or your targets. Completed sessions are shared only when BlackPyre recorded a real start, end, and duration. Missing data stays “Not available” and manual entry always remains available.</div>
+          <div class="note" id="healthSourceHint" style="margin-top:8px;">If a device or app is not writing a signal into Apple Health, BlackPyre cannot see it. Check the Health app and the original device's app.</div>
         </div>
       </div>
     </details>
@@ -1967,6 +2000,7 @@
 <script src="scripts/04-weight.js"></script>
 <script src="scripts/05-ai.js"></script>
 <script src="scripts/06-settings.js"></script>
+<script src="scripts/08-health.js"></script>
 <script src="scripts/07-boot.js"></script>
 </body>
 </html>

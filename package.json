@@ -30,7 +30,8 @@
     "@capacitor/filesystem": "^8.1.2",
     "@capacitor/ios": "8.5.0",
     "@capacitor/local-notifications": "^8.2.1",
-    "@capacitor/share": "^8.0.1"
+    "@capacitor/share": "^8.0.1",
+    "@flomentumsolutions/capacitor-health-extended": "0.8.3"
   },
   "overrides": {
     "brace-expansion": "5.0.9"

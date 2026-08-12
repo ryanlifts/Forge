@@ -12,8 +12,9 @@ practice.
 ## Data processed only on device
 
 Settings, nutrition/training logs, weights, programs, camera frames used for barcode
-recognition, local notifications, recovery records, and future HealthKit data are
-processed only on device. Under Apple's definition, data that never leaves the device is
+recognition, local notifications, recovery records, and optional HealthKit aggregates are
+processed only on device. HealthKit data is kept in a separate backup-excluded cache and
+is absent from BlackPyre backup and recovery artifacts. Under Apple's definition, data that never leaves the device is
 not “collected” for the App Privacy label. Explain it in the privacy policy, but do not
 mislabel it as off-device collection.
 
@@ -48,5 +49,7 @@ off-device copies.
 - No data is sold.
 - No data is used for advertising or marketing.
 - Camera access is only for local food-barcode scanning.
+- HealthKit access is optional, aggregate-only, device-only, and never used for advertising.
+- HealthKit reads cover weight, active energy, steps, sleep, resting heart rate, HRV, and workout heart rate. Eligible completed workouts may be written with permission.
 - Privacy policy: https://ryanlifts.github.io/Forge/privacy.html
 - Support: https://ryanlifts.github.io/Forge/support.html

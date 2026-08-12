@@ -26,6 +26,15 @@ and Share are copyright (c) 2017-present Drifty Co. / Ionic and are licensed
 under the MIT License. Complete license text is included in each installed
 package and available from https://github.com/ionic-team/capacitor.
 
+Flomentum Solutions Capacitor Health Extended 0.8.3
+--------------------------------------------------
+Copyright (c) 2024 Martin Ley1.
+Copyright (c) 2025 Flomentum Solutions, LLC (Matthew May).
+Licensed under the MIT License.
+The complete license is bundled as
+vendor/capacitor-health-extended.LICENSE.txt.
+Source: https://github.com/Flomentum-Solutions/capacitor-health-extended
+
 IONFilesystemLib
 ----------------
 Copyright (c) 2025 Ionic.
