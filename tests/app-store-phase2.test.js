@@ -38,7 +38,7 @@ async function run(){
     && /protectNativeManagedFile\(filename,"DOCUMENTS"\)/.test(read("scripts/06-settings.js")));
 
   const buildNumbers=[...project.matchAll(/CURRENT_PROJECT_VERSION = (\d+);/g)].map(match=>Number(match[1]));
-  check("Debug and Release use App Store build 2",buildNumbers.length===2&&buildNumbers.every(value=>value===2));
+  check("app and Live Activity configurations use App Store build 2",buildNumbers.length===4&&buildNumbers.every(value=>value===2));
   check("Capacitor 8.5.0 and the secure brace-expansion override are pinned",(()=>{
     const pkg=JSON.parse(read("package.json"));
     return pkg.dependencies["@capacitor/cli"]==="8.5.0"

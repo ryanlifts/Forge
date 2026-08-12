@@ -410,7 +410,49 @@ let restInterval = null, restRunning = false, restPaused = false;
 let restRemaining = 0, restEndsAt = 0, restDurationSec = 0, restReadySec = 0, restStateRestored = false;
 const REST_NOTIFICATION_ID = 64065;
 let restNotificationWork = Promise.resolve();
+let restActivityWork = Promise.resolve();
 function fmtRest(sec){ return Math.floor(sec/60)+":"+String(sec%60).padStart(2,"0"); }
+function restActivityCapability(){
+  const c = window.Capacitor;
+  let native = false, plugin = null;
+  try { native = !!(c && typeof c.isNativePlatform==="function" && c.isNativePlatform()); } catch(e){}
+  try { plugin = c && c.Plugins ? c.Plugins.BlackPyreRestActivity : null; } catch(e){}
+  return {available:!!(native && plugin), plugin:plugin};
+}
+function queueRestActivity(task){
+  restActivityWork = restActivityWork.catch(()=>{}).then(task);
+  return restActivityWork;
+}
+function syncRestActivity(){
+  const snapshot = restRunning
+    ? {status:"running", endAt:restEndsAt, remainingSec:restRemaining}
+    : restPaused
+      ? {status:"paused", endAt:0, remainingSec:restRemaining}
+      : null;
+  if (!snapshot) return endRestActivity();
+  return queueRestActivity(async ()=>{
+    const capability = restActivityCapability();
+    if (!capability.available) return {available:false};
+    try {
+      return await capability.plugin.sync(snapshot);
+    } catch(e){
+      console.warn("BlackPyre could not sync the rest Live Activity:", e);
+      return {available:true, error:true};
+    }
+  });
+}
+function endRestActivity(){
+  return queueRestActivity(async ()=>{
+    const capability = restActivityCapability();
+    if (!capability.available) return {available:false};
+    try {
+      return await capability.plugin.end();
+    } catch(e){
+      console.warn("BlackPyre could not end the rest Live Activity:", e);
+      return {available:true, error:true};
+    }
+  });
+}
 function restNotificationCapability(){
   const c = window.Capacitor;
   let native = false, available = false, plugin = null;
@@ -537,6 +579,7 @@ function persistRestTimer(){
   } else if (restPaused){
     writeRestTimerState({status:"paused", remainingSec:restRemaining, durationSec:restDurationSec, savedAt:Date.now()});
   }
+  syncRestActivity();
 }
 function finishRestCountdown(){
   const completedDuration = normalizedRestSeconds(restDurationSec, restReadySec);
@@ -548,6 +591,7 @@ function finishRestCountdown(){
   restDurationSec = completedDuration;
   restReadySec = completedDuration;
   writeRestTimerState({status:"ready", durationSec:completedDuration, savedAt:Date.now()});
+  endRestActivity();
   paintRestDock();
 }
 function syncRestFromClock(){
@@ -627,6 +671,7 @@ function cancelRest(){
   restDurationSec = 0;
   restReadySec = selectedRestSeconds();
   clearRestTimerState();
+  endRestActivity();
   paintRestDock();
   cancelRestNotification();
 }
@@ -636,6 +681,7 @@ function restoreRestTimerState(){
   const saved = readRestTimerState();
   if (!saved.ok){
     cancelRestNotification();
+    endRestActivity();
     return;
   }
   restDurationSec = savedRestDuration(saved.record);
@@ -650,16 +696,19 @@ function restoreRestTimerState(){
     }
     armRestInterval();
     reconcileRestNotification();
+    syncRestActivity();
   } else if (saved.record.status==="paused") {
     restRemaining = Math.max(1, Math.round(saved.record.remainingSec));
     restRunning = false;
     restPaused = true;
     restEndsAt = 0;
+    syncRestActivity();
   } else {
     restRemaining = 0;
     restRunning = false;
     restPaused = false;
     restEndsAt = 0;
+    endRestActivity();
   }
   if (!restRunning) cancelRestNotification();
 }

@@ -1,10 +1,12 @@
 import Foundation
 import WebKit
 import Capacitor
+import ActivityKit
 
 @objc(BlackPyreBridgeViewController)
 final class BlackPyreBridgeViewController: CAPBridgeViewController {
     private let blackPyreDataPlugin = BlackPyreDataPlugin()
+    private let blackPyreRestActivityPlugin = BlackPyreRestActivityPlugin()
     private var contentSizeObserver: NSObjectProtocol?
 
     deinit {
@@ -48,6 +50,7 @@ final class BlackPyreBridgeViewController: CAPBridgeViewController {
 
     override func capacitorDidLoad() {
         bridge?.registerPluginInstance(blackPyreDataPlugin)
+        bridge?.registerPluginInstance(blackPyreRestActivityPlugin)
         applyDynamicTypeScale()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             self?.applyDynamicTypeScale()
@@ -120,6 +123,100 @@ final class BlackPyreBridgeViewController: CAPBridgeViewController {
           }
         })();
         """
+    }
+}
+
+@objc(BlackPyreRestActivityPlugin)
+final class BlackPyreRestActivityPlugin: CAPPlugin, CAPBridgedPlugin {
+    let identifier = "BlackPyreRestActivityPlugin"
+    let jsName = "BlackPyreRestActivity"
+    let pluginMethods: [CAPPluginMethod] = [
+        CAPPluginMethod(name: "sync", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "end", returnType: CAPPluginReturnPromise)
+    ]
+
+    @objc func sync(_ call: CAPPluginCall) {
+        guard #available(iOS 16.1, *) else {
+            call.resolve(["supported": false, "active": false])
+            return
+        }
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else {
+            call.resolve(["supported": true, "enabled": false, "active": false])
+            return
+        }
+
+        let status = call.getString("status") ?? "running"
+        let paused = status == "paused"
+        let remaining = max(0, call.getInt("remainingSec") ?? 0)
+        let endAtMilliseconds = call.getDouble("endAt") ?? 0
+        let endAt = paused
+            ? Date().addingTimeInterval(TimeInterval(remaining))
+            : Date(timeIntervalSince1970: endAtMilliseconds / 1000)
+
+        guard paused ? remaining > 0 : endAt > Date() else {
+            Task {
+                await Self.endAllActivities()
+                call.resolve(["supported": true, "enabled": true, "active": false])
+            }
+            return
+        }
+
+        let state = RestTimerActivityAttributes.ContentState(
+            endAt: endAt,
+            pausedRemaining: remaining,
+            isPaused: paused
+        )
+
+        Task {
+            let activities = Activity<RestTimerActivityAttributes>.activities
+            if let primary = activities.first {
+                await primary.update(using: state)
+                for extra in activities.dropFirst() {
+                    await extra.end(using: nil, dismissalPolicy: .immediate)
+                }
+                call.resolve([
+                    "supported": true,
+                    "enabled": true,
+                    "active": true,
+                    "id": primary.id
+                ])
+                return
+            }
+
+            do {
+                let activity = try Activity.request(
+                    attributes: RestTimerActivityAttributes(title: "BlackPyre Rest"),
+                    contentState: state,
+                    pushType: nil
+                )
+                call.resolve([
+                    "supported": true,
+                    "enabled": true,
+                    "active": true,
+                    "id": activity.id
+                ])
+            } catch {
+                call.reject("BlackPyre could not start the Live Activity.", nil, error)
+            }
+        }
+    }
+
+    @objc func end(_ call: CAPPluginCall) {
+        guard #available(iOS 16.1, *) else {
+            call.resolve(["supported": false, "active": false])
+            return
+        }
+        Task {
+            await Self.endAllActivities()
+            call.resolve(["supported": true, "active": false])
+        }
+    }
+
+    @available(iOS 16.1, *)
+    private static func endAllActivities() async {
+        for activity in Activity<RestTimerActivityAttributes>.activities {
+            await activity.end(using: nil, dismissalPolicy: .immediate)
+        }
     }
 }
 

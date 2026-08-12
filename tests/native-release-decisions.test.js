@@ -47,6 +47,6 @@ check("native target is iPhone-only and portrait-only with no armv7 requirement"
   && (plist.match(/UIInterfaceOrientationPortrait/g)||[]).length===1);
 const project=read("ios/App/App.xcodeproj/project.pbxproj");
 const families=[...project.matchAll(/TARGETED_DEVICE_FAMILY = ([^;]+);/g)].map(match=>match[1].trim());
-check("Debug and Release both target iPhone only",families.length===2&&families.every(value=>value==="1"));
+check("app and Live Activity configurations all target iPhone only",families.length===4&&families.every(value=>value==="1"));
 
 summary("NATIVE RELEASE DECISIONS");

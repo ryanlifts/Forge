@@ -24,6 +24,8 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
@@ -32,6 +34,8 @@
 	<string>BlackPyre reads the Apple Health data you choose to show weight, activity, and recovery information alongside your logs.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>BlackPyre writes only completed workouts with a recorded duration when you choose Apple Health workout sharing.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
