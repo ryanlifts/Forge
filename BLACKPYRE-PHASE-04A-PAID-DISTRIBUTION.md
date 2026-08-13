@@ -45,9 +45,9 @@ directly in App Store Connect; never add those values to this repository.
 - [ ] Enroll in the App Store Small Business Program and disclose every Associated
       Developer Account, if any.
 - [ ] Confirm Small Business Program approval and the reduced commission effective date.
-- [ ] In **Apps > BlackPyre > Monetization > Pricing and Availability**, select the
+- [x] In **Apps > BlackPyre > Monetization > Pricing and Availability**, select the
       United States as the base country or region and set the approved one-time price.
-- [ ] Set app availability to the United States only.
+- [x] Set app availability to the United States only.
 - [ ] Confirm the pricing and availability pages show no subscription or In-App Purchase.
 
 ## Evidence to record without private values
@@ -64,9 +64,9 @@ security codes, or screenshots containing them.
 | Banking | Pending Account Holder | — |
 | U.S. tax form | Pending Account Holder | — |
 | Small Business Program | Pending enrollment | — |
-| Base region | United States — prepared | August 12, 2026 |
-| Price | $14.99 approved; App Store Connect entry pending | August 12, 2026 |
-| Availability | United States only — prepared | August 12, 2026 |
+| Base region | United States — configured | August 13, 2026 |
+| Price | $14.99 — configured in App Store Connect | August 13, 2026 |
+| Availability | United States only — configured | August 13, 2026 |
 
 ## Authoritative Apple references
 
