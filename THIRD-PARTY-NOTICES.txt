@@ -17,14 +17,26 @@ html5-qrcode 2.3.8
 ------------------
 Copyright Minhaz.
 Licensed under the Apache License, Version 2.0.
-The complete license is bundled as vendor/html5-qrcode.LICENSE.txt.
+The complete Apache License 2.0 text is bundled as
+vendor/apache-2.0.LICENSE.txt.
 
 Capacitor and Capacitor plugins
 -------------------------------
-Capacitor CLI, Capacitor Core, Capacitor iOS, Filesystem, Local Notifications,
-and Share are copyright (c) 2017-present Drifty Co. / Ionic and are licensed
-under the MIT License. Complete license text is included in each installed
-package and available from https://github.com/ionic-team/capacitor.
+Capacitor Core and Capacitor iOS are copyright (c) 2017-present Drifty Co.
+and are licensed under the MIT License. The complete license is bundled as
+vendor/capacitor.LICENSE.txt.
+
+Capacitor Filesystem is copyright (c) 2025 Ionic. Capacitor Local
+Notifications and Share are copyright 2020-present Ionic. These plugins are
+licensed under the MIT License. Their complete licenses are bundled as
+vendor/capacitor-filesystem.LICENSE.txt and
+vendor/capacitor-plugins.LICENSE.txt.
+
+CapacitorCordova / Apache Cordova
+---------------------------------
+Capacitor iOS contains portions of Apache Cordova licensed to the Apache
+Software Foundation under the Apache License, Version 2.0. The complete
+Apache License 2.0 text is bundled as vendor/apache-2.0.LICENSE.txt.
 
 Flomentum Solutions Capacitor Health Extended 0.8.3
 --------------------------------------------------
@@ -39,6 +51,7 @@ IONFilesystemLib
 ----------------
 Copyright (c) 2025 Ionic.
 Licensed under the MIT License.
+The complete license is bundled as vendor/capacitor-filesystem.LICENSE.txt.
 Source: https://github.com/ionic-team/ion-ios-filesystem
 
 Oswald

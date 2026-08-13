@@ -188,7 +188,8 @@ recurring charge harder to justify to both Apple and customers — "support and 
 what any paid app already owes. A one-time purchase matches the product's actual shape,
 carries no ongoing obligation, and removes nearly all of Phase 4a. Revisit subscriptions
 only if BlackPyre later adds genuine recurring value (cloud sync, regularly updated
-programming, or another continuing service). Price itself remains deferred (D-8).
+programming, or another continuing service). Phase 4a carries the launch-price decision
+(D-8).
 
 - No advertising, no analytics SDK, no BlackPyre server, no account required
 - Enroll in the **App Store Small Business Program** (15% commission instead of 30%;
@@ -196,26 +197,27 @@ programming, or another continuing service). Price itself remains deferred (D-8)
   apply in App Store Connect)
 - Requires the **Paid Applications agreement**: banking details and tax forms completed
   in App Store Connect before any paid product can ship
-- Initial countries/regions: **still open — Ryan to confirm**
+- Initial countries/regions: **United States only for 1.0**
 
-**Consequence:** this decision forces D-9 (web app). A paid iOS app cannot compete with a
-free, identical, publicly hosted web version.
+**Consequence:** this decision required an explicit D-9 web-app decision. The web app
+will remain live as a supported companion and Android-accessible PWA; the paid native
+app is positioned around its native integrations, App Store distribution, and local
+iPhone experience.
 
-### D-8. One-time purchase price — DEFERRED, deliberately
+### D-8. One-time purchase price — PHASE 4A IN PROGRESS
 
-Decide *that it is paid* now, because that unblocks submission planning. The **model** is
-now decided (one-time purchase, D-7). The **one-time purchase price** remains deferred until the
-app is in front of real users. There is no term, trial, or renewal structure to decide.
-Price is changeable after launch; a rejected or delayed submission is not.
+The model is a one-time paid download. Ryan approved a **US $14.99** launch price on
+August 12, 2026. There is no term, trial, renewal, paywall,
+or feature gate. Price remains changeable after launch without an application update.
 
 Implementation consequence for Phase 1: **build no paywall or feature-gating layer yet.**
 Gating is new machinery with a new class of bug (paying user locked out) and it is not
 required to reach TestFlight. Purchase mechanics land in their own phase (Phase 4a).
 
-### D-9. Web app — must be resolved before submission
+### D-9. Web app — RESOLVED: KEEP LIVE
 
-The public web build at `ryanlifts.github.io/Forge` is currently the same product, free.
-Three options, to be decided before Phase 4:
+The public web build at `ryanlifts.github.io/Forge` remains a supported companion and the
+Android-accessible PWA. The decision is to keep it live. The alternatives considered were:
 
 1. **Retire it.** Cleanest commercially. Also removes the GitHub Pages constraint that
    forces the repository to stay public — the repo could then become private, which has
@@ -242,18 +244,18 @@ from the same native codebase when a Play Store listing is wanted. Revisit after
 
 ---
 
-## Part B — Still open (decide before Phase 2 ends)
+## Part B — Decisions and direct-entry items
 
 Files exposure is no longer open: the current native package has
 `UIFileSharingEnabled` and `LSSupportsOpeningDocumentsInPlace` enabled, and Phase 2
 item 6 keeps that capability with disclosure. Full local reset is also an implementation
 requirement in Phase 2, not an undecided product question.
 
-1. **Initial countries and regions.**
-2. **Support contact address** for the support page and App Review contact.
-3. **Web app disposition** (D-9) — retire, reduce, or keep. Required before Phase 4.
-4. **One-time purchase price** (D-8) — required before Phase 4a, not before. There is no
-   term and no trial structure to decide.
+1. **RESOLVED — Initial country and region:** United States only for 1.0.
+2. **DIRECT ENTRY — Support and App Review contact:** private values are entered in App
+   Store Connect and intentionally excluded from version control.
+3. **RESOLVED — Web app disposition:** keep it live as a supported companion.
+4. **RESOLVED — One-time purchase price:** US $14.99, approved August 12, 2026.
 5. **COMPLETE — Health plugin selection.** The exact-pinned Capacitor Health Extended
    plugin is registry-integrity verified, licensed, and covered by permanent tests and
    third-party notices.
@@ -485,6 +487,14 @@ As originally written, with these emphases:
 
 ### Phase 4a — Paid distribution setup (one-time purchase)
 
+**Status: IN PROGRESS — August 13, 2026.** Apple Developer Program membership is active
+and App Store Connect access is confirmed. The Paid Apps Agreement is `New` and requires
+the Account Holder's legal-entity update, followed by banking and tax setup. The
+exact Account Holder checklist is in
+`BLACKPYRE-PHASE-04A-PAID-DISTRIBUTION.md`. The launch storefront is United States only
+and the approved one-time price is $14.99. Agreement,
+banking, tax, and Small Business Program work requires authenticated direct entry.
+
 Scope collapsed by D-7. A one-time paid download requires **no** StoreKit entitlement
 code, no restore-purchases flow, no receipt validation, no paywall, and no lapsed-state
 handling. Apple gates the download itself; the app ships with all features included and
@@ -506,6 +516,13 @@ purchases, and any feature gating. Revisit only if BlackPyre later adds genuine 
 value (see D-7).
 
 ### Phase 5 — Internal TestFlight
+
+**Status: IN PROGRESS — August 13, 2026.** The first-build record, TestFlight description,
+What to Test text, internal group, and activation-to-install runbook are prepared in
+`BLACKPYRE-PHASE-05-INTERNAL-TESTFLIGHT.md`. Version 1.0 build 2 is configured and the
+signed archive uploaded successfully. Apple is processing version 1.0 build 2. The
+`BlackPyre Internal` group is created; build assignment and the RAW TestFlight update
+remain.
 
 - Upload the first signed Release archive; resolve processing and export-compliance warnings
 - Test install and update **through TestFlight**, not a local Xcode install
@@ -569,6 +586,6 @@ Not part of the iOS 1.0 program. Recorded here so the architecture accounts for 
 | Health data | Deferred (old D-6) | **In 1.0 (new D-6)** — 7 read signals + workout write-back, new Phase 2a |
 | Health storage | Not addressed | **D-11** — source-agnostic contract, device-only, aggregates only, never in backups |
 | Android | Deferred (old D-10) | **Planned, Phase 8**; contract designed now so it is an adapter, not a migration |
-| Commercial model | Free, no IAP | **Paid (D-7)**; price deferred (D-8) |
+| Commercial model | Free, no IAP | **Paid (D-7)**; $14.99 approved in Phase 4a (D-8) |
 | Purchase work | Not addressed | **Phase 4a is commercial setup only** — no purchase code for a one-time download |
-| Web app | "Later" | **D-9, decide before Phase 4**; never retire before approval |
+| Web app | "Later" | **D-9 resolved:** keep live as a supported companion |

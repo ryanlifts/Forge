@@ -51,5 +51,5 @@ off-device copies.
 - Camera access is only for local food-barcode scanning.
 - HealthKit access is optional, aggregate-only, device-only, and never used for advertising.
 - HealthKit reads cover weight, active energy, steps, sleep, resting heart rate, HRV, and workout heart rate. Eligible completed workouts may be written with permission.
-- Privacy policy: https://ryanlifts.github.io/Forge/privacy.html
+- Privacy policy: https://ryanlifts.github.io/Forge/privacy-ios.html
 - Support: https://ryanlifts.github.io/Forge/support.html

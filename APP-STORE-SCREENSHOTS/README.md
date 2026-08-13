@@ -7,7 +7,7 @@ This package contains the English (U.S.) iPhone master screenshot set for BlackP
 - Format: JPEG, no alpha channel
 - Source: native Simulator build of the current iOS candidate
 - Data: fictional screenshot-only profile created by
-  `scripts/prepare-app-store-screenshots.js`
+  `tools/prepare-app-store-screenshots.js`
 - RAW personal data: never used
 
 ## Upload order

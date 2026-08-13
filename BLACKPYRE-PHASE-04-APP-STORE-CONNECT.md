@@ -20,7 +20,7 @@ directly in App Store Connect and must not be committed to this repository.
 | Secondary category | Lifestyle |
 | Made for Kids | No |
 | Copyright | `2026 Ryan Allen Wilsey` |
-| Privacy Policy URL | `https://ryanlifts.github.io/Forge/privacy.html` |
+| Privacy Policy URL | `https://ryanlifts.github.io/Forge/privacy-ios.html` |
 | Support URL | `https://ryanlifts.github.io/Forge/support.html` |
 | Marketing URL | Leave blank for 1.0 unless a dedicated iOS product page is published |
 | License agreement | Apple's standard EULA |
@@ -118,7 +118,7 @@ or HealthKit aggregates as collected. They never leave the device through BlackP
 User-directed exports, share-sheet actions, external links, and AI copy/paste handoffs
 occur only when the user deliberately chooses them.
 
-Privacy policy: `https://ryanlifts.github.io/Forge/privacy.html`
+Privacy policy: `https://ryanlifts.github.io/Forge/privacy-ios.html`
 
 ## 5. Compliance declarations
 
@@ -241,7 +241,7 @@ not an open App Store Connect decision.
 4. Web disposition: keep the web app live. It remains a supported companion product and
    is not scheduled for retirement after iOS approval.
 5. Screenshot dataset and capture: complete. The reproducible fictional seed tool is
-   `scripts/prepare-app-store-screenshots.js`; the upload set and checksum manifest are in
+   `tools/prepare-app-store-screenshots.js`; the upload set and checksum manifest are in
    `APP-STORE-SCREENSHOTS/`.
 6. App Store Connect access: the login endpoint was reached on August 12, 2026. Account
    authentication, private contact entry, distribution signing, and upload begin in Phase 5.
