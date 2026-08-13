@@ -13960,6 +13960,7 @@ function renderWork(){
     const removed = data.workouts[i];
 
     if (!removed) return;
+    if (!confirm('Delete workout "'+(removed.title||removed.day||"session")+'"? You can still undo immediately after deletion.')) return;
 
     data.workouts.splice(i,1);
 

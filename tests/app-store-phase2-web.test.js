@@ -14,11 +14,13 @@ const read=relative=>fs.readFileSync(path.join(root,relative),"utf8");
 async function run(){
   const index=read("index.html");
   const food=read("scripts/02-food.js");
+  const train=read("scripts/03-train.js");
   const ai=read("scripts/05-ai.js");
   const settings=read("scripts/06-settings.js");
   const sw=read("sw.js");
   const webPrivacy=read("privacy.html");
   const iosPrivacy=read("privacy-ios.html");
+  const support=read("support.html");
   check("Open Food Facts search has no retired CGI fallback",
     /search\.openfoodfacts\.org\/search/.test(food)&&!/cgi\/search\.pl/.test(food));
   check("offline copy keeps AI handoffs available",
@@ -27,10 +29,21 @@ async function run(){
     ["privacy.html","privacy-ios.html","support.html","third-party-notices.html","THIRD-PARTY-NOTICES.txt"].every(file=>fs.existsSync(path.join(root,file)))
     && /id="eraseAllDataBtn"/.test(index)&&/Open Database License/.test(index)&&/privacy\.html/.test(index));
   check("service worker precaches the public release pages",
-    /blackpyre-v118-unified-removal-1/.test(sw)&&/privacy\.html/.test(sw)&&/privacy-ios\.html/.test(sw)&&/support\.html/.test(sw)&&/third-party-notices\.html/.test(sw));
+    /blackpyre-v119-release-hardening-1/.test(sw)&&/privacy\.html/.test(sw)&&/privacy-ios\.html/.test(sw)&&/support\.html/.test(sw)&&/third-party-notices\.html/.test(sw));
   check("web and iOS privacy policies are explicitly product-specific",
     /Web App Privacy Policy/.test(webPrivacy)&&!/iPhone|Native Vault|iOS App Privacy Policy/.test(webPrivacy)
     &&/iOS App Privacy Policy/.test(iosPrivacy)&&!/browser\/PWA|Web App Privacy Policy/.test(iosPrivacy));
+  check("public support email is available without inviting private data into public issues",
+    [webPrivacy,iosPrivacy,support].every(text=>/blackpyrestrong@gmail\.com/.test(text))
+    &&/Do not include personal health, nutrition, training, backup, or diagnostic data/.test(support));
+  check("release hardening keeps settings headings visible and aborts timed-out food requests",
+    /#view-settings \.disclosure\[open\] > summary\s*\{[^}]*position:sticky/.test(index)
+    &&/new AbortController\(\)/.test(food)&&/controller\.abort\(\)/.test(food));
+  check("destructive workout deletion confirms before mutation while retaining Undo",
+    /if \(!confirm\('Delete workout/.test(train)
+    &&/offerUndo\('Deleted workout/.test(train));
+  check("failed static-asset requests never receive the HTML app shell",
+    /if \(e\.request\.mode === "navigate"\) return caches\.match\("\.\/index\.html"\);\s*throw error;/.test(sw));
   check("AI Quick Log copies the exact JSON-only code-block instruction",
     /Return ONLY the JSON in a single code block\. Do not include any explanation, commentary, or text before or after the JSON\./.test(ai));
   check("every named X Close control has the custom-color treatment",

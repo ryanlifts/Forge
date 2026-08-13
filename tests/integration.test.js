@@ -2135,7 +2135,7 @@ C62.window.eval(`reviewFoodSuggestion(foodSuggestionCandidates().find(c=>c.food.
 check("v62 a catalog suggestion opens its exact listed serving for review", dC62.getElementById("qtyUnit").value==="serving" && Number(dC62.getElementById("qtyAmount").value)===1 && /4 oz cooked \(113g\)/.test(dC62.getElementById("qtyUnit").selectedOptions[0].textContent));
 check("v62 review shows the USDA per-100g values and correctly scaled serving", /USDA reference · SR28/.test(dC62.getElementById("selName").textContent) && /165 kcal/.test(dC62.getElementById("selPer100").textContent) && dC62.getElementById("calcCal").textContent==="186" && dC62.getElementById("calcPro").textContent==="35");
 check("v62 reviewing a broad-catalog suggestion never auto-logs it", C62.window.eval(`(data.food[todayStr()]||[]).length`)===beforeReview62);
-check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js') && x.includes('const CACHE = "blackpyre-v118-unified-removal-1"'); })());
+check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js') && x.includes('const CACHE = "blackpyre-v119-release-hardening-1"'); })());
 check("v62 keeps primary schemaVersion 3", C62.window.eval("SCHEMA_VERSION")===3);
 
 // ================= ChatGPT handoff paste flow =================
@@ -2596,8 +2596,8 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f)));
 check("SW cache key matches the BlackPyre web v82 release",
-  /const CACHE = "blackpyre-v118-unified-removal-1";/.test(sw));
-check("Phase 1 service-worker cache remains refreshed", sw.includes('const CACHE = "blackpyre-v118-unified-removal-1"') && !sw.includes('blackpyre-phase1-nutrition-safety-1'));
+  /const CACHE = "blackpyre-v119-release-hardening-1";/.test(sw));
+check("Phase 1 service-worker cache remains refreshed", sw.includes('const CACHE = "blackpyre-v119-release-hardening-1"') && !sw.includes('blackpyre-phase1-nutrition-safety-1'));
 
 await wait(0);
 releaseTestWindows([
@@ -2833,6 +2833,7 @@ const deleteData={food:{},workouts:[{date:deleteDay,day:"D1",title:"Delete Me",s
 deleteData.food[deleteDay]=[{name:"Food Entry",cal:100,pro:10,carb:5,fat:2,meal:"other"}];
 const U56=boot(Object.assign({},V2_CFG,{measureOn:true}),deleteData,null,TEST_PROGRAM);
 const dU56=U56.window.document;
+U56.window.confirm=()=>true;
 dU56.querySelector("#workHistory .delWork").dispatchEvent(new U56.window.Event("click",{bubbles:true}));
 check("v56 workout deletion offers working Undo", U56.window.eval("data.workouts.length")===0 && !dU56.getElementById("undoToast").classList.contains("hidden"));
 dU56.getElementById("undoBtn").dispatchEvent(new U56.window.Event("click",{bubbles:true}));
@@ -8005,7 +8006,7 @@ check(
   V78ServiceWorker.includes('"./data-exercise-card-profiles.js')
   && V78ServiceWorker.includes('"./scripts/03-card-profiles.js')
   && V78ServiceWorker.includes(
-    'const CACHE = "blackpyre-v118-unified-removal-1"'
+    'const CACHE = "blackpyre-v119-release-hardening-1"'
   )
 );
 
