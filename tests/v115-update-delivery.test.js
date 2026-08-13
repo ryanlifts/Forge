@@ -23,7 +23,7 @@ check(
 
 check(
   "v115 service-worker registration uses release-specific URL and bypasses HTTP cache",
-  /register\("sw\.js\?v=web-v117-removal-state-1",\{updateViaCache:"none"\}\)/.test(boot)
+  /register\("sw\.js\?v=web-v118-unified-removal-1",\{updateViaCache:"none"\}\)/.test(boot)
 );
 
 check(
@@ -47,8 +47,8 @@ check(
 
 check(
   "v115 runtime and cache family are version-busted",
-  /blackpyre-v117-removal-state-1/.test(sw)
-  &&/scripts\/07-boot\.js\?v=web-v117-removal-state-1/.test(index)
+  /blackpyre-v118-unified-removal-1/.test(sw)
+  &&/scripts\/07-boot\.js\?v=web-v118-unified-removal-1/.test(index)
 );
 
 check(

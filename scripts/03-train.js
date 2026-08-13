@@ -3313,11 +3313,33 @@ function appendExerciseOutcomeEditor(
 ){
   ensureExerciseOutcomeState(st);
 
+  const undoRemoval=()=>{
+    st.exerciseOutcome="";
+    st.exerciseReason="";
+    st.status="unsaved";
+    clearWorkoutError();
+    renderSessionInputs();
+  };
+
+  if(st.exerciseOutcome==="removed"){
+    const removedExerciseBar=makeRemovalUndoBar(
+      "Exercise removed from today",
+      "Undo",
+      "Undo removal of "+ex.name.replace("[Cardio] ",""),
+      undoRemoval,
+      "exerciseRemovalUndo",
+      ex.name
+    );
+    removedExerciseBar.classList.add("removed-exercise-card");
+    div.appendChild(removedExerciseBar);
+    return;
+  }
+
   const line=
     document.createElement("div");
 
   line.className=
-    "exercise-outcome-card simple-exercise-removal removed-exercise-card";
+    "exercise-outcome-card simple-exercise-removal";
 
   const label=
     document.createElement("span");
@@ -3325,12 +3347,9 @@ function appendExerciseOutcomeEditor(
   label.className=
     "exercise-outcome-label";
 
-  label.textContent=
-    st.exerciseOutcome==="removed"
-      ? "Exercise removed from today"
-      : workoutSetStatusLabel(
-          st.exerciseOutcome
-        );
+  label.textContent=workoutSetStatusLabel(
+    st.exerciseOutcome
+  );
 
   line.appendChild(label);
 
@@ -3407,17 +3426,7 @@ function appendExerciseOutcomeEditor(
       )
   );
 
-  undo.addEventListener(
-    "click",
-    ()=>{
-      st.exerciseOutcome="";
-      st.exerciseReason="";
-      st.status="unsaved";
-
-      clearWorkoutError();
-      renderSessionInputs();
-    }
-  );
+  undo.addEventListener("click",undoRemoval);
 
   line.appendChild(undo);
   div.appendChild(line);
