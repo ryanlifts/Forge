@@ -2,7 +2,7 @@
 
 **Date opened:** August 13, 2026
 
-**Status:** IN PROGRESS — build 2 uploaded and processing in App Store Connect
+**Status:** IN PROGRESS — build 2 processed, validated, and assigned for internal testing
 
 **Version:** 1.0
 
@@ -13,7 +13,11 @@
 Apple Developer Program membership is active. The BlackPyre App Store Connect record and
 the `BlackPyre Internal` group exist. The full 1,346-check gauntlet passed, the signed
 Release archive validated, and version 1.0 build 2 uploaded successfully on August 13,
-2026. Apple is processing the build before it can be assigned to the internal group.
+2026. Apple processed and validated the build, and it is assigned to `BlackPyre Internal`
+with the beta description, privacy URL, feedback address, and What to Test instructions
+saved. Build 2 is also assigned to the `BlackPyre Beta` external group and was submitted
+for first-build Beta App Review with the private review contact entered directly in App
+Store Connect.
 
 ## Native release configuration — verified
 
@@ -52,6 +56,9 @@ The record was created August 13, 2026.
 **Automatic distribution:** Off for the first build; add the proven build manually.
 **First tester:** Ryan. Additional internal testers must be App Store Connect users.
 
+**External group:** BlackPyre Beta. The first external build requires Beta App Review
+before invitations or a public testing link can be used.
+
 ### Beta app description
 
 BlackPyre is a private, local-first nutrition and training tracker. It combines food and
@@ -85,8 +92,10 @@ the address to version control unless Ryan deliberately chooses to publish it.
 - [x] Run the complete native release gauntlet and root/www/native parity checks.
 - [x] Create a signed Release archive for generic iOS device.
 - [x] Validate the archive and upload build 2 to App Store Connect.
-- [ ] Wait for Apple processing and resolve any compliance or processing warning.
-- [ ] Add the processed build to **BlackPyre Internal** with the What to Test text above.
+- [x] Wait for Apple processing and resolve any compliance or processing warning.
+- [x] Add the processed build to **BlackPyre Internal** with the What to Test text above.
+- [x] Create the **BlackPyre Beta** external testing group.
+- [x] Submit build 2 to the external group for first-build Beta App Review.
 - [ ] Install through TestFlight on RAW without uninstalling the current app.
 - [ ] Complete onboarding-to-backup smoke testing and verify update preservation.
 
