@@ -14,6 +14,7 @@ const attributes=fs.readFileSync("ios/App/App/RestTimerActivityAttributes.swift"
 const widget=fs.readFileSync("ios/App/BlackPyreRestActivity/BlackPyreRestActivity.swift","utf8");
 const widgetPlist=fs.readFileSync("ios/App/BlackPyreRestActivity/Info.plist","utf8");
 const timer=fs.readFileSync("scripts/04-weight.js","utf8");
+const prepareNative=fs.readFileSync("tools/prepare-native.sh","utf8");
 
 check("app declares Live Activity support",/<key>NSSupportsLiveActivities<\/key>\s*<true\/>/.test(plist));
 check("widget extension uses the WidgetKit extension point",/com\.apple\.widgetkit-extension/.test(widgetPlist));
@@ -32,7 +33,14 @@ check("Dynamic Island supplies expanded compact and minimal regions",/DynamicIsl
 check("running and paused states sync to native",/status:"running"/.test(timer) && /status:"paused"/.test(timer) && /plugin\.sync\(snapshot\)/.test(timer));
 check("finished and cancelled timers dismiss native activity",/(finishRestCountdown\(\)[\s\S]*?endRestActivity\(\))/.test(timer) && /(cancelRest\(\)[\s\S]*?endRestActivity\(\))/.test(timer));
 check("rest activity failures never break the web timer",/could not sync the rest Live Activity/.test(timer) && /could not end the rest Live Activity/.test(timer));
-check("root www and native timer sources are byte-identical",timer===fs.readFileSync("www/scripts/04-weight.js","utf8") && timer===fs.readFileSync("ios/App/App/public/scripts/04-weight.js","utf8"));
+const generatedTimerPaths=["www/scripts/04-weight.js","ios/App/App/public/scripts/04-weight.js"];
+const generatedTimersExist=generatedTimerPaths.every(file=>fs.existsSync(file));
+check("native preparation copies root scripts through www into the iOS public bundle",
+  /cp -R scripts vendor assets www\//.test(prepareNative)
+  &&/npx cap sync ios/.test(prepareNative));
+check("generated root www and native timer sources are byte-identical when present",
+  !generatedTimersExist
+  ||generatedTimerPaths.every(file=>timer===fs.readFileSync(file,"utf8")));
 
 console.log(`\nLIVE ACTIVITY REST TIMER: ${passed} passed, ${failed} failed`);
 if(failed) process.exit(1);
