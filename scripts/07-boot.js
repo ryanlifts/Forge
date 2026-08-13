@@ -397,7 +397,7 @@ if ("serviceWorker" in navigator) {
   });
 
   window.addEventListener("load", ()=>{
-    navigator.serviceWorker.register("sw.js?v=web-v116-runtime-integrity-1",{updateViaCache:"none"})
+    navigator.serviceWorker.register("sw.js?v=web-v117-removal-state-1",{updateViaCache:"none"})
       .then((registration)=>{
         pwaRegistration = registration;
         if (hadController && registration.waiting && !updateReloaded) showUpdateToast();

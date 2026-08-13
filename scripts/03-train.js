@@ -3317,7 +3317,7 @@ function appendExerciseOutcomeEditor(
     document.createElement("div");
 
   line.className=
-    "exercise-outcome-card simple-exercise-removal";
+    "exercise-outcome-card simple-exercise-removal removed-exercise-card";
 
   const label=
     document.createElement("span");
@@ -3327,7 +3327,7 @@ function appendExerciseOutcomeEditor(
 
   label.textContent=
     st.exerciseOutcome==="removed"
-      ? "Removed today"
+      ? "Exercise removed from today"
       : workoutSetStatusLabel(
           st.exerciseOutcome
         );
@@ -3603,6 +3603,14 @@ function makeRemovalUndoBar(
   return bar;
 }
 
+function exerciseRemovedFromToday(st){
+  if(!st||typeof st!=="object") return false;
+  if(st.exerciseOutcome==="removed") return true;
+  if(!Array.isArray(st.rows)) return false;
+  const prescribed=st.rows.filter(row=>row&&row.prescribed===true);
+  return prescribed.length>0&&prescribed.every(row=>row.status==="removed");
+}
+
 function ensureExerciseMoreOutsideDismiss(){
   if (
     document
@@ -3691,7 +3699,7 @@ function decorateWorkoutRowsForSimpleRemoval(
       row.hidden=true;
     });
 
-    div.appendChild(
+    const removedExerciseBar=
       makeRemovalUndoBar(
         "Exercise removed from today",
         "Undo",
@@ -3701,8 +3709,9 @@ function decorateWorkoutRowsForSimpleRemoval(
         },
         "exerciseRowsUndo",
         ex.name
-      )
-    );
+      );
+    removedExerciseBar.classList.add("removed-exercise-card");
+    div.appendChild(removedExerciseBar);
 
     return;
   }
@@ -4125,6 +4134,7 @@ function simplifyExerciseToolbar(
   if (
     planned
     && !existingExtraRemove
+    && !exerciseRemovedFromToday(st)
   ){
     const removeExercise=
       document.createElement(

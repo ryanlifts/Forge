@@ -2408,7 +2408,7 @@ primaryTabs.forEach((btn,index)=>{
 
 
 /* BLACKPYRE_V116_RUNTIME_DIAGNOSTIC */
-const BLACKPYRE_WEB_RUNTIME_VERSION = "web-v116-runtime-integrity-1";
+const BLACKPYRE_WEB_RUNTIME_VERSION = "web-v117-removal-state-1";
 const __blackpyreBaseStorageDiagnostic = makeStorageDiagnosticEnvelope;
 makeStorageDiagnosticEnvelope = function(){
   const payload = __blackpyreBaseStorageDiagnostic();
