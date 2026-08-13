@@ -56,10 +56,10 @@ matrix:
 6. Workout write-back remains deferred until a timed workout can be completed accurately.
    Health permissions granted, denied, partially granted, and revoked after grant are
    complete on RAW; the Phase 2a real-device read path is also verified.
-7. Validate the actual minimum supported iOS version. The project currently declares
-   iOS 15.0, but this pass had only iOS 26.5 simulation and iOS 27.0 hardware available.
-   Do not claim Phase 3 complete until iOS 15 is tested or the deployment target is
-   raised to a version represented in the final device matrix.
+7. The deployment target was raised to iOS 16.1 on August 12, 2026, matching the minimum
+   for the rest-timer Live Activity while keeping older supported iPhones eligible.
+   Compilation is green, but the final TestFlight matrix must still include iOS 16.1 or
+   the oldest available 16.x device before claiming floor-version validation.
 
 ## Release decision
 

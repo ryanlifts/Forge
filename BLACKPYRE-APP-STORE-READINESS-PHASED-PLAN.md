@@ -421,10 +421,10 @@ Adds two dimensions the original plan omitted.
   focus visibility, touch targets, safe areas, small-screen devices
 - Device minimum: the current test device, one small-screen phone (SE/mini class — real
   risk given 16px typography and safe-area work), and the oldest supported iOS version
-- **Deployment target must be honest.** The project targets iOS 15 but iOS 15 has never
-  been tested. Either validate on a real iOS 15 device or runtime, or **raise the minimum
-  to a version that can genuinely be supported.** Claiming an untested floor is avoidable
-  release risk. Recommended: raise it.
+- **Deployment target must be honest.** The minimum was raised from untested iOS 15 to
+  **iOS 16.1** on August 12, 2026, matching the Live Activity foundation. Validate the
+  final TestFlight build on iOS 16.1 or the oldest available 16.x device before release;
+  a deployment setting and successful compilation do not replace floor-version testing.
 - Notification permission allowed **and denied**; offline and reconnect; backgrounding and
   forced termination during saves; backup/restore/corrupt-file recovery **on a clean
   install**

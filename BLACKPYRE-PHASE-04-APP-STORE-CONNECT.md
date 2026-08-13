@@ -222,6 +222,10 @@ real health values, notifications, or third-party AI content.
 
 Phase 4 cannot be honestly marked complete until these are supplied or decided:
 
+The minimum deployment target is decided: iOS 16.1 for both the app and Live Activity
+extension. Floor-version device validation remains part of the final TestFlight matrix,
+not an open App Store Connect decision.
+
 1. A private support/review email and phone number. The current support page offers a
    public GitHub issue form but does not publish direct contact information.
 2. DSA trader self-assessment and, if distributing in the EU, verified trader contact
@@ -230,10 +234,8 @@ Phase 4 cannot be honestly marked complete until these are supplied or decided:
 4. Web disposition: recommended decision is to keep the web app live through App Review,
    then retire it with a backup/migration notice after iOS approval. Confirm or choose a
    reduced/continued web version before submission.
-5. The minimum iOS version: test iOS 15 or raise the deployment target and validate the
-   chosen floor.
-6. Final fictional screenshot dataset and capture.
-7. App Store Connect app record access. Distribution signing and upload begin in Phase 5.
+5. Final fictional screenshot dataset and capture.
+6. App Store Connect app record access. Distribution signing and upload begin in Phase 5.
 
 Price, banking, tax, paid agreement, and Small Business Program enrollment belong to
 Phase 4a rather than this metadata packet.

@@ -19,7 +19,8 @@ check("app declares Live Activity support",/<key>NSSupportsLiveActivities<\/key>
 check("widget extension uses the WidgetKit extension point",/com\.apple\.widgetkit-extension/.test(widgetPlist));
 check("Live Activity extension is embedded in the app",/BlackPyreRestActivity\.appex in Embed App Extensions/.test(project));
 check("extension bundle is nested under the app bundle",/PRODUCT_BUNDLE_IDENTIFIER = com\.blackpyre\.app\.resttimer;/.test(project));
-check("base app keeps iOS 15 compatibility",/IPHONEOS_DEPLOYMENT_TARGET = 15\.0;/.test(project));
+const deploymentTargets=[...project.matchAll(/IPHONEOS_DEPLOYMENT_TARGET = ([^;]+);/g)].map(match=>match[1].trim());
+check("app and extension share the iOS 16.1 minimum",deploymentTargets.length===6&&deploymentTargets.every(value=>value==="16.1"));
 check("extension starts at the ActivityKit minimum",/BlackPyreRestActivity[\s\S]*?IPHONEOS_DEPLOYMENT_TARGET = 16\.1;/.test(project));
 check("shared rest timer attributes are defined",/struct RestTimerActivityAttributes: ActivityAttributes/.test(attributes));
 check("native bridge registers the rest activity plugin",/registerPluginInstance\(blackPyreRestActivityPlugin\)/.test(bridge));
