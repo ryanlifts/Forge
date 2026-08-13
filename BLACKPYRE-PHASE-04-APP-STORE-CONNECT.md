@@ -4,7 +4,9 @@
 **Platform:** iPhone only, portrait only  
 **Bundle ID:** `com.blackpyre.app`  
 **Version:** 1.0  
-**Status:** Metadata and compliance answers prepared; owner-only fields and screenshots remain.
+**Status:** COMPLETE — metadata, compliance answers, product decisions, and the fictional
+6.9-inch screenshot master set are prepared. Private review-contact values must be entered
+directly in App Store Connect and must not be committed to this repository.
 
 ## 1. App record
 
@@ -168,7 +170,10 @@ deletion.
 Native capabilities and how to exercise them:
 
 1. Apple Health — Settings > Apple Health; connect and choose individual read permissions.
-   Imported values are aggregate-only, device-only, backup-excluded, and optional.
+   Imported values are aggregate-only, device-only, backup-excluded, and optional. When
+   Workout Sharing is on, a newly logged same-day workout with an explicit recorded exercise
+   duration can be written to Apple Health. Time spent on the draft screen is never counted;
+   drafts, edits, historical entries, and sessions without explicit duration are not written.
 2. Camera barcode scanning — Food > Scan barcode. Camera access is used only for food
    barcodes. The user must verify returned nutrition against the package before logging.
 3. Rest timer Live Activity — start a rest timer from Train. On supported iPhones it
@@ -197,45 +202,49 @@ does not diagnose, prescribe, prevent, monitor, or treat disease.
 ### Review contact — owner must complete
 
 - First and last name: Ryan Allen Wilsey
-- Email: **OWNER TO PROVIDE**
-- Phone: **OWNER TO PROVIDE**
+- Email: enter privately in App Store Connect; do not commit it.
+- Phone: enter privately in App Store Connect; do not commit it.
 
 ## 7. Screenshot set
 
-Use fictional data only and capture the exact final candidate. Required master set:
-portrait iPhone 6.9-inch screenshots at an accepted size. Prepare these eight frames:
+The completed master set is in `APP-STORE-SCREENSHOTS/iphone-6.9/`. Every upload file is
+1320 × 2868 portrait JPEG with no alpha channel and uses the native candidate with a
+fictional screenshot-only profile. Upload these eight frames in order:
+
+Use fictional data only. Never capture RAW's personal data.
 
 1. Home — daily nutrition, water, weekly summary, and progress.
 2. Food — totals, meal sections, and quick-log choices.
 3. Barcode — returned nutrition inside the verification workflow.
 4. Train — current program and today's session.
-5. Rest timer — active timer with its Dynamic Island or Lock Screen Live Activity.
-6. Exercise entry — a representative completed strength or timed activity card.
-7. Weight — fictional weight trend and body-measurement history.
-8. Apple Health — connected signals using fictional or simulator-safe data only.
-9. Data & recovery — backup, restore, Native Vault, and erase controls.
+5. Rest timer — active floating timer during a training session.
+6. Weight — fictional dated entry and weight trend.
+7. Apple Health — optional signal access and workout-sharing controls.
+8. Data & recovery — backup, external save, restore, and Native Vault controls.
 
 Never capture RAW's personal data. Screenshots must contain no diagnostic identifiers,
 real health values, notifications, or third-party AI content.
 
-## 8. Owner decisions and blockers
-
-Phase 4 cannot be honestly marked complete until these are supplied or decided:
+## 8. Resolved decisions and direct-entry fields
 
 The minimum deployment target is decided: iOS 16.1 for both the app and Live Activity
 extension. Floor-version device validation remains part of the final TestFlight matrix,
 not an open App Store Connect decision.
 
-1. A private support/review email and phone number. The current support page offers a
-   public GitHub issue form but does not publish direct contact information.
-2. DSA trader self-assessment and, if distributing in the EU, verified trader contact
-   details.
-3. Initial countries and regions.
-4. Web disposition: recommended decision is to keep the web app live through App Review,
-   then retire it with a backup/migration notice after iOS approval. Confirm or choose a
-   reduced/continued web version before submission.
-5. Final fictional screenshot dataset and capture.
-6. App Store Connect app record access. Distribution signing and upload begin in Phase 5.
+1. Review contact: Ryan Allen Wilsey. The private email and phone are direct-entry values
+   in App Store Connect and are intentionally excluded from version control.
+2. DSA: BlackPyre 1.0 launches outside the EU, so the app is not acting as a trader on the
+   EU App Store. The Account Holder must still complete Apple's required DSA declaration
+   directly in App Store Connect. EU availability can be reconsidered later with verified
+   trader contact information if required.
+3. Initial country and region: United States only.
+4. Web disposition: keep the web app live. It remains a supported companion product and
+   is not scheduled for retirement after iOS approval.
+5. Screenshot dataset and capture: complete. The reproducible fictional seed tool is
+   `scripts/prepare-app-store-screenshots.js`; the upload set and checksum manifest are in
+   `APP-STORE-SCREENSHOTS/`.
+6. App Store Connect access: the login endpoint was reached on August 12, 2026. Account
+   authentication, private contact entry, distribution signing, and upload begin in Phase 5.
 
 Price, banking, tax, paid agreement, and Small Business Program enrollment belong to
 Phase 4a rather than this metadata packet.

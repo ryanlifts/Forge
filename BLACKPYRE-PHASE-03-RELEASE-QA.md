@@ -53,9 +53,12 @@ matrix:
 4. Repeat the now-passing background/offline/reconnect and forced-termination checks on
    the final TestFlight candidate. Notification permission allowed and denied is complete.
 5. On a clean TestFlight install, exercise backup, restore, and corrupt-file recovery.
-6. Workout write-back remains deferred until a timed workout can be completed accurately.
-   Health permissions granted, denied, partially granted, and revoked after grant are
-   complete on RAW; the Phase 2a real-device read path is also verified.
+6. Workout write-back is included in 1.0 by owner decision on August 12, 2026. Automated
+   eligibility, explicit-duration accuracy, activity mapping, denial, and backup-boundary
+   checks are green. Draft-screen elapsed time is explicitly excluded. A newly completed
+   timed workout was confirmed with the correct explicit duration in Apple Health on RAW.
+   Repeat that check on the final TestFlight candidate. Health read permissions granted,
+   denied, partially granted, and revoked after grant are already complete on RAW.
 7. The deployment target was raised to iOS 16.1 on August 12, 2026, matching the minimum
    for the rest-timer Live Activity while keeping older supported iPhones eligible.
    Compilation is green, but the final TestFlight matrix must still include iOS 16.1 or
@@ -63,6 +66,6 @@ matrix:
 
 ## Release decision
 
-No release-blocking defect was found in the checks completed here. Phase 3 remains open
-only for the final TestFlight lifecycle, hands-on accessibility/permission paths, and an
-honest minimum-iOS decision. No App Store upload was performed in this pass.
+No release-blocking defect was found in the checks completed here. The physical RAW
+workout write-back gate is complete. Phase 3 remains open only for floor-version device
+validation and the final TestFlight lifecycle. No App Store upload was performed in this pass.

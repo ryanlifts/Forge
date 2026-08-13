@@ -2377,7 +2377,7 @@ function appendExerciseOutcomeEditor(
     document.createElement("div");
 
   line.className=
-    "exercise-outcome-card simple-exercise-removal";
+    "exercise-outcome-card simple-exercise-removal removed-exercise-card";
 
   const label=
     document.createElement("span");
@@ -2387,7 +2387,7 @@ function appendExerciseOutcomeEditor(
 
   label.textContent=
     st.exerciseOutcome==="removed"
-      ? "Removed today"
+      ? "Exercise removed from today"
       : workoutSetStatusLabel(
           st.exerciseOutcome
         );
@@ -2663,6 +2663,14 @@ function makeRemovalUndoBar(
   return bar;
 }
 
+function exerciseRemovedFromToday(st){
+  if(!st||typeof st!=="object") return false;
+  if(st.exerciseOutcome==="removed") return true;
+  if(!Array.isArray(st.rows)) return false;
+  const prescribed=st.rows.filter(row=>row&&row.prescribed===true);
+  return prescribed.length>0&&prescribed.every(row=>row.status==="removed");
+}
+
 function ensureExerciseMoreOutsideDismiss(){
   if (
     document
@@ -2751,7 +2759,7 @@ function decorateWorkoutRowsForSimpleRemoval(
       row.hidden=true;
     });
 
-    div.appendChild(
+    const removedExerciseBar=
       makeRemovalUndoBar(
         "Exercise removed from today",
         "Undo",
@@ -2761,8 +2769,9 @@ function decorateWorkoutRowsForSimpleRemoval(
         },
         "exerciseRowsUndo",
         ex.name
-      )
-    );
+      );
+    removedExerciseBar.classList.add("removed-exercise-card");
+    div.appendChild(removedExerciseBar);
 
     return;
   }
@@ -3185,6 +3194,7 @@ function simplifyExerciseToolbar(
   if (
     planned
     && !existingExtraRemove
+    && !exerciseRemovedFromToday(st)
   ){
     const removeExercise=
       document.createElement(
@@ -12035,17 +12045,67 @@ document.getElementById("addExBtn").addEventListener("click", ()=>{
 function completedWorkoutTiming(date,explicitDurationSeconds){
   if(date!==todayStr()) return null;
   const endedAt=new Date();
-  let startedAt=null;
   const explicit=Number(explicitDurationSeconds);
-  if(Number.isFinite(explicit)&&explicit>0){
-    startedAt=new Date(endedAt.getTime()-explicit*1000);
-  }else if(typeof validHealthIso==="function"&&validHealthIso(workoutSessionStartedAt)){
-    startedAt=new Date(workoutSessionStartedAt);
-  }
+  if(!Number.isFinite(explicit)||explicit<=0) return null;
+  const startedAt=new Date(endedAt.getTime()-explicit*1000);
   if(!startedAt||!Number.isFinite(startedAt.getTime())||startedAt>=endedAt) return null;
   const durationSeconds=Math.round((endedAt-startedAt)/1000);
   if(durationSeconds<60||durationSeconds>12*3600) return null;
   return {startedAt:startedAt.toISOString(),endedAt:endedAt.toISOString(),durationSeconds:durationSeconds};
+}
+function explicitExerciseDurationSeconds(value){
+  if(!value||typeof value!=="object") return null;
+  const noRecordedWorkStatus=status=>["missed","skipped","removed"].includes(String(status||""));
+  if(Array.isArray(value)){
+    return value.length&&value.every(row=>row&&typeof row==="object"&&noRecordedWorkStatus(row.status)) ? 0 : null;
+  }
+  if(value.t==="exerciseOutcome"&&noRecordedWorkStatus(value.status)) return 0;
+  const positive=value=>{
+    const number=Number(value);
+    return Number.isFinite(number)&&number>0 ? number : null;
+  };
+  const count=value=>{
+    const number=Number(value);
+    return Number.isInteger(number)&&number>0 ? number : null;
+  };
+  const withRecovery=(repetitions,work,recovery)=>{
+    const amount=count(repetitions);
+    const workSeconds=positive(work);
+    if(amount===null||workSeconds===null) return null;
+    const recoverySeconds=Math.max(0,Number(recovery)||0);
+    return amount*workSeconds+Math.max(0,amount-1)*recoverySeconds;
+  };
+  switch(String(value.t||"")){
+    case "durationActivity":
+    case "steadyTimeDistance":
+    case "timeDist":
+    case "activityNotes":
+      return positive(value.secs);
+    case "timedHold":
+      return withRecovery(value.holds,value.holdSecs,value.recSecs);
+    case "timedIntervals":
+      return withRecovery(value.intervals,value.workSecs,value.recSecs);
+    case "distanceIntervals":
+      return withRecovery(value.repeats,value.workSecs,value.recSecs);
+    case "loadedDistance":
+      return positive(value.secs);
+    case "rounds":
+    case "conditioningRounds":
+      return withRecovery(value.rounds,value.workSecs,value.recSecs);
+    default:
+      return null;
+  }
+}
+function explicitWorkoutDurationSeconds(sets){
+  const values=Object.values(sets||{});
+  if(!values.length) return null;
+  let total=0;
+  for(const value of values){
+    const seconds=explicitExerciseDurationSeconds(value);
+    if(seconds===null) return null;
+    total+=seconds;
+  }
+  return total>0 ? Math.round(total) : null;
 }
 function newLoggedWorkoutRecord(base,timing){
   const id=typeof newBlackPyreWorkoutId==="function" ? newBlackPyreWorkoutId() : "bpw-"+Date.now()+"-"+Math.random().toString(36).slice(2,12);
@@ -12057,6 +12117,8 @@ function sendEligibleWorkoutToAppleHealth(record){
   if(typeof writeWorkoutToAppleHealth!=="function") return;
   writeWorkoutToAppleHealth(record).then(result=>{
     if(result&&result.ok) flashSave("Session logged and shared with Apple Health ✓");
+    else if(result&&result.ineligible) flashSave("Session logged · Apple Health needs an explicit workout duration",true);
+    else if(result&&!result.skipped) flashSave("Session logged · Apple Health sharing failed — check Settings",true);
   }).catch(()=>{});
 }
 
@@ -12204,7 +12266,7 @@ document.getElementById("logWorkoutBtn").addEventListener("click", ()=>{
   } else {
     loggedWorkout=newLoggedWorkoutRecord(
       {date:date, day:v, title: v==="__FREE__" ? "Freestyle" : (day?day.title:v), sets:sets, notes:notes},
-      completedWorkoutTiming(date,null)
+      completedWorkoutTiming(date,explicitWorkoutDurationSeconds(sets))
     );
     data.workouts.push(loggedWorkout);
     data.activeWorkoutDraft = null;

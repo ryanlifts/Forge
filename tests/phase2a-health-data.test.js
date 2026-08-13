@@ -146,6 +146,32 @@ async function run(){
     &&!Object.prototype.hasOwnProperty.call(all.workoutWrites[0],"calories")
     &&!Object.prototype.hasOwnProperty.call(all.workoutWrites[0],"distance")
     &&!Object.prototype.hasOwnProperty.call(all.workoutWrites[0],"heartRate"));
+  const timed=app.window.eval("completedWorkoutTiming(todayStr(),1800)");
+  const historical=app.window.eval("completedWorkoutTiming('2026-01-01',1800)");
+  const tooShort=app.window.eval("completedWorkoutTiming(todayStr(),59)");
+  const tooLong=app.window.eval("completedWorkoutTiming(todayStr(),43201)");
+  check("write-back timing accepts only same-day durations from 1 minute through 12 hours",
+    timed&&timed.durationSeconds===1800&&historical===null&&tooShort===null&&tooLong===null);
+  check("time-only exercise duration controls Health write-back instead of draft elapsed time",
+    app.window.eval("workoutSessionStartedAt=new Date(Date.now()-958000).toISOString(); explicitWorkoutDurationSeconds({Walking:{t:'durationActivity',secs:60}})")===60
+    &&app.window.eval("completedWorkoutTiming(todayStr(),explicitWorkoutDurationSeconds({Walking:{t:'durationActivity',secs:60}})).durationSeconds")===60);
+  check("mixed or strength-only sessions cannot invent a Health workout duration",
+    app.window.eval("explicitWorkoutDurationSeconds({Squat:[{w:225,r:5}]})")===null
+    &&app.window.eval("explicitWorkoutDurationSeconds({Walking:{t:'durationActivity',secs:60},Squat:[{w:225,r:5}]})")===null
+    &&app.window.eval("completedWorkoutTiming(todayStr(),null)")===null);
+  check("removed and skipped programmed exercises do not invalidate recorded walking time",
+    app.window.eval(`explicitWorkoutDurationSeconds({
+      "Back Squat":[{status:"removed"},{status:"removed"},{status:"removed"}],
+      "Bench Press":[{status:"skipped"},{status:"missed"}],
+      "Plank":{t:"exerciseOutcome",status:"removed"},
+      "Walk":{t:"timeDist",secs:120}
+    })`)===120);
+  check("explicit interval duration includes only recorded work and between-interval recovery",
+    app.window.eval("explicitWorkoutDurationSeconds({Intervals:{t:'timedIntervals',intervals:3,workSecs:30,recSecs:15}})")===120);
+  check("workout activity mapping distinguishes running sports and strength sessions",
+    app.window.eval("appleHealthActivityType({title:'Outdoor Run',sets:{}})")==="running"
+    &&app.window.eval("appleHealthActivityType({title:'Basketball',sets:{}})")==="other"
+    &&app.window.eval("appleHealthActivityType({title:'Full Body A',sets:{Squat:'3x5'}})")==="strength-training");
   app.window.close();
 
   const denied=makeHealthPlugins({denied:"steps",noData:"sleep"});

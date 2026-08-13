@@ -118,8 +118,8 @@ No overall granted flag may conceal a per-type denial or failure.
 
 - The key is a stable, non-health BlackPyre workout identifier.
 - Status is one of `pending`, `written`, `denied`, `ineligible`, or `error`.
-- BlackPyre writes only a real logged session whose saved record has a trustworthy start time, end time, and positive actual duration.
-- Planned workouts, drafts, historical records without actual duration, and edited records that cannot be safely reconciled are never written.
+- BlackPyre writes only a newly logged, same-day session whose saved exercise data contains an explicit positive duration. Its start time is derived from that duration and the moment the session is logged; time spent viewing or editing the workout draft is never used as workout duration.
+- Planned workouts, drafts, historical records, edited records, and strength or mixed sessions without an explicit total duration are never written. A time-only activity such as Walking uses its saved time exactly; programmed exercises explicitly marked missed, skipped, or removed are not counted as performed work and do not invalidate that duration.
 - `healthWorkoutId` is stored only after the platform confirms success.
 - No calories, distance, route, or heart-rate samples are invented for write-back.
 

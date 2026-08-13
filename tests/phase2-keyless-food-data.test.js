@@ -411,7 +411,7 @@ check("normal backups exclude a legacy USDA credential",
   !backupText.includes("should-never-export") &&
   !Object.prototype.hasOwnProperty.call(JSON.parse(backupText).cfg,"usdaKey"));
 
-check("service worker cache is bumped for the current release",/blackpyre-v108/.test(fs.readFileSync(path.join(root,"sw.js"),"utf8")));
+check("service worker cache is bumped for the current release",/blackpyre-v111/.test(fs.readFileSync(path.join(root,"sw.js"),"utf8")));
 
 summary("PHASE 2 KEYLESS FOOD DATA");
 })().catch(error=>{

@@ -254,11 +254,17 @@ requirement in Phase 2, not an undecided product question.
 3. **Web app disposition** (D-9) — retire, reduce, or keep. Required before Phase 4.
 4. **One-time purchase price** (D-8) — required before Phase 4a, not before. There is no
    term and no trial structure to decide.
-5. **Health plugin selection** — which Capacitor HealthKit plugin, vetted and vendored the
-   way `html5-qrcode` was (npm-verified, checksum-recorded, license bundled).
-6. **Whether workout write-back ships in 1.0 or immediately after.** Writing workouts
-   carries Apple's "must not write false or inaccurate data" obligation. Recommended:
-   keep it in 1.0 if its activity mapping and duration accuracy pass physical validation.
+5. **COMPLETE — Health plugin selection.** The exact-pinned Capacitor Health Extended
+   plugin is registry-integrity verified, licensed, and covered by permanent tests and
+   third-party notices.
+
+Workout write-back is decided: **it ships in 1.0.** BlackPyre writes only a newly logged,
+same-day completed session whose exercise data contains an explicit recorded duration of
+1 minute through 12 hours. It never substitutes time spent on the workout draft screen.
+Edits, historical entries, drafts, planned durations, incomplete sessions, and strength
+or mixed sessions without an explicit total duration are ineligible.
+The final release gate is a physical Apple Health write/read-back check on RAW and the
+same check on the TestFlight candidate.
 
 ---
 
@@ -435,6 +441,12 @@ Adds two dimensions the original plan omitted.
 **Exit:** no release-blocking or high-severity defects; documented results per device class.
 
 ### Phase 4 — App Store Connect preparation
+
+**Status: COMPLETE — August 12, 2026.** Product-page metadata, privacy and compliance
+answers, review notes, U.S.-only initial availability, continued web-app support, and the
+fictional 6.9-inch screenshot master set are prepared. Private review-contact values are
+direct-entry App Store Connect fields and are intentionally excluded from version control.
+Authentication, commercial setup, signing, and upload continue in Phases 4a and 5.
 
 As originally written, with these emphases:
 
