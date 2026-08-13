@@ -8,11 +8,19 @@
 
 **First build:** 2
 
+**Candidate build:** 3
+
+Build 3 is the release-hardening candidate prepared from the independent 1.0 review.
+It broadens the camera purpose string, protects expired Live Activities, tightens native
+backup-file scope, corrects Settings safe-area behavior, and brings every release suite
+into the permanent gauntlet. Build 2 remains the first external TestFlight submission.
+
 ## Current gate
 
 Apple Developer Program membership is active. The BlackPyre App Store Connect record and
-the `BlackPyre Internal` group exist. The full 1,346-check gauntlet passed, the signed
-Release archive validated, and version 1.0 build 2 uploaded successfully on August 13,
+the `BlackPyre Internal` group exist. The build 3 release-hardening gauntlet now covers
+all 1,357 checks with zero failures. The signed build 2 Release archive validated, and
+version 1.0 build 2 uploaded successfully on August 13,
 2026. Apple processed and validated the build, and it is assigned to `BlackPyre Internal`
 with the beta description, privacy URL, feedback address, and What to Test instructions
 saved. Build 2 is also assigned to the `BlackPyre Beta` external group and was submitted
@@ -26,7 +34,7 @@ Store Connect.
 | Platform | iOS / iPhone only |
 | App name | BlackPyre |
 | Version | 1.0 |
-| Build | 2 |
+| Build | 3 (release-hardening candidate; build 2 remains in TestFlight) |
 | App bundle ID | `com.blackpyre.app` |
 | Live Activity bundle ID | `com.blackpyre.app.resttimer` |
 | Minimum iOS | 16.1 |

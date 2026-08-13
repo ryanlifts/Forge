@@ -27,6 +27,7 @@ check("native bridge registers the rest activity plugin",/registerPluginInstance
 check("plugin respects Live Activity authorization",/ActivityAuthorizationInfo\(\)\.areActivitiesEnabled/.test(bridge));
 check("plugin requests, updates, and ends activities",/Activity\.request/.test(bridge) && /\.update\(using: state\)/.test(bridge) && /\.end\(using: nil, dismissalPolicy: \.immediate\)/.test(bridge));
 check("Lock Screen surface uses a system countdown",/Text\(timerInterval: Date\.now\.\.\.state\.endAt, countsDown: true\)/.test(widget));
+check("expired Live Activity state cannot create an invalid countdown range",/state\.isPaused \|\| state\.endAt <= Date\.now/.test(widget));
 check("Dynamic Island supplies expanded compact and minimal regions",/DynamicIsland \{/.test(widget) && /compactLeading:/.test(widget) && /compactTrailing:/.test(widget) && /minimal:/.test(widget));
 check("running and paused states sync to native",/status:"running"/.test(timer) && /status:"paused"/.test(timer) && /plugin\.sync\(snapshot\)/.test(timer));
 check("finished and cancelled timers dismiss native activity",/(finishRestCountdown\(\)[\s\S]*?endRestActivity\(\))/.test(timer) && /(cancelRest\(\)[\s\S]*?endRestActivity\(\))/.test(timer));

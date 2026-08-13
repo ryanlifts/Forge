@@ -2,7 +2,7 @@
 // NOTE: sw.js deliberately does NOT appear in SHELL. The browser fetches the service
 // worker itself through its own update mechanism (byte-compare on navigation); precaching
 // it would freeze updates and break the cache-bump release ritual. Do not "fix" this.
-const CACHE = "blackpyre-v111";
+const CACHE = "blackpyre-v112";
 const SHELL = [
   "./",
   "./index.html",
@@ -74,7 +74,10 @@ self.addEventListener("fetch", (e) => {
           }
           return res;
         })
-        .catch(() => caches.match("./index.html"));
+        .catch((error) => {
+          if (e.request.mode === "navigate") return caches.match("./index.html");
+          throw error;
+        });
     })
   );
 });

@@ -17,6 +17,7 @@ const sha256=relative=>crypto.createHash("sha256").update(fs.readFileSync(path.j
 
 async function run(){
   const privacy=read("ios/App/App/PrivacyInfo.xcprivacy");
+  const extensionPrivacy=read("ios/App/BlackPyreRestActivity/PrivacyInfo.xcprivacy");
   const privacyPage=read("privacy.html");
   const index=read("index.html");
   const ai=read("scripts/05-ai.js");
@@ -27,6 +28,10 @@ async function run(){
     && /NSPrivacyAccessedAPICategoryFileTimestamp/.test(privacy)
     && /C617\.1/.test(privacy)
     && /<key>NSPrivacyTracking<\/key>\s*<false\/>/.test(privacy));
+  check("Live Activity extension bundles a privacy manifest with no tracking or collection",
+    /C4A400062E5A000000000001 \/\* PrivacyInfo\.xcprivacy in Resources \*\//.test(project)
+    && /<key>NSPrivacyCollectedDataTypes<\/key>\s*<array\/>/.test(extensionPrivacy)
+    && /<key>NSPrivacyTracking<\/key>\s*<false\/>/.test(extensionPrivacy));
   check("native WebKit appends BlackPyre identification without replacing the standard user agent",
     /applicationNameForUserAgent/.test(bridge)
     && /BlackPyre\/1\.0/.test(bridge)
@@ -36,14 +41,22 @@ async function run(){
     && /blackpyre-native-vault\.json/.test(bridge)
     && /eraseNativeFiles/.test(bridge)
     && /protectNativeManagedFile\(filename,"DOCUMENTS"\)/.test(read("scripts/06-settings.js")));
+  check("native document management is restricted to BlackPyre-created backup prefixes",
+    /documentExportPrefixes/.test(bridge)
+    && /blackpyre-backup-/.test(bridge)
+    && /blackpyre-PARTIAL-/.test(bridge)
+    && !/name\.hasPrefix\("blackpyre-"\)/.test(bridge));
 
   const buildNumbers=[...project.matchAll(/CURRENT_PROJECT_VERSION = (\d+);/g)].map(match=>Number(match[1]));
-  check("app and Live Activity configurations use App Store build 2",buildNumbers.length===4&&buildNumbers.every(value=>value===2));
+  check("app and Live Activity configurations use App Store candidate build 3",buildNumbers.length===4&&buildNumbers.every(value=>value===3));
   check("Capacitor 8.5.0 and the secure brace-expansion override are pinned",(()=>{
     const pkg=JSON.parse(read("package.json"));
     return pkg.dependencies["@capacitor/cli"]==="8.5.0"
       && pkg.dependencies["@capacitor/core"]==="8.5.0"
       && pkg.dependencies["@capacitor/ios"]==="8.5.0"
+      && pkg.dependencies["@capacitor/filesystem"]==="8.1.2"
+      && pkg.dependencies["@capacitor/local-notifications"]==="8.2.1"
+      && pkg.dependencies["@capacitor/share"]==="8.0.1"
       && pkg.overrides["brace-expansion"]==="5.0.9";
   })());
   check("vendored html5-qrcode remains the npm-verified 2.3.8 build",

@@ -18,6 +18,9 @@ const faq=fs.readFileSync("data-faq.js","utf8");
 const screenshotReadme=fs.readFileSync("APP-STORE-SCREENSHOTS/README.md","utf8");
 const screenshotManifest=fs.readFileSync("APP-STORE-SCREENSHOTS/MANIFEST.sha256","utf8");
 const screenshotSeed=fs.readFileSync("tools/prepare-app-store-screenshots.js","utf8");
+const index=fs.readFileSync("index.html","utf8");
+const settings=fs.readFileSync("scripts/06-settings.js","utf8");
+const sw=fs.readFileSync("sw.js","utf8");
 
 const subtitle="Nutrition & Training, Forged";
 const promotional="Track nutrition, training, weight, measurements, water, and Apple Health data—privately, locally, and without a BlackPyre account.";
@@ -32,6 +35,10 @@ check("packet includes required support URL",packet.includes("https://ryanlifts.
 check("privacy policy is iOS-specific",/BlackPyre for iOS Privacy Policy/.test(privacy));
 check("privacy policy covers optional Apple Health",/Apple Health access is optional/.test(privacy));
 check("privacy policy covers complete local deletion",/Erase all BlackPyre data/.test(privacy));
+check("camera disclosure covers barcode scanning and an optional user-directed meal photo",
+  /scan food barcodes/.test(privacy)&&/take a meal photo/.test(privacy));
+check("private BlackPyre support email is published without exposing a personal address",
+  /blackpyrestrong@gmail\.com/.test(privacy)&&/blackpyrestrong@gmail\.com/.test(support));
 check("support page explains recovery before uninstall",/do not uninstall/i.test(support));
 check("Open Food Facts rights are attributed",/Open Database License \(ODbL\)/.test(notices));
 check("all shipped native component licenses are bundled",
@@ -95,6 +102,14 @@ check("screenshot seed is simulator-only and cannot target RAW",
   /Pass an iOS Simulator UDID/.test(screenshotSeed)
   &&/\/CoreSimulator\/Devices\//.test(screenshotSeed)
   &&!/RAW/.test(screenshotSeed));
+check("open Settings sections remain below the iPhone safe area while scrolling",
+  /#view-settings \.disclosure\[open\] > summary\s*\{[\s\S]*?position:sticky;[\s\S]*?safe-area-inset-top/.test(index));
+check("backup age display uses the clamped elapsed-day helper",
+  /const localDays = backupElapsedDays\(m\.lastBackup\);/.test(settings));
+check("partial erase failure states exactly what was and was not restored",
+  /Logs and settings were restored/.test(settings)&&/app-owned files inside BlackPyre may already have been removed/.test(settings));
+check("service worker falls back to HTML only for navigation requests",
+  /e\.request\.mode === "navigate"/.test(sw)&&!/\.catch\(\(\) => caches\.match\("\.\/index\.html"\)\)/.test(sw));
 check("Phase 4 records resolved U.S. launch and continued web support",
   /\*\*Status:\*\* COMPLETE/.test(packet)
   &&/Initial country and region: United States only/.test(packet)

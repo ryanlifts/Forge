@@ -1148,7 +1148,7 @@ async function eraseAllBlackPyreData(){
     restoreBlackPyreStorageAfterErase(snapshot);
     if (btn){ btn.disabled=false; btn.textContent="ERASE ALL BLACKPYRE DATA"; }
     console.error("BlackPyre erase failed:",error);
-    flashSave("Erase failed — existing browser data was preserved",true);
+    flashSave("Erase did not complete. Logs and settings were restored, but some app-owned files inside BlackPyre may already have been removed. Copies saved elsewhere are unchanged.",true);
     return false;
   }
 }
@@ -1661,7 +1661,7 @@ function renderBackup(){
   renderStorageUse();
   const m = data.meta || {lastBackup:null, logsSince:0};
   const line = document.getElementById("backupMetaLine");
-  const localDays = m.lastBackup ? Math.floor((new Date(todayStr())-new Date(m.lastBackup))/BACKUP_DAY_MS) : null;
+  const localDays = backupElapsedDays(m.lastBackup);
   const localText = m.lastBackup
     ? "Last local backup: "+(localDays===0?"today":localDays+" day"+(localDays===1?"":"s")+" ago")+" · "+(m.logsSince||0)+" new logs since."
     : "Last local backup: never.";

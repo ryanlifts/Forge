@@ -40,8 +40,9 @@ check("native HTML and service worker use only bundled fonts",
   && fontFiles.slice(0,5).every(file=>read("sw.js").includes("./"+file)));
 
 const plist=read("ios/App/App/Info.plist");
-check("camera permission is barcode-specific",
-  plist.includes("BlackPyre uses your camera only to scan food barcodes."));
+check("camera permission accurately covers barcode and optional meal-photo use",
+  /uses your camera to scan food barcodes/.test(plist)
+  && /take a meal photo for an AI handoff you send yourself/.test(plist));
 check("native target is iPhone-only and portrait-only with no armv7 requirement",
   !/armv7|UISupportedInterfaceOrientations~ipad|Landscape/.test(plist)
   && (plist.match(/UIInterfaceOrientationPortrait/g)||[]).length===1);

@@ -10,9 +10,11 @@ function check(name,condition){
 const project=fs.readFileSync("ios/App/App.xcodeproj/project.pbxproj","utf8");
 const plist=fs.readFileSync("ios/App/App/Info.plist","utf8");
 const packet=fs.readFileSync("BLACKPYRE-PHASE-05-INTERNAL-TESTFLIGHT.md","utf8");
+const runner=fs.readFileSync("tests/run-tests.sh","utf8");
 
 check("TestFlight version is 1.0",/MARKETING_VERSION = 1\.0;/.test(project));
-check("first TestFlight build is 2",/CURRENT_PROJECT_VERSION = 2;/.test(project)&&/First build:\*\* 2/.test(packet));
+check("first TestFlight upload remains recorded as build 2",/First build:\*\* 2/.test(packet));
+check("release-hardening candidate is build 3",/CURRENT_PROJECT_VERSION = 3;/.test(project)&&/Candidate build:\*\* 3/.test(packet));
 check("app bundle identifier is stable",/PRODUCT_BUNDLE_IDENTIFIER = com\.blackpyre\.app;/.test(project));
 check("Live Activity bundle identifier is stable",/PRODUCT_BUNDLE_IDENTIFIER = com\.blackpyre\.app\.resttimer;/.test(project));
 check("app remains iPhone only",/TARGETED_DEVICE_FAMILY = 1;/.test(project));
@@ -23,6 +25,8 @@ check("app record values are prepared",/BLACKPYRE-IOS-1/.test(packet)&&/English 
 check("internal test group and first tester are prepared",/BlackPyre Internal/.test(packet)&&/First tester:\*\* Ryan/.test(packet));
 check("TestFlight lifecycle covers update preservation",/update-in-place data-preservation check/i.test(packet));
 check("private feedback address remains direct entry",/feedback email must be entered directly/i.test(packet));
+check("permanent gauntlet includes all four formerly manual release suites",
+  ["manual-food-slider","phase2-keyless-food-data","phase4a-paid-distribution","phase5-testflight-readiness"].every(name=>runner.includes("tests/"+name+".test.js")));
 
 console.log(`\nPHASE 5 TESTFLIGHT READINESS: ${passed} passed, ${failed} failed`);
 if(failed) process.exit(1);

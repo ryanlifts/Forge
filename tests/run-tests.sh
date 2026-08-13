@@ -20,6 +20,10 @@ node tests/phase4-app-store-connect.test.js
 node tests/live-activity-rest-timer.test.js
 node tests/unit.test.js
 node tests/integration.test.js
+node tests/manual-food-slider.test.js
+node tests/phase2-keyless-food-data.test.js
+node tests/phase4a-paid-distribution.test.js
+node tests/phase5-testflight-readiness.test.js
 node tests/card-profiles.test.js
 echo ""
 echo "GAUNTLET GREEN — safe to ship."

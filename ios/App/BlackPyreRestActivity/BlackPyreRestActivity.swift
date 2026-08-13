@@ -76,7 +76,7 @@ struct BlackPyreRestActivity: Widget {
 
     @ViewBuilder
     private func timerText(for state: RestTimerActivityAttributes.ContentState) -> some View {
-        if state.isPaused {
+        if state.isPaused || state.endAt <= Date.now {
             Text(Self.format(seconds: state.pausedRemaining))
         } else {
             Text(timerInterval: Date.now...state.endAt, countsDown: true)

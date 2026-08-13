@@ -29,7 +29,7 @@
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>BlackPyre uses your camera only to scan food barcodes.</string>
+	<string>BlackPyre uses your camera to scan food barcodes and, if you choose, take a meal photo for an AI handoff you send yourself.</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>BlackPyre reads the Apple Health data you choose to show weight, activity, and recovery information alongside your logs.</string>
 	<key>NSHealthUpdateUsageDescription</key>

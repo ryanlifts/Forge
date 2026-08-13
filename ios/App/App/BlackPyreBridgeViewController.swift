@@ -238,6 +238,11 @@ final class BlackPyreDataPlugin: CAPPlugin, CAPBridgedPlugin {
         "blackpyre-health-cache.json"
     ]
 
+    private static let documentExportPrefixes = [
+        "blackpyre-backup-",
+        "blackpyre-PARTIAL-"
+    ]
+
     private static let healthCacheName = "blackpyre-health-cache.json"
     private static let healthCacheLimit = 2_000_000
 
@@ -261,7 +266,7 @@ final class BlackPyreDataPlugin: CAPPlugin, CAPBridgedPlugin {
             return libraryNames.contains(name)
         }
         return directory == "DOCUMENTS"
-            && name.hasPrefix("blackpyre-")
+            && documentExportPrefixes.contains(where: { name.hasPrefix($0) })
             && name.hasSuffix(".json")
     }
 

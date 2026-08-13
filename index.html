@@ -633,6 +633,12 @@
   .disclosure > summary::-webkit-details-marker { display:none; }
   .disclosure > summary::after { content:'＋'; color:var(--ember); font-size:18px; flex:0 0 auto; }
   .disclosure[open] > summary { border-radius:14px 14px 0 0; border-bottom-color:transparent; }
+  #view-settings .disclosure[open] > summary {
+    position:sticky;
+    top:calc(env(safe-area-inset-top, 0px) + 4px);
+    z-index:12;
+    box-shadow:0 8px 18px rgba(16,18,21,.92);
+  }
   .disclosure[open] > summary::after { content:'−'; }
   .disclosure-title { font-family:'Oswald',sans-serif; font-size:15px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; }
   .disclosure-sub { color:var(--dim); font-size:10px; margin-top:3px; }

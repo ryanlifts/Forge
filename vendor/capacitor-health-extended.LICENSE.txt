@@ -1,4 +1,4 @@
-+The MIT License (MIT)
+The MIT License (MIT)
 
 Copyright (c) 2024 - Martin Ley1
 Copyright (c) 2025 - Flomentum Solutions, LLC (Matthew May)

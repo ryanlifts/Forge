@@ -2089,7 +2089,7 @@ const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("native app disables double-tap and pinch zoom while preserving one-finger panning", html.includes("user-scalable=no") && html.includes("maximum-scale=1.0") && /html, body\s*\{\s*touch-action:pan-x pan-y;\s*\}/.test(html));
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+(?:-\d+)?"/.test(sw));
-check("native service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v111"'));
+check("native service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v112"'));
 
 const nativePrep76 = fs.readFileSync(
   path.join(__dirname,"..","tools","prepare-native.sh"),
@@ -2618,6 +2618,7 @@ const deleteData={food:{},workouts:[{date:deleteDay,day:"D1",title:"Delete Me",s
 deleteData.food[deleteDay]=[{name:"Food Entry",cal:100,pro:10,carb:5,fat:2,meal:"other"}];
 const U56=boot(Object.assign({},V3_CFG,{measureOn:true}),deleteData,null,TEST_PROGRAM);
 const dU56=U56.window.document;
+U56.window.confirm=()=>true;
 dU56.querySelector("#workHistory .delWork").dispatchEvent(new U56.window.Event("click",{bubbles:true}));
 check("v56 workout deletion offers working Undo", U56.window.eval("data.workouts.length")===0 && !dU56.getElementById("undoToast").classList.contains("hidden"));
 dU56.getElementById("undoBtn").dispatchEvent(new U56.window.Event("click",{bubbles:true}));

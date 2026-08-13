@@ -330,8 +330,13 @@ function mapOFFProduct(p){
 // --- OFF search: Search-a-licious only; no retired legacy endpoint fallback ---
 function fetchWithTimeout(url, ms){
   return new Promise((resolve, reject)=>{
-    const t = setTimeout(()=>reject(new Error("timeout")), ms);
-    fetch(url).then(r=>{ clearTimeout(t); resolve(r); }, e=>{ clearTimeout(t); reject(e); });
+    const controller = typeof AbortController==="function" ? new AbortController() : null;
+    const t = setTimeout(()=>{
+      if (controller) controller.abort();
+      reject(new Error("timeout"));
+    }, ms);
+    const options = controller ? {signal:controller.signal} : undefined;
+    fetch(url,options).then(r=>{ clearTimeout(t); resolve(r); }, e=>{ clearTimeout(t); reject(e); });
   });
 }
 async function searchOFF(q){

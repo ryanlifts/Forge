@@ -11,8 +11,12 @@ const path = require("path");
 const childProcess = require("child_process");
 
 const udid = process.argv[2];
+const requestedPanel = process.argv[3] || "1";
 if (!/^[A-F0-9-]{36}$/.test(String(udid || ""))) {
   throw new Error("Pass an iOS Simulator UDID.");
+}
+if (!["1", "health", "data"].includes(requestedPanel)) {
+  throw new Error("Optional screenshot panel must be health or data.");
 }
 
 function run(command, args) {
@@ -27,7 +31,11 @@ if (!container.includes("/CoreSimulator/Devices/") || !fs.existsSync(container))
   throw new Error("Refusing to seed anything except an installed Simulator app.");
 }
 
-run("xcrun", ["simctl", "terminate", udid, "com.blackpyre.app"]);
+try {
+  run("xcrun", ["simctl", "terminate", udid, "com.blackpyre.app"]);
+} catch (error) {
+  // A freshly installed screenshot build may not be running yet.
+}
 
 function findFile(dir, filename) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -214,7 +222,7 @@ const sql = [
   sqlUpsert("forge:cfg", JSON.stringify(cfg)),
   sqlUpsert("forge:data", JSON.stringify(data)),
   sqlUpsert("forge:program", JSON.stringify(program)),
-  sqlUpsert("blackpyre:phase4-screenshot-mode", "1"),
+  sqlUpsert("blackpyre:phase4-screenshot-mode", requestedPanel),
   "COMMIT;"
 ].join("\n");
 
