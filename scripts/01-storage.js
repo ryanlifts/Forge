@@ -45,7 +45,7 @@ function commitBlackPyreStorageErase(strings){
   }
 }
 
-const DEFAULT_CFG = { startWt:0, goalWt:0, calTarget:0, proTarget:0, carbGoal:0, fatGoal:0, unitSystem:"imperial", accent:"gold", foodHandoffOn:true, autoProgressionOn:false, foodSuggestionsOn:false, foodSuggestionsWeightLoss:true, foodSuggestionsAvoid:"" };
+const DEFAULT_CFG = { startWt:0, goalWt:0, calTarget:0, proTarget:0, carbGoal:0, fatGoal:0, unitSystem:"imperial", accent:"gold", foodHandoffOn:true, autoProgressionOn:false, foodSuggestionsOn:false, foodSuggestionsWeightLoss:true, foodSuggestionsAvoid:"", prHidden:{}, prResetAt:{} };
 const LB_TO_KG = 0.45359237;
 const IN_TO_CM = 2.54;
 const SUPPORTED_GOAL_ADJUSTMENTS = Object.freeze([-1000,-500,-250,0,250]);
@@ -952,7 +952,7 @@ function validateCfgShape(obj){
   if (!isPlainObject(obj)) throw new Error("Saved settings are not an object.");
   if (obj.schemaVersion!==SCHEMA_VERSION) throw new Error("Settings were not migrated to the current schema.");
   ["calSchedDays"].forEach(k=>{ if (hasOwn(obj,k) && obj[k]!==null && !Array.isArray(obj[k])) throw new Error("Saved settings field "+k+" has an unusable shape."); });
-  ["calcInputs","splitState","liftGoals"].forEach(k=>{ if (hasOwn(obj,k) && obj[k]!==null && !isPlainObject(obj[k])) throw new Error("Saved settings field "+k+" has an unusable shape."); });
+  ["calcInputs","splitState","liftGoals","prHidden","prResetAt"].forEach(k=>{ if (hasOwn(obj,k) && obj[k]!==null && !isPlainObject(obj[k])) throw new Error("Saved settings field "+k+" has an unusable shape."); });
   if (hasOwn(obj,"customRests") && obj.customRests!==null && !Array.isArray(obj.customRests) && !isPlainObject(obj.customRests)) throw new Error("Saved settings field customRests has an unusable shape.");
 }
 function safeProtectedState(parsed){
@@ -2408,7 +2408,7 @@ primaryTabs.forEach((btn,index)=>{
 
 
 /* BLACKPYRE_V116_RUNTIME_DIAGNOSTIC */
-const BLACKPYRE_WEB_RUNTIME_VERSION = "web-v119-release-hardening-1";
+const BLACKPYRE_WEB_RUNTIME_VERSION = "web-v121-food-catalog-1";
 const __blackpyreBaseStorageDiagnostic = makeStorageDiagnosticEnvelope;
 makeStorageDiagnosticEnvelope = function(){
   const payload = __blackpyreBaseStorageDiagnostic();

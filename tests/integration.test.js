@@ -841,7 +841,7 @@ const yoplaitOFF = {
 };
 let C = bootOFF(()=>Promise.resolve({ok:true,status:200,json:()=>Promise.resolve({status:1,product:yoplaitOFF})}));
 await scan(C,"070470343488");
-check("v69 OFF v2 barcode lookup selects Yoplait product", C.window.document.getElementById("selName").textContent.includes("mixed berry") && C.window.eval("window.__calls[0]").includes("/api/v2/product/070470343488.json") && !C.window.eval("window.__calls[0]").includes("/api/v3.6/product/"));
+check("v69 OFF v2 barcode lookup selects Yoplait product", C.window.document.getElementById("selName").textContent.includes("mixed berry") && C.window.eval("window.__calls.some(url=>url.includes('/api/v2/product/070470343488.json'))") && !C.window.eval("window.__calls.some(url=>url.includes('/api/v3.6/product/'))"));
 
 const repairedYoplait = C.window.eval("mapOFFProduct("+JSON.stringify(yoplaitOFF)+")");
 check("v69 repairs OFF serving macros mislabeled as per 100g", repairedYoplait &&
@@ -973,7 +973,7 @@ C = bootOFF(()=>{
 await scan(C,"333");
 check("v82 confirmed OFF 404 does not retry and opens label entry", notFoundAttempts===1 &&
   !C.window.document.getElementById("customCard").classList.contains("hidden") &&
-  /not found in Open Food Facts/i.test(C.window.document.getElementById("searchErr").textContent));
+  /not found in the USDA catalog or Open Food Facts/i.test(C.window.document.getElementById("searchErr").textContent));
 
 let networkAttempts = 0;
 C = bootOFF(()=>{
@@ -2135,7 +2135,7 @@ C62.window.eval(`reviewFoodSuggestion(foodSuggestionCandidates().find(c=>c.food.
 check("v62 a catalog suggestion opens its exact listed serving for review", dC62.getElementById("qtyUnit").value==="serving" && Number(dC62.getElementById("qtyAmount").value)===1 && /4 oz cooked \(113g\)/.test(dC62.getElementById("qtyUnit").selectedOptions[0].textContent));
 check("v62 review shows the USDA per-100g values and correctly scaled serving", /USDA reference · SR28/.test(dC62.getElementById("selName").textContent) && /165 kcal/.test(dC62.getElementById("selPer100").textContent) && dC62.getElementById("calcCal").textContent==="186" && dC62.getElementById("calcPro").textContent==="35");
 check("v62 reviewing a broad-catalog suggestion never auto-logs it", C62.window.eval(`(data.food[todayStr()]||[]).length`)===beforeReview62);
-check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js') && x.includes('const CACHE = "blackpyre-v119-release-hardening-1"'); })());
+check("v62 suggestion catalog remains precached in the current service worker", (()=>{ const x=fs.readFileSync(path.join(__dirname,"..","sw.js"),"utf8"); return x.includes('"./data-suggestions.js') && x.includes('const CACHE = "blackpyre-v121-food-catalog-1"'); })());
 check("v62 keeps primary schemaVersion 3", C62.window.eval("SCHEMA_VERSION")===3);
 
 // ================= ChatGPT handoff paste flow =================
@@ -2474,6 +2474,7 @@ const currentFaqContract = P.window.eval(`(()=>{
     "How do I log and track my weight?",
     "Can I use accessibility features?",
     "How do I scan food?",
+    "Where do food search results come from?",
     "What if scanned nutrition is wrong or missing?",
     "What is My Foods?",
     "What is the fastest way to log foods I eat often?",
@@ -2498,12 +2499,12 @@ const currentFaqContract = P.window.eval(`(()=>{
   ];
   const faqText=JSON.stringify(FAQ).toLowerCase();
   const banned=[
-    "usda","apple","iphone","ipad","android",
+    "apple","iphone","ipad","android",
     "safari","chrome","google","chatgpt","openai","claude",
     "anthropic","starry","chipotle","paddleocr"
   ];
 
-  return questions.length===27
+  return questions.length===28
     && JSON.stringify(questions.map(item=>item.q))===JSON.stringify(expectedQuestions)
     && JSON.stringify(sections)===JSON.stringify([
       "Getting started",
@@ -2519,6 +2520,8 @@ const currentFaqContract = P.window.eval(`(()=>{
     && has("How do I scan food?","Scan barcode")
     && has("How do I scan food?","Compare those values with the package")
     && has("How do I scan food?","Add to log")
+    && has("Where do food search results come from?","USDA FoodData Central")
+    && has("Where do food search results come from?","Open Food Facts")
     && has("What if scanned nutrition is wrong or missing?","Nutrition needs editing")
     && has("What if scanned nutrition is wrong or missing?","saves your correction")
     && has("What if scanned nutrition is wrong or missing?","uses it first on later scans")
@@ -2546,7 +2549,7 @@ const currentFaqContract = P.window.eval(`(()=>{
     && has("What is Protected mode, and what if my data disappears?","pauses normal saving")
     && has("What is Protected mode, and what if my data disappears?","Do not remove the installed web app or clear its site data")
     && has("What works without an internet connection?","Saved barcodes")
-    && has("What works without an internet connection?","need a connection")
+    && has("What works without an internet connection?","require a connection")
     && has("Disclaimer & terms of use","not medical advice")
     && has("Disclaimer & terms of use","Exercise carries injury risk")
     && has("Disclaimer & terms of use","Verify food labels")
@@ -2596,8 +2599,8 @@ check("local food search still finds LOCAL_DB entries", P.window.eval(`LOCAL_DB.
 const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f)));
 check("SW cache key matches the BlackPyre web v82 release",
-  /const CACHE = "blackpyre-v119-release-hardening-1";/.test(sw));
-check("Phase 1 service-worker cache remains refreshed", sw.includes('const CACHE = "blackpyre-v119-release-hardening-1"') && !sw.includes('blackpyre-phase1-nutrition-safety-1'));
+  /const CACHE = "blackpyre-v121-food-catalog-1";/.test(sw));
+check("Phase 1 service-worker cache remains refreshed", sw.includes('const CACHE = "blackpyre-v121-food-catalog-1"') && !sw.includes('blackpyre-phase1-nutrition-safety-1'));
 
 await wait(0);
 releaseTestWindows([
@@ -2713,6 +2716,7 @@ const LOCAL_SCRIPTS = [
   "data-quotes.js",
   "data-foods.js",
   "data-suggestions.js",
+  "data-food-catalog.js",
   "data-faq.js",
   "data-exercises.js",
   "data-exercise-card-profiles.js",
@@ -2730,8 +2734,8 @@ check("every local classic script begins with the strict-mode directive",
 
 const APPROVED_ORDER = LOCAL_SCRIPTS; // data files, then slices 01..07 — this order is load-bearing
 const scriptTags = [...rawIndex.matchAll(/<script\b[^>]*\bsrc="([^"]+)"[^>]*><\/script>/g)];
-check("exactly the 14 approved scripts, each exactly once, in the approved order",
-  scriptTags.length===14 && scriptTags.every((t,i)=>t[1].split(/[?#]/)[0]===APPROVED_ORDER[i]));
+check("exactly the 15 approved scripts, each exactly once, in the approved order",
+  scriptTags.length===15 && scriptTags.every((t,i)=>t[1].split(/[?#]/)[0]===APPROVED_ORDER[i]));
 check("no local script tag uses async, defer, or type=module",
   scriptTags.every(t=>!/\basync\b|\bdefer\b|type="module"/.test(t[0])));
 
@@ -2877,10 +2881,10 @@ const dO56=O56.window.document;
 Object.defineProperty(O56.window.navigator,"onLine",{configurable:true,value:false});
 dO56.getElementById("foodQuery").value="chicken";
 await O56.window.eval("runSearch()");
-check("v56 offline food search skips network and shows local results immediately", O56.window.__netCalls.length===0 && dO56.getElementById("results").children.length>0 && /Open Food Facts was skipped/.test(dO56.getElementById("searchErr").textContent));
+check("v56 offline food search skips network and shows local results immediately", O56.window.__netCalls.length===0 && dO56.getElementById("results").children.length>0 && /bundled USDA/.test(dO56.getElementById("searchErr").textContent));
 dO56.getElementById("barcodeInput").value="999999";
 await O56.window.eval("runBarcode()");
-check("v56 offline barcode lookup skips network and opens manual entry", O56.window.__netCalls.length===0 && !dO56.getElementById("customCard").classList.contains("hidden") && /Open Food Facts was skipped/.test(dO56.getElementById("searchErr").textContent));
+check("v56 offline barcode lookup skips network and opens manual entry", O56.window.__netCalls.length===0 && !dO56.getElementById("customCard").classList.contains("hidden") && /not in a cached catalog section/.test(dO56.getElementById("searchErr").textContent));
 dO56.getElementById("scanBtn").dispatchEvent(new O56.window.Event("click",{bubbles:true}));
 await wait(5);
 check("v56 offline scanner fast-fails without loading its external library", O56.window.__netCalls.length===0 && /needs a connection/.test(dO56.getElementById("scanErr").textContent) && ![...dO56.querySelectorAll('script[src]')].some(x=>/html5-qrcode/.test(x.src)));
@@ -5812,7 +5816,7 @@ check(
 check(
   "v77 web canonical Sprinting remains time-distance",
   TrainingPlanCore1B.window.eval(
-    `EXERCISE_LIBRARY.length===203
+    `EXERCISE_LIBRARY.length===261
       && trainingPlanEntryById("bp:sprinting").name==="Sprinting"
       && trainingPlanEntryById("bp:sprinting").shape==="timeDist"`
   )
@@ -8006,7 +8010,7 @@ check(
   V78ServiceWorker.includes('"./data-exercise-card-profiles.js')
   && V78ServiceWorker.includes('"./scripts/03-card-profiles.js')
   && V78ServiceWorker.includes(
-    'const CACHE = "blackpyre-v119-release-hardening-1"'
+    'const CACHE = "blackpyre-v121-food-catalog-1"'
   )
 );
 
@@ -8298,13 +8302,13 @@ const CanonicalImportAudit78=
   `);
 
 check(
-  "v78 all 203 canonical exercises accept their authoritative profile prescription",
-  CanonicalImportAudit78.count===203
+  "v78 all 261 canonical exercises accept their authoritative profile prescription",
+  CanonicalImportAudit78.count===261
   && CanonicalImportAudit78.failures.length===0
 );
 
 check(
-  "v78 all 203 profile-aware prescriptions survive public export and re-import",
+  "v78 all 261 profile-aware prescriptions survive public export and re-import",
   CanonicalImportAudit78.roundTripFailures.length===0
 );
 
@@ -8364,18 +8368,16 @@ const NativeParityAmbiguous77=
 
       return {
         ok:result.ok,
-        first:
-          result.suggestions[0]
-          && result.suggestions[0].id
+        id:result.entry && result.entry.id
       };
     })()
   `);
 
 check(
-  "v77 ambiguous Chest Supported Row remains blocked with the likely match first",
-  NativeParityAmbiguous77.ok===false
-  && NativeParityAmbiguous77.first
-    ==="bp:chest-supported-dumbbell-row"
+  "equipment-neutral Chest-Supported Row resolves exactly",
+  NativeParityAmbiguous77.ok===true
+  && NativeParityAmbiguous77.id
+    ==="bp:chest-supported-row"
 );
 
 NativeParity77.window.eval(`
@@ -8416,33 +8418,13 @@ const NativeParityCustom77=
   );
 
 check(
-  "v77 review dropdown keeps likely matches before the full library",
-  !!NativeParityReviewSelect77
-  && !!NativeParityReviewSelect77
-    .querySelector(
-      'optgroup[label="Likely matches"]'
-    )
-  && NativeParityReviewSelect77
-    .querySelector(
-      'optgroup[label="Likely matches"] option'
-    ).value
-      ==="bp:chest-supported-dumbbell-row"
+  "exact canonical imports do not require an unnecessary match dropdown",
+  NativeParityReviewSelect77===null
 );
 
 check(
-  "v77 custom exercise creation stays collapsed behind simple wording",
-  !!NativeParityCustom77
-  && NativeParityCustom77.classList
-    .contains("hidden")
-  && [
-    ...NativeParityDocument77
-      .querySelectorAll(
-        ".training-plan-review-resolution button"
-      )
-  ].some(button=>
-    button.textContent
-      ==="Create a custom exercise instead"
-  )
+  "exact canonical imports do not show custom-exercise resolution controls",
+  NativeParityCustom77===null
 );
 
 const NativeParityTimed77=

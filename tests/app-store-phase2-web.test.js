@@ -21,15 +21,16 @@ async function run(){
   const webPrivacy=read("privacy.html");
   const iosPrivacy=read("privacy-ios.html");
   const support=read("support.html");
-  check("Open Food Facts search has no retired CGI fallback",
-    /search\.openfoodfacts\.org\/search/.test(food)&&!/cgi\/search\.pl/.test(food));
+  check("Open Food Facts full-text search uses the CORS-capable public route",
+    /world\.openfoodfacts\.org\/cgi\/search\.pl/.test(food)
+    &&/search_simple=1/.test(food));
   check("offline copy keeps AI handoffs available",
     /AI copy\/paste handoffs/.test(index)&&!/connected AI features need a connection/.test(index));
   check("privacy, support, deletion, attribution, and notices ship",
     ["privacy.html","privacy-ios.html","support.html","third-party-notices.html","THIRD-PARTY-NOTICES.txt"].every(file=>fs.existsSync(path.join(root,file)))
     && /id="eraseAllDataBtn"/.test(index)&&/Open Database License/.test(index)&&/privacy\.html/.test(index));
   check("service worker precaches the public release pages",
-    /blackpyre-v119-release-hardening-1/.test(sw)&&/privacy\.html/.test(sw)&&/privacy-ios\.html/.test(sw)&&/support\.html/.test(sw)&&/third-party-notices\.html/.test(sw));
+    /blackpyre-v121-food-catalog-1/.test(sw)&&/privacy\.html/.test(sw)&&/privacy-ios\.html/.test(sw)&&/support\.html/.test(sw)&&/third-party-notices\.html/.test(sw));
   check("web and iOS privacy policies are explicitly product-specific",
     /Web App Privacy Policy/.test(webPrivacy)&&!/iPhone|Native Vault|iOS App Privacy Policy/.test(webPrivacy)
     &&/iOS App Privacy Policy/.test(iosPrivacy)&&!/browser\/PWA|Web App Privacy Policy/.test(iosPrivacy));

@@ -687,13 +687,15 @@ const faq = fs.readFileSync(
 
 check(
   "current consolidated native FAQ is valid",
-  (faq.match(/\{q:"/g) || []).length === 27
+  (faq.match(/\{q:"/g) || []).length === 28
 
   && /How do I set my calorie and macro targets\?/.test(faq)
   && /Can teenagers use the calorie and macro calculator\?/.test(faq)
 
   && /How do I scan food\?/.test(faq)
   && /Scan barcode/.test(faq)
+  && /Where do food search results come from\?/.test(faq)
+  && /USDA FoodData Central/.test(faq)
   && /What if scanned nutrition is wrong or missing\?/.test(faq)
   && /correction form/.test(faq)
   && /Nothing is logged until you review it/.test(faq)
@@ -720,7 +722,7 @@ check(
 
   && /Disclaimer & terms of use/.test(faq)
 
-  && !/(USDA|Apple|iPhone|iPad|Android|Safari|Chrome|Google|ChatGPT|OpenAI|Claude|Anthropic|Starry|Chipotle)/i.test(faq)
+  && !/(Apple|iPhone|iPad|Android|Safari|Chrome|Google|ChatGPT|OpenAI|Claude|Anthropic|Starry|Chipotle)/i.test(faq)
 );
 
 const sw = fs.readFileSync(
@@ -731,7 +733,7 @@ const sw = fs.readFileSync(
 check(
   "manual food-slider candidate uses the current cache",
   sw.includes(
-    'const CACHE = "blackpyre-v119-release-hardening-1"'
+    'const CACHE = "blackpyre-v121-food-catalog-1"'
   )
 );
 

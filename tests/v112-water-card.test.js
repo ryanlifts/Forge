@@ -62,9 +62,9 @@ check("v112 water runtime repairs older markup through the adjacent unit element
   /getElementById\("waterUnit"\)\|\|waterCount\.nextElementSibling/.test(rawWater));
 
 check("v112 cache and critical runtime family are version-busted",
-  /blackpyre-v119-release-hardening-1/.test(rawSw)
-  && /scripts\/05-ai\.js\?v=web-v119-release-hardening-1/.test(rawIndex)
-  && /scripts\/05-ai\.js\?v=web-v119-release-hardening-1/.test(rawSw));
+  /blackpyre-v121-food-catalog-1/.test(rawSw)
+  && /scripts\/05-ai\.js\?v=web-v121-food-catalog-1/.test(rawIndex)
+  && /scripts\/05-ai\.js\?v=web-v121-food-catalog-1/.test(rawSw));
 
 W.window.close();
 summary("V112 WATER CARD");

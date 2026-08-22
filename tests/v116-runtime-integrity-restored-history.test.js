@@ -2,8 +2,8 @@ const {boot,check,summary,EXISTING_CFG}=require("./harness");
 const fs=require("fs"),path=require("path");
 
 const root=path.join(__dirname,"..");
-const VERSION="web-v119-release-hardening-1";
-const CACHE="blackpyre-v119-release-hardening-1";
+const VERSION="web-v121-food-catalog-1";
+const CACHE="blackpyre-v121-food-catalog-1";
 
 const rawIndex=fs.readFileSync(path.join(root,"index.html"),"utf8");
 const rawManifest=fs.readFileSync(path.join(root,"manifest.json"),"utf8");

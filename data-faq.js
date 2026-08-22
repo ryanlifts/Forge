@@ -20,6 +20,8 @@ const FAQ = [
 
   {q:"How do I scan food?", a:"Use <b>Scan barcode</b> for a packaged food, or type the barcode and tap <b>Look up</b>. BlackPyre checks <b>My Foods</b> first. For a fresh online result, the verification panel shows the scanned serving and nutrition. Compare those values with the package, then choose <b>Nutrition matches package</b> or <b>Nutrition needs editing</b>. A match saves the barcode to My Foods but does not log the meal. <b>Nothing is logged until you review it and tap Add to log.</b>"},
 
+  {q:"Where do food search results come from?", a:"BlackPyre searches <b>My Foods</b> first, then bundled and downloadable <b>USDA FoodData Central</b> records. <b>Open Food Facts</b> is a separately labeled fallback when the USDA catalog has no match. Results always identify their source, and packaged-food values should be checked against the package label."},
+
   {q:"What if scanned nutrition is wrong or missing?", a:"Choose <b>Nutrition needs editing</b> to open the correction form. Enter the serving, calories, and macros from the package and save it. BlackPyre saves your correction to <b>My Foods</b> and uses it first on later scans of the same barcode. If a barcode is not found, enter the package information manually and save it if you want to reuse it. The package label is the best source for packaged-food nutrition."},
 
   {q:"What is My Foods?", a:"<b>My Foods</b> is your personal food library. Save foods you use often, including homemade foods or products you entered manually. Saved foods can be edited or deleted, and a barcode can be added so future scans find the food locally."},
@@ -59,7 +61,7 @@ const FAQ = [
 
   {sec:"Your data & recovery"},
 
-  {q:"Where is my data stored? Is it private?", a:"Your settings, logs, program, saved foods, and recovery data are stored in BlackPyre’s browser/PWA site storage on this device. BlackPyre has no user account, advertising, analytics SDK, or BlackPyre server that can read your personal log. Online packaged-food searches send only the search words or barcode to <b>Open Food Facts</b>; that service also receives ordinary network information such as your IP address. BlackPyre never transmits your logs, prompts, reports, or photos to an AI service; you control any copy, paste, or share handoff. Open <b>Settings → Privacy &amp; support</b> for the full policy."},
+  {q:"Where is my data stored? Is it private?", a:"Your settings, logs, program, saved foods, and recovery data are stored in BlackPyre’s browser/PWA site storage on this device. BlackPyre has no user account, advertising, analytics SDK, or BlackPyre server that can read your personal log. Online food searches download only the matching public catalog section from GitHub; if that catalog has no match, only the search words or barcode may be sent to <b>Open Food Facts</b>. Those services receive ordinary network information such as your IP address, but BlackPyre never sends them your logs, name, targets, weight, training history, or saved corrections. BlackPyre never transmits your prompts, reports, or photos to an AI service; you control any copy, paste, or share handoff. Open <b>Settings → Privacy &amp; support</b> for the full policy."},
 
   {q:"How do I back up or move BlackPyre to another device?", a:"Open <b>Settings → Data &amp; recovery</b>. <b>Save backup</b> quickly creates a verified file in your browser or device’s Downloads location. <b>Save backup elsewhere</b> opens supported share/save choices. Keep a second copy somewhere you will still control if this browser, installed PWA, or device is removed. On another device, install BlackPyre and restore that backup."},
 
@@ -67,7 +69,7 @@ const FAQ = [
 
   {q:"What is Protected mode, and what if my data disappears?", a:"If BlackPyre cannot safely read established saved data, it pauses normal saving instead of replacing it with empty information. <b>Do not remove the installed web app or clear its site data.</b> Open recovery and choose a validated recovery snapshot or one of your own backups. BlackPyre preserves the original saved information while recovery is being handled."},
 
-  {q:"What works without an internet connection?", a:"Your saved foods, manual food logging, local suggestions, workouts, workout drafts, weights, measurements, water, programs, AI handoff prompts, backups, and recovery features continue to work. Saved barcodes can still load local foods. Only new online food searches and unknown barcode lookups need a connection."},
+  {q:"What works without an internet connection?", a:"Your saved foods, manual food logging, bundled USDA foods, local suggestions, workouts, workout drafts, weights, measurements, water, programs, AI handoff prompts, backups, and recovery features continue to work. Saved barcodes always load locally, and catalog sections used before may remain cached. A new packaged-food search or unknown barcode can require a connection if its catalog section has not been downloaded yet."},
 
 
   {sec:"Legal"},

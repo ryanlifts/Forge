@@ -132,10 +132,10 @@ check(
 
 check(
   "v113 full critical runtime family and cache are version-busted",
-  /blackpyre-v119-release-hardening-1/.test(rawSw)
-  &&/scripts\/01-storage\.js\?v=web-v119-release-hardening-1/.test(rawIndex)
-  &&/scripts\/03-train\.js\?v=web-v119-release-hardening-1/.test(rawIndex)
-  &&/scripts\/06-settings\.js\?v=web-v119-release-hardening-1/.test(rawIndex)
+  /blackpyre-v121-food-catalog-1/.test(rawSw)
+  &&/scripts\/01-storage\.js\?v=web-v121-food-catalog-1/.test(rawIndex)
+  &&/scripts\/03-train\.js\?v=web-v121-food-catalog-1/.test(rawIndex)
+  &&/scripts\/06-settings\.js\?v=web-v121-food-catalog-1/.test(rawIndex)
 );
 
 check(

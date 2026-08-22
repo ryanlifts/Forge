@@ -51,7 +51,7 @@ check("v118 Plank and set-based exercises render the identical removal box and f
 app.window.close();
 
 check("v117 deployment identity is coherent",
-  sw.includes('const CACHE = "blackpyre-v119-release-hardening-1"')
-  &&index.includes("web-v119-release-hardening-1"));
+  sw.includes('const CACHE = "blackpyre-v121-food-catalog-1"')
+  &&index.includes("web-v121-food-catalog-1"));
 
 summary("V117 REMOVAL STATE");

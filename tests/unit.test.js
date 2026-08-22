@@ -361,9 +361,9 @@ check(
 );
 
 check(
-  "canonical library contains 203 exercises including Sprinting",
+  "canonical library contains 261 exercises including Sprinting",
   E(
-    `EXERCISE_LIBRARY.length===203
+    `EXERCISE_LIBRARY.length===261
       && trainingPlanEntryById("bp:sprinting").shape==="timeDist"`
   )===true
 );
@@ -802,7 +802,7 @@ check(
 );
 
 check(
-  "v77 Chest Supported Row stays unresolved with the likely dumbbell match first",
+  "Chest-Supported Row resolves to the new equipment-neutral canonical exercise",
   E(
     `(()=>{
       const result=
@@ -811,10 +811,9 @@ check(
         });
 
       return (
-        !result.ok
-        && result.suggestions.length>0
-        && result.suggestions[0].id
-          ==="bp:chest-supported-dumbbell-row"
+        result.ok
+        && result.entry.id
+          ==="bp:chest-supported-row"
       );
     })()`
   )===true
@@ -962,6 +961,48 @@ check("rounded metric macros remain within four kcal of their calorie target",Ma
 const metricYouth=E(`(()=>{const height=feetInchesFromTotalInches(inchesFromUnit(165,"metric"));return calculateNutritionTargets({sex:"f",age:15,ft:height.ft,inches:height.inches,lb:poundsFromUnit(60,"metric"),activity:1.55,goalAdj:0,unitSystem:"metric"});})()`);
 check("metric youth calculation keeps the 20/55/25 starting split",metricYouth.ok&&metricYouth.value.isYouth&&Math.abs(metricYouth.value.pro*4/metricYouth.value.cal-.20)<.003&&Math.abs(metricYouth.value.carb*4/metricYouth.value.cal-.55)<.003&&Math.abs(metricYouth.value.fat*9/metricYouth.value.cal-.25)<.003);
 check("metric calculator errors use kg and cm instead of Imperial units",E(`validateSupportedWeight(40,"Weight",false,"lb","metric").message.includes("kg")&&!validateNutritionCalculatorInput({sex:"m",age:30,ft:3,inches:0,lb:180,activity:1.55,goalAdj:-500,unitSystem:"metric"}).ok&&validateNutritionCalculatorInput({sex:"m",age:30,ft:3,inches:0,lb:180,activity:1.55,goalAdj:-500,unitSystem:"metric"}).message.includes("cm")`));
+
+check(
+  "submitted-plan movements resolve and preserve the required tracking method",
+  E(`(()=>{
+    const exercises=[
+      {name:"Approach Jump",prescription:{sets:5,reps:2}},
+      {name:"Bear Crawl",prescription:{intervals:2,distance:25,distanceUnit:"m"}},
+      {name:"Bike",prescription:{intervals:5,durationSeconds:60,recoverySeconds:60}},
+      {name:"Burpee Broad Jump",prescription:{intervals:2,distance:20,distanceUnit:"m"}},
+      {name:"Chest Supported Row",prescription:{sets:3,reps:6}},
+      {name:"Hardest Mile Movement Practice",prescription:{instructions:"Practice controlled transitions.",completionTarget:"10 minutes"}},
+      {name:"Jump Technique",prescription:{sets:5,reps:3}},
+      {name:"Recovery",prescription:{instructions:"Easy movement.",completionTarget:"Finish feeling better"}},
+      {name:"Walking Lunge",prescription:{intervals:2,distance:20,distanceUnit:"m"}}
+    ];
+    const result=prepareTrainingPlanImport({format:"blackpyre-training-plan",version:1,program:{name:"Regression",days:[{id:"D1",title:"Mixed",exercises:exercises}]}});
+    const walking=result.review.find(row=>row.importedName==="Walking Lunge");
+    return result.canConfirm&&result.blockers===0&&walking&&walking.exerciseId==="bp:walking-lunge"&&walking.prescription.distance===20;
+  })()`)===true
+);
+
+check(
+  "assisted pull-up PR uses lower assistance rather than estimated 1RM",
+  E(`(()=>{
+    const assisted=deriveExerciseValue(exerciseDescriptor("Assisted Pull-Up",null),[{w:130,r:5},{w:120,r:3}]);
+    return assisted&&assisted.kind==="assistance"&&assisted.lbs===120;
+  })()`)===true
+);
+
+check(
+  "PR reset preserves history but only counts future assisted pull-up sessions",
+  E(`(()=>{
+    const entry=exerciseDescriptor("Assisted Pull-Up",null),key=exercisePRGroupKey(entry);
+    cfg.prResetAt={[key]:Date.parse("2026-08-20T12:00:00Z")};
+    data.workouts=[
+      {date:"2026-08-19",prRecordedAt:"2026-08-19T12:00:00Z",sets:{"Assisted Pull-Up":[{w:130,r:5}]}},
+      {date:"2026-08-21",prRecordedAt:"2026-08-21T12:00:00Z",sets:{"Assisted Pull-Up":[{w:120,r:4}]}}
+    ];
+    const records=exerciseHistoryRecords(entry,-1),best=aggregateExerciseMetrics(entry,records).assistance;
+    return data.workouts.length===2&&records.length===1&&best&&best.lbs===120&&best.reps===4;
+  })()`)===true
+);
 
 summary("UNIT");
 })().catch(e=>{ console.error(e); process.exit(1); });

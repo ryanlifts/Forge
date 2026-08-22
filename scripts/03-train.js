@@ -7046,6 +7046,14 @@ function parseLegacySchemeForShape(
   };
 }
 
+function trainingPlanShapeForProfile(profile,fallback){
+  if (["timedHold","steadyTimeDistance","durationActivity","timedIntervals","distanceIntervals"].includes(profile)) return "timeDist";
+  if (profile==="loadedDistance") return "carry";
+  if (profile==="conditioningRounds") return "rounds";
+  if (profile==="activityNotes") return "text";
+  return fallback;
+}
+
 function normalizeTrainingPlanPrescriptionForCanonicalShape(
   shape,
   exercise
@@ -7064,6 +7072,12 @@ function normalizeTrainingPlanPrescriptionForCanonicalShape(
     profileResolution
       ? profileResolution.profile
       : null;
+
+  const effectiveShape=
+    profileResolution
+    && String(profileResolution.source||"").indexOf("prescription-")===0
+      ? trainingPlanShapeForProfile(profile,shape)
+      : shape;
 
   const source=
     isPlainObject(originalSource)
@@ -7097,7 +7111,7 @@ function normalizeTrainingPlanPrescriptionForCanonicalShape(
 
   const direct =
     sanitizeTrainingPlanPrescription(
-      shape,
+      effectiveShape,
       source,
       profile
     );
@@ -7152,7 +7166,7 @@ function normalizeTrainingPlanPrescriptionForCanonicalShape(
 
   if (
     direct.ok
-    || shape!=="timeDist"
+    || effectiveShape!=="timeDist"
     || !isPlainObject(source)
   ){
     return Object.assign(
@@ -7195,7 +7209,7 @@ function normalizeTrainingPlanPrescriptionForCanonicalShape(
 
     const cleanedResult=
       sanitizeTrainingPlanPrescription(
-        shape,
+        effectiveShape,
         cleaned,
         profile
       );
@@ -7263,7 +7277,7 @@ function normalizeTrainingPlanPrescriptionForCanonicalShape(
   const legacy =
     parseLegacySchemeForShape(
       item.scheme,
-      shape
+      effectiveShape
     );
 
   let legacyConflict = false;
@@ -7320,7 +7334,7 @@ function normalizeTrainingPlanPrescriptionForCanonicalShape(
 
   const sanitized =
     sanitizeTrainingPlanPrescription(
-      shape,
+      effectiveShape,
       normalized,
       profile
     );
@@ -8216,6 +8230,35 @@ function trainingPlanReviewRowKey(row){
   return row.dayIndex+":"+row.exerciseIndex;
 }
 
+function trainingPlanReviewRowsWithSameImportedName(row){
+  const wanted=trainingPlanSafeNameKey(row && row.importedName);
+  const rows=
+    trainingPlanReviewState
+    && trainingPlanReviewState.prepared
+    && Array.isArray(trainingPlanReviewState.prepared.review)
+      ? trainingPlanReviewState.prepared.review
+      : [];
+  if (!wanted) return row ? [row] : [];
+  return rows.filter(candidate=>
+    trainingPlanSafeNameKey(candidate.importedName)===wanted
+  );
+}
+
+function applyTrainingPlanSelectionToMatchingRows(row,entryId){
+  const rows=entryId
+    ? trainingPlanReviewRowsWithSameImportedName(row)
+    : [row];
+  rows.forEach(candidate=>{
+    const candidateKey=trainingPlanReviewRowKey(candidate);
+    const previous=trainingPlanReviewState.selections[candidateKey] || "";
+    if (entryId) trainingPlanReviewState.selections[candidateKey]=entryId;
+    else delete trainingPlanReviewState.selections[candidateKey];
+    if (entryId!==previous && trainingPlanReviewState.prescriptionOverrides){
+      delete trainingPlanReviewState.prescriptionOverrides[candidateKey];
+    }
+  });
+}
+
 function trainingPlanReviewCustomEntries(){
   if (
     !trainingPlanReviewState
@@ -8965,12 +9008,10 @@ function buildTrainingPlanResolutionSelect(row){
         .prescriptionOverrides[key];
     }
 
-    if (select.value){
-      trainingPlanReviewState.selections[key] =
-        select.value;
-    } else {
-      delete trainingPlanReviewState.selections[key];
-    }
+    applyTrainingPlanSelectionToMatchingRows(
+      row,
+      select.value
+    );
 
     rebuildTrainingPlanReview();
     renderTrainingPlanReview();
@@ -13691,7 +13732,7 @@ document.getElementById("logWorkoutBtn").addEventListener("click", ()=>{
     }
     const sets=newExerciseNameMap();
     setExerciseNameValue(sets,type,min+" min"+(detail?" \u00b7 "+detail:""));
-    const cObj = {date:date, day:"CARDIO", title:"Cardio", sets:sets, notes:notes};
+    const cObj = {date:date, day:"CARDIO", title:"Cardio", sets:sets, notes:notes, prRecordedAt:new Date().toISOString()};
     const wasCardioEdit = editingWorkoutIdx!=null;
     const before=cloneJSON(data);
     if (wasCardioEdit){ data.workouts[editingWorkoutIdx] = cObj; }
@@ -13800,6 +13841,11 @@ document.getElementById("logWorkoutBtn").addEventListener("click", ()=>{
   // PR detection BEFORE pushing the new session
   const prLines = [];
   Object.keys(sets).forEach(ex=>{
+    if(typeof exercisePrLine==="function"){
+      const line=exercisePrLine(ex,sets[ex],editingWorkoutIdx!=null ? editingWorkoutIdx : -1);
+      if(line)prLines.push("🏆 PR: "+line);
+      return;
+    }
     const nb = parseBestSet(sets[ex]);
     if(!nb) return;
     const hist = bestHistorical(ex, editingWorkoutIdx!=null ? editingWorkoutIdx : -1);
@@ -13816,7 +13862,7 @@ document.getElementById("logWorkoutBtn").addEventListener("click", ()=>{
       : null;
   if (wasEdit){
     const orig = data.workouts[editingWorkoutIdx];
-    data.workouts[editingWorkoutIdx] = {date:date, day:orig.day, title:orig.title, sets:sets, notes:notes};
+    data.workouts[editingWorkoutIdx] = Object.assign({},orig,{date:date, day:orig.day, title:orig.title, sets:sets, notes:notes});
   } else {
     data.workouts.push({
       date:date,
@@ -13825,7 +13871,8 @@ document.getElementById("logWorkoutBtn").addEventListener("click", ()=>{
         ? loadedIdentity.title
         : v==="__FREE__" ? "Freestyle" : (day?day.title:v),
       sets:sets,
-      notes:notes
+      notes:notes,
+      prRecordedAt:new Date().toISOString()
     });
     data.activeWorkoutDraft = null;
     bumpLog();

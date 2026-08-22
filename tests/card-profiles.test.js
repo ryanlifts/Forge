@@ -123,8 +123,8 @@ function parseCanonicalExercises(){
 }
 
 const canonical=parseCanonicalExercises();
-check("203 active canonical exercises are parsed",canonical.length===203);
-check("203 profile assignments exist",Object.keys(profileData.assignments).length===203);
+check("261 active canonical exercises are parsed",canonical.length===261);
+check("261 profile assignments exist",Object.keys(profileData.assignments).length===261);
 
 const exhaustive={
   assignment:true,

@@ -426,7 +426,9 @@ function mapOFFProduct(p){
   };
 }
 
-// --- OFF search: Search-a-licious only; no retired legacy endpoint fallback ---
+// Open Food Facts' dedicated search host does not consistently return CORS
+// headers. Use the CORS-capable world endpoint so browser and native builds
+// share the same reliable path.
 function fetchWithTimeout(url, ms){
   return new Promise((resolve, reject)=>{
     const controller = typeof AbortController==="function" ? new AbortController() : null;
@@ -438,12 +440,292 @@ function fetchWithTimeout(url, ms){
     fetch(url,options).then(r=>{ clearTimeout(t); resolve(r); }, e=>{ clearTimeout(t); reject(e); });
   });
 }
+
+// --- BlackPyre Food Catalog -------------------------------------------------
+// A versioned, source-separated catalog distributed through an immutable
+// GitHub Release for native iOS and a hash-identical GitHub Pages mirror for
+// browsers. USDA shards are searched first. Open Food Facts remains a live
+// fallback and is never blended into the USDA dataset. Native and web runtimes
+// cache successful catalog responses so previously used shards remain useful
+// during a later network outage.
+const foodCatalogState={
+  manifest:null,
+  manifestPromise:null,
+  shards:new Map(),
+};
+
+function foodCatalogConfig(){
+  return typeof BLACKPYRE_FOOD_CATALOG==="object"
+    ? BLACKPYRE_FOOD_CATALOG
+    : null;
+}
+
+function foodCatalogPrefix(value,length){
+  const folded=String(value||"")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g,"")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g,"");
+  return folded.slice(0,length);
+}
+
+function foodCatalogSearchPrefixes(query,length){
+  return [...new Set(
+    String(query||"")
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .map(token=>foodCatalogPrefix(token,length))
+      .filter(prefix=>prefix.length===length)
+  )].slice(0,4);
+}
+
+function foodCatalogNativePlugin(){
+  const c=window.Capacitor;
+  try {
+    if(c&&typeof c.isNativePlatform==="function"&&c.isNativePlatform()&&c.Plugins&&c.Plugins.BlackPyreData&&typeof c.Plugins.BlackPyreData.fetchFoodCatalog==="function")return c.Plugins.BlackPyreData;
+  } catch(e){}
+  return null;
+}
+
+function foodCatalogManifestURL(cfg,plugin){
+  return plugin ? String(cfg.releaseManifestUrl||"") : String(cfg.webManifestUrl||"");
+}
+
+function foodCatalogAssetBase(cfg,manifest,plugin){
+  return plugin ? String(manifest.releaseBase||"") : String(cfg.webBaseUrl||"");
+}
+
+async function requestFoodCatalogJSON(url,cacheKey,ms){
+  const plugin=foodCatalogNativePlugin();
+  if(plugin){
+    const result=await plugin.fetchFoodCatalog({url:url,cacheKey:cacheKey,offlineOnly:isOffline()});
+    const status=Number(result&&result.status)||0;
+    const body=String((result&&result.body)||"");
+    let json=null;
+    try { json=JSON.parse(body); } catch(e){}
+    return {status:status,ok:status>=200&&status<300,body:body,json:json,cached:!!(result&&result.cached)};
+  }
+  if(isOffline()){
+    try {
+      if(window.caches&&typeof window.caches.match==="function"){
+        const cached=await window.caches.match(url);
+        if(cached){
+          const body=await cached.text();
+          let json=null;
+          try { json=JSON.parse(body); } catch(e){}
+          return {status:200,ok:true,body:body,json:json,cached:true};
+        }
+      }
+    } catch(e){}
+    return {status:0,ok:false,body:"",json:null,cached:false};
+  }
+  const res=await fetchWithTimeout(url,ms);
+  let body="",json=null;
+  if(typeof res.text==="function"){
+    body=await res.text();
+    try { json=JSON.parse(body); } catch(e){}
+  }else if(typeof res.json==="function"){
+    json=await res.json();
+    body=JSON.stringify(json);
+  }
+  return {status:res.status,ok:res.ok,body:body,json:json,cached:false};
+}
+
+async function verifyFoodCatalogAsset(body,expected){
+  if(!expected||typeof body!=="string")return false;
+  if(typeof TextEncoder!=="function")return !(Number(expected.bytes)>0||expected.sha256);
+  const bytes=new TextEncoder().encode(body);
+  if(Number(expected.bytes)>0&&bytes.byteLength!==Number(expected.bytes))return false;
+  const expectedHash=String(expected.sha256||"").toLowerCase();
+  if(!expectedHash)return true;
+  if(!window.crypto||!window.crypto.subtle||typeof window.crypto.subtle.digest!=="function")return false;
+  try {
+    const digest=await window.crypto.subtle.digest("SHA-256",bytes);
+    const actual=[...new Uint8Array(digest)].map(value=>value.toString(16).padStart(2,"0")).join("");
+    return actual===expectedHash;
+  } catch(e){
+    return false;
+  }
+}
+
+function validFoodCatalogManifest(manifest){
+  const cfg=foodCatalogConfig();
+  if(!cfg||!manifest||Number(manifest.schema)!==Number(cfg.schema))return false;
+  if(!/^https:\/\/github\.com\/ryanlifts\/BlackPyre-Food-Catalog\/releases\/download\/[A-Za-z0-9._-]+$/.test(String(manifest.releaseBase||"")))return false;
+  if(!/^https:\/\/github\.com\/ryanlifts\/BlackPyre-Food-Catalog\/releases\/latest\/download\/manifest\.json$/.test(String(cfg.releaseManifestUrl||"")))return false;
+  if(!/^https:\/\/ryanlifts\.github\.io\/BlackPyre-Food-Catalog(?:\/manifest\.json)?$/.test(String(cfg.webManifestUrl||"")))return false;
+  if(String(cfg.webBaseUrl||"")!=="https://ryanlifts.github.io/BlackPyre-Food-Catalog")return false;
+  return Array.isArray(manifest.searchPrefixes)
+    &&Array.isArray(manifest.barcodePrefixes)
+    &&manifest.sources
+    &&manifest.sources.usda;
+}
+
+async function foodCatalogManifest(){
+  if(foodCatalogState.manifest)return foodCatalogState.manifest;
+  if(foodCatalogState.manifestPromise)return foodCatalogState.manifestPromise;
+  const cfg=foodCatalogConfig();
+  if(!cfg)return null;
+  foodCatalogState.manifestPromise=(async()=>{
+    try {
+      const plugin=foodCatalogNativePlugin();
+      const manifestURL=foodCatalogManifestURL(cfg,plugin);
+      if(!manifestURL)return null;
+      const response=await requestFoodCatalogJSON(manifestURL,"manifest-v1",10000);
+      if(response.ok&&validFoodCatalogManifest(response.json)){
+        foodCatalogState.manifest=response.json;
+        return response.json;
+      }
+    } catch(e){}
+    return null;
+  })();
+  const manifest=await foodCatalogState.manifestPromise;
+  foodCatalogState.manifestPromise=null;
+  return manifest;
+}
+
+function mapFoodCatalogRecord(record,source){
+  if(!Array.isArray(record)||record.length!==11)return null;
+  const values=record.slice(3,7).map(Number);
+  if(!record[1]||values.some(value=>!Number.isFinite(value)||value<0))return null;
+  const serving=Number(record[7]);
+  const code=normalizeBarcodeIdentity(record[9]);
+  return {
+    catalogId:String(source||"usda")+":"+String(record[0]||""),
+    name:String(record[1]),
+    brand:String(record[2]||"Generic"),
+    cal100:values[0],pro100:values[1],carb100:values[2],fat100:values[3],
+    servingG:Number.isFinite(serving)&&serving>0&&serving<=1000?serving:null,
+    servingLabel:String(record[8]||"")||null,
+    barcode:code||null,
+    sourceLabel:source==="off"?"Open Food Facts":"USDA FoodData Central",
+    sourceUpdated:String(record[10]||""),
+  };
+}
+
+async function foodCatalogShard(manifest,source,kind,prefix){
+  const filename=source+"-"+kind+"-"+prefix+".json";
+  const expected=manifest.assets&&manifest.assets[filename];
+  if(!expected)return [];
+  const key=manifest.catalogVersion+":"+filename;
+  if(foodCatalogState.shards.has(key))return foodCatalogState.shards.get(key);
+  try {
+    const cfg=foodCatalogConfig();
+    const base=foodCatalogAssetBase(cfg,manifest,foodCatalogNativePlugin());
+    if(!base)return [];
+    const response=await requestFoodCatalogJSON(base+"/"+filename,key,12000);
+    const payload=response.json;
+    const verified=await verifyFoodCatalogAsset(response.body,expected);
+    if(response.ok&&verified&&payload&&Number(payload.schema)===Number(manifest.schema)&&payload.source===source&&Array.isArray(payload.records)){
+      const foods=payload.records.map(record=>mapFoodCatalogRecord(record,source)).filter(Boolean);
+      foodCatalogState.shards.set(key,foods);
+      return foods;
+    }
+  } catch(e){}
+  return [];
+}
+
+function scoreCatalogFood(food,tokens){
+  const name=String(food.name||"").toLowerCase();
+  const brand=String(food.brand||"").toLowerCase();
+  return tokens.reduce((score,token)=>{
+    if(name===token||brand===token)return score+10;
+    if(name.startsWith(token))return score+7;
+    if(brand.startsWith(token))return score+6;
+    if(name.includes(token))return score+4;
+    if(brand.includes(token))return score+3;
+    return score-8;
+  },0);
+}
+
+function dedupeCatalogFoods(foods,limit){
+  const seen=new Set(),out=[];
+  foods.forEach(food=>{
+    const key=food.barcode||food.catalogId||String(food.name||"").toLowerCase()+"|"+String(food.brand||"").toLowerCase();
+    if(seen.has(key)||out.length>=limit)return;
+    seen.add(key);out.push(food);
+  });
+  return out;
+}
+
+function bundledUSDAHits(query,limit){
+  if(!Array.isArray(FOOD_SUGGESTION_CATALOG))return [];
+  const tokens=String(query||"").toLowerCase().split(/\s+/).filter(token=>token.length>1);
+  if(!tokens.length)return [];
+  return FOOD_SUGGESTION_CATALOG
+    .map(food=>({food:food,score:tokens.reduce((score,token)=>score+(String(food.name||"").toLowerCase().includes(token)||String(food.usdaDescription||"").toLowerCase().includes(token)?1:0),0)}))
+    .filter(item=>item.score===tokens.length)
+    .sort((a,b)=>b.score-a.score||String(a.food.name).localeCompare(String(b.food.name)))
+    .slice(0,limit)
+    .map(item=>({
+      catalogId:"usda-sr:"+String(item.food.ndb||item.food.name),
+      name:item.food.name,
+      brand:"USDA reference",
+      cal100:item.food.cal100,pro100:item.food.pro100,carb100:item.food.carb100,fat100:item.food.fat100,
+      servingG:item.food.servingG,servingLabel:item.food.servingLabel,
+      sourceLabel:"USDA FoodData Central",
+    }));
+}
+
+async function searchFoodCatalog(query){
+  const manifest=await foodCatalogManifest();
+  if(!manifest)return {state:"unavailable",foods:[]};
+  const length=Number(manifest.searchPrefixLength)||2;
+  const prefixes=foodCatalogSearchPrefixes(query,length)
+    .filter(prefix=>manifest.searchPrefixes.includes(prefix));
+  if(!prefixes.length)return {state:"ok",foods:[]};
+  const shardLists=await Promise.all(prefixes.map(prefix=>foodCatalogShard(manifest,"usda","search",prefix)));
+  const tokens=String(query||"").toLowerCase().split(/[^a-z0-9]+/).filter(token=>token.length>1);
+  const foods=shardLists.flat()
+    .map(food=>({food:food,score:scoreCatalogFood(food,tokens)}))
+    .filter(item=>item.score>0)
+    .sort((a,b)=>b.score-a.score||String(b.food.sourceUpdated||"").localeCompare(String(a.food.sourceUpdated||"")))
+    .map(item=>item.food);
+  return {state:"ok",foods:dedupeCatalogFoods(foods,15)};
+}
+
+async function lookupFoodCatalogBarcode(code){
+  const manifest=await foodCatalogManifest();
+  if(!manifest)return {state:"unavailable",food:null};
+  const length=Number(manifest.barcodePrefixLength)||2;
+  const prefix=String(code||"").slice(0,length);
+  if(prefix.length!==length||!manifest.barcodePrefixes.includes(prefix))return {state:"not-found",food:null};
+  const foods=await foodCatalogShard(manifest,"usda","barcode",prefix);
+  const food=foods.find(item=>normalizeBarcodeIdentity(item.barcode)===normalizeBarcodeIdentity(code));
+  return {state:food?"ok":"not-found",food:food||null};
+}
+
+function openFoodFactsNativePlugin(){
+  const c=window.Capacitor;
+  try {
+    if(c&&typeof c.isNativePlatform==="function"&&c.isNativePlatform()&&c.Plugins&&c.Plugins.BlackPyreData&&typeof c.Plugins.BlackPyreData.fetchOpenFoodFacts==="function")return c.Plugins.BlackPyreData;
+  } catch(e){}
+  return null;
+}
+async function requestOFFJSON(url,ms){
+  const plugin=openFoodFactsNativePlugin();
+  if(plugin){
+    const result=await plugin.fetchOpenFoodFacts({url:url});
+    const status=Number(result&&result.status)||0;
+    let json=null;
+    try { json=JSON.parse(String((result&&result.body)||"")); } catch(e){}
+    return {status:status,ok:status>=200&&status<300,json:json};
+  }
+  const res=await fetchWithTimeout(url,ms);
+  let json=null;
+  try { json=await res.json(); } catch(e){}
+  return {status:res.status,ok:res.ok,json:json};
+}
 async function searchOFF(q){
   const fields = "code,product_name,brands,nutriments,serving_size,serving_quantity,nutrition_data_per";
-  const res = await fetchWithTimeout("https://search.openfoodfacts.org/search?q="+encodeURIComponent(q)+"&page_size=15&fields="+fields, 8000);
+  const url="https://world.openfoodfacts.org/cgi/search.pl?search_terms="
+    +encodeURIComponent(q)
+    +"&search_simple=1&action=process&json=1&page_size=15&fields="
+    +encodeURIComponent(fields);
+  const res = await requestOFFJSON(url, 12000);
   if (!res.ok) throw new Error("Open Food Facts search unavailable");
-  const json = await res.json();
-  return (json.hits||[]).map(mapOFFProduct).filter(Boolean);
+  const json = res.json || {};
+  return (json.products||json.hits||[]).map(mapOFFProduct).filter(Boolean);
 }
 
 function foodSourceLabel(food){
@@ -514,11 +796,18 @@ async function runSearch(){
       sourceLabel:"Built-in"
     }));
 
-  if(isOffline()){
-    renderResults([...myHits,...localHits]);
+  const bundledHits=bundledUSDAHits(q,8);
 
-    errEl.textContent=
-      "Offline — showing saved and built-in foods; Open Food Facts was skipped.";
+  if(isOffline()){
+    const cachedCatalog=await searchFoodCatalog(q);
+    renderResults(dedupeCatalogFoods(
+      [...myHits,...cachedCatalog.foods,...bundledHits,...localHits],
+      20
+    ));
+
+    errEl.textContent=cachedCatalog.foods.length
+      ? "Offline — showing saved foods, bundled USDA foods, and previously downloaded catalog matches."
+      : "Offline — showing saved foods and bundled USDA matches; new online catalog sections were skipped.";
     errEl.classList.remove("hidden");
 
     searchBtn.disabled=false;
@@ -526,19 +815,31 @@ async function runSearch(){
     return;
   }
 
+  const catalog=await searchFoodCatalog(q);
   let offHits=[];
 
-  try{
-    offHits=await searchOFF(q);
-  }catch(error){
-    errEl.textContent=localHits.length||myHits.length
-      ? "Open Food Facts is temporarily unavailable — showing saved and built-in matches. You can also enter label values manually."
-      : "Open Food Facts is temporarily unavailable. Check your connection or enter the package label manually.";
-
-    errEl.classList.remove("hidden");
+  if(catalog.state!=="ok"||!catalog.foods.length){
+    try{
+      offHits=await searchOFF(q);
+    }catch(error){}
   }
 
-  renderResults([...myHits,...localHits,...offHits]);
+  const combined=dedupeCatalogFoods(
+    [...myHits,...catalog.foods,...bundledHits,...localHits,...offHits],
+    30
+  );
+
+  renderResults(combined);
+
+  if(catalog.state!=="ok"&&!offHits.length){
+    errEl.textContent=
+      "The downloadable food catalog is temporarily unavailable — showing saved and bundled USDA matches. Manual label entry is always available.";
+    errEl.classList.remove("hidden");
+  }else if(!combined.length){
+    errEl.textContent=
+      "No reliable match was found. Enter the package label manually and BlackPyre will remember it.";
+    errEl.classList.remove("hidden");
+  }
 
   searchBtn.disabled=false;
   searchBtn.textContent="Search food database";
@@ -1002,7 +1303,7 @@ async function lookupOFFBarcode(code, fields){
 
   for (let attempt=0; attempt<2; attempt++){
     try {
-      const res = await fetchWithTimeout(url, 10000);
+      const res = await requestOFFJSON(url, 10000);
 
       if (res.status===404) return {state:"not-found", product:null};
 
@@ -1012,7 +1313,7 @@ async function lookupOFFBarcode(code, fields){
         return {state:"unavailable", product:null};
       }
 
-      const json = await res.json();
+      const json = res.json || {};
       return {state:"ok", product:json && json.product};
     } catch(e){
       if (attempt===0) continue;
@@ -1070,21 +1371,29 @@ async function runBarcode(){
     return;
   }
 
-  if(isOffline()){
-    openCustomForm(code);
-
-    errEl.textContent=
-      "Offline — Open Food Facts was skipped. Add the package-label details manually, or reconnect and try again.";
-    errEl.classList.remove("hidden");
-    return;
-  }
-
   const button=document.getElementById("barcodeBtn");
 
   button.disabled=true;
   button.textContent="…";
 
   try{
+    // The downloadable USDA catalog is primary. Native and browser runtimes
+    // reuse previously downloaded, hash-verified shards when offline.
+    const catalogResult=await lookupFoodCatalogBarcode(code);
+
+    if(catalogResult.state==="ok"&&catalogResult.food){
+      selectFood(catalogResult.food);
+      return;
+    }
+
+    if(isOffline()){
+      openCustomForm(code);
+      errEl.textContent=
+        "Offline — this barcode is not in a cached catalog section. Add the package-label details manually, or reconnect and try again.";
+      errEl.classList.remove("hidden");
+      return;
+    }
+
     const fields=
       "code,product_name,brands,quantity,serving_size,"+
       "serving_quantity,nutrition_data_per,nutriments";
@@ -1094,8 +1403,9 @@ async function runBarcode(){
     if(result.state==="unavailable"){
       openCustomForm(code);
 
-      errEl.textContent=
-        "Open Food Facts could not be reached. Enter the package label below, or check your connection and tap Look up again.";
+      errEl.textContent=catalogResult.state==="unavailable"
+        ? "Online food sources could not be reached. Enter the package label below, or check your connection and tap Look up again."
+        : "That barcode was not in the USDA catalog, and Open Food Facts could not be reached. Enter the package label below and BlackPyre will remember it.";
       errEl.classList.remove("hidden");
       return;
     }
@@ -1104,7 +1414,7 @@ async function runBarcode(){
       openCustomForm(code);
 
       errEl.textContent=
-        "That barcode was not found in Open Food Facts. Enter the package label below and BlackPyre will remember it on this device.";
+        "That barcode was not found in the USDA catalog or Open Food Facts. Enter the package label below and BlackPyre will remember it on this device.";
       errEl.classList.remove("hidden");
       return;
     }
@@ -2137,7 +2447,8 @@ function syncBarcodeCorrectionReview(food){
   const eligible=
     !!(
       food
-      && food.sourceLabel==="Open Food Facts"
+      && ["Open Food Facts","USDA FoodData Central"]
+        .includes(food.sourceLabel)
       && barcode
     );
 
@@ -2215,7 +2526,9 @@ function syncBarcodeCorrectionReview(food){
   }
 
   if (source){
-    source.textContent=food ? "SOURCE: OPEN FOOD FACTS" : "";
+    source.textContent=food
+      ? "SOURCE: "+String(food.sourceLabel||"").toUpperCase()
+      : "";
   }
 
   confirmButton.disabled=false;
@@ -2237,7 +2550,11 @@ function syncBarcodeCorrectionReview(food){
 }
 
 function rememberConfirmedBarcodeFood(food){
-  if (!food || food.sourceLabel!=="Open Food Facts") return false;
+  if (
+    !food
+    || !["Open Food Facts","USDA FoodData Central"]
+      .includes(food.sourceLabel)
+  ) return false;
 
   const barcode=normalizeBarcodeIdentity(
     food.barcode

@@ -1457,6 +1457,18 @@ function deriveRepsValue(value){
   value.forEach(row=>{const reps=Number(row&&row.r);if(reps>maxReps)maxReps=reps;});
   return maxReps>0?{kind:"maxReps",reps:maxReps}:null;
 }
+function deriveAssistanceValue(value){
+  if(!Array.isArray(value))return null;
+  let best=null;
+  value.forEach(row=>{
+    const lbs=Number(row&&row.w),reps=Number(row&&row.r);
+    if(!(lbs>0)||!(reps>0))return;
+    if(!best||lbs<best.lbs||(lbs===best.lbs&&reps>best.reps)){
+      best={kind:"assistance",lbs:lbs,reps:reps};
+    }
+  });
+  return best;
+}
 function deriveTimeDistValue(value){
   if(!isPlainObject(value)||value.t!=="timeDist"||!(Number(value.secs)>0))return null;
   const result={kind:"timeDist",secs:Number(value.secs)};
@@ -1478,28 +1490,41 @@ const SHAPE_DERIVERS={lift:deriveLiftValue,reps:deriveRepsValue,timeDist:deriveT
 function deriveExerciseValue(entryOrName,value){
   const entry=typeof entryOrName==="string"?exerciseDescriptor(entryOrName,value):entryOrName;
   if(!entry)return null;
+  if(isAssistedExercise(entry.name))return deriveAssistanceValue(value);
   const shape=Array.isArray(value)&&entry.shape!=="reps"?"lift":typeof value==="string"&&entry.legacy?"lift":entry.shape;
   return (SHAPE_DERIVERS[shape]||(()=>null))(value);
 }
 // Backward-compatible public helper retained for existing charts and tests.
 function parseBestSet(value){ return bestEpleyRows(value); }
+function exercisePRGroupKey(entryOrName){
+  const entry=typeof entryOrName==="string"?exerciseDescriptor(entryOrName,null):entryOrName;
+  return entry&&entry.id&&entry.id.indexOf("legacy:")!==0?entry.id:"legacy:"+normalizeExerciseName(entry&&entry.name||entryOrName||"");
+}
+function prSessionAllowed(groupKey,session){
+  const reset=Number(cfg.prResetAt&&cfg.prResetAt[groupKey]);
+  if(!(reset>0))return true;
+  const recorded=Date.parse(session&&((session.prRecordedAt)||(session.endedAt))||"")||0;
+  return recorded>reset;
+}
 function exerciseHistoryRecords(entryOrName,excludeIdx){
   const entry=typeof entryOrName==="string"?exerciseDescriptor(entryOrName,null):entryOrName;
+  const groupKey=exercisePRGroupKey(entry);
   const records=[];
   data.workouts.forEach((session,index)=>{
-    if(index===excludeIdx)return;
+    if(index===excludeIdx||!prSessionAllowed(groupKey,session))return;
     const hit=findHistoryValue(session.sets,entry);
     if(hit)records.push({date:session.date,value:hit.value,key:hit.key,index:index});
   });
   return records;
 }
 function aggregateExerciseMetrics(entry,records){
-  const out={e1rm:null,maxReps:0,longestDistance:null,longestSecs:0,paces:{},carryHeaviest:0,carryAtWeight:{},latestDate:null};
+  const out={e1rm:null,assistance:null,maxReps:0,longestDistance:null,longestSecs:0,paces:{},carryHeaviest:0,carryAtWeight:{},latestDate:null};
   records.forEach(record=>{
     const metric=deriveExerciseValue(entry,record.value);
     if(!metric)return;
     if(!out.latestDate||record.date>out.latestDate)out.latestDate=record.date;
     if(metric.kind==="e1rm"&&(!out.e1rm||metric.e1rm>out.e1rm.e1rm))out.e1rm=Object.assign({date:record.date},metric);
+    if(metric.kind==="assistance"&&(!out.assistance||metric.lbs<out.assistance.lbs||(metric.lbs===out.assistance.lbs&&metric.reps>out.assistance.reps)))out.assistance=Object.assign({date:record.date},metric);
     if(metric.kind==="maxReps")out.maxReps=Math.max(out.maxReps,metric.reps);
     if(metric.kind==="timeDist"){
       if(metric.meters!=null&&(!out.longestDistance||metric.meters>out.longestDistance.meters))out.longestDistance=Object.assign({date:record.date},metric);
@@ -1523,6 +1548,7 @@ function exercisePrLine(name,value,excludeIdx){
   if(!metric)return null;
   const prior=aggregateExerciseMetrics(entry,exerciseHistoryRecords(entry,excludeIdx));
   if(metric.kind==="e1rm"&&(!prior.e1rm||metric.e1rm>prior.e1rm.e1rm))return entry.name+" ~"+poundsToUnit(metric.e1rm,currentUnitSystem(),1)+" "+unitWeightLabel()+" est. 1RM";
+  if(metric.kind==="assistance"&&(!prior.assistance||metric.lbs<prior.assistance.lbs||(metric.lbs===prior.assistance.lbs&&metric.reps>prior.assistance.reps)))return entry.name+" · lowest assistance "+formatBodyWeight(metric.lbs,currentUnitSystem(),1)+" for "+metric.reps+" reps";
   if(metric.kind==="maxReps"&&metric.reps>prior.maxReps)return entry.name+" "+metric.reps+" reps";
   if(metric.kind==="timeDist"){
     const lines=[];
@@ -1543,14 +1569,17 @@ function allPRs(){
   const groups={};
   data.workouts.forEach((session,index)=>Object.keys(session.sets||{}).forEach(key=>{
     const entry=exerciseDescriptor(key,session.sets[key]);
-    const groupKey=entry.id&&entry.id.indexOf("legacy:")!==0?entry.id:"legacy:"+normalizeExerciseName(key);
+    const groupKey=exercisePRGroupKey(entry);
+    if(!prSessionAllowed(groupKey,session))return;
     if(!groups[groupKey])groups[groupKey]={entry:entry,records:[]};
     groups[groupKey].records.push({date:session.date,value:session.sets[key],key:key,index:index});
   }));
   const map={};
   Object.keys(groups).forEach(groupKey=>{
+    if (cfg.prHidden && cfg.prHidden[groupKey]) return;
     const group=groups[groupKey],agg=aggregateExerciseMetrics(group.entry,group.records),item={name:group.entry.name,date:agg.latestDate,chart:false};
     if(agg.e1rm){item.kind="e1rm";item.display=poundsToUnit(agg.e1rm.w,currentUnitSystem(),1)+"×"+agg.e1rm.r;item.value="~"+formatBodyWeight(agg.e1rm.e1rm,currentUnitSystem(),1);item.chart=true;}
+    else if(agg.assistance){item.kind="assistance";item.display="Least assistance";item.value=formatBodyWeight(agg.assistance.lbs,currentUnitSystem(),1)+" · "+agg.assistance.reps+" reps";}
     else if(agg.maxReps>0){item.kind="maxReps";item.display="Best set";item.value=agg.maxReps+" reps";}
     else if(agg.longestDistance){item.kind="timeDist";item.display="Longest";item.value=agg.longestDistance.dist+" "+agg.longestDistance.distUnit;}
     else if(agg.longestSecs>0){item.kind="timeDist";item.display="Longest";item.value=formatDuration(agg.longestSecs);}
@@ -1561,12 +1590,15 @@ function allPRs(){
   return map;
 }
 function renderPRs(){
-  const map=allPRs(),items=Object.keys(map).map(key=>map[key]).sort((a,b)=>String(b.date||"").localeCompare(String(a.date||""))||a.name.localeCompare(b.name));
+  const map=allPRs(),items=Object.keys(map).map(key=>Object.assign({key:key},map[key])).sort((a,b)=>String(b.date||"").localeCompare(String(a.date||""))||a.name.localeCompare(b.name));
   const card=document.getElementById("prCard"),list=document.getElementById("prList");
-  if(!items.length){card.classList.add("hidden");list.innerHTML="";return;}
+  const restore=document.getElementById("restorePRsBtn");
+  const hasPriorState=!!((cfg.prHidden&&Object.keys(cfg.prHidden).length)||(cfg.prResetAt&&Object.keys(cfg.prResetAt).length));
+  if(restore){restore.classList.toggle("hidden",!hasPriorState);restore.textContent="Restore previous PRs";}
+  if(!items.length&&!hasPriorState){card.classList.add("hidden");list.innerHTML="";return;}
   card.classList.remove("hidden");list.innerHTML="";
   items.slice(0,10).forEach(item=>{
-    const row=document.createElement("div");row.className="list-item";if(item.chart){row.style.cursor="pointer";row.addEventListener("click",()=>openLiftChart(item.name));}
+    const row=document.createElement("div");row.className="list-item";row.style.cursor="pointer";row.addEventListener("click",()=>openLiftChart(item.name,item.key));
     const name=document.createElement("span");name.style.flex="2";name.textContent=item.name;row.appendChild(name);
     const detail=document.createElement("span");detail.style.cssText="flex:1.4;text-align:right;color:var(--dim);";detail.textContent=item.display;row.appendChild(detail);
     const value=document.createElement("span");value.style.cssText="flex:1.2;text-align:right;font-weight:600;color:var(--ember);";value.textContent=item.value;row.appendChild(value);list.appendChild(row);
@@ -1716,6 +1748,7 @@ function lineChartSVG(pts, goal){
 
 // --- per-lift chart overlay ---
 let liftOverlayEx = null;
+let liftOverlayPRKey = null;
 function liftHistory(exName){
   const entry=exerciseDescriptor(exName,null),byDate={};
   exerciseHistoryRecords(entry,-1).forEach(record=>{
@@ -1724,12 +1757,23 @@ function liftHistory(exName){
   });
   return Object.keys(byDate).sort().map(date=>({date:date,y:byDate[date]}));
 }
-function openLiftChart(exName){
+function openLiftChart(exName,groupKey){
   liftOverlayEx = exName;
+  const entry=exerciseDescriptor(exName,null);
+  liftOverlayPRKey=groupKey || (entry.id&&entry.id.indexOf("legacy:")!==0?entry.id:"legacy:"+normalizeExerciseName(exName));
   document.getElementById("liftTitle").textContent = exName;
   const goalMatch=liftGoalMatch(exName);
   const goal=goalMatch?Number(goalMatch.value):null;
   const pts = liftHistory(exName);
+  const usesEstimatedOneRepMax=pts.length>0;
+  const intro=document.getElementById("liftOverlayIntro");
+  const chartCard=document.getElementById("liftChartCard");
+  const goalCard=document.getElementById("liftGoalCard");
+  if(intro)intro.textContent=usesEstimatedOneRepMax
+    ? "Estimated 1RM per session (Epley). Dots are your logged best each day."
+    : "This record uses the tracking method assigned to this exercise, not an estimated 1RM.";
+  if(chartCard)chartCard.classList.toggle("hidden",!usesEstimatedOneRepMax);
+  if(goalCard)goalCard.classList.toggle("hidden",!usesEstimatedOneRepMax);
   const displayPts=pts.map(point=>({date:point.date,y:poundsToUnit(point.y,currentUnitSystem(),2)}));
   const displayGoal=goal?poundsToUnit(goal,currentUnitSystem(),2):null;
   document.getElementById("liftChart").innerHTML = lineChartSVG(displayPts, displayGoal);
@@ -1758,6 +1802,35 @@ document.getElementById("liftGoalSave").addEventListener("click", ()=>{
   saveCfg();
   ackBtn("liftGoalSave", "✓ Goal set");
   openLiftChart(liftOverlayEx);
+});
+document.getElementById("hidePRBtn").addEventListener("click",()=>{
+  if(!liftOverlayPRKey)return;
+  if(!isPlainObject(cfg.prHidden))cfg.prHidden={};
+  cfg.prHidden[liftOverlayPRKey]=true;
+  saveCfg();
+  document.getElementById("liftOverlay").classList.add("hidden");
+  unlockScroll();
+  renderPRs();
+  flashSave("PR removed from the board · workout history kept ✓");
+});
+document.getElementById("resetPRBtn").addEventListener("click",()=>{
+  if(!liftOverlayPRKey)return;
+  if(!confirm("Reset this PR baseline? Every workout stays in history, but only future sessions will count toward this exercise's PR."))return;
+  if(!isPlainObject(cfg.prResetAt))cfg.prResetAt={};
+  cfg.prResetAt[liftOverlayPRKey]=Date.now();
+  if(cfg.prHidden)delete cfg.prHidden[liftOverlayPRKey];
+  saveCfg();
+  document.getElementById("liftOverlay").classList.add("hidden");
+  unlockScroll();
+  renderPRs();
+  flashSave("PR baseline reset · workout history kept ✓");
+});
+document.getElementById("restorePRsBtn").addEventListener("click",()=>{
+  cfg.prHidden={};
+  cfg.prResetAt={};
+  saveCfg();
+  renderPRs();
+  flashSave("Previous PRs restored ✓");
 });
 
 // --- weekly review ---

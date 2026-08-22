@@ -14,14 +14,14 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="BlackPyre" />
 <meta name="theme-color" content="#101215" />
-<link rel="manifest" href="manifest.json?v=web-v119-release-hardening-1" />
+<link rel="manifest" href="manifest.json?v=web-v121-food-catalog-1" />
 <link rel="apple-touch-icon" href="apple-touch-icon.png" />
 <title>BlackPyre — Training & Nutrition Log</title>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<style>
+  <style>
   :root {
     --bg:#101215; --panel:#191C21; --panel-up:#1F232A; --border:#2B3039;
-    --text:#EDEEF0; --dim:#8A919C; --ember:#FBBF24; --ember-deep:#D97706; --ember-rgb:251,191,36; --amber:#E8B04B;
+    --text:#EDEEF0; --dim:#B8BEC8; --ember:#FBBF24; --ember-deep:#D97706; --ember-rgb:251,191,36; --amber:#E8B04B;
     --ok:#4ADE80; --warn:#F87171; --progress:#FBBF24;
   }
   * { box-sizing:border-box; margin:0; padding:0; }
@@ -938,7 +938,7 @@
     <div class="motto">Burn away the old. Forge what comes next.</div>
     <div id="saveState" class="note hdr-save" role="status" aria-live="polite"></div>
   </div>
-  <div id="offlineBanner" class="hidden" role="status" aria-live="polite"><b>Offline.</b> Logging, workouts, weights, saved foods, AI copy/paste handoffs, backups, and recovery still work. Only new online food searches and unknown barcode lookups need a connection.</div>
+  <div id="offlineBanner" class="hidden" role="status" aria-live="polite"><b>Offline.</b> Logging, workouts, weights, saved foods, the bundled USDA catalog, AI copy/paste handoffs, backups, and recovery still work. Previously downloaded catalog results may also remain available. New online lookups need a connection.</div>
   <div id="journey" class="hidden">
     <div class="jy-top">
       <span class="label" style="margin:0;">Your Journey</span>
@@ -1610,7 +1610,7 @@
     </div>
 
     <div class="card flush hidden" id="prCard">
-      <div style="padding:12px 16px; border-bottom:1px solid var(--border);"><span class="label" style="margin:0;">Personal records</span></div>
+      <div style="padding:12px 16px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; gap:10px;"><span class="label" style="margin:0;">Personal records</span><button class="xbtn hidden" id="restorePRsBtn">Restore hidden</button></div>
       <div id="prList"></div>
     </div>
 
@@ -1827,7 +1827,7 @@
       <div class="disclosure-body">
     <div class="card">
       <div class="label" style="margin-bottom:10px;">Food search sources</div>
-      <div class="note">My Foods and built-in staples work offline. Packaged-food search and barcode lookup use <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener" style="color:var(--ember);">Open Food Facts</a> when connected, and results identify their source. Open Food Facts database content is available under the <a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank" rel="noopener" style="color:var(--ember);">Open Database License</a>. If a product is missing or the service is unavailable, use manual entry to copy the nutrition label; BlackPyre remembers saved barcodes on this device. The optional 120-food suggestion catalog is bundled USDA reference data and also works offline.</div>
+      <div class="note">BlackPyre searches My Foods first, then its bundled and downloadable <a href="https://fdc.nal.usda.gov/" target="_blank" rel="noopener" style="color:var(--ember);">USDA FoodData Central</a> catalog. BlackPyre downloads prebuilt, versioned catalog files and caches used sections for offline reuse. <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener" style="color:var(--ember);">Open Food Facts</a> remains a separately labeled fallback under the <a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank" rel="noopener" style="color:var(--ember);">Open Database License</a>. Every database result should be checked against the package label. If a product is missing, manual entry lets BlackPyre remember the corrected barcode on this device.</div>
     </div>
 
     <div class="card">
@@ -2034,9 +2034,12 @@
       <div style="font-family:'Oswald',sans-serif; font-weight:700; font-size:16px; text-transform:uppercase;" id="liftTitle"></div>
       <button class="xbtn" id="liftCloseBtn" aria-label="Close lift progress">✕ Close</button>
     </div>
-    <div class="note" style="margin:0 0 12px;">Estimated 1RM per session (Epley). Dots are your logged best each day.</div>
-    <div class="card"><div id="liftChart"></div></div>
-    <div class="card">
+    <div class="note" id="liftOverlayIntro" style="margin:0 0 12px;">Estimated 1RM per session (Epley). Dots are your logged best each day.</div>
+    <div class="card" id="liftChartCard"><div id="liftChart"></div></div>
+    <button class="btn ghost" id="hidePRBtn" style="width:100%;">Hide from PR board</button>
+    <button class="btn ghost mt10" id="resetPRBtn" style="width:100%; border-color:var(--ember);">Reset PR baseline</button>
+    <div class="note" style="margin:8px 0 12px;">Hide changes visibility. Reset keeps every workout but starts this exercise's PR tracking fresh from the next session. Both can be restored.</div>
+    <div class="card" id="liftGoalCard">
       <div class="row" style="align-items:flex-end;">
         <div style="flex:1;"><div class="label" id="liftGoalLabel">Goal for this lift (lb, est. 1RM)</div><input type="number" id="liftGoalInput" aria-label="Estimated one rep max goal in pounds" inputmode="decimal" placeholder="e.g. 315"></div>
         <button class="xbtn" id="liftGoalSave" style="flex:0 0 auto;">Set goal</button>
@@ -2112,19 +2115,20 @@
   </div>
 </div>
 
-<script src="data-quotes.js?v=web-v119-release-hardening-1"></script>
-<script src="data-foods.js?v=web-v119-release-hardening-1"></script>
-<script src="data-suggestions.js?v=web-v119-release-hardening-1"></script>
-<script src="data-faq.js?v=web-v119-release-hardening-1"></script>
-<script src="data-exercises.js?v=web-v119-release-hardening-1"></script>
-<script src="data-exercise-card-profiles.js?v=web-v119-release-hardening-1"></script>
-<script src="scripts/01-storage.js?v=web-v119-release-hardening-1"></script>
-<script src="scripts/02-food.js?v=web-v119-release-hardening-1"></script>
-<script src="scripts/03-card-profiles.js?v=web-v119-release-hardening-1"></script>
-<script src="scripts/03-train.js?v=web-v119-release-hardening-1"></script>
-<script src="scripts/04-weight.js?v=web-v119-release-hardening-1"></script>
-<script src="scripts/05-ai.js?v=web-v119-release-hardening-1"></script>
-<script src="scripts/06-settings.js?v=web-v119-release-hardening-1"></script>
-<script src="scripts/07-boot.js?v=web-v119-release-hardening-1"></script>
+<script src="data-quotes.js?v=web-v121-food-catalog-1"></script>
+<script src="data-foods.js?v=web-v121-food-catalog-1"></script>
+<script src="data-suggestions.js?v=web-v121-food-catalog-1"></script>
+<script src="data-food-catalog.js?v=web-v121-food-catalog-1"></script>
+<script src="data-faq.js?v=web-v121-food-catalog-1"></script>
+<script src="data-exercises.js?v=web-v121-food-catalog-1"></script>
+<script src="data-exercise-card-profiles.js?v=web-v121-food-catalog-1"></script>
+<script src="scripts/01-storage.js?v=web-v121-food-catalog-1"></script>
+<script src="scripts/02-food.js?v=web-v121-food-catalog-1"></script>
+<script src="scripts/03-card-profiles.js?v=web-v121-food-catalog-1"></script>
+<script src="scripts/03-train.js?v=web-v121-food-catalog-1"></script>
+<script src="scripts/04-weight.js?v=web-v121-food-catalog-1"></script>
+<script src="scripts/05-ai.js?v=web-v121-food-catalog-1"></script>
+<script src="scripts/06-settings.js?v=web-v121-food-catalog-1"></script>
+<script src="scripts/07-boot.js?v=web-v121-food-catalog-1"></script>
 </body>
 </html>

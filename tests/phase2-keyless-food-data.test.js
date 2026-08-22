@@ -6,7 +6,7 @@ const path = require("path");
 (async ()=>{
 const root = path.join(__dirname,"..");
 const shippedFiles = [
-  "index.html","data-faq.js","scripts/01-storage.js","scripts/02-food.js",
+  "index.html","data-faq.js","data-food-catalog.js","scripts/01-storage.js","scripts/02-food.js",
   "scripts/05-ai.js","scripts/06-settings.js","scripts/07-boot.js"
 ];
 const shippedSource = shippedFiles.map(file=>fs.readFileSync(path.join(root,file),"utf8")).join("\n");
@@ -64,13 +64,51 @@ onlineSearch.window.document.getElementById("foodQuery").value="Yoplait berry";
 await onlineSearch.window.eval("runSearch()");
 const searchResult = [...onlineSearch.window.document.querySelectorAll("#results .result")]
   .find(result=>/Source: Open Food Facts/.test(result.textContent));
-check("keyless packaged-food search uses Open Food Facts only",
-  searchCalls.length===1 && /search\.openfoodfacts\.org/.test(searchCalls[0]) && !/usda/i.test(searchCalls[0]));
+check("keyless packaged-food search falls back to Open Food Facts without calling the USDA API",
+  searchCalls.some(url=>/ryanlifts\.github\.io\/BlackPyre-Food-Catalog\/manifest\.json/.test(url)) &&
+  searchCalls.some(url=>/world\.openfoodfacts\.org\/cgi\/search\.pl/.test(url)) &&
+  !searchCalls.some(url=>/api\.nal\.usda\.gov/.test(url)));
 check("online search results visibly name Open Food Facts",
   !!searchResult);
 searchResult.click();
 check("selected packaged food keeps its source visible",
   /Source: Open Food Facts/.test(onlineSearch.window.document.getElementById("selPer100").textContent));
+
+const catalogManifest={
+  schema:1,
+  catalogVersion:"test",
+  releaseTag:"catalog-test",
+  releaseBase:"https://github.com/ryanlifts/BlackPyre-Food-Catalog/releases/download/catalog-test",
+  sources:{usda:{label:"USDA FoodData Central",records:1}},
+  searchPrefixLength:2,
+  barcodePrefixLength:2,
+  searchPrefixes:["yo"],
+  barcodePrefixes:["07"],
+  assets:{
+    "usda-search-yo.json":{records:1},
+    "usda-barcode-07.json":{records:1}
+  }
+};
+const catalogRecord=["123","Mixed Berry Yogurt","Yoplait",82.35,2.94,16.47,0.88,170,"1 container (170g)","070470343488","2026-04-30"];
+const catalogSearchCalls=[];
+const catalogSearch=boot(EXISTING_CFG,EMPTY_DATA,w=>{
+  w.fetch=url=>{
+    const request=String(url);catalogSearchCalls.push(request);
+    if(request.endsWith("manifest.json"))return Promise.resolve({ok:true,status:200,json:()=>Promise.resolve(catalogManifest)});
+    if(request.endsWith("usda-search-yo.json"))return Promise.resolve({ok:true,status:200,json:()=>Promise.resolve({schema:1,source:"usda",records:[catalogRecord]})});
+    return Promise.reject(new Error("Open Food Facts must not run after a USDA match"));
+  };
+});
+catalogSearch.window.document.getElementById("foodQuery").value="Yoplait berry";
+await catalogSearch.window.eval("runSearch()");
+const usdaSearchResult=[...catalogSearch.window.document.querySelectorAll("#results .result")]
+  .find(result=>/Source: USDA FoodData Central/.test(result.textContent));
+check("downloadable catalog supplies source-identified USDA search results",
+  !!usdaSearchResult &&
+  catalogSearchCalls.some(url=>url==="https://ryanlifts.github.io/BlackPyre-Food-Catalog/manifest.json") &&
+  catalogSearchCalls.some(url=>url==="https://ryanlifts.github.io/BlackPyre-Food-Catalog/usda-search-yo.json") &&
+  !catalogSearchCalls.some(url=>url.includes("openfoodfacts")) &&
+  !catalogSearchCalls.some(url=>url.includes("api.nal.usda.gov")));
 
 const localSearch = boot(EXISTING_CFG,Object.assign({},EMPTY_DATA,{
   myFoods:{"123":{name:"Personal oatmeal",brand:"Home",cal100:100,pro100:4,carb100:18,fat100:2}}
@@ -83,12 +121,38 @@ check("saved matches remain usable when Open Food Facts is unavailable",
   /Personal oatmeal/.test(localSearch.window.document.getElementById("results").textContent) &&
   /Source: My Foods/.test(localSearch.window.document.getElementById("results").textContent));
 check("text-search outage is explained without hiding local results",
-  /Open Food Facts is temporarily unavailable/.test(localSearch.window.document.getElementById("searchErr").textContent));
+  /downloadable food catalog is temporarily unavailable/.test(localSearch.window.document.getElementById("searchErr").textContent));
+
+const catalogBarcodeCalls=[];
+const catalogBarcode=boot(EXISTING_CFG,EMPTY_DATA,w=>{
+  w.fetch=url=>{
+    const request=String(url);catalogBarcodeCalls.push(request);
+    if(request.endsWith("manifest.json"))return Promise.resolve({ok:true,status:200,json:()=>Promise.resolve(catalogManifest)});
+    if(request.endsWith("usda-barcode-07.json"))return Promise.resolve({ok:true,status:200,json:()=>Promise.resolve({schema:1,source:"usda",records:[catalogRecord]})});
+    return Promise.reject(new Error("Open Food Facts must not run after a USDA barcode match"));
+  };
+});
+catalogBarcode.window.document.getElementById("barcodeInput").value="070470343488";
+await catalogBarcode.window.eval("runBarcode()");
+await wait(20);
+check("downloadable catalog supplies USDA barcode results before Open Food Facts",
+  /Source: USDA FoodData Central/.test(catalogBarcode.window.document.getElementById("selPer100").textContent) &&
+  catalogBarcodeCalls.some(url=>url.endsWith("usda-barcode-07.json")) &&
+  !catalogBarcodeCalls.some(url=>url.includes("openfoodfacts")));
+check("USDA barcode results use the same package-verification workflow",
+  !catalogBarcode.window.document.getElementById("barcodeCorrectionReview").classList.contains("hidden") &&
+  /SOURCE: USDA FOODDATA CENTRAL/.test(catalogBarcode.window.document.getElementById("barcodeCorrectionSource").textContent));
 
 function barcodeBoot(responder){
   const calls=[];
   const dom=boot(EXISTING_CFG,EMPTY_DATA,w=>{
-    w.fetch=url=>{ calls.push(String(url)); return responder(url,calls.length); };
+    w.fetch=url=>{
+      calls.push(String(url));
+      if(String(url).includes("BlackPyre-Food-Catalog")||String(url).includes("ryanlifts.github.io")){
+        return Promise.resolve({ok:false,status:503,json:()=>Promise.resolve({})});
+      }
+      return responder(url,calls.length);
+    };
   });
   return {dom,calls};
 }
@@ -101,21 +165,23 @@ async function lookup(ctx,code){
 const foundBarcode = barcodeBoot(()=>Promise.resolve({ok:true,status:200,json:()=>Promise.resolve({product})}));
 await lookup(foundBarcode,"070470343488");
 check("barcode lookup stays on the stable Open Food Facts v2 endpoint",
-  foundBarcode.calls.length===1 && /\/api\/v2\/product\//.test(foundBarcode.calls[0]));
+  foundBarcode.calls.filter(url=>url.includes("openfoodfacts")).length===1 &&
+  foundBarcode.calls.some(url=>/\/api\/v2\/product\//.test(url)) &&
+  !foundBarcode.calls.some(url=>/api\.nal\.usda\.gov/.test(url)));
 check("barcode result visibly names Open Food Facts",
   /Source: Open Food Facts/.test(foundBarcode.dom.window.document.getElementById("selPer100").textContent));
 
 const missingBarcode = barcodeBoot(()=>Promise.resolve({ok:false,status:404,json:()=>Promise.resolve({})}));
 await lookup(missingBarcode,"999999999999");
 check("missing barcode opens manual label entry after one request",
-  missingBarcode.calls.length===1 &&
+  missingBarcode.calls.filter(url=>url.includes("openfoodfacts")).length===1 &&
   !missingBarcode.dom.window.document.getElementById("customCard").classList.contains("hidden") &&
-  /not found in Open Food Facts/.test(missingBarcode.dom.window.document.getElementById("searchErr").textContent));
+  /not found in the USDA catalog or Open Food Facts/.test(missingBarcode.dom.window.document.getElementById("searchErr").textContent));
 
 const failedBarcode = barcodeBoot(()=>Promise.reject(new Error("network down")));
 await lookup(failedBarcode,"888888888888");
 check("temporary barcode failure retries once then opens manual entry",
-  failedBarcode.calls.length===2 &&
+  failedBarcode.calls.filter(url=>url.includes("openfoodfacts")).length===2 &&
   !failedBarcode.dom.window.document.getElementById("customCard").classList.contains("hidden") &&
   /could not be reached/.test(failedBarcode.dom.window.document.getElementById("searchErr").textContent));
 
@@ -298,10 +364,11 @@ const readyCorrectionPanelV84 =
 
 check(
   "leading-zero EAN and UPC use one canonical barcode identity",
-  readyBarcodeCorrectionV84.calls.length===1
-  && /\/847644005066\.json/.test(
-    readyBarcodeCorrectionV84.calls[0]
-  )
+  readyBarcodeCorrectionV84.calls
+    .filter(url=>url.includes("openfoodfacts"))
+    .length===1
+  && readyBarcodeCorrectionV84.calls
+    .some(url=>/\/847644005066\.json/.test(url))
   && readyBarcodeCorrectionV84
     .dom
     .window
@@ -569,7 +636,7 @@ check("normal backups exclude a legacy USDA credential",
   !backupText.includes("should-never-export") &&
   !Object.prototype.hasOwnProperty.call(JSON.parse(backupText).cfg,"usdaKey"));
 
-check("service worker cache is bumped for the current release",/blackpyre-v119-release-hardening-1/.test(fs.readFileSync(path.join(root,"sw.js"),"utf8")));
+check("service worker cache is bumped for the current release",/blackpyre-v121-food-catalog-1/.test(fs.readFileSync(path.join(root,"sw.js"),"utf8")));
 
 
 const ServingReviewCorrection = boot(
