@@ -1758,11 +1758,14 @@ let liftOverlayEx = null;
 let liftOverlayPRKey = null;
 function liftHistory(exName){
   const byDate = {};
+  const assisted=isAssistedExercise(exName);
   data.workouts.forEach(s=>{
+    if(!prSessionAllowedForExercise(exName,s))return;
     const v = s.sets[exName];
     if (!v) return;
-    const b = parseBestSet(v);
-    if (b && (!byDate[s.date] || b.e1rm>byDate[s.date])) byDate[s.date] = b.e1rm;
+    const b = assisted ? parseBestAssistance(v,bodyWeightForWorkoutDate(s.date)) : parseBestSet(v);
+    const score=assisted ? b&&b.oneRepAssistance : b&&b.e1rm;
+    if (Number.isFinite(score) && (!Number.isFinite(byDate[s.date]) || (assisted ? score<byDate[s.date] : score>byDate[s.date]))) byDate[s.date] = score;
   });
   return Object.keys(byDate).sort().map(d=>({date:d, y:byDate[d]}));
 }
@@ -1770,6 +1773,7 @@ function openLiftChart(exName,groupKey){
   liftOverlayEx = exName;
   liftOverlayPRKey=groupKey || "legacy:"+normalizeExerciseName(exName);
   document.getElementById("liftTitle").textContent = exName;
+  const assisted=isAssistedExercise(exName);
   const goal = (cfg.liftGoals||{})[exName] || null;
   const pts = liftHistory(exName);
   const usesEstimatedOneRepMax=pts.length>0;
@@ -1777,7 +1781,9 @@ function openLiftChart(exName,groupKey){
   const chartCard=document.getElementById("liftChartCard");
   const goalCard=document.getElementById("liftGoalCard");
   if(intro)intro.textContent=usesEstimatedOneRepMax
-    ? "Estimated 1RM per session (Epley). Dots are your logged best each day."
+    ? (assisted
+      ? "Estimated assistance needed for one rep. Lower assistance means greater strength."
+      : "Estimated 1RM per session (Epley). Dots are your logged best each day.")
     : "This record uses the tracking method assigned to this exercise, not an estimated 1RM.";
   if(chartCard)chartCard.classList.toggle("hidden",!usesEstimatedOneRepMax);
   if(goalCard)goalCard.classList.toggle("hidden",!usesEstimatedOneRepMax);
@@ -1785,13 +1791,19 @@ function openLiftChart(exName,groupKey){
   const displayGoal=goal?poundsToUnit(goal,currentUnitSystem(),2):null;
   document.getElementById("liftChart").innerHTML = lineChartSVG(displayPts, displayGoal);
   document.getElementById("liftGoalInput").value = displayGoal || "";
-  const best = pts.length ? Math.max.apply(null, pts.map(p=>p.y)) : 0;
+  const best = pts.length ? (assisted ? Math.min.apply(null, pts.map(p=>p.y)) : Math.max.apply(null, pts.map(p=>p.y))) : 0;
   const unit=unitWeightLabel(), metric=isMetricSystem();
-  document.getElementById("liftGoalLabel").textContent="Goal for this lift ("+unit+", est. 1RM)";
-  document.getElementById("liftGoalInput").setAttribute("aria-label","Estimated one rep max goal in "+(metric?"kilograms":"pounds"));
+  document.getElementById("liftGoalLabel").textContent=assisted
+    ? "Goal assistance for one rep ("+unit+", lower is stronger)"
+    : "Goal for this lift ("+unit+", est. 1RM)";
+  document.getElementById("liftGoalInput").setAttribute("aria-label",assisted
+    ? "Estimated assistance goal for one rep in "+(metric?"kilograms":"pounds")
+    : "Estimated one rep max goal in "+(metric?"kilograms":"pounds"));
   document.getElementById("liftGoalInput").placeholder=metric?"e.g. 140":"e.g. 315";
   document.getElementById("liftGoalNote").textContent = goal
-    ? "Current best: ~"+poundsToUnit(best,currentUnitSystem(),1)+" "+unit+" est. 1RM · "+poundsToUnit(Math.max(0, goal-best),currentUnitSystem(),1)+" "+unit+" to go"
+    ? (assisted
+      ? "Current best: ~"+poundsToUnit(best,currentUnitSystem(),1)+" "+unit+" assistance for one rep · "+poundsToUnit(Math.max(0,best-goal),currentUnitSystem(),1)+" "+unit+" less assistance to goal"
+      : "Current best: ~"+poundsToUnit(best,currentUnitSystem(),1)+" "+unit+" est. 1RM · "+poundsToUnit(Math.max(0, goal-best),currentUnitSystem(),1)+" "+unit+" to go")
     : "Set a goal to draw a target line on the chart.";
   if (document.getElementById("liftOverlay").classList.contains("hidden")){
     lockScroll();

@@ -39,45 +39,37 @@ struct BlackPyreRestActivity: Widget {
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    Label("BLACKPYRE", systemImage: "flame.fill")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(ember)
+                    EmptyView()
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    timerText(for: context.state)
-                        .font(.headline.monospacedDigit().weight(.bold))
-                        .foregroundStyle(context.state.isPaused ? .white : ember)
+                    EmptyView()
                 }
-                DynamicIslandExpandedRegion(.bottom) {
-                    HStack {
-                        Text(context.state.isPaused ? "REST TIMER PAUSED" : "REST BETWEEN SETS")
-                            .font(.caption.weight(.semibold))
-                        Spacer()
-                        Text("Open BlackPyre to adjust")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
+                DynamicIslandExpandedRegion(.center) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "flame.fill")
+                            .font(.system(size: 22, weight: .bold))
+                        timerText(for: context.state)
+                            .font(.system(size: 22, weight: .bold, design: .monospaced))
                     }
+                    .foregroundStyle(context.state.isPaused ? .white : ember)
                 }
             } compactLeading: {
-                HStack(spacing: 2) {
+                HStack(spacing: 3) {
                     Image(systemName: "flame.fill")
-                        .font(.system(size: 9, weight: .bold))
-                        .frame(width: 11)
+                        .font(.system(size: 14, weight: .bold))
                     timerText(for: context.state)
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
-                        .frame(width: 31, alignment: .trailing)
-                        .minimumScaleFactor(0.8)
+                        .font(.system(size: 14, weight: .bold, design: .monospaced))
+                        .minimumScaleFactor(0.9)
                 }
-                .frame(width: 44, alignment: .leading)
+                .frame(width: 62, alignment: .leading)
                 .foregroundStyle(context.state.isPaused ? .white : ember)
             } compactTrailing: {
                 EmptyView()
             } minimal: {
                 timerText(for: context.state)
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundStyle(context.state.isPaused ? .white : ember)
-                    .frame(width: 30)
-                    .minimumScaleFactor(0.7)
+                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+                    .minimumScaleFactor(0.85)
+                .foregroundStyle(context.state.isPaused ? .white : ember)
             }
             .keylineTint(ember)
         }

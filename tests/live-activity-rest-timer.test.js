@@ -30,8 +30,9 @@ check("plugin requests, updates, and ends activities",/Activity\.request/.test(b
 check("Lock Screen surface uses a system countdown",/Text\(timerInterval: Date\.now\.\.\.state\.endAt, countsDown: true\)/.test(widget));
 check("expired Live Activity state cannot create an invalid countdown range",/state\.isPaused \|\| state\.endAt <= Date\.now/.test(widget));
 check("Dynamic Island supplies expanded compact and minimal regions",/DynamicIsland \{/.test(widget) && /compactLeading:/.test(widget) && /compactTrailing:/.test(widget) && /minimal:/.test(widget));
-check("minimal Dynamic Island presentation keeps the countdown visible beside other activities",/minimal:\s*\{\s*timerText\(for: context\.state\)/.test(widget));
-check("compact leading presentation keeps flame and countdown together when another activity suppresses the trailing region",/compactLeading:\s*\{\s*HStack[\s\S]*?Image\(systemName: "flame\.fill"\)[\s\S]*?timerText\(for: context\.state\)/.test(widget));
+check("expanded Dynamic Island centers the flame and countdown together",/DynamicIslandExpandedRegion\(\.center\)\s*\{\s*HStack[\s\S]*?Image\(systemName: "flame\.fill"\)[\s\S]*?timerText\(for: context\.state\)/.test(widget));
+check("minimal Dynamic Island prioritizes a readable countdown beside other activities",/minimal:\s*\{\s*timerText\(for: context\.state\)[\s\S]*?font\(\.system\(size: 13/.test(widget));
+check("compact Dynamic Island keeps flame and countdown condensed together",/compactLeading:\s*\{\s*HStack[\s\S]*?Image\(systemName: "flame\.fill"\)[\s\S]*?timerText\(for: context\.state\)[\s\S]*?compactTrailing:\s*\{\s*EmptyView\(\)/.test(widget));
 check("running and paused states sync to native",/status:"running"/.test(timer) && /status:"paused"/.test(timer) && /plugin\.sync\(snapshot\)/.test(timer));
 check("finished and cancelled timers dismiss native activity",/(finishRestCountdown\(\)[\s\S]*?endRestActivity\(\))/.test(timer) && /(cancelRest\(\)[\s\S]*?endRestActivity\(\))/.test(timer));
 check("rest activity failures never break the web timer",/could not sync the rest Live Activity/.test(timer) && /could not end the rest Live Activity/.test(timer));

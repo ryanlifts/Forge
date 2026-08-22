@@ -48,7 +48,7 @@ async function run(){
     && !/name\.hasPrefix\("blackpyre-"\)/.test(bridge));
 
   const buildNumbers=[...project.matchAll(/CURRENT_PROJECT_VERSION = (\d+);/g)].map(match=>Number(match[1]));
-  check("app and Live Activity configurations use App Store candidate build 5",buildNumbers.length===4&&buildNumbers.every(value=>value===5));
+  check("app and Live Activity configurations use App Store candidate build 8",buildNumbers.length===4&&buildNumbers.every(value=>value===8));
   check("Capacitor 8.5.0 and the secure brace-expansion override are pinned",(()=>{
     const pkg=JSON.parse(read("package.json"));
     return pkg.dependencies["@capacitor/cli"]==="8.5.0"

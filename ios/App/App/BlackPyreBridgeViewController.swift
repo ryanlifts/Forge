@@ -184,8 +184,9 @@ final class BlackPyreRestActivityPlugin: CAPPlugin, CAPBridgedPlugin {
             }
 
             do {
+                let attributes = RestTimerActivityAttributes(title: "BlackPyre Rest")
                 let activity = try Activity.request(
-                    attributes: RestTimerActivityAttributes(title: "BlackPyre Rest"),
+                    attributes: attributes,
                     contentState: state,
                     pushType: nil
                 )

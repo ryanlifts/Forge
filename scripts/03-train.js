@@ -12299,10 +12299,13 @@ document.getElementById("logWorkoutBtn").addEventListener("click", ()=>{
   const prLines = [];
   Object.keys(sets).forEach(ex=>{
     if(isAssistedExercise(ex)){
-      const current=parseBestAssistance(sets[ex]);
+      const current=parseBestAssistance(sets[ex],bodyWeightForWorkoutDate(date));
       const prior=bestHistorical(ex,editingWorkoutIdx!=null ? editingWorkoutIdx : -1);
-      if(current&&(!prior||current.w<prior.w||(current.w===prior.w&&current.r>prior.r))){
-        prLines.push("🏆 PR: "+ex+" lowest assistance "+current.w+" "+unitWeightLabel()+" for "+current.r+" reps");
+      if(assistedPRIsBetter(current,prior)){
+        const estimate=Number.isFinite(current.oneRepAssistance)
+          ? " (~"+poundsToUnit(current.oneRepAssistance,currentUnitSystem(),1)+" "+unitWeightLabel()+" assistance for an estimated 1 rep)"
+          : "";
+        prLines.push("🏆 PR: "+ex+" "+poundsToUnit(current.w,currentUnitSystem(),1)+" "+unitWeightLabel()+" assistance × "+current.r+estimate);
       }
       return;
     }

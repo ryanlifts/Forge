@@ -1342,16 +1342,18 @@ check(
 );
 
 check(
-  "assisted pull-up PR uses lower assistance rather than estimated 1RM",
+  "assisted PR estimates one-rep assistance from bodyweight moved and reps",
   E(`(()=>{
-    const assisted=parseBestAssistance([{w:130,r:5},{w:120,r:3}]);
-    return assisted&&assisted.w===120;
+    cfg.startWt=200;
+    const assisted=parseBestAssistance([{w:130,r:10},{w:120,r:1}],200);
+    return assisted&&assisted.w===130&&assisted.r===10&&Math.abs(assisted.oneRepAssistance-106.6667)<0.01;
   })()`)===true
 );
 
 check(
   "PR reset preserves history but only counts future assisted pull-up sessions",
   E(`(()=>{
+    cfg.startWt=200;
     const key="legacy:"+normalizeExerciseName("Assisted Pull-Up");
     cfg.prResetAt={[key]:Date.parse("2026-08-20T12:00:00Z")};
     data.workouts=[

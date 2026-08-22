@@ -160,13 +160,42 @@ function parseBestSet(val){
   }
   return best;
 }
-function parseBestAssistance(val){
+function bodyWeightForWorkoutDate(date){
+  const target=String(date||"");
+  const entries=(Array.isArray(data.weights)?data.weights:[])
+    .filter(entry=>entry&&Number(entry.lbs)>0&&/^\d{4}-\d{2}-\d{2}$/.test(String(entry.date||"")))
+    .slice()
+    .sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  let prior=null;
+  entries.forEach(entry=>{if(!target||String(entry.date)<=target)prior=Number(entry.lbs);});
+  return prior||Number(cfg.startWt)||null;
+}
+function assistedSetScore(assistance,reps,bodyWeight){
+  const lbs=Number(assistance),count=Number(reps),body=Number(bodyWeight);
+  if(!(lbs>0)||!(count>0)||count>30)return null;
+  if(!(body>lbs))return {w:lbs,r:count,e1rm:null,oneRepAssistance:null,bodyWeight:body||null};
+  const moved=body-lbs;
+  const effectiveE1RM=moved*(1+count/30);
+  return {
+    w:lbs,
+    r:count,
+    e1rm:effectiveE1RM,
+    oneRepAssistance:Math.max(0,body-effectiveE1RM),
+    bodyWeight:body
+  };
+}
+function assistedPRIsBetter(candidate,current){
+  if(!candidate)return false;
+  if(!current)return true;
+  if(Number.isFinite(candidate.e1rm)&&Number.isFinite(current.e1rm))return candidate.e1rm>current.e1rm+0.01;
+  return candidate.w<current.w||(candidate.w===current.w&&candidate.r>current.r);
+}
+function parseBestAssistance(val,bodyWeight){
   if(!Array.isArray(val))return null;
   let best=null;
   val.forEach(row=>{
-    const lbs=Number(row&&row.w),reps=Number(row&&row.r);
-    if(!(lbs>0)||!(reps>0))return;
-    if(!best||lbs<best.w||(lbs===best.w&&reps>best.r))best={w:lbs,r:reps};
+    const candidate=assistedSetScore(row&&row.w,row&&row.r,bodyWeight);
+    if(assistedPRIsBetter(candidate,best))best=candidate;
   });
   return best;
 }
@@ -182,8 +211,8 @@ function bestHistorical(exName, excludeIdx){
     let best=null;
     data.workouts.forEach((session,index)=>{
       if(index===excludeIdx||!prSessionAllowedForExercise(exName,session))return;
-      const candidate=parseBestAssistance(session.sets[exName]);
-      if(candidate&&(!best||candidate.w<best.w||(candidate.w===best.w&&candidate.r>best.r)))best=candidate;
+      const candidate=parseBestAssistance(session.sets[exName],bodyWeightForWorkoutDate(session.date));
+      if(assistedPRIsBetter(candidate,best))best=candidate;
     });
     return best;
   }
@@ -204,8 +233,8 @@ function allPRs(){
       const prKey="legacy:"+normalizeExerciseName(ex);
       if((cfg.prHidden&&cfg.prHidden[prKey])||!prSessionAllowedForExercise(ex,s))return;
       const assisted=isAssistedExercise(ex);
-      const b = assisted ? parseBestAssistance(s.sets[ex]) : parseBestSet(s.sets[ex]);
-      if (b && (!map[ex] || (assisted ? b.w<map[ex].w||(b.w===map[ex].w&&b.r>map[ex].r) : b.e1rm>map[ex].e1rm))) map[ex] = Object.assign({date:s.date,assisted:assisted}, b);
+      const b = assisted ? parseBestAssistance(s.sets[ex],bodyWeightForWorkoutDate(s.date)) : parseBestSet(s.sets[ex]);
+      if (b && (!map[ex] || (assisted ? assistedPRIsBetter(b,map[ex]) : b.e1rm>map[ex].e1rm))) map[ex] = Object.assign({date:s.date,assisted:assisted}, b);
     });
   });
   return map;
@@ -219,11 +248,11 @@ function renderPRs(){
   if(restore){restore.classList.toggle("hidden",!hasPriorState);restore.textContent="Restore previous PRs";}
   if(!names.length&&!hasPriorState){ card.classList.add("hidden"); return; }
   card.classList.remove("hidden");
-  names.sort((a,b)=>map[b].e1rm-map[a].e1rm);
+  names.sort((a,b)=>a.localeCompare(b));
   document.getElementById("prList").innerHTML = names.slice(0,8).map(ex=>
     '<div class="list-item" style="cursor:pointer;" data-ex="'+esc(ex)+'"><span style="flex:2;">'+esc(ex)+' <span style="color:var(--dim); font-size:10px;"></span></span>'
-    +'<span style="flex:1.4; text-align:right; color:var(--dim);">'+(map[ex].assisted?'Least assistance':poundsToUnit(map[ex].w,currentUnitSystem(),1)+'×'+map[ex].r)+'</span>'
-    +'<span style="flex:1; text-align:right; font-weight:600; color:var(--ember);">'+(map[ex].assisted?poundsToUnit(map[ex].w,currentUnitSystem(),1)+' '+unitWeightLabel()+' · '+map[ex].r+' reps':'~'+poundsToUnit(map[ex].e1rm,currentUnitSystem(),1)+' '+unitWeightLabel())+'</span></div>'
+    +'<span style="flex:1.4; text-align:right; color:var(--dim);">'+(map[ex].assisted?poundsToUnit(map[ex].w,currentUnitSystem(),1)+' '+unitWeightLabel()+' assist × '+map[ex].r:poundsToUnit(map[ex].w,currentUnitSystem(),1)+'×'+map[ex].r)+'</span>'
+    +'<span style="flex:1; text-align:right; font-weight:600; color:var(--ember);">'+(map[ex].assisted?(Number.isFinite(map[ex].oneRepAssistance)?'~'+poundsToUnit(map[ex].oneRepAssistance,currentUnitSystem(),1)+' '+unitWeightLabel()+' assist · est. 1 rep':'Assistance PR'):'~'+poundsToUnit(map[ex].e1rm,currentUnitSystem(),1)+' '+unitWeightLabel()+' est. 1RM')+'</span></div>'
   ).join("");
   document.getElementById("prList").querySelectorAll("[data-ex]").forEach(row=>
     row.addEventListener("click", ()=>openLiftChart(row.dataset.ex,"legacy:"+normalizeExerciseName(row.dataset.ex))));

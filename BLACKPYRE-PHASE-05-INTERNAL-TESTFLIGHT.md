@@ -8,7 +8,7 @@
 
 **First build:** 2
 
-**Candidate build:** 5
+**Candidate build:** 8
 
 Build 3 is the release-hardening candidate prepared from the independent 1.0 review.
 It broadens the camera purpose string, protects expired Live Activities, tightens native
