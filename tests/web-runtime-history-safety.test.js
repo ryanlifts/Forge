@@ -9,8 +9,8 @@ const path=require("path");
   const sw=fs.readFileSync(path.join(root,"sw.js"),"utf8");
   const waterSource=fs.readFileSync(path.join(root,"scripts","05-ai.js"),"utf8");
 
-  const asset="web-v121-food-catalog-1";
-  const cache="blackpyre-v121-food-catalog-1";
+  const asset="web-v122-assisted-pr-1";
+  const cache="blackpyre-v122-assisted-pr-1";
 
   check("critical web runtimes use unique cache-busting URLs",
     index.includes('scripts/01-storage.js?v='+asset)

@@ -397,7 +397,7 @@ if ("serviceWorker" in navigator) {
   });
 
   window.addEventListener("load", ()=>{
-    navigator.serviceWorker.register("sw.js?v=web-v121-food-catalog-1",{updateViaCache:"none"})
+    navigator.serviceWorker.register("sw.js?v=web-v122-assisted-pr-1",{updateViaCache:"none"})
       .then((registration)=>{
         pwaRegistration = registration;
         if (hadController && registration.waiting && !updateReloaded) showUpdateToast();

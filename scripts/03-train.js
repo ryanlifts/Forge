@@ -13842,7 +13842,7 @@ document.getElementById("logWorkoutBtn").addEventListener("click", ()=>{
   const prLines = [];
   Object.keys(sets).forEach(ex=>{
     if(typeof exercisePrLine==="function"){
-      const line=exercisePrLine(ex,sets[ex],editingWorkoutIdx!=null ? editingWorkoutIdx : -1);
+      const line=exercisePrLine(ex,sets[ex],editingWorkoutIdx!=null ? editingWorkoutIdx : -1,date);
       if(line)prLines.push("🏆 PR: "+line);
       return;
     }

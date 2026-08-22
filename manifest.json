@@ -2,7 +2,7 @@
   "name": "BlackPyre — Training & Nutrition Log",
   "short_name": "BlackPyre",
   "description": "Track food macros, workouts, and bodyweight. Load any workout program.",
-  "start_url": "./?app=web-v121-food-catalog-1",
+  "start_url": "./?app=web-v122-assisted-pr-1",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",

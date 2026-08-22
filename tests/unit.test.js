@@ -983,16 +983,18 @@ check(
 );
 
 check(
-  "assisted pull-up PR uses lower assistance rather than estimated 1RM",
+  "assisted PR estimates one-rep assistance from bodyweight moved and reps",
   E(`(()=>{
-    const assisted=deriveExerciseValue(exerciseDescriptor("Assisted Pull-Up",null),[{w:130,r:5},{w:120,r:3}]);
-    return assisted&&assisted.kind==="assistance"&&assisted.lbs===120;
+    cfg.startWt=200;
+    const assisted=parseBestAssistance([{w:130,r:10},{w:120,r:1}],200);
+    return assisted&&assisted.lbs===130&&assisted.reps===10&&Math.abs(assisted.oneRepAssistance-106.6667)<0.01;
   })()`)===true
 );
 
 check(
   "PR reset preserves history but only counts future assisted pull-up sessions",
   E(`(()=>{
+    cfg.startWt=200;
     const entry=exerciseDescriptor("Assisted Pull-Up",null),key=exercisePRGroupKey(entry);
     cfg.prResetAt={[key]:Date.parse("2026-08-20T12:00:00Z")};
     data.workouts=[
@@ -1000,7 +1002,7 @@ check(
       {date:"2026-08-21",prRecordedAt:"2026-08-21T12:00:00Z",sets:{"Assisted Pull-Up":[{w:120,r:4}]}}
     ];
     const records=exerciseHistoryRecords(entry,-1),best=aggregateExerciseMetrics(entry,records).assistance;
-    return data.workouts.length===2&&records.length===1&&best&&best.lbs===120&&best.reps===4;
+    return data.workouts.length===2&&records.length===1&&best&&best.lbs===120&&best.reps===4&&Number.isFinite(best.oneRepAssistance);
   })()`)===true
 );
 

@@ -733,7 +733,7 @@ const sw = fs.readFileSync(
 check(
   "manual food-slider candidate uses the current cache",
   sw.includes(
-    'const CACHE = "blackpyre-v121-food-catalog-1"'
+    'const CACHE = "blackpyre-v122-assisted-pr-1"'
   )
 );
 
