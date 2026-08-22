@@ -8,7 +8,7 @@
 
 **First build:** 2
 
-**Candidate build:** 3
+**Candidate build:** 5
 
 Build 3 is the release-hardening candidate prepared from the independent 1.0 review.
 It broadens the camera purpose string, protects expired Live Activities, tightens native
@@ -18,7 +18,7 @@ into the permanent gauntlet. Build 2 remains the first external TestFlight submi
 ## Current gate
 
 Apple Developer Program membership is active. The BlackPyre App Store Connect record and
-the `BlackPyre Internal` group exist. The build 3 release-hardening gauntlet now covers
+the `BlackPyre Internal` group exist. The build 5 release-hardening gauntlet now covers
 all 1,357 checks with zero failures. The signed build 2 Release archive validated, and
 version 1.0 build 2 uploaded successfully on August 13,
 2026. Apple processed and validated the build, and it is assigned to `BlackPyre Internal`

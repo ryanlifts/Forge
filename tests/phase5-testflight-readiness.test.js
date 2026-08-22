@@ -14,7 +14,7 @@ const runner=fs.readFileSync("tests/run-tests.sh","utf8");
 
 check("TestFlight version is 1.0",/MARKETING_VERSION = 1\.0;/.test(project));
 check("first TestFlight upload remains recorded as build 2",/First build:\*\* 2/.test(packet));
-check("release-hardening candidate is build 3",/CURRENT_PROJECT_VERSION = 3;/.test(project)&&/Candidate build:\*\* 3/.test(packet));
+check("release-hardening candidate is build 5",/CURRENT_PROJECT_VERSION = 5;/.test(project)&&/Candidate build:\*\* 5/.test(packet));
 check("app bundle identifier is stable",/PRODUCT_BUNDLE_IDENTIFIER = com\.blackpyre\.app;/.test(project));
 check("Live Activity bundle identifier is stable",/PRODUCT_BUNDLE_IDENTIFIER = com\.blackpyre\.app\.resttimer;/.test(project));
 check("app remains iPhone only",/TARGETED_DEVICE_FAMILY = 1;/.test(project));

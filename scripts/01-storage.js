@@ -57,7 +57,7 @@ const NUTRITION_CALCULATOR_LIMITS = Object.freeze({
 const SUPPORTED_ACTIVITY_LEVELS = Object.freeze([1.2,1.375,1.55,1.725,1.9]);
 const SUPPORTED_GOAL_ADJUSTMENTS = Object.freeze([-1000,-500,-250,0,250]);
 
-const DEFAULT_CFG = { startWt:0, goalWt:0, calTarget:0, proTarget:0, carbGoal:0, fatGoal:0, unitSystem:"imperial", accent:"gold", foodHandoffOn:true, autoProgressionOn:false, foodSuggestionsOn:false, foodSuggestionsWeightLoss:true, foodSuggestionsAvoid:"" };
+const DEFAULT_CFG = { startWt:0, goalWt:0, calTarget:0, proTarget:0, carbGoal:0, fatGoal:0, unitSystem:"imperial", accent:"gold", foodHandoffOn:true, autoProgressionOn:false, foodSuggestionsOn:false, foodSuggestionsWeightLoss:true, foodSuggestionsAvoid:"", prHidden:{}, prResetAt:{} };
 const ACCENT_KEYS = ["ember","steel","emerald","crimson","violet","gold","pink"];
 
 // Saved body and workout values remain pounds/inches for backward compatibility.
@@ -879,7 +879,7 @@ function validateCfgShape(obj){
   if (!isPlainObject(obj)) throw new Error("Saved settings are not an object.");
   if (obj.schemaVersion!==SCHEMA_VERSION) throw new Error("Settings were not migrated to the current schema.");
   ["calSchedDays"].forEach(k=>{ if (hasOwn(obj,k) && obj[k]!==null && !Array.isArray(obj[k])) throw new Error("Saved settings field "+k+" has an unusable shape."); });
-  ["calcInputs","splitState","liftGoals"].forEach(k=>{ if (hasOwn(obj,k) && obj[k]!==null && !isPlainObject(obj[k])) throw new Error("Saved settings field "+k+" has an unusable shape."); });
+  ["calcInputs","splitState","liftGoals","prHidden","prResetAt"].forEach(k=>{ if (hasOwn(obj,k) && obj[k]!==null && !isPlainObject(obj[k])) throw new Error("Saved settings field "+k+" has an unusable shape."); });
   if (hasOwn(obj,"customRests") && obj.customRests!==null && !Array.isArray(obj.customRests) && !isPlainObject(obj.customRests)) throw new Error("Saved settings field customRests has an unusable shape.");
 }
 function safeProtectedState(parsed){

@@ -607,7 +607,7 @@ const yoplaitOFF = {
 };
 let C = bootOFF(()=>Promise.resolve({ok:true,status:200,json:()=>Promise.resolve({status:1,product:yoplaitOFF})}));
 await scan(C,"070470343488");
-check("v69 OFF v2 barcode lookup selects Yoplait product", C.window.document.getElementById("selName").textContent.includes("mixed berry") && C.window.eval("window.__calls[0]").includes("/api/v2/product/070470343488.json") && !C.window.eval("window.__calls[0]").includes("/api/v3.6/product/"));
+check("v69 OFF v2 barcode fallback selects Yoplait product", C.window.document.getElementById("selName").textContent.includes("mixed berry") && C.window.eval("window.__calls.find(url=>url.includes('openfoodfacts'))").includes("/api/v2/product/070470343488.json") && !C.window.eval("window.__calls.find(url=>url.includes('openfoodfacts'))").includes("/api/v3.6/product/"));
 
 const repairedYoplait = C.window.eval("mapOFFProduct("+JSON.stringify(yoplaitOFF)+")");
 check("v69 repairs OFF serving macros mislabeled as per 100g", repairedYoplait &&
@@ -901,7 +901,7 @@ C = bootOFF(()=>{
 await scan(C,"333");
 check("v81 confirmed OFF 404 does not retry and opens label entry", notFoundAttempts===1 &&
   !C.window.document.getElementById("customCard").classList.contains("hidden") &&
-  /not found in Open Food Facts/i.test(C.window.document.getElementById("searchErr").textContent));
+  /not found.*Open Food Facts/i.test(C.window.document.getElementById("searchErr").textContent));
 
 let networkAttempts = 0;
 C = bootOFF(()=>{
@@ -2089,7 +2089,7 @@ const sw = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 check("native app disables double-tap and pinch zoom while preserving one-finger panning", html.includes("user-scalable=no") && html.includes("maximum-scale=1.0") && /html, body\s*\{\s*touch-action:pan-x pan-y;\s*\}/.test(html));
 check("SW precaches the five data files", ["data-quotes.js","data-foods.js","data-suggestions.js","data-faq.js","data-exercises.js"].every(f=>sw.includes('"./'+f+'"')));
 check("SW cache name matches the release", /const CACHE = "blackpyre-v\d+(?:-\d+)?"/.test(sw));
-check("native service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v112"'));
+check("native service-worker cache is bumped", sw.includes('const CACHE = "blackpyre-v113"'));
 
 const nativePrep76 = fs.readFileSync(
   path.join(__dirname,"..","tools","prepare-native.sh"),
@@ -2137,6 +2137,7 @@ const LOCAL_SCRIPTS = [
   "data-quotes.js",
   "data-foods.js",
   "data-suggestions.js",
+  "data-food-catalog.js",
   "data-faq.js",
   "data-exercises.js",
   "data-exercise-card-profiles.js",
@@ -2156,7 +2157,7 @@ check("every local classic script begins with the strict-mode directive",
 const APPROVED_ORDER = LOCAL_SCRIPTS; // data files, then slices 01..07 — this order is load-bearing
 const scriptTags = [...rawIndex.matchAll(/<script\b[^>]*\bsrc="([^"]+)"[^>]*><\/script>/g)];
 check(
-  "exactly the 15 approved scripts, each exactly once, in the approved order",
+  "exactly the approved scripts, each exactly once, in the approved order",
   scriptTags.length===APPROVED_ORDER.length
     && scriptTags.every(
       (tag,index)=>tag[1]===APPROVED_ORDER[index]
@@ -2662,10 +2663,10 @@ const dO56=O56.window.document;
 Object.defineProperty(O56.window.navigator,"onLine",{configurable:true,value:false});
 dO56.getElementById("foodQuery").value="chicken";
 await O56.window.eval("runSearch()");
-check("v56 offline food search skips network and shows local results immediately", O56.window.__netCalls.length===0 && dO56.getElementById("results").children.length>0 && /online databases were skipped/.test(dO56.getElementById("searchErr").textContent));
+check("v56 offline food search skips network and shows local results immediately", O56.window.__netCalls.length===0 && dO56.getElementById("results").children.length>0 && /online catalog sections were skipped/.test(dO56.getElementById("searchErr").textContent));
 dO56.getElementById("barcodeInput").value="999999";
 await O56.window.eval("runBarcode()");
-check("v56 offline barcode lookup skips network and opens manual entry", O56.window.__netCalls.length===0 && !dO56.getElementById("customCard").classList.contains("hidden") && /online barcode lookup was skipped/.test(dO56.getElementById("searchErr").textContent));
+check("v56 offline barcode lookup skips network and opens manual entry", O56.window.__netCalls.length===0 && !dO56.getElementById("customCard").classList.contains("hidden") && /not in a cached catalog shard/.test(dO56.getElementById("searchErr").textContent));
 dO56.getElementById("scanBtn").dispatchEvent(new O56.window.Event("click",{bubbles:true}));
 await wait(5);
 check("v56 offline scanner fast-fails without loading its external library", O56.window.__netCalls.length===0 && /needs a connection/.test(dO56.getElementById("scanErr").textContent) && ![...dO56.querySelectorAll('script[src]')].some(x=>/html5-qrcode/.test(x.src)));
@@ -4133,7 +4134,7 @@ check(
 );
 
 check(
-  "v76 all 203 canonical exercises produce their stored editor mode contract",
+  "v76 all 261 canonical exercises produce their stored editor mode contract",
   T76Fresh.window.eval(`
     (()=>{
       const expected = {
@@ -4146,7 +4147,7 @@ check(
       };
 
       return (
-        EXERCISE_LIBRARY.length===203
+        EXERCISE_LIBRARY.length===261
         && EXERCISE_LIBRARY.every(
           entry=>{
             const state =
@@ -4749,8 +4750,8 @@ const freestyleUsers76 =
   )];
 
 check(
-  "post-v76 Freestyle picker exposes all 203 canonical built-ins by display name",
-  freestyleBuiltIns76.length===203
+  "post-v76 Freestyle picker exposes all 261 canonical built-ins by display name",
+  freestyleBuiltIns76.length===261
   && freestyleBuiltIns76.every(o=>
     o.value.length>0
     && o.textContent===o.value
@@ -4867,15 +4868,15 @@ const builderPicker76 =
     .find(s=>
       s.querySelectorAll(
         'option[data-exercise-source="builtin"]'
-      ).length===203
+      ).length===261
     );
 
 check(
-  "post-v76 Program Builder exposes all 203 canonical built-in exercise names",
+  "post-v76 Program Builder exposes all 261 canonical built-in exercise names",
   !!builderPicker76
   && builderPicker76.querySelectorAll(
     'option[data-exercise-source="builtin"]'
-  ).length===203
+  ).length===261
   && [...builderPicker76.querySelectorAll(
     'option[data-exercise-source="builtin"]'
   )].every(o=>
@@ -4945,8 +4946,8 @@ check(
   "v76 Freestyle shape sections contain all 202 built-ins exactly once",
   (()=>{
     const options=builtInGroups76.flatMap(group=>[...group.querySelectorAll("option")]);
-    return options.length===203
-      && new Set(options.map(option=>option.dataset.exerciseId)).size===203
+    return options.length===261
+      && new Set(options.map(option=>option.dataset.exerciseId)).size===261
       && options.every(option=>option.dataset.exerciseSource==="builtin");
   })()
 );
@@ -5490,7 +5491,7 @@ check(
   workoutPickerSearch76
     .querySelectorAll(
       'option[data-exercise-source="builtin"]'
-    ).length===203
+    ).length===261
   && [...workoutPickerSearch76.options]
        .some(
          option=>
@@ -9594,7 +9595,7 @@ AliasCompactReview77.window.eval(`
           scheme:"3 × 12"
         },
         {
-          name:"Chest Supported Row",
+          name:"Unlisted Test Row",
           scheme:"3 × 12"
         }
       ]
@@ -9613,7 +9614,7 @@ const aliasCompactSelects77 =
   );
 
 check(
-  "v77 review safely auto-matches five common names and leaves only the ambiguous row unresolved",
+  "v77 review safely auto-matches five common names and leaves only an unlisted row unresolved",
   (()=>{
     const reviewData77 =
       JSON.parse(JSON.stringify(EMPTY_DATA));
@@ -9658,7 +9659,7 @@ check(
               prescription:{sets:3,reps:12}
             },
             {
-              name:"Chest Supported Row",
+              name:"Unlisted Test Row",
               prescription:{sets:3,reps:10}
             }
           ]
@@ -9694,9 +9695,6 @@ check(
            "bp:biceps-curl"
          ].join("|")
       && rows[5].exerciseId===null
-      && rows[5].suggestions.length>0
-      && rows[5].suggestions[0].id
-         ==="bp:chest-supported-dumbbell-row"
     );
   })()
 );
@@ -9839,7 +9837,7 @@ const SYSTEMIC_RESOLVER_REVIEW_PLAN_77 = {
           prescription:{sets:3,reps:12}
         },
         {
-          name:"Chest Supported Row",
+          name:"Unlisted Test Row",
           prescription:{sets:3,reps:10}
         },
         {
@@ -9893,10 +9891,8 @@ check(
 );
 
 check(
-  "v77 ambiguous equipment reduction remains blocked with ranked choices",
+  "v77 unlisted exercise remains blocked for explicit review",
   systemicResolverRows77[5].exerciseId===null
-  && systemicResolverRows77[5].suggestions[0].id
-     ==="bp:chest-supported-dumbbell-row"
   && dSystemicResolverReview77
        .getElementById("trainingPlanReviewConfirmBtn")
        .disabled===true

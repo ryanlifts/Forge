@@ -160,10 +160,36 @@ function parseBestSet(val){
   }
   return best;
 }
+function parseBestAssistance(val){
+  if(!Array.isArray(val))return null;
+  let best=null;
+  val.forEach(row=>{
+    const lbs=Number(row&&row.w),reps=Number(row&&row.r);
+    if(!(lbs>0)||!(reps>0))return;
+    if(!best||lbs<best.w||(lbs===best.w&&reps>best.r))best={w:lbs,r:reps};
+  });
+  return best;
+}
+function prSessionAllowedForExercise(exName,session){
+  const key="legacy:"+normalizeExerciseName(exName);
+  const reset=Number(cfg.prResetAt&&cfg.prResetAt[key]);
+  if(!(reset>0))return true;
+  const recorded=Date.parse(session&&((session.prRecordedAt)||(session.endedAt))||"")||0;
+  return recorded>reset;
+}
 function bestHistorical(exName, excludeIdx){
+  if(isAssistedExercise(exName)){
+    let best=null;
+    data.workouts.forEach((session,index)=>{
+      if(index===excludeIdx||!prSessionAllowedForExercise(exName,session))return;
+      const candidate=parseBestAssistance(session.sets[exName]);
+      if(candidate&&(!best||candidate.w<best.w||(candidate.w===best.w&&candidate.r>best.r)))best=candidate;
+    });
+    return best;
+  }
   let best = null;
   data.workouts.forEach((s,i)=>{
-    if (i===excludeIdx) return;
+    if (i===excludeIdx||!prSessionAllowedForExercise(exName,s)) return;
     const str = s.sets[exName];
     if(!str) return;
     const b = parseBestSet(str);
@@ -175,8 +201,11 @@ function allPRs(){
   const map = {};
   data.workouts.forEach(s=>{
     Object.keys(s.sets).forEach(ex=>{
-      const b = parseBestSet(s.sets[ex]);
-      if (b && (!map[ex] || b.e1rm>map[ex].e1rm)) map[ex] = Object.assign({date:s.date}, b);
+      const prKey="legacy:"+normalizeExerciseName(ex);
+      if((cfg.prHidden&&cfg.prHidden[prKey])||!prSessionAllowedForExercise(ex,s))return;
+      const assisted=isAssistedExercise(ex);
+      const b = assisted ? parseBestAssistance(s.sets[ex]) : parseBestSet(s.sets[ex]);
+      if (b && (!map[ex] || (assisted ? b.w<map[ex].w||(b.w===map[ex].w&&b.r>map[ex].r) : b.e1rm>map[ex].e1rm))) map[ex] = Object.assign({date:s.date,assisted:assisted}, b);
     });
   });
   return map;
@@ -185,16 +214,19 @@ function renderPRs(){
   const map = allPRs();
   const names = Object.keys(map);
   const card = document.getElementById("prCard");
-  if(!names.length){ card.classList.add("hidden"); return; }
+  const restore=document.getElementById("restorePRsBtn");
+  const hasPriorState=!!((cfg.prHidden&&Object.keys(cfg.prHidden).length)||(cfg.prResetAt&&Object.keys(cfg.prResetAt).length));
+  if(restore){restore.classList.toggle("hidden",!hasPriorState);restore.textContent="Restore previous PRs";}
+  if(!names.length&&!hasPriorState){ card.classList.add("hidden"); return; }
   card.classList.remove("hidden");
   names.sort((a,b)=>map[b].e1rm-map[a].e1rm);
   document.getElementById("prList").innerHTML = names.slice(0,8).map(ex=>
     '<div class="list-item" style="cursor:pointer;" data-ex="'+esc(ex)+'"><span style="flex:2;">'+esc(ex)+' <span style="color:var(--dim); font-size:10px;"></span></span>'
-    +'<span style="flex:1.4; text-align:right; color:var(--dim);">'+poundsToUnit(map[ex].w,currentUnitSystem(),1)+'×'+map[ex].r+'</span>'
-    +'<span style="flex:1; text-align:right; font-weight:600; color:var(--ember);">~'+poundsToUnit(map[ex].e1rm,currentUnitSystem(),1)+' '+unitWeightLabel()+'</span></div>'
+    +'<span style="flex:1.4; text-align:right; color:var(--dim);">'+(map[ex].assisted?'Least assistance':poundsToUnit(map[ex].w,currentUnitSystem(),1)+'×'+map[ex].r)+'</span>'
+    +'<span style="flex:1; text-align:right; font-weight:600; color:var(--ember);">'+(map[ex].assisted?poundsToUnit(map[ex].w,currentUnitSystem(),1)+' '+unitWeightLabel()+' · '+map[ex].r+' reps':'~'+poundsToUnit(map[ex].e1rm,currentUnitSystem(),1)+' '+unitWeightLabel())+'</span></div>'
   ).join("");
   document.getElementById("prList").querySelectorAll("[data-ex]").forEach(row=>
-    row.addEventListener("click", ()=>openLiftChart(row.dataset.ex)));
+    row.addEventListener("click", ()=>openLiftChart(row.dataset.ex,"legacy:"+normalizeExerciseName(row.dataset.ex))));
 }
 function lastSessionFor(dayId){
   let best = null;

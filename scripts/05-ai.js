@@ -1755,6 +1755,7 @@ function lineChartSVG(pts, goal){
 
 // --- per-lift chart overlay ---
 let liftOverlayEx = null;
+let liftOverlayPRKey = null;
 function liftHistory(exName){
   const byDate = {};
   data.workouts.forEach(s=>{
@@ -1765,11 +1766,21 @@ function liftHistory(exName){
   });
   return Object.keys(byDate).sort().map(d=>({date:d, y:byDate[d]}));
 }
-function openLiftChart(exName){
+function openLiftChart(exName,groupKey){
   liftOverlayEx = exName;
+  liftOverlayPRKey=groupKey || "legacy:"+normalizeExerciseName(exName);
   document.getElementById("liftTitle").textContent = exName;
   const goal = (cfg.liftGoals||{})[exName] || null;
   const pts = liftHistory(exName);
+  const usesEstimatedOneRepMax=pts.length>0;
+  const intro=document.getElementById("liftOverlayIntro");
+  const chartCard=document.getElementById("liftChartCard");
+  const goalCard=document.getElementById("liftGoalCard");
+  if(intro)intro.textContent=usesEstimatedOneRepMax
+    ? "Estimated 1RM per session (Epley). Dots are your logged best each day."
+    : "This record uses the tracking method assigned to this exercise, not an estimated 1RM.";
+  if(chartCard)chartCard.classList.toggle("hidden",!usesEstimatedOneRepMax);
+  if(goalCard)goalCard.classList.toggle("hidden",!usesEstimatedOneRepMax);
   const displayPts=pts.map(point=>({date:point.date,y:poundsToUnit(point.y,currentUnitSystem(),2)}));
   const displayGoal=goal?poundsToUnit(goal,currentUnitSystem(),2):null;
   document.getElementById("liftChart").innerHTML = lineChartSVG(displayPts, displayGoal);
@@ -1799,6 +1810,35 @@ document.getElementById("liftGoalSave").addEventListener("click", ()=>{
   saveCfg();
   ackBtn("liftGoalSave", "✓ Goal set");
   openLiftChart(liftOverlayEx);
+});
+document.getElementById("hidePRBtn").addEventListener("click",()=>{
+  if(!liftOverlayPRKey)return;
+  if(!isPlainObject(cfg.prHidden))cfg.prHidden={};
+  cfg.prHidden[liftOverlayPRKey]=true;
+  saveCfg();
+  document.getElementById("liftOverlay").classList.add("hidden");
+  unlockScroll();
+  renderPRs();
+  flashSave("PR removed from the board · workout history kept ✓");
+});
+document.getElementById("resetPRBtn").addEventListener("click",()=>{
+  if(!liftOverlayPRKey)return;
+  if(!confirm("Reset this PR baseline? Every workout stays in history, but only future sessions will count toward this exercise's PR."))return;
+  if(!isPlainObject(cfg.prResetAt))cfg.prResetAt={};
+  cfg.prResetAt[liftOverlayPRKey]=Date.now();
+  if(cfg.prHidden)delete cfg.prHidden[liftOverlayPRKey];
+  saveCfg();
+  document.getElementById("liftOverlay").classList.add("hidden");
+  unlockScroll();
+  renderPRs();
+  flashSave("PR baseline reset · workout history kept ✓");
+});
+document.getElementById("restorePRsBtn").addEventListener("click",()=>{
+  cfg.prHidden={};
+  cfg.prResetAt={};
+  saveCfg();
+  renderPRs();
+  flashSave("Previous PRs restored ✓");
 });
 
 // --- weekly review ---

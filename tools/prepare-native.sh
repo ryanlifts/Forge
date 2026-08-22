@@ -19,6 +19,7 @@ cp \
   data-foods.js \
   data-quotes.js \
   data-suggestions.js \
+  data-food-catalog.js \
   privacy.html \
   support.html \
   third-party-notices.html \

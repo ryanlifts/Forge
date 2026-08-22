@@ -2,13 +2,15 @@
 // NOTE: sw.js deliberately does NOT appear in SHELL. The browser fetches the service
 // worker itself through its own update mechanism (byte-compare on navigation); precaching
 // it would freeze updates and break the cache-bump release ritual. Do not "fix" this.
-const CACHE = "blackpyre-v112";
+const CACHE = "blackpyre-v113";
+const FOOD_CATALOG_CACHE = "blackpyre-food-catalog-v1";
 const SHELL = [
   "./",
   "./index.html",
   "./data-quotes.js",
   "./data-foods.js",
   "./data-suggestions.js",
+  "./data-food-catalog.js",
   "./data-faq.js",
   "./data-exercises.js",
   "./scripts/01-storage.js",
@@ -43,7 +45,7 @@ self.addEventListener("install", (e) => {
 self.addEventListener("activate", (e) => {
   e.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
+      Promise.all(keys.filter((k) => k !== CACHE && k !== FOOD_CATALOG_CACHE).map((k) => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
 });
@@ -55,6 +57,25 @@ self.addEventListener("fetch", (e) => {
   // Food database calls: network only (always fresh, never cached)
   if (url.includes("openfoodfacts.org")) {
     return; // let it hit the network normally
+  }
+
+  // Catalog release assets are refreshed when online and remain cached for
+  // later offline use. Immutable versioned shard URLs prevent stale mixing.
+  if (url.startsWith("https://ryanlifts.github.io/BlackPyre-Food-Catalog/")) {
+    e.respondWith(
+      caches.open(FOOD_CATALOG_CACHE).then(async (cache) => {
+        const cached = await cache.match(e.request);
+        try {
+          const fresh = await fetch(e.request);
+          if (fresh && fresh.ok) await cache.put(e.request, fresh.clone());
+          return fresh;
+        } catch (error) {
+          if (cached) return cached;
+          throw error;
+        }
+      })
+    );
+    return;
   }
 
   // App shell: cache-first with network fallback + same-origin backfill

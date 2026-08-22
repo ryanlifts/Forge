@@ -1,6 +1,15 @@
 BlackPyre Third-Party Notices
 Copyright (c) 2026 Ryan Allen Wilsey. All rights reserved.
 
+USDA FoodData Central
+---------------------
+Food and nutrition records identified as USDA FoodData Central are public
+domain data published under CC0 1.0 Universal:
+https://fdc.nal.usda.gov/
+https://creativecommons.org/publicdomain/zero/1.0/
+
+BlackPyre downloads prebuilt source-identified catalog files.
+
 Open Food Facts
 ----------------
 Packaged-food data is provided by Open Food Facts:

@@ -59,16 +59,25 @@ struct BlackPyreRestActivity: Widget {
                     }
                 }
             } compactLeading: {
-                Image(systemName: "flame.fill")
-                    .foregroundStyle(ember)
+                HStack(spacing: 2) {
+                    Image(systemName: "flame.fill")
+                        .font(.system(size: 9, weight: .bold))
+                        .frame(width: 11)
+                    timerText(for: context.state)
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .frame(width: 31, alignment: .trailing)
+                        .minimumScaleFactor(0.8)
+                }
+                .frame(width: 44, alignment: .leading)
+                .foregroundStyle(context.state.isPaused ? .white : ember)
             } compactTrailing: {
-                timerText(for: context.state)
-                    .font(.caption.monospacedDigit().weight(.bold))
-                    .foregroundStyle(context.state.isPaused ? .white : ember)
-                    .frame(maxWidth: 46)
+                EmptyView()
             } minimal: {
-                Image(systemName: context.state.isPaused ? "pause.fill" : "timer")
-                    .foregroundStyle(ember)
+                timerText(for: context.state)
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(context.state.isPaused ? .white : ember)
+                    .frame(width: 30)
+                    .minimumScaleFactor(0.7)
             }
             .keylineTint(ember)
         }

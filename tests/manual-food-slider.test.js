@@ -687,7 +687,7 @@ const faq = fs.readFileSync(
 
 check(
   "current consolidated native FAQ is valid",
-  (faq.match(/\{q:"/g) || []).length === 29
+  (faq.match(/\{q:"/g) || []).length === 30
 
   && /How do I set my calorie and macro targets\?/.test(faq)
   && /Can teenagers use the calorie and macro calculator\?/.test(faq)
@@ -695,6 +695,9 @@ check(
   && /How do I scan food\?/.test(faq)
   && /Scan barcode/.test(faq)
   && /What if barcode nutrition is wrong or missing\?/.test(faq)
+  && /Where do food search results come from\?/.test(faq)
+  && /USDA FoodData Central/.test(faq)
+  && /Open Food Facts/.test(faq)
   && /correction form/.test(faq)
   && /Nothing is logged until you review it/.test(faq)
 
@@ -730,7 +733,7 @@ const sw = fs.readFileSync(
 check(
   "manual food-slider candidate uses the current cache",
   sw.includes(
-    'const CACHE = "blackpyre-v112"'
+    'const CACHE = "blackpyre-v113"'
   )
 );
 

@@ -48,7 +48,7 @@ async function run(){
     && !/name\.hasPrefix\("blackpyre-"\)/.test(bridge));
 
   const buildNumbers=[...project.matchAll(/CURRENT_PROJECT_VERSION = (\d+);/g)].map(match=>Number(match[1]));
-  check("app and Live Activity configurations use App Store candidate build 3",buildNumbers.length===4&&buildNumbers.every(value=>value===3));
+  check("app and Live Activity configurations use App Store candidate build 5",buildNumbers.length===4&&buildNumbers.every(value=>value===5));
   check("Capacitor 8.5.0 and the secure brace-expansion override are pinned",(()=>{
     const pkg=JSON.parse(read("package.json"));
     return pkg.dependencies["@capacitor/cli"]==="8.5.0"
@@ -64,9 +64,9 @@ async function run(){
     && /Apache License/.test(read("vendor/html5-qrcode.LICENSE.txt")));
 
   const source=read("scripts/02-food.js");
-  check("Open Food Facts search uses Search-a-licious with no retired CGI fallback",
-    /search\.openfoodfacts\.org\/search/.test(source)
-    && !/cgi\/search\.pl/.test(source));
+  check("Open Food Facts full-text search uses the CORS-capable public route",
+    /world\.openfoodfacts\.org\/cgi\/search\.pl/.test(source)
+    && /search_simple=1/.test(source));
   check("offline copy correctly says AI handoffs remain available",
     /AI copy\/paste handoffs/.test(index)
     && !/connected AI features need a connection/.test(index));

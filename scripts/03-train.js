@@ -6034,6 +6034,14 @@ function parseLegacySchemeForShape(
   };
 }
 
+function trainingPlanShapeForProfile(profile,fallback){
+  if (["timedHold","steadyTimeDistance","durationActivity","timedIntervals","distanceIntervals"].includes(profile)) return "timeDist";
+  if (profile==="loadedDistance") return "carry";
+  if (profile==="conditioningRounds") return "rounds";
+  if (profile==="activityNotes") return "text";
+  return fallback;
+}
+
 function normalizeTrainingPlanPrescriptionForCanonicalShape(
   shape,
   exercise
@@ -6043,17 +6051,31 @@ function normalizeTrainingPlanPrescriptionForCanonicalShape(
       ? exercise
       : {};
 
+  const profileResolution=
+    bpWorkoutProfileResolutionForExercise(item);
+
+  const profile=
+    profileResolution
+      ? profileResolution.profile
+      : null;
+
+  const effectiveShape=
+    profileResolution
+    && String(profileResolution.source||"").indexOf("prescription-")===0
+      ? trainingPlanShapeForProfile(profile,shape)
+      : shape;
+
   const source = item.prescription;
 
   const direct =
     sanitizeTrainingPlanPrescription(
-      shape,
+      effectiveShape,
       source
     );
 
   if (
     direct.ok
-    || shape!=="timeDist"
+    || effectiveShape!=="timeDist"
     || !isPlainObject(source)
   ){
     return Object.assign(
@@ -6143,7 +6165,7 @@ function normalizeTrainingPlanPrescriptionForCanonicalShape(
   const legacy =
     parseLegacySchemeForShape(
       item.scheme,
-      shape
+      effectiveShape
     );
 
   let legacyConflict = false;
@@ -6200,7 +6222,7 @@ function normalizeTrainingPlanPrescriptionForCanonicalShape(
 
   const sanitized =
     sanitizeTrainingPlanPrescription(
-      shape,
+      effectiveShape,
       normalized
     );
 
@@ -7075,6 +7097,35 @@ function trainingPlanReviewRowKey(row){
   return row.dayIndex+":"+row.exerciseIndex;
 }
 
+function trainingPlanReviewRowsWithSameImportedName(row){
+  const wanted=trainingPlanSafeNameKey(row && row.importedName);
+  const rows=
+    trainingPlanReviewState
+    && trainingPlanReviewState.prepared
+    && Array.isArray(trainingPlanReviewState.prepared.review)
+      ? trainingPlanReviewState.prepared.review
+      : [];
+  if (!wanted) return row ? [row] : [];
+  return rows.filter(candidate=>
+    trainingPlanSafeNameKey(candidate.importedName)===wanted
+  );
+}
+
+function applyTrainingPlanSelectionToMatchingRows(row,entryId){
+  const rows=entryId
+    ? trainingPlanReviewRowsWithSameImportedName(row)
+    : [row];
+  rows.forEach(candidate=>{
+    const candidateKey=trainingPlanReviewRowKey(candidate);
+    const previous=trainingPlanReviewState.selections[candidateKey] || "";
+    if (entryId) trainingPlanReviewState.selections[candidateKey]=entryId;
+    else delete trainingPlanReviewState.selections[candidateKey];
+    if (entryId!==previous && trainingPlanReviewState.prescriptionOverrides){
+      delete trainingPlanReviewState.prescriptionOverrides[candidateKey];
+    }
+  });
+}
+
 function trainingPlanReviewCustomEntries(){
   if (
     !trainingPlanReviewState
@@ -7701,12 +7752,10 @@ function buildTrainingPlanResolutionSelect(row){
         .prescriptionOverrides[key];
     }
 
-    if (select.value){
-      trainingPlanReviewState.selections[key] =
-        select.value;
-    } else {
-      delete trainingPlanReviewState.selections[key];
-    }
+    applyTrainingPlanSelectionToMatchingRows(
+      row,
+      select.value
+    );
 
     rebuildTrainingPlanReview();
     renderTrainingPlanReview();
@@ -12109,7 +12158,7 @@ function explicitWorkoutDurationSeconds(sets){
 }
 function newLoggedWorkoutRecord(base,timing){
   const id=typeof newBlackPyreWorkoutId==="function" ? newBlackPyreWorkoutId() : "bpw-"+Date.now()+"-"+Math.random().toString(36).slice(2,12);
-  const record=Object.assign({},base,{id:id});
+  const record=Object.assign({},base,{id:id,prRecordedAt:new Date().toISOString()});
   if(timing) Object.assign(record,timing);
   return record;
 }
@@ -12249,11 +12298,19 @@ document.getElementById("logWorkoutBtn").addEventListener("click", ()=>{
   // PR detection BEFORE pushing the new session
   const prLines = [];
   Object.keys(sets).forEach(ex=>{
+    if(isAssistedExercise(ex)){
+      const current=parseBestAssistance(sets[ex]);
+      const prior=bestHistorical(ex,editingWorkoutIdx!=null ? editingWorkoutIdx : -1);
+      if(current&&(!prior||current.w<prior.w||(current.w===prior.w&&current.r>prior.r))){
+        prLines.push("🏆 PR: "+ex+" lowest assistance "+current.w+" "+unitWeightLabel()+" for "+current.r+" reps");
+      }
+      return;
+    }
     const nb = parseBestSet(sets[ex]);
     if(!nb) return;
     const hist = bestHistorical(ex, editingWorkoutIdx!=null ? editingWorkoutIdx : -1);
-    if (hist && nb.e1rm > hist.e1rm + 0.5){
-      prLines.push("\ud83c\udfc6 PR: "+ex+" "+nb.w+"\u00d7"+nb.r+" (est 1RM "+Math.round(nb.e1rm)+", was "+Math.round(hist.e1rm)+")");
+    if (!hist || nb.e1rm > hist.e1rm + 0.5){
+      prLines.push("\ud83c\udfc6 PR: "+ex+" "+nb.w+"\u00d7"+nb.r+" (est 1RM "+Math.round(nb.e1rm)+(hist?", was "+Math.round(hist.e1rm):", fresh baseline")+")");
     }
   });
   const day = program.days.find(p=>p.id===v);

@@ -228,6 +228,8 @@ final class BlackPyreDataPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "protectFile", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "readHealthCache", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "writeHealthCache", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "fetchFoodCatalog", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "fetchOpenFoodFacts", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "eraseNativeFiles", returnType: CAPPluginReturnPromise)
     ]
 
@@ -245,6 +247,140 @@ final class BlackPyreDataPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private static let healthCacheName = "blackpyre-health-cache.json"
     private static let healthCacheLimit = 2_000_000
+    private static let foodCatalogCacheLimit = 50_000_000
+
+    private static func foodCatalogCacheURL(key: String) -> URL? {
+        guard !key.isEmpty,
+              key.count <= 160,
+              key.range(of: "^[A-Za-z0-9._:-]+$", options: .regularExpression) != nil,
+              let root = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else {
+            return nil
+        }
+        let directory = root.appendingPathComponent("BlackPyreFoodCatalog", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            return directory.appendingPathComponent(key + ".json", isDirectory: false)
+        } catch {
+            return nil
+        }
+    }
+
+    private static func cachedFoodCatalogBody(key: String) -> String? {
+        guard let url = foodCatalogCacheURL(key: key),
+              let data = try? Data(contentsOf: url),
+              data.count <= foodCatalogCacheLimit else {
+            return nil
+        }
+        return String(data: data, encoding: .utf8)
+    }
+
+    @objc func fetchFoodCatalog(_ call: CAPPluginCall) {
+        guard let rawURL = call.getString("url"),
+              let cacheKey = call.getString("cacheKey"),
+              let url = URL(string: rawURL),
+              url.scheme == "https",
+              let host = url.host?.lowercased(),
+              host == "github.com",
+              url.path.hasPrefix("/ryanlifts/BlackPyre-Food-Catalog/releases/") else {
+            call.reject("Invalid BlackPyre Food Catalog request.")
+            return
+        }
+
+        guard let cacheURL = Self.foodCatalogCacheURL(key: cacheKey) else {
+            call.reject("Invalid BlackPyre Food Catalog cache key.")
+            return
+        }
+
+        if call.getBool("offlineOnly") == true {
+            if let cached = Self.cachedFoodCatalogBody(key: cacheKey) {
+                call.resolve(["status": 200, "body": cached, "cached": true])
+            } else {
+                call.resolve(["status": 404, "body": "", "cached": false])
+            }
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 20
+        request.cachePolicy = .reloadRevalidatingCacheData
+        request.setValue(
+            "BlackPyre/1.0 (blackpyrestrong@gmail.com)",
+            forHTTPHeaderField: "User-Agent"
+        )
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let http = response as? HTTPURLResponse,
+               (200..<300).contains(http.statusCode),
+               let data,
+               !data.isEmpty,
+               data.count <= Self.foodCatalogCacheLimit,
+               String(data: data, encoding: .utf8) != nil {
+                do {
+                    try data.write(to: cacheURL, options: .atomic)
+                    call.resolve([
+                        "status": http.statusCode,
+                        "body": String(data: data, encoding: .utf8) ?? "",
+                        "cached": false
+                    ])
+                    return
+                } catch {
+                    // The fresh result is still safe to return even if caching
+                    // fails because iOS is under temporary storage pressure.
+                    call.resolve([
+                        "status": http.statusCode,
+                        "body": String(data: data, encoding: .utf8) ?? "",
+                        "cached": false
+                    ])
+                    return
+                }
+            }
+
+            if let cached = Self.cachedFoodCatalogBody(key: cacheKey) {
+                call.resolve(["status": 200, "body": cached, "cached": true])
+                return
+            }
+
+            if let error {
+                call.reject("BlackPyre Food Catalog could not be reached.", nil, error)
+                return
+            }
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            call.resolve(["status": status, "body": "", "cached": false])
+        }.resume()
+    }
+
+    @objc func fetchOpenFoodFacts(_ call: CAPPluginCall) {
+        guard let rawURL = call.getString("url"),
+              let url = URL(string: rawURL),
+              url.scheme == "https",
+              let host = url.host?.lowercased(),
+              host == "openfoodfacts.org" || host.hasSuffix(".openfoodfacts.org") else {
+            call.reject("Invalid Open Food Facts URL.")
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 15
+        request.setValue(
+            "BlackPyre/1.0 (blackpyrestrong@gmail.com)",
+            forHTTPHeaderField: "User-Agent"
+        )
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error {
+                call.reject("Open Food Facts could not be reached.", nil, error)
+                return
+            }
+            guard let http = response as? HTTPURLResponse else {
+                call.reject("Open Food Facts returned an invalid response.")
+                return
+            }
+            let body = data.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+            call.resolve(["status": http.statusCode, "body": body])
+        }.resume()
+    }
 
     override func load() {
         Self.protectManagedFiles()

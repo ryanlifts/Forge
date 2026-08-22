@@ -317,6 +317,22 @@
         }
       }
 
+      /* Some rep movements are prescribed over a distance or time. Keep the
+       * normal reps card by default, but use an interval card for that specific
+       * program occurrence when the prescription requires one. */
+      if (resolved.profile==="repetitionSets" && intervals!==null){
+        if (positiveNumber(p.distance)!==null){
+          resolved.profile="distanceIntervals";
+          resolved.source="prescription-distance-intervals";
+        } else if (
+          positiveNumber(p.workSeconds)!==null
+          || positiveNumber(p.durationSeconds)!==null
+        ){
+          resolved.profile="timedIntervals";
+          resolved.source="prescription-intervals";
+        }
+      }
+
       return resolved;
     }
 
